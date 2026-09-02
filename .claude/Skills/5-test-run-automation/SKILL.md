@@ -100,9 +100,13 @@ Required inputs — missing from the task input AND the learning file → ASK th
    project's env layer / `TEST_ENV` presets).
 
 **ADO connectivity check:** perform one cheap read (the User Story fetch counts).
-On 401/403 → STOP and ask the user for a valid **read/write PAT** (Work Items
-Read & Write + Test Management Read & Write scopes) configured for the MCP server's
-environment. Never echo, log, or write the token anywhere.
+On 401/403 → STOP. 401 → the Azure DevOps MCP server holds a rejected or stale token:
+ask the user to **reconnect the Azure DevOps MCP server** (`/mcp` → azure-devops →
+reconnect; if the PAT itself expired they renew it first — a **read/write PAT** with
+Work Items Read/Write/Manage + Test Management Read/Write — where the server reads it
+from). You cannot connect or disconnect MCP servers yourself, so always ask, wait for
+the user, then retry the read once. 403 → a scope is missing on an otherwise valid
+token. Never ask for the token in chat; never echo, log, or write it anywhere.
 </input_gate>
 
 <project_profile>

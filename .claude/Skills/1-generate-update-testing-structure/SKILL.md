@@ -719,34 +719,36 @@ omitting it if the project has none yet):
 
 This server needs no authentication — configure it fully and unconditionally.
 
-### 8.2 Azure DevOps MCP (required — PAT via environment variable)
+### 8.2 Azure DevOps MCP (required — PAT authentication)
 
-Add this entry, replacing the organization name with the project's Azure DevOps
-organization (ask the user for the org name if it cannot be inferred from the git
-remote URL):
+Add this entry, replacing the organization name (ask the user if it cannot be inferred
+from the git remote URL):
 
 ```json
 "azure-devops": {
   "command": "npx",
   "args": ["-y", "@azure-devops/mcp", "<ORG_NAME>", "--authentication", "pat"],
-  "env": {
-    "PERSONAL_ACCESS_TOKEN": "${AZURE_DEVOPS_PAT_B64}"
-  }
+  "env": { "PERSONAL_ACCESS_TOKEN": "${AZURE_DEVOPS_PAT_B64}" }
 }
 ```
 
 PAT rules:
 
-* The value must be an **environment variable reference** (`${AZURE_DEVOPS_PAT_B64}`),
-  never the raw token.
-* The variable must contain `base64(":" + PAT)` — the raw PAT alone produces an
-  anonymous `TF400813` error.
-* Never hardcode the PAT into any file. Never commit it. Never print it in logs.
+* The user sets the `AZURE_DEVOPS_PAT_B64` environment variable on their machine
+  themselves; value = base64 of `":" + PAT`. Required scopes: Work Items
+  Read/Write/Manage + Test Management Read/Write.
+* Never hardcode the PAT into `.mcp.json`, `.env`, or any skill/doc. Never commit it.
+  Never print it in logs or chat. Never ask the user to paste it into the chat.
 * Azure DevOps authentication is a PAT — it is **not** an Azure Storage SAS token and
   does not require `az login`.
-* Write the config entry unconditionally. If the environment variable is not yet set,
-  the config is still correct — report the variable name the user must set as the only
-  USER ACTION, not the whole MCP setup.
+* Write the config entry unconditionally. If no token is available yet, the config is
+  still correct — report "set `AZURE_DEVOPS_PAT_B64` and reconnect the server" as the
+  only USER ACTION, not the whole MCP setup.
+* Verify with one cheap MCP read after the session reload (e.g. `core_list_projects`).
+  On **401** the server holds a rejected or stale token → ask the user to renew the token
+  (if expired) and **reconnect the Azure DevOps MCP server** (`/mcp` → azure-devops →
+  reconnect). You cannot connect or disconnect MCP servers yourself — always ask and
+  wait. On **403** a scope is missing.
 
 ### 8.3 Azure MCP (optional — for Azure resource access, not DevOps)
 
@@ -957,7 +959,7 @@ under `### Setup Model (skill 1) → #### Knowledge` — for example:
 ```markdown
 - [module: Project] [type: env] The app is an Angular front end with a .NET back end; tests run with Playwright on Chromium.
 - [module: Project] [type: env] Automation code lives under Testing/Automation (new project, no earlier framework found).
-- [module: Project] [type: env] MCP servers configured: Playwright, Azure DevOps (organization Link-Dev), Word.
+- [module: Project] [type: env] MCP servers configured: Playwright, Azure DevOps (organization Link-Dev, PAT authentication), Word.
 - [module: Project] [type: env] Node 20 and NPM 10 were found already installed.
 ```
 
@@ -1058,7 +1060,15 @@ If an MCP is configured but not working:
 1. Diagnose the issue.
 2. Check configuration.
 3. Check dependencies.
-4. Check authentication.
+4. Check authentication. For Azure DevOps perform one cheap MCP read:
+   * **401** → the server holds a rejected or stale token (expired, revoked, wrong org,
+     or an old value in the environment) → ask the user to renew the token if needed
+     and **reconnect the Azure DevOps MCP server** (`/mcp` → azure-devops → reconnect).
+     You cannot connect or disconnect MCP servers yourself — always ask, wait, then
+     retry once;
+   * **403** → token valid but a scope is missing (Work Items / Test Management);
+   * **404** → wrong project name.
+   Never ask the user to paste the token into the chat.
 5. Attempt safe fixes.
 
 Do not continuously retry indefinitely.

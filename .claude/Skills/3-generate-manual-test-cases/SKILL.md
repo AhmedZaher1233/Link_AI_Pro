@@ -152,7 +152,12 @@ Flow: **User Story → Retrieve from Azure DevOps / Word → Generate Requiremen
 → Generate Manual TCs → Review**
 
 1. Retrieve the User Story + acceptance criteria from Azure DevOps using the Azure
-   DevOps MCP (`wit_work_item` / `search_workitem`). If the source is a Word
+   DevOps MCP (`wit_work_item` / `search_workitem`). On 401/403 STOP: 401 → the Azure
+   DevOps MCP server holds a rejected or stale token → ask the user to **reconnect the
+   Azure DevOps MCP server** (`/mcp` → azure-devops → reconnect; if the PAT expired they
+   renew it first where the server reads it from) — you cannot connect or disconnect MCP
+   servers yourself, so always ask, wait, then retry once; 403 → missing scope on the
+   PAT. Never ask for the token in chat. If the source is a Word
    document, use the Word MCP instead. If neither source is reachable → BLOCKED.
 2. Convert the User Story into a **structured requirement/specification file**:
    title, story ID, description, numbered acceptance criteria, derived requirement

@@ -112,7 +112,7 @@ The requirement is the source of truth (the oracle) whichever way it arrives:
 
 | Source | How to read |
 |--------|-------------|
-| **Azure DevOps User Story** (ID like `1031475` / `US-1031475`, or exact title) | Fetch via the Azure DevOps MCP (`wit_work_item` / `search_workitem`): title, description, acceptance criteria, linked items. Title given → resolve to exactly one ID; zero or multiple matches → ask the user (show candidates), never guess |
+| **Azure DevOps User Story** (ID like `1031475` / `US-1031475`, or exact title) | Fetch via the Azure DevOps MCP (`wit_work_item` / `search_workitem`): title, description, acceptance criteria, linked items. Title given → resolve to exactly one ID; zero or multiple matches → ask the user (show candidates), never guess. On **401/403** STOP and report: 401 → the Azure DevOps MCP server is holding a rejected or stale token → ask the user to **reconnect the Azure DevOps MCP server** (`/mcp` → azure-devops → reconnect; if the PAT itself expired they renew it first where the server reads it from) — you cannot connect or disconnect MCP servers yourself, so always ask and wait, then retry once; 403 → missing scope on the PAT. Never ask for the token in chat |
 | **Word document** (`.docx` path or reference) | Read via the Word MCP if configured; if no Word MCP is available, ask the user to export to markdown/text or paste the content |
 | **Direct text** (requirement/PRD pasted inline) | Use the provided content directly |
 | **Small spec file** (one user story) | Read the file directly |
