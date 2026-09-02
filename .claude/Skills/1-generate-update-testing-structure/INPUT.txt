@@ -1,0 +1,33 @@
+SKILL: 1-generate-update-testing-structure
+WHAT IT DOES: Creates or repairs the project's testing environment — the Testing/ folder
+structure, Node/NPM + Playwright setup, MCP servers (.mcp.json), and QA agent definitions.
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+
+REQUIRED:
+  (nothing) — the skill scans the project itself. Just run it from the project root.
+
+ASKED DURING THE RUN (only if it cannot detect them):
+  1. Azure DevOps organization name        — for the azure-devops MCP entry
+                                             (auto-detected from the git remote when possible)
+  2. AZURE_DEVOPS_PAT_B64 environment var  — you set it yourself; value = base64(":" + PAT).
+                                             The skill never asks for the raw token.
+
+OPTIONAL:
+  - A different automation folder name/location, if your project already has a convention.
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+  Testing/
+    Requirements/          (per-User-Story folders are added later by skill 2)
+    Manual_Test/TestCases/
+    Automation/  (pages, tests, reports, screenshots, automation-logs)
+    White_Box_Testing/
+  + Playwright installed & configured
+  + .mcp.json with Playwright / Azure DevOps / Word MCP entries
+  + validation report (PASS/FAIL per component)
+
+WHEN TO RUN: once per project, or after environment drift — BEFORE skills 2–5.

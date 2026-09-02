@@ -1,0 +1,30 @@
+SKILL: 4-white-box-testing
+WHAT IT DOES: Audits the CODEBASE against a requirement — traces where/how it is
+implemented, finds gaps, potential bugs, and concrete reproduction scenarios.
+(First run auto-profiles the repository and caches the profile.)
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+
+REQUIRED (one of):
+  1. Story/requirement ID      — e.g. US-1031475, or a feature name
+  2. Path to a spec/story file — e.g. Testing/Requirements/US-.../REQ-*.md, specs/.../spec.md
+  3. Free-text acceptance criteria pasted in the chat
+
+OPTIONAL FLAG:
+  --reprofile   — force a fresh repository profile (use after big structural changes)
+
+NOTES:
+  - Read-only on the codebase: it never modifies source code.
+  - No URL or credentials needed — this is static code analysis, not live testing.
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+  Testing/White_Box_Testing/
+    {RequirementID}-{Feature}-analysis.md   ← gaps, bugs, repro scenarios, verdict
+    .project-profile.md                     ← cached repo profile (reused next runs)
+
+WHEN TO RUN: any time you need "is this story actually implemented, and where are the
+bugs?" — typically before or alongside skill 3.

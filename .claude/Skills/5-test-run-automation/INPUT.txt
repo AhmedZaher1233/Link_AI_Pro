@@ -1,0 +1,35 @@
+SKILL: 5-test-run-automation
+WHAT IT DOES: Takes the HUMAN-APPROVED TC document → publishes beautified TCs to Azure
+DevOps → generates Playwright automation (POM mandatory) → runs smoke-gated staged
+execution (smoke → positive → negative) with live progress + ETA in the chat → produces
+the phase HTML report + bug report → closes the loop in DevOps.
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+
+REQUIRED:
+  1. Approved TC document path   — Testing/Manual_Test/TestCases/{Story}/TEST-CASES-*.md
+                                   MUST contain "Status: APPROVED" (skill refuses anything
+                                   else — it never flips the status itself)
+  2. User Story ID or EXACT title — the Azure DevOps work item the TCs belong to
+
+OPTIONAL:
+  3. Environment                 — target test environment (defaults to the automation
+                                   project's TEST_ENV preset)
+
+PREREQUISITES (asked/checked, not guessed):
+  - Azure DevOps PAT with Work Items + Test Management read/write, configured for the MCP
+  - Healthy app environment (URL responding, seeded data, VPN up) — otherwise the run
+    stops as ENVIRONMENT_BLOCKED
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+  {automation_root}/reports/US-{id}/phase-N.json + phase-N.html   ← run of record
+                                                                    (history never overwritten)
+  {automation_root}/automation-logs/US-{id}/run-progress-{stamp}.log  ← live tailable log
+  Azure DevOps: TC work items linked to the story + summary comment
+  + live progress in the chat (counts, current TC, elapsed, estimated remaining)
+
+WHEN TO RUN: last — only after a human set Status: APPROVED on skill 3's output.

@@ -1,0 +1,33 @@
+SKILL: 2-review-requirements
+WHAT IT DOES: Reviews a requirement / user story / spec for completeness, clarity,
+testability, consistency, feasibility, and risk. Splits multi-story specs and writes one
+folder per User Story under Testing/Requirements/ (REQ file + review file).
+
+============================================================
+INPUT — PROVIDE EXACTLY ONE SOURCE
+============================================================
+
+Pick ONE of these five:
+  1. Azure DevOps User Story   — the story ID (e.g. 1031475) or its EXACT title
+  2. Word document             — path to the .docx file
+  3. Direct text               — paste the requirement/PRD text in the chat
+  4. Small spec file           — path to the .md file (one user story)
+  5. Big spec file             — path to the .md file (multiple user stories — it will be
+                                 split, one review per story)
+
+OPTIONAL:
+  - A dimension to limit the review: completeness | clarity | testability |
+    consistency | feasibility | risk        (default: all 6)
+  - "all" — review every spec under specs/ and every story under test/User stories/
+
+IF YOU GIVE NOTHING: the skill asks you for the source before starting. It never guesses.
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+  Testing/Requirements/US-{id}-{name}/
+    REQ-{id}-{name}.md      ← structured requirement (input for skill 3)
+    US-{id}-review.md       ← the review (ratings, gaps, questions, verdict)
+  Testing/Requirements/SPEC-REVIEW-SUMMARY.md   (only for multi-story specs)
+
+WHEN TO RUN: after skill 1, before skill 3.
