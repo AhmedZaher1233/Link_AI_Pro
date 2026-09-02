@@ -39,6 +39,13 @@ source repository so every run uses the latest versions of skills 1-5:
 https://github.com/AhmedZaher1233/Link_AI_Pro
 ```
 
+**Shortcut:** if the project has `.claude/commands/sync-skills.md`, run `/sync-skills` — it
+performs exactly this procedure (diff, copy, report, self-update) and is the preferred way.
+If the command is missing, install it first (one line, from the project root):
+`curl -fsSL -o .claude/commands/sync-skills.md https://raw.githubusercontent.com/AhmedZaher1233/Link_AI_Pro/main/.claude/commands/sync-skills.md`
+(create `.claude/commands/` if needed), then run `/sync-skills`. Only fall back to the manual
+procedure below when neither is possible.
+
 Procedure:
 
 1. Fetch the latest `.claude/Skills/` tree from the repository's `main` branch. Prefer a
