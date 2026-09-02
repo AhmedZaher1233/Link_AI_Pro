@@ -16,6 +16,11 @@ description: >
   up to 3 windows for the parallel group, 1 for serial groups) to minimise run time.
   Every TC gets a final-state screenshot ({TC-ID}.png, plus {TC-ID}-failed.png on
   failure) in screenshots/{UserStoryName}/, replaced on every re-run.
+  BEFORE the first run it measures STATIC automation coverage — every TC of the approved
+  document classified Fully / Partially / Not Covered by reading the generated spec source
+  (always-skipped, data-gated, access-only and role-variant tests are downgraded), weighted
+  % against the L3 target with a soft block below it, plus a per-story coverage dashboard,
+  CSVs and a categorized "what stays manual" list under reports/US-{id}/coverage/.
   All folders and files follow the generate-testing-structure layout: automation code
   under Testing/Automation/ (pages, tests, reports, screenshots, automation-logs), TC
   documents under Testing/Manual_Test/TestCases/{UserStoryName}/. Results are organized
@@ -36,7 +41,8 @@ skill (or `manual-test-agent`), and you own everything from there to the final r
 1. Beautify the approved TCs into a SEPARATE upload document, then publish that
    document to Azure DevOps on the given User Story
 2. Generate Playwright automation code from the ORIGINAL approved document
-   (POM mandatory, correct placement mandatory)
+   (POM mandatory, correct placement mandatory), then measure STATIC coverage of that
+   document from the spec source and pass the coverage gate before anything runs
 3. First run — improve: staged smoke→positive→negative execution, classify failures,
    self-heal TEST-CODE defects only
 4. Second run — report: designed HTML test report + plain-language bug report
@@ -124,6 +130,9 @@ Resolve:
 | `screenshots_root` | `{automation_root}/screenshots/{user_story_name}/` — one folder per User Story, **replaced** on every run (see `<result_organization>`) | same |
 | `us_config` | `{automation_root}/playwright.us-{UserStoryID}.config.ts` — generated per story, extends the base config (see `<us_config>`) | same |
 | `run_plan` | `{results_root}/run-plan.json` — parallel/serial groups for this story (see `<run_plan>`), rewritten every run | same |
+| `coverage_root` | `{results_root}/coverage/` — static coverage CSVs, dashboard and previous-run snapshot (see `<coverage_measurement>`), rewritten every run | same |
+| `coverage_target` | automation coverage target % from L3 (`docs/steering/L3-*.md`, e.g. "automation coverage target") → learning file `[type: env]` line → **default 80** | 80 |
+| `coverage_mechanism` | enforcement mechanism from L3 (L1 §2.4: `hard block` / `soft block` / `report-only`) → **default `soft block`** | soft block |
 | `workers_parallel` | task input `--workers N` → learning file `[type: env]` line → **default 3** | 3 |
 | `headed` | **true by default** (visible browser); task input `--headless` or no display available → false, reported as a Deviation | true |
 | `qa_standards` | glob `docs/steering/*` | L1/L2/L3 + testing-strategy |
@@ -712,7 +721,152 @@ Before Phase 3 — review your own output as a gatekeeper would; FIX findings fi
 - [ ] Isolation: each test runnable alone; teardown for every api_setup
 - [ ] Traceability header present; describe has REQ-ID; titles have [TC-ID] + polarity tag
       (+ `@smoke` where the document marks it)
+- [ ] Static coverage measured (PHASE 2.5) and the gate verdict recorded before any run
 </self_check>
+
+---
+
+## PHASE 2.5 — STATIC COVERAGE MEASUREMENT (pre-run gate)
+
+<coverage_measurement>
+**Runs after `<self_check>` and BEFORE PHASE 3 — nothing executes until this verdict exists.**
+This is a static read of the spec source, not a pass/fail result: it answers "how much of
+the approved document does the generated code *really* cover?" — and it is deliberately
+skeptical, because a `test()` that exists is not a TC that is covered.
+
+**Denominator = every TC in `{source_tc_doc}`** (the ORIGINAL approved document — never the
+beautified file). Locale variants (`TC-01`, `TC-01b`) are separate TCs, as in the document.
+`manual — not automated` TCs stay in the denominator; the number must be honest.
+
+**1. Inventory the generated tests** — per spec file of this story, without reading every
+line of logic:
+
+```
+grep -nE "test\.describe\(|[^.]test\(|test\.skip\(|\[TC-" <spec>
+```
+
+Capture per `test()`: `tcId` (from the `[TC-ID]` in the title), describe group, and:
+- `alwaysSkipped` — a `test.skip(true, …)` (or an unconditional skip guard) gates the whole body
+- `dataGated` — `test.skip(!data | !entity | !record, …)`: runs only when seeded data exists
+- `accessOnly` — the body only asserts that an option/panel/screen is visible; no field value,
+  count, identity or status assertion
+- `roleLoop` — the test is parameterised over several roles (one `tcId`, many runs)
+
+**2. Classify every TC of the document** against the inventory — match on TC-ID first, then on
+action + role + screen where a TC-ID is missing from a title:
+
+| Status | Weight | Assign when… |
+|---|---|---|
+| **Fully Covered** | 1.0 | A test asserts the TC's **expected result** end-to-end (the values, status, count or identity the document names) and it actually runs (not always-skipped). |
+| **Partially Covered** | 0.5 | Automation exists but is weaker than the TC: always-skipped (role/config not available), data-gated with no empty-state assertion, access-only, proves the scenario for a **different role or data variant**, checks **one row** where the TC says "every row", or asserts less than the document's expected result. |
+| **Not Covered** | 0.0 | No test exercises the scenario — including every `Automation Candidate = NO` / `manual — not automated` TC. |
+
+Heuristics that almost always land Partial or Not Covered — check them explicitly:
+negative / permission / "cannot see" scenarios without a dedicated negative test · empty-state
+/ no-data scenarios (data-gated specs skip instead of asserting emptiness) · system or
+background-job records (auto-approve, auto-cancel, scheduled updates) · date-format /
+field-present-vs-absent display · "every row" enumeration and "opens the correct record"
+identity · a role the environment has no user for · a scenario proved via another role's data.
+
+Record per TC: `coverageStatus`, `mappedTests` (or `-`), `manualRecommended` (Yes for every
+Partial and Not Covered), `category` (see step 4) and a one-line `note`.
+
+**3. Compute** — overall and per run stage (Smoke / Positive / Negative, the same split the
+run uses):
+
+```
+weighted % = (full × 1.0 + partial × 0.5) / total × 100     (one decimal)
+```
+
+Also count distinct automated TC-IDs per spec (context only — role loops and data gates mean
+it is not "tests that will execute").
+
+**4. Gate** — compare the overall weighted % with `{coverage_target}` using `{coverage_mechanism}`
+(both from L3; defaults 80 % / soft block — say which source was used):
+
+- **≥ target → PASS.** Print the verdict and continue.
+- **Below target, `soft block` (default):**
+  1. List every Partial / Not Covered TC whose `Automation Candidate = YES` — these are the
+     fixable ones. `manual — not automated` TCs are never a reason to block and are never
+     "fixed" here.
+  2. ONE repair pass on that list under the PHASE 2 rules (POM mandatory, no banned patterns,
+     no lowered assertions): strengthen access-only assertions to the document's expected
+     result, remove skip guards that hide a runnable scenario, add the missing negative /
+     empty-state test where the document has the TC. Never invent scenarios.
+  3. Re-measure (steps 1–3).
+  4. Still below → print the gap table and **ask the user**: `run anyway` (recorded as a
+     user override in the report) / `fix more` (another pass, then re-ask) / `stop` (BLOCKED
+     with the gap table). Never silently proceed.
+- **`hard block`** → same repair pass; still below → BLOCKED, no run.
+- **`report-only`** → continue; the number and gaps still go everywhere below.
+
+Live progress line (the `<live_progress>` format, also appended to the run log):
+`Coverage: {x}% weighted (Full {n} · Partial {n} · None {n}) — target {t}% ({L3 | default}) — {PASS | BELOW TARGET → repairing | BELOW TARGET → user override | BLOCKED}`
+
+**5. Write the coverage folder** — `{coverage_root}` = `{results_root}/coverage/`, **replaced every
+run** (same class as `run-plan.json`; history lives in the delta and in the phase reports).
+Quote any CSV field containing a comma; use these exact headers.
+
+- `coverage-summary.csv`
+  ```
+  User Story,Stage,Total TCs,Fully Covered,Partially Covered,Not Covered,Weighted Coverage %,Distinct Automated TC-IDs
+  ```
+  One row per stage (Smoke / Positive / Negative), then a `TOTAL` row; a blank line; a `Legend`
+  of the three statuses + weights; numbered `Notes` (weighting formula; target + source +
+  mechanism; role-loop / data-gate caveat; the manual-gap categories present).
+- `coverage-detail.csv`
+  ```
+  User Story,TC-ID,Test Case Title,Type,Smoke,Automation Candidate,Coverage Status,Mapped Test(s),Manual Testing Recommended,Notes / Recommendation
+  ```
+  One row per TC of the approved document, in document order.
+- `manual-scenarios.csv`
+  ```
+  Category,User Story,TC-ID,Scenario,Why Manual,Priority
+  ```
+  Only `manualRecommended = Yes` rows, grouped by `Category`: `Not an automation candidate`,
+  `Empty State (Negative)`, `Permission / Unauthorized (Negative)`, `System / Background-Job
+  Triggered`, `Display / Field Presence`, `Cross-Role Specific`, `Per-Row Enumeration &
+  Identity`, `Role Variant`, `Config-Skipped (coded, never runs)`, `Completeness`.
+  Priority: **High** = security / permission, empty-state, coded-but-never-runs; **Medium** =
+  background jobs, field display, cross-role; **Low** = redundant per-row enumeration.
+- `coverage-dashboard.html` — ONE complete, self-contained HTML document (`<!DOCTYPE html>`,
+  no external assets; must open by double-click off disk). Inline the entire
+  `assets/coverage-dashboard.css` (next to this SKILL.md) in one `<style>` block, then:
+  1. **Hero** — `.eyebrow` (US-{id}), `<h1>` (story title), `.sub` (approved doc path · spec
+     files · measured at), then `.hero` with a `.gauge` styled
+     `style="--p:{greenStop}; --q:{amberStop}"` where `greenStop = full/total×100` and
+     `amberStop = (full+partial)/total×100`; the centre shows the overall **weighted %** and,
+     under it, `target {t}% — {PASS | override | BLOCKED}`. `.hero-stats`: `.big-row` with the
+     total TC count and a `.legend` of three `.chip`s (`.full` / `.partial` / `.none`).
+  2. **Coverage by stage** (`section` + `.sec-head`): one `.story` per stage (Smoke / Positive /
+     Negative). `.story-top` holds `.story-id` (stage), `.story-name` (what the stage means for
+     the run), `.story-count` ("full·partial·none of total") and `.story-pct` coloured
+     `var(--green)` ≥ 70, `var(--amber)` ≥ 50, else `var(--red)`. `.bar` holds three `.seg`s with
+     inline `width:{share}%` (shares of that stage's total, summing to 100) and the count in `<b>`.
+  3. **Where the manual effort goes** (`.cats`): one `.cat` per category present, sorted by count
+     desc; `.cat-fill` width = `count / maxCount × 100`%; `.sec-head .note` = total manual scenarios.
+  4. **Delta** (when a previous snapshot exists): improved / regressed TC-IDs and the % change.
+  5. **Source reports** (`.files`): one `.file` per CSV written.
+  6. `<footer>`: 1–2 sentence quick wins (e.g. configure the missing role user; seed an
+     empty-history record) + a provenance line (approved doc revision, spec files, TC counts).
+  Semantic colours (green/amber/red) are for coverage only; the indigo `--accent` for structure.
+  No chart libraries — bars are divs, the gauge is a CSS `conic-gradient`.
+- `coverage-previous.json` — snapshot `{ measuredAt, weightedPct, target, verdict,
+  tcs: { "TC-ID": "Fully Covered" | "Partially Covered" | "Not Covered" } }`. **Read the old one
+  BEFORE overwriting** and compute the delta: status changes per TC-ID (improved / regressed),
+  TC-IDs added / removed (the approved document changed), overall % change. No previous file →
+  "no prior measurement to diff against". The delta is reported in the chat, in the dashboard and
+  in `### Coverage`; no separate delta file.
+
+**6. Verify** — open the dashboard once (`Start-Process "<abs path>"` on Windows) to confirm it
+renders. Any TC-ID in the approved document missing from `coverage-detail.csv`, or any status
+you could not decide, is an assumption — list it.
+
+Recurring reasons a project lands Partial (e.g. "no Delivery Director user exists in any
+environment", "history screens have no empty-state fixture") are project knowledge: write them
+as plain-English `[type: env]` / `[type: trick]` lines under `### Automation Model (skill 5) →
+#### Knowledge` so the next story's design and measurement start from them.
+</coverage_measurement>
 
 ---
 
@@ -770,6 +924,7 @@ inside the structure's `reports/` folder.**
 | `automation-logs/US-{id}/run-progress-{stamp}.log` | immutable, new file per run |
 | `screenshots/{user_story_name}/*.png` | replaced each run |
 | `reports/US-{id}/run-plan.json`, `last-run.json`, `artifacts/` | replaced each run |
+| `reports/US-{id}/coverage/*` (CSVs, dashboard, `coverage-previous.json`) | replaced each run — the delta vs the previous measurement is reported before overwriting |
 | `playwright.us-{id}.config.ts` | regenerated each run |
 </result_organization>
 
@@ -889,6 +1044,9 @@ runs twice in one phase. Suites beyond ~40 tests are sliced per group and stage 
 ## PHASE 3 — FIRST RUN (IMPROVE)
 
 <environment_gate>
+**Coverage gate first:** the PHASE 2.5 verdict must be `PASS`, `report-only`, or a recorded
+user override — otherwise do not execute (see `<coverage_measurement>`).
+
 Before executing: grep `Testing/project-learning.md` for `[type: env]` lines first — known
 environment quirks, VPN/proxy notes, slicing thresholds and past fixes are applied before
 diagnosing anything anew. Then confirm the app/base URL responds, required services are
@@ -1108,7 +1266,9 @@ Using `{tc_output_folder}/ADO-MAP.md`:
      list of supported values`. Do not attempt it, and never write `Automated` into
      `ADO-MAP.md` — that records a status ADO refused. Leave `Planned` and rely on
      `Custom.TestAutomated` + the metadata fields to express automation.
-   - Keep `Planned` for candidates that ended up skip-guarded (note why in the map).
+   - Keep `Planned` for candidates that ended up skip-guarded (note why in the map), and
+     for any TC whose PHASE 2.5 status is Partially / Not Covered — copy the reason from
+     `coverage-detail.csv` into the map so the ADO status never overstates the coverage.
 2. Post ONE summary comment on the User Story: **phase number**, run-2 counts
    (pass/fail/skip/not-run), smoke-gate verdict, number of app bugs found (with
    TC-IDs), and the `phase-{N}.json` + `phase-{N}.html` artifact paths.
@@ -1173,9 +1333,16 @@ requirements, Data Oracle, type, smoke and locale unchanged — PASS
 {TC-IDs without an image and why (NOT_RUN / SKIP)}
 
 ### Coverage
-| TC-ID | Smoke | Automation candidate | Implementation | Run 2 status |
-|-------|-------|----------------------|----------------|--------------|
-{— includes `manual — not automated` rows}
+| TC-ID | Smoke | Automation candidate | Implementation | Static coverage | Run 2 status |
+|-------|-------|----------------------|----------------|-----------------|--------------|
+{— includes `manual — not automated` rows; Static coverage = Fully / Partially / Not Covered from PHASE 2.5}
+
+**Weighted static coverage (pre-run):** {x}% — target {t}% ({L3 | default}, {mechanism}) — **{PASS | user override | report-only}**
+Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None {n} of {N}
+**Δ vs previous measurement:** {±d} pts — improved {TC-IDs} · regressed {TC-IDs} · TCs added/removed {+a/−b} — or "no prior measurement"
+**Repair pass:** {n} TCs strengthened → {before}% → {after}% — or "not needed"
+**Manual-only scenarios:** {n} (High {h} · Medium {m} · Low {l}) → `{coverage_root}/manual-scenarios.csv`
+**Coverage folder:** `{coverage_root}` — coverage-summary.csv · coverage-detail.csv · manual-scenarios.csv · coverage-dashboard.html
 
 ### First Run — Heal Log
 {TC-ID · failure · classification · fix · result — or "First run fully green"}
@@ -1192,6 +1359,8 @@ requirements, Data Oracle, type, smoke and locale unchanged — PASS
 | Smoke | {n} TCs — gate: {passed \| healed-then-passed \| FAILED-STOPPED} (fail% {x}%) |
 | Positive | {passed}/{total} |
 | Negative | {passed}/{total} |
+| Static coverage (pre-run) | {x}% weighted — target {t}% — {PASS \| user override \| report-only} |
+| Coverage folder | {automation_root}/reports/US-{ID}/coverage/ (dashboard + 3 CSVs, replaced) |
 | Total execution time | {hh:mm:ss} |
 | Planned vs actual duration | ~{planned} vs {actual} (serial-only would be ~{serial}) |
 | Headed / workers | {yes \| no} / parallel ×{N}, serial ×1 |
@@ -1262,6 +1431,14 @@ Before returning AUTOMATION COMPLETE:
 - [ ] No spec-local UI helper functions; no chaining off exposed page-object locators
 - [ ] Every selector confirmed in source; safe-fix impact checks run before any rename
 - [ ] Self-check passed before first run; no banned patterns
+- [ ] **Static coverage measured BEFORE the first run: every TC of the approved document classified
+      Fully / Partially / Not Covered from the spec source (always-skipped, data-gated, access-only
+      and role-variant tests downgraded); weighted % computed overall and per stage**
+- [ ] **Gate verdict recorded with target + source (L3 or default 80 %) + mechanism; below target →
+      one repair pass, re-measure, then the user asked — never silently run; override reported**
+- [ ] **`reports/US-{ID}/coverage/` written: coverage-summary.csv, coverage-detail.csv,
+      manual-scenarios.csv (category + priority), self-contained coverage-dashboard.html,
+      coverage-previous.json; delta vs the previous measurement reported**
 - [ ] First run: every failure classified; only test-code defects healed (≤2 iterations); Heal Log kept
 - [ ] No assertion lowered, no skip added to hide a failure, no app bug masked
 - [ ] **Results under `reports/US-{ID}/` as `phase-{N}.*` — phase auto-incremented, NO prior phase overwritten or deleted**

@@ -16,7 +16,10 @@ description: >
   Cannot be validated) BEFORE treating TCs as executable, and mark
   pending-implementation TCs instead of validating them live. Delivers the markdown
   TC document (source of truth) PLUS a designed HTML review page for HUMAN approval,
-  and maintains project-learning.md. Does NOT produce code, selectors, or JSON.
+  scores requirement coverage (weighted Fully / Partially / Not Covered per acceptance
+  criterion, shown as a gauge in the review page) and lists the scenarios that will stay
+  manual with a category and priority, and maintains project-learning.md. Does NOT
+  produce code, selectors, or JSON.
   Human review is the gate to test-automation-agent. Trigger on: "design manual test
   cases", "generate manual TCs", "update existing test cases", "review manual TCs
   against the story", "create TCs for user story".
@@ -680,6 +683,29 @@ separate reviewer agent — the next gate is the human.
 2. **Negative coverage table** — all L1 §4 categories present or justified N/A.
 3. **Standards alignment** — map the set against the QA standards functional
    checklist (L2 §9 for SMO): COVERED / GAP / N/A per item, with TC-IDs.
+3b. **Requirement coverage score** — the traceability matrix is binary (an AC has a TC
+    or not); this score shows the *depth* it hides. Classify every acceptance criterion:
+
+    | Status | Weight | The AC is… |
+    |---|---|---|
+    | **Fully Covered** | 1.0 | ≥1 happy-path TC **and** every L1 §4 negative category that applies to it **and** every `required_locales` variant present — all with observable expected results and, where data is asserted, a Data Oracle |
+    | **Partially Covered** | 0.5 | Has TCs, but misses one of: a negative category that applies, a locale variant, a required Data Oracle — or its only TCs are `not-implemented — pending implementation` / `draft — not app-validated` |
+    | **Not Covered** | 0.0 | No TC cites the AC (item 1 already forces a fix before delivering; the score only makes a reviewer-waived gap visible) |
+
+    `weighted % = (full × 1.0 + partial × 0.5) / total ACs × 100` (one decimal). Report a
+    per-AC table (AC · REQ-ID · TC-IDs · status · what is missing) and the overall number
+    with Full / Partial / None counts. The score never replaces item 1 — every AC at 0.0 is
+    still fixed first; Partial rows are fixed where you can and otherwise listed under
+    Open Findings with the missing piece named.
+3c. **Manual-only scenarios** — every TC with `Automation Candidate = NO` (plus
+    `not-implemented` TCs the reviewer will run by hand once the story ships) gets one row:
+    `Category · TC-ID · Scenario · Why manual · Priority`. Categories: `Permission /
+    Unauthorized`, `Empty State`, `System / Background-Job Triggered`, `Display / Field
+    Presence`, `Cross-Role Specific`, `Per-Row Enumeration & Identity`, `Visual / UX
+    judgement`, `Data setup not reproducible`, `Pending implementation`. Priority: **High** =
+    security / permission, empty state, pending implementation; **Medium** = background jobs,
+    field display, cross-role; **Low** = redundant per-row enumeration. This is the list the
+    automation skill later confirms against the real specs — keep the wording plain English.
 4. **Independence** — every TC runnable in isolation; all preconditions explicit;
    no TC assumes state from another TC.
 5. **Redundancy** — merge or remove TCs that cover identical scenarios under
@@ -721,12 +747,15 @@ Write to `{tc_output_folder}` = `Testing/Manual_Test/TestCases/{UserStoryName}/`
 **MCP validation:** {N validated} / {N enhanced} / {N inferred} / {N discrepancy} / {N not-implemented} / {N draft}
 **Smoke TCs:** {N}
 **Automation candidates:** {N of total}
+**Requirement coverage (weighted):** {x}% — Full {n} / Partial {n} / None {n} of {ACs} acceptance criteria
+**Manual-only scenarios:** {N} (High {h} · Medium {m} · Low {l})
 ```
 
 Then: summary table (ID, Type, Locale, Requirement, Smoke, Automation Candidate,
 Data effect, Shared data, Validation, Description) → full TC details (format from Step 2) → Existing-TC
 Analysis table (Case 1 only) → enhancement log → self-review tables (traceability
-matrix, negative coverage, standards alignment) → Open Findings for the Human
+matrix, negative coverage, standards alignment, **requirement coverage score** per AC,
+**manual-only scenarios** with category + priority) → Open Findings for the Human
 Reviewer (with gaps, defects, and pending-implementation items in separate
 subsections).
 
@@ -752,7 +781,17 @@ content.
 - **Summary tiles**: total TCs, by type, by locale, automation candidates,
   validation breakdown (validated / enhanced / inferred / discrepancy /
   not-implemented / draft). Tile numbers must always match the cards below.
+- **Requirement coverage tile**: a CSS `conic-gradient` gauge (no chart library) driven by
+  two custom properties — `--p` = Fully Covered share of ACs, `--q` = Fully + Partially
+  share — with the weighted % in the centre and Full / Partial / None chips (green / amber /
+  grey) beside it; under it one stacked bar per AC (three segments, widths = share of that
+  AC's checks: happy / negative categories / locales present) so the reviewer sees *where*
+  depth is missing. Same visual grammar as the automation skill's coverage dashboard, so
+  both stages read the same way. Numbers come from the Step 4 item 3b table only.
 - **Traceability matrix** table (AC ↔ REQ-ID ↔ TC-IDs, gaps highlighted).
+- **What stays manual** section: the Step 4 item 3c table (Category · TC-ID · Scenario ·
+  Why manual · Priority), rows colour-coded by priority (High red / Medium amber / Low
+  grey), grouped by category, never collapsed.
 - **Existing-TC Analysis** section (Case 1 only): disposition per original TC.
 - **One collapsible card per TC** (`<details>`): ID + description in the summary
   row with colour-coded badges — type, locale, **smoke badge** (so the reviewer
@@ -801,9 +840,10 @@ Tell the reviewer, explicitly:
   steps against the live app (re-ask for URL/credentials only if the session lost them).
 - **Patch, do not regenerate.** In the markdown, edit only the affected TC sections
   and summary-table rows, and recompute the header counts (totals, validation
-  breakdown, automation candidates). In the HTML, update only the affected TC cards
-  AND always recompute the summary tiles and validation breakdown so the page stays
-  internally consistent. Do NOT rewrite either file wholesale. If the existing HTML
+  breakdown, automation candidates, requirement coverage score, manual-only count). In
+  the HTML, update only the affected TC cards AND always recompute the summary tiles,
+  validation breakdown, the requirement coverage gauge and the "What stays manual" table
+  so the page stays internally consistent. Do NOT rewrite either file wholesale. If the existing HTML
   is missing or structurally unrecognizable, regenerate it fully and say so.
 - Keep status `PENDING HUMAN REVIEW`.
 - Include a **Corrections Applied** table: | Feedback item | TC-ID(s) | Fix applied |
@@ -825,6 +865,8 @@ Tell the reviewer, explicitly:
 {Case 2: **Requirement file generated:** Testing/Requirements/US-{storyID}-{kebab-name}/REQ-{storyID}-{feature}.md}
 **Status:** PENDING HUMAN REVIEW
 **Totals:** {N} TCs ({breakdown}) · {N} automation candidates
+**Requirement coverage:** {x}% weighted — Full {n} / Partial {n} / None {n} of {ACs} ACs
+**Manual-only scenarios:** {N} (High {h} · Medium {m} · Low {l})
 **MCP validation:** {validated}/{enhanced}/{inferred}/{discrepancy}/{not-implemented}/{draft}
 {Case 1: **Existing-TC analysis:** {kept}/{updated}/{merged}/{removed}/{new}}
 **Common flows validated:** {list}
@@ -880,6 +922,8 @@ Before returning TEST CASES READY FOR HUMAN REVIEW:
 - [ ] Data Oracle cited for every data-asserting TC
 - [ ] Every step has the 4 handoff fields; TCs read as complete user journeys; no selectors/code in deliverables
 - [ ] Self-review tables completed and included; own findings fixed in place
+- [ ] Requirement coverage score computed per AC (Fully / Partially / Not Covered, weighted %) — in the markdown header + tables and as the gauge in the HTML; no AC left at 0.0 without a fix or an Open Finding
+- [ ] Manual-only scenarios table present: every `Automation Candidate = NO` TC has a category and a priority; shown in the markdown and in the HTML "What stays manual" section
 - [ ] Automation Candidate marked on every TC with the heuristics applied
 - [ ] Smoke marked deliberately on every TC (small critical set, ≥1 per screen) — never defaulted to YES
 - [ ] Learning file updated: user answers under Manual TC Model Q&A, new tagged knowledge added, Index row updated, duplicates removed, contradicted entries corrected, no credentials or code identifiers written
