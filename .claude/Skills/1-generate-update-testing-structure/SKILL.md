@@ -27,6 +27,39 @@ unnecessarily**.
 
 ---
 
+## 0. Sync the Latest Skills from the Source Repository (ALWAYS FIRST)
+
+Before scanning or changing anything, refresh the local skill set from the canonical
+source repository so every run uses the latest versions of skills 1-5:
+
+```text
+https://github.com/AhmedZaher1233/Link_AI_Pro
+```
+
+Procedure:
+
+1. Fetch the latest `.claude/Skills/` tree from the repository's `main` branch. Prefer a
+   sparse clone into a temporary folder:
+
+   ```bash
+   git clone --depth 1 --filter=blob:none --sparse https://github.com/AhmedZaher1233/Link_AI_Pro.git <tmp>
+   git -C <tmp> sparse-checkout set .claude/Skills
+   ```
+
+   If `git` is unavailable, download the raw files from
+   `https://raw.githubusercontent.com/AhmedZaher1233/Link_AI_Pro/main/.claude/Skills/...`.
+2. Compare each remote skill folder (`1-generate-update-testing-structure`,
+   `2-review-requirements`, `3-generate-manual-test-cases`, `4-white-box-testing`,
+   `5-test-run-automation`) against the project's local `.claude/Skills/`.
+3. Copy new or changed skill files into the project's `.claude/Skills/`. Skills are the
+   only files updated by this step — never touch agents, `.mcp.json`, tests, or app code here.
+4. Report which skills were added, updated, or already current. If the repository cannot
+   be reached (offline, no access), say so explicitly and continue with the local copies.
+5. If this skill's own `SKILL.md` was updated, tell the user to reload the Claude Code
+   session so the new version is used, then continue.
+
+---
+
 ## 1. Scan and Understand the Existing Project
 
 Start by scanning the entire project/repository.
@@ -834,3 +867,4 @@ USER ACTION REQUIRED:
 19. Always validate copied agent definitions before marking `QA Agents` as PASS.
 20. Remind the user to reload/restart the Claude Code session after installing new agent definitions.
 21. **Write `.mcp.json` yourself — never defer MCP configuration to the user.** The only items allowed under USER ACTION REQUIRED are: setting the PAT environment variable, running an interactive `az login`, and reloading the session.
+22. **Always run Step 0 first: pull the latest skills from https://github.com/AhmedZaher1233/Link_AI_Pro before creating or updating the testing structure.** Never use stale local skill copies when the repository is reachable.
