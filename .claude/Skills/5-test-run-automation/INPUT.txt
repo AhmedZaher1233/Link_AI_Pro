@@ -17,6 +17,18 @@ REQUIRED:
 OPTIONAL:
   3. Environment                 — target test environment (defaults to the automation
                                    project's TEST_ENV preset)
+  4. --workers N                 — browser windows for the parallel group (default 3;
+                                   serial groups always run with 1)
+  5. --headless                  — hide the browser (default: VISIBLE, you watch the run)
+
+HOW IT RUNS: the skill builds a run plan from your TCs — read-only TCs run in parallel,
+TCs that create/edit/delete or share the same data run one after another (you can steer
+this with the optional "Data effect" / "Shared data" fields from skill 3) — then runs
+smoke → positive → negative with the browser visible.
+
+BEFORE ASKING: the skill searches Testing/project-learning.md (Automation Model + Automation
+Tricks) for the environment, run settings, known elements and past environment fixes. Only
+what is missing is asked, and your answers are saved there. PATs are never written to it.
 
 PREREQUISITES (asked/checked, not guessed):
   - Azure DevOps PAT with Work Items + Test Management read/write, configured for the MCP
@@ -29,7 +41,13 @@ OUTPUT — WHAT YOU GET
   {automation_root}/reports/US-{id}/phase-N.json + phase-N.html   ← run of record
                                                                     (history never overwritten)
   {automation_root}/automation-logs/US-{id}/run-progress-{stamp}.log  ← live tailable log
+  {automation_root}/screenshots/{UserStoryName}/{TC-ID}.png            ← EVERY TC, final state
+                                                  {TC-ID}-failed.png   ← failed TCs only
+                                                  (same names each run → re-run REPLACES them)
+  {automation_root}/reports/US-{id}/run-plan.json                      ← parallel/serial groups
+  {automation_root}/playwright.us-{id}.config.ts                       ← per-story config (headed)
   Azure DevOps: TC work items linked to the story + summary comment
   + live progress in the chat (counts, current TC, elapsed, estimated remaining)
+  Testing/project-learning.md  ← updated: automation tricks, element identification, env fixes, Q&A
 
 WHEN TO RUN: last — only after a human set Status: APPROVED on skill 3's output.

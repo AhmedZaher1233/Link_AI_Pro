@@ -25,6 +25,60 @@ exactly what is needed, and WAIT for the reply. Do NOT start the review, search,
 anything on assumptions.** Skip the ask only when the input already answers everything —
 and state what you resolved so the user can override it.
 
+### Step 0.a — Consult `Testing/project-learning.md` BEFORE asking
+
+Before the intake ask, search the shared learning file for what it already knows: recorded
+spec/story locations, the Azure DevOps project and area path, story-ID conventions, module
+names, glossary terms, and earlier answers under `### Requirements Review Model (skill 2)`.
+Only what the file does not answer is asked. Follow the protocol below.
+
+<project_learning_file>
+**Project Learning File protocol — shared by skills 1-5 (read first, ask second, write back).**
+
+`Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
+(created by `1-generate-update-testing-structure`). This skill's section is
+`### Requirements Review Model (skill 2)`. If `Testing/` exists but the file does not,
+create it with the skeleton defined in skill 1, section 2.
+
+*Read first — targeted search, never the whole file:*
+1. Read only the `## Index` block at the top (one row per module: pages, similar modules, sections).
+2. From the task (story title, feature, page names) pick the module / page / element names
+   to look for; add the `Similar to` modules the Index lists for them.
+3. Grep for those tags — `\[module: X\]`, `\[page: Y\]`, `\[similar: .*X` — plus
+   `\[type: qa\]` inside this skill's model section. Read only the matching lines
+   (0-1 lines of context).
+4. Before asking the user anything, grep this skill's `#### Questions and Answers` for the
+   question's keywords.
+5. Load a whole section only if it is under ~40 lines and the grep found nothing. A file
+   under 80 lines may be read whole.
+
+*Ask second:* anything still missing (not in the file, the task input, CLAUDE.md, or the
+specs) → ask the user in ONE combined message and WAIT. Never re-ask what the file
+answers; state what you are reusing so the user can override it. Credentials and PATs are
+NEVER written to the file.
+
+*Write back (mandatory before delivering):*
+- Every answered question → one tagged line under this skill's `#### Questions and Answers`:
+  `- [module: X] [type: qa] **Q (skill 2, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
+  answers (environments, roles, module names, where specs live) are ALSO added to
+  `## Project Knowledge`.
+- Every new fact → one tagged line in the matching shared section or this skill's
+  `#### Knowledge`. Grep the same tags first; update or dedupe instead of appending twins.
+- A module / page / element that behaves like an existing one → add `[similar: …]` on both
+  entries instead of copying text.
+- Update the `## Index` row (new module, page, similar link, section).
+- Entries contradicted by a spec → correct them. Specs and steering always win
+  (L1 > L2 > L3 > CLAUDE.md > skill rules > learning file).
+
+*Content rules:* plain English a QC can read; one fact per line; what the user does, what
+the system shows, which data works, what to avoid. Never method / class / function / file
+names, variables, selectors, code, stack traces, secrets, or requirement text copied
+verbatim (state the learned rule + its source instead).
+
+*Report:* end the final message with
+`**Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}`.
+</project_learning_file>
+
 ---
 
 ## Trigger Phrases
@@ -66,6 +120,7 @@ The requirement is the source of truth (the oracle) whichever way it arrives:
 
 | Argument | Action |
 |----------|--------|
+| Any argument | FIRST grep `Testing/project-learning.md` (Index + `[module: …]` tags + this skill's Q&A) for a recorded spec location, ADO project, or story convention that resolves it — reuse it and say so |
 | Path ending in `.md` / `.txt` / `.docx` | Read directly (spec.md, story .md, or Word doc per the table above) |
 | Feature name or ID (e.g. "resource-request-hours", "1038145", "US-1003547") | Search `specs/**/spec.md`, `Testing/Requirements/**/*.md`, and `test/User stories/**/*.md`; nothing local → try Azure DevOps by ID/title. Matches in both spec and story form → **prefer the `specs/**/spec.md`** and note the story path as a cross-reference |
 | Text/PRD/requirement provided inline | Use provided content directly |
@@ -338,8 +393,35 @@ Based on this review, testing should cover:
 
 ---
 
+## Update the learning file (mandatory before the final message)
+
+Per the `<project_learning_file>` protocol, write to `Testing/project-learning.md`:
+
+- Under `### Requirements Review Model (skill 2) → #### Knowledge`: where this project's
+  specs/stories live and how they are named, story-boundary patterns seen, and the
+  business rules and domain terms learned from the requirement — one tagged line each, in
+  plain words with the story ID as source, e.g.
+  `- [module: KPI] [type: rule] A KPI's yearly value is entered per year and cannot exceed its target. (source: US-1031475 AC-2)`.
+- Under `#### Questions and Answers`: every question the user answered this run.
+- Project-wide facts (modules, roles, environments, glossary) → also `## Project Knowledge`;
+  update the `## Index` row for every module touched; link `[similar: …]` modules that share rules.
+- Never copy requirement text verbatim, never write code identifiers.
+
 ## Final message to the user
 
 Report: source type resolved · number of stories found (and the split, if >1) ·
-per-story folder paths + verdicts · summary file path (multi-story) · and that the
-`REQ-*.md` files are ready as input for the `3-generate-manual-test-cases` skill.
+per-story folder paths + verdicts · summary file path (multi-story) · that the
+`REQ-*.md` files are ready as input for the `3-generate-manual-test-cases` skill · and
+`**Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}`.
+
+---
+
+## Critical Rules
+
+1. Write output only to `Testing/Requirements/` and `Testing/project-learning.md`.
+2. Search the learning file (Index + tag grep) before asking the user anything; never load
+   the whole file when a grep answers the question.
+3. Record every user answer and every learned system rule in the learning file, in plain
+   English, tagged; never secrets, never code identifiers, never verbatim requirement text.
+4. The spec always wins over the learning file; fix the learning entry on conflict.
+5. Never guess a story, a source, or a scope — ask.

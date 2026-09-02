@@ -1,5 +1,5 @@
 ---
-name: generic-implementation-analysis
+name: white-box-testing
 model: claude-opus-5
 description: Stack-agnostic implementation audit. Analyse any codebase against a requirement (spec.md, user story, ticket, or free-text acceptance criteria) to verify implementation correctness. On the first run in a new project it auto-profiles the repository — detecting language, frameworks, monorepo layout, architectural layers, requirement sources and test locations — and derives its own code-discovery and search strategy, caching it as a reusable project profile. Then identifies gaps, potential bugs, and concrete reproduction scenarios. Use when the user asks to verify implementation, find bugs for a story, check if a spec is implemented, audit an implementation, or trace a requirement in code — especially in a project this skill has not seen before. Trigger on phrases like "generic implementation analysis", "analyse implementation", "audit implementation", "check if implemented", "find bugs for", "implementation gaps", "trace spec in code", "trace story in code", "verify the code for".
 argument-hint: "[<story-id> | <feature-name> | <path/to/spec.md> | <path/to/story.md>] [--reprofile]"
@@ -28,6 +28,58 @@ Phase 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6. Do not skip phases. Phase 0 runs in full 
 ---
 
 ## Phase 0 — Project Profiling (auto, first run only)
+
+### 0.0 Consult `Testing/project-learning.md` (every run, before anything else)
+
+The shared learning file is the team's plain-English knowledge base. Search it BEFORE
+profiling and BEFORE asking the user anything: recorded requirement sources, which business
+area a feature belongs to, rules the system is known to enforce, earlier white-box findings
+and answers under `### White-Box Model (skill 4)`. Reuse what it knows and say so.
+
+<project_learning_file>
+**Project Learning File protocol — shared by skills 1-5 (read first, ask second, write back).**
+
+`Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
+(created by `1-generate-update-testing-structure`). This skill's section is
+`### White-Box Model (skill 4)`. If `Testing/` exists but the file does not, create it with
+the skeleton defined in skill 1, section 2. The technical repository profile stays in
+`.project-profile.md` (0.7); the learning file holds only what a QC can read.
+
+*Read first — targeted search, never the whole file:*
+1. Read only the `## Index` block at the top (one row per module: pages, similar modules, sections).
+2. From the requirement (story title, feature, page names) pick the module / page / element
+   names to look for; add the `Similar to` modules the Index lists for them.
+3. Grep for those tags — `\[module: X\]`, `\[page: Y\]`, `\[similar: .*X` — plus
+   `\[type: rule\]` and `\[type: qa\]` inside this skill's model section. Read only the
+   matching lines (0-1 lines of context).
+4. Before asking the user anything, grep this skill's `#### Questions and Answers` for the
+   question's keywords.
+5. Load a whole section only if it is under ~40 lines and the grep found nothing. A file
+   under 80 lines may be read whole.
+
+*Ask second:* anything still missing (not in the file, the task input, CLAUDE.md, or the
+requirement sources) → ask the user in ONE combined message and WAIT. Never re-ask what the
+file answers; state what you are reusing so the user can override it. Secrets are NEVER
+written to the file.
+
+*Write back (mandatory before delivering):*
+- Every answered question → one tagged line under this skill's `#### Questions and Answers`:
+  `- [module: X] [type: qa] **Q (skill 4, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
+  answers are ALSO added to `## Project Knowledge`.
+- Every new fact about the system → one tagged line in the matching shared section or this
+  skill's `#### Knowledge`. Grep the same tags first; update or dedupe instead of appending twins.
+- Modules that share the same rules or checks → add `[similar: …]` on both entries instead
+  of copying text. Update the `## Index` row for every module touched.
+- Entries contradicted by the code or by a spec → correct them. Specs and steering always win.
+
+*Content rules (translate code into behaviour):* plain English a QC can read; one fact per
+line. Write "discounts are checked on the server, so changing the price in the browser does
+not work" — never the method, class, file or variable that does it. No file paths, no
+selectors, no code, no stack traces, no secrets, no requirement text copied verbatim.
+
+*Report:* end the result message with
+`**Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}`.
+</project_learning_file>
 
 ### 0.1 Check for an existing profile
 
@@ -189,6 +241,20 @@ re-run 0.3–0.6 and rewrite the profile. Otherwise reuse it as-is.
 
 Tell the user in one line whether you built a new profile or reused a cached one.
 
+### 0.8 Write what the profile means to `Testing/project-learning.md`
+
+After building or refreshing the profile, add (or update) 2-5 tagged lines under
+`### White-Box Model (skill 4) → #### Knowledge`, in words a QC understands — for example:
+
+```markdown
+- [module: Project] [type: env] The app has a browser front end, a server API, and a database; business rules are enforced on the server.
+- [module: Project] [type: env] Requirements live in Testing/Requirements as one folder per user story; stories are identified by their Azure DevOps number.
+- [module: Project] [type: env] Unit and integration tests exist for the server; the exact commands are in Testing/White_Box_Testing/.project-profile.md.
+```
+
+Link to the profile path instead of copying its tables. Never write file globs, class names,
+or commands here.
+
 ---
 
 ## Phase 1 — Requirement Ingestion
@@ -199,7 +265,7 @@ Tell the user in one line whether you built a new profile or reused a cached one
 |---|---|
 | Path ending in `.md` / `.feature` / `.txt` | Read directly |
 | ID or feature name | Search every requirement source from profile §Requirement sources, by filename and content. If several match, prefer the most formal artifact (spec > story > ticket dump) and cross-reference the others |
-| Blank | List the requirement sources found and ask which requirement to analyse |
+| Blank | First grep `Testing/project-learning.md` (Index + this skill's Q&A) for a recorded default or last-analysed requirement; if nothing, list the requirement sources found and ask which requirement to analyse, then record the answer under White-Box Model Q&A |
 
 If the requirement has sibling artifacts (`plan.md`, `data-model.md`, `contracts/`, `tasks.md`, linked ADRs,
 API schemas), read them read-only for trace context.
@@ -250,6 +316,27 @@ Regardless of vocabulary, always check the requirement's:
 ### 2.3 Record
 
 Build an **Implementation Map**: file -> layer role -> scenario(s) served -> ✅ Found / ⚠️ Partial / ❌ Not found.
+
+### 2.4 Teach the learning file what the system does
+
+Translate what Phase 2 (and later Phases 3-4) revealed into tagged, plain-English lines in
+`Testing/project-learning.md` — this is how white-box findings reach the manual and
+automation skills:
+
+- `### White-Box Model (skill 4) → #### Knowledge`: which business area the feature belongs
+  to; every rule or validation the code enforces, stated as behaviour with the story as
+  source (`- [module: KPI] [page: KPI Details] [type: rule] The server rejects a yearly value above the KPI target, even if the screen allows typing it. (source: US-1031475)`);
+  where each check happens (browser only / server / both, in words); recurring bug patterns;
+  scenarios the code does not cover at all.
+- `## Automation Tricks`: behaviour automation must know — saves that finish in the
+  background, hidden validations, how elements are identified on this screen (a pattern in
+  words, plus `data-testid` values if seen, each explained).
+- `## UI Knowledge` / `## Test Data`: messages the user will see, limits, seeded data the
+  code depends on.
+- Two modules enforcing the same rules → `[similar: …]` on both, and one `## Index` row each.
+
+Never write file paths, method or class names, or code snippets in the learning file; those
+stay in the analysis report.
 
 ---
 
@@ -447,6 +534,7 @@ Report to the user:
 
 **Report**: {output-dir}/{ID}-{Feature}-analysis.md
 **Profile**: {output-dir}/.project-profile.md  (re-run with --reprofile after big structural changes)
+**Learning file**: read {sections/tags} · updated {N added / M updated | "no new knowledge"}
 ```
 
 ---
@@ -459,3 +547,6 @@ Report to the user:
   finding that depends on it as Low confidence.
 - If the project already has a stack-specific analysis skill, prefer that one; this skill is the fallback for
   unfamiliar or mixed repositories.
+- **Learning file first.** Search `Testing/project-learning.md` (Index + tag grep, never the whole file) before
+  profiling and before asking the user; write every answer and every learned system rule back to it in plain
+  English (2.4). Never delete existing entries; never write secrets, file paths, or code identifiers there.

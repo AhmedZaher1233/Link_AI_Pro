@@ -18,6 +18,9 @@ OPTIONAL FLAG:
 NOTES:
   - Read-only on the codebase: it never modifies source code.
   - No URL or credentials needed — this is static code analysis, not live testing.
+  - Checks Testing/project-learning.md before asking which requirement to analyse; what it
+    learns about the system (rules, where checks happen, bug patterns) is written back there
+    in plain language under "White-Box Model".
 
 ============================================================
 OUTPUT — WHAT YOU GET
@@ -25,6 +28,7 @@ OUTPUT — WHAT YOU GET
   Testing/White_Box_Testing/
     {RequirementID}-{Feature}-analysis.md   ← gaps, bugs, repro scenarios, verdict
     .project-profile.md                     ← cached repo profile (reused next runs)
+  Testing/project-learning.md               ← updated: system rules learned, module map, Q&A
 
 WHEN TO RUN: any time you need "is this story actually implemented, and where are the
 bugs?" — typically before or alongside skill 3.

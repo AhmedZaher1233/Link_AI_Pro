@@ -22,12 +22,20 @@ PICK YOUR STARTING POINT (tell the skill which case applies):
         (Testing/Requirements/**/REQ-*.md, docs/specs/).
 
 ASKED DURING THE RUN (before any live validation):
-  2. Application base URL                  — never auto-detected
+  2. Application base URL                  — reused from Testing/project-learning.md when
+                                             recorded there; otherwise asked
   3. Username + password PER ROLE          — exact accounts used in the TC steps
+                                             (ALWAYS asked fresh; never stored in the file)
   4. Is the story implemented?             — implemented / partially / not implemented /
                                              not sure (skill verifies live either way)
 
-IF ANYTHING IS MISSING: the skill asks you in ONE message and WAITS. It never assumes.
+OPTIONAL:
+  - Learning file path                     — default Testing/project-learning.md (shared
+                                             knowledge base created by skill 1)
+
+IF ANYTHING IS MISSING: the skill searches Testing/project-learning.md first, then asks you
+in ONE message and WAITS. It never assumes. Your answers are saved to the file's
+"Manual TC Model" section so they are not asked again.
 
 ============================================================
 OUTPUT — WHAT YOU GET
@@ -35,6 +43,10 @@ OUTPUT — WHAT YOU GET
   Testing/Manual_Test/TestCases/{UserStoryName}/
     TEST-CASES-{feature}.md   ← source of truth (Status: PENDING HUMAN REVIEW)
     TC-REVIEW-{feature}.html  ← visual review page
+  Testing/project-learning.md ← updated: flows, UI behaviour, test data, EN/AR notes, Q&A
 
-YOUR NEXT STEP: review, adjust Smoke / Automation Candidate markings, then set
-Status: APPROVED in the markdown — that unlocks skill 5.
+YOUR NEXT STEP: review, adjust Smoke / Automation Candidate markings, optionally fill the
+"Data effect" (read-only / creates / modifies / deletes) and "Shared data" fields on TCs
+that change or share data (skill 5 uses them to decide parallel vs one-after-another
+execution; blank = it infers), then set Status: APPROVED in the markdown — that unlocks
+skill 5.

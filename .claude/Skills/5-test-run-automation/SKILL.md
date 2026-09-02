@@ -1,5 +1,5 @@
 ---
-name: test-automation
+name: test-run-automation
 model: claude-opus-5
 description: >
   Test Automation — takes a HUMAN-APPROVED test case document, BEAUTIFIES its TCs into
@@ -10,6 +10,12 @@ description: >
   failure gate (automation/env/VPN failures self-heal + smoke re-runs; application-error
   majority stops the run), then positive, then negative — with continuous live progress
   in the chat and a per-run progress log (counts, current TC, elapsed, refreshed ETA).
+  Before running it builds a per-User-Story RUN PLAN — detects which TCs are safe to run
+  in parallel and which must run one after another (shared data, create/edit/delete
+  flows) — and generates a per-story Playwright config that runs HEADED (visible browser,
+  up to 3 windows for the parallel group, 1 for serial groups) to minimise run time.
+  Every TC gets a final-state screenshot ({TC-ID}.png, plus {TC-ID}-failed.png on
+  failure) in screenshots/{UserStoryName}/, replaced on every re-run.
   All folders and files follow the generate-testing-structure layout: automation code
   under Testing/Automation/ (pages, tests, reports, screenshots, automation-logs), TC
   documents under Testing/Manual_Test/TestCases/{UserStoryName}/. Results are organized
@@ -18,7 +24,7 @@ description: >
   with reproducible steps and screenshots, and closes the loop in DevOps. Never masks
   app bugs. Trigger on: "automate the approved test cases", "run the automation",
   "generate playwright tests from the TC document", "publish TCs to Azure DevOps".
-argument-hint: "[<approved TC document path>] [<User Story ID or title>] [<environment>]"
+argument-hint: "[<approved TC document path>] [<User Story ID or title>] [<environment>] [--workers N] [--headless]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__azure-devops, mcp__playwright
 ---
 
@@ -64,7 +70,15 @@ ENVIRONMENT_BLOCKED (never blamed on the code under test).
 ## PHASE 0 — INPUT GATE + PROJECT PROFILE
 
 <input_gate>
-Required inputs — missing any → ASK the user (interactive) or BLOCKED (pipeline):
+**Before asking anything**, search `Testing/project-learning.md` per the
+`<project_learning_file>` protocol below: the Index, `[module: …]` tags for this story's
+feature, `[type: env]` / `[type: trick]` lines, and `### Automation Model (skill 5) →
+#### Questions and Answers`. Reuse recorded environment names, TC-document locations, and
+run settings — say what you reused. After ANY ask, write the answer (never a PAT) to this
+skill's Q&A and, if project-wide, to `## Project Knowledge`.
+
+Required inputs — missing from the task input AND the learning file → ASK the user
+(interactive) or BLOCKED (pipeline):
 
 1. **Approved TC document path** — must contain `Status: APPROVED`.
    `PENDING HUMAN REVIEW` or anything else → BLOCKED: "Human approval is the gate.
@@ -86,7 +100,12 @@ environment. Never echo, log, or write the token anywhere.
 </input_gate>
 
 <project_profile>
-This skill is generic — no hardcoded project paths in the rules. Resolve:
+This skill is generic — no hardcoded project paths in the rules. **Resolution order for
+every key: task input → `Testing/project-learning.md` (`### Automation Model (skill 5) →
+#### Knowledge`, `[type: env]` lines) → auto-detection → SMO fallback.** Every key resolved
+by detection is written back to the learning file as one plain-English tagged line
+(e.g. `- [module: Project] [type: env] Automation runs on Chromium from the Testing/Automation project; the UAT environment is the default preset.`) so the next run skips detection.
+Resolve:
 
 | Profile key | Auto-detection | Fallback for this repo (SMO) |
 |---|---|---|
@@ -101,6 +120,12 @@ This skill is generic — no hardcoded project paths in the rules. Resolve:
 | `beautified_tc_doc` | PHASE 1 output — **ADO publishes this** | `{tc_output_folder}/{stem}-beautified.md` |
 | `results_root` | `{automation_root}/reports/US-{UserStoryID}/` | same |
 | `logs_root` | `{automation_root}/automation-logs/US-{UserStoryID}/` | same |
+| `user_story_name` | the per-story folder name skill 3 used under `Testing/Manual_Test/TestCases/` (e.g. `US-1031475-initiative-yearly-values`) | same |
+| `screenshots_root` | `{automation_root}/screenshots/{user_story_name}/` — one folder per User Story, **replaced** on every run (see `<result_organization>`) | same |
+| `us_config` | `{automation_root}/playwright.us-{UserStoryID}.config.ts` — generated per story, extends the base config (see `<us_config>`) | same |
+| `run_plan` | `{results_root}/run-plan.json` — parallel/serial groups for this story (see `<run_plan>`), rewritten every run | same |
+| `workers_parallel` | task input `--workers N` → learning file `[type: env]` line → **default 3** | 3 |
+| `headed` | **true by default** (visible browser); task input `--headless` or no display available → false, reported as a Deviation | true |
 | `qa_standards` | glob `docs/steering/*` | L1/L2/L3 + testing-strategy |
 
 **Directory-structure rule (`generate-testing-structure` compliance):** for a NEW
@@ -111,8 +136,9 @@ Testing/Automation/
 ├── pages/            ← Page Object Model files (+ pages/components/)
 ├── tests/            ← specs, organized in {Area}_Tests folders
 ├── reports/          ← run-of-record artifacts, per User Story (see <result_organization>)
-├── screenshots/      ← failure screenshots
-└── automation-logs/  ← live progress logs, per User Story (see <automation_logs>)
+├── screenshots/      ← one folder per User Story: {TC-ID}.png for EVERY TC (+ {TC-ID}-failed.png), replaced each run
+├── automation-logs/  ← live progress logs, per User Story (see <automation_logs>)
+└── playwright.us-{id}.config.ts  ← generated per-story config (headed, workers, evidence), extends playwright.config.ts
 ```
 
 An EXISTING automation project (e.g. `SMO_Automation_PW/`) is reused with its own
@@ -121,8 +147,57 @@ per-User-Story `reports/US-{id}/` and `automation-logs/US-{id}/` trees are creat
 INSIDE whatever `{automation_root}` resolves to.
 
 **Mandatory reading before any code:** `./CLAUDE.md` + the `qa_standards` files.
-Steering priority: L1 > L2 > L3 > CLAUDE.md > skill rules.
+Steering priority: L1 > L2 > L3 > CLAUDE.md > skill rules > learning file.
 </project_profile>
+
+<project_learning_file>
+**Project Learning File protocol — shared by skills 1-5 (read first, ask second, write back).**
+
+`Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
+(created by `1-generate-update-testing-structure`). This skill's section is
+`### Automation Model (skill 5)`; it also owns most of `## Automation Tricks`. If
+`Testing/` exists but the file does not, create it with the skeleton defined in skill 1,
+section 2.
+
+*Read first — targeted search, never the whole file:*
+1. Read only the `## Index` block at the top (one row per module: pages, similar modules, sections).
+2. From the User Story and the approved TC document pick the module / page / element names
+   to look for; add the `Similar to` modules the Index lists for them.
+3. Grep for those tags — `\[module: X\]`, `\[page: Y\]`, `\[element: Z\]`,
+   `\[similar: .*X` — plus `\[type: trick\]`, `\[type: env\]`, `\[type: qa\]`. Read only
+   the matching lines (0-1 lines of context).
+4. Before asking the user anything, grep this skill's `#### Questions and Answers` for the
+   question's keywords.
+5. Load a whole section only if it is under ~40 lines and the grep found nothing. A file
+   under 80 lines may be read whole.
+
+*Ask second:* anything still missing (not in the file, the task input, CLAUDE.md, or the
+env layer) → ask the user in ONE combined message and WAIT. Never re-ask what the file
+answers; state what you are reusing so the user can override it. PATs and credentials are
+NEVER written to the file.
+
+*Write back (mandatory before AUTOMATION COMPLETE):*
+- Every answered question → one tagged line under this skill's `#### Questions and Answers`:
+  `- [module: X] [type: qa] **Q (skill 5, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
+  answers are ALSO added to `## Project Knowledge`.
+- Every new automation fact → one tagged `[type: trick]` or `[type: env]` line under
+  `## Automation Tricks` or this skill's `#### Knowledge`: how elements are identified on a
+  page (a pattern in words, plus the `data-testid` values used, each explained), which pages
+  already have a page object (page name only), waits that work, environment quirks and their
+  fixes, run slicing. Grep the same tags first; update or dedupe instead of appending twins.
+- Pages that follow the same identification pattern → `[similar: …]` on both entries; update
+  the `## Index` row for every module touched.
+- Entries contradicted by the live run → correct them. The approved TC document and the
+  steering documents always win over the learning file.
+
+*Content rules:* plain English a QC can read; one fact per line. Never method / class /
+function / file names, variables, CSS or XPath selectors, code snippets, stack traces, or
+secrets. `data-testid` values and URLs are the only technical tokens allowed, each explained
+in words on the same line.
+
+*Report:* the `AUTOMATION COMPLETE` return ends with
+`**Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}`.
+</project_learning_file>
 
 ---
 
@@ -347,8 +422,10 @@ the coverage table as `manual — not automated`, with the reason stated.
 1. Verify the automation project skeleton at `{automation_root}` (for a NEW project,
    the `generate-testing-structure` layout under `Testing/Automation/`):
    `tests/{Area}_Tests/` folders · `pages/` (+ `pages/components/`) · `prerequest/`
-   · `helpers/` · the env layer (`utils/env`) · `playwright.config.ts` · `reports/`
-   · `screenshots/` · `automation-logs/`.
+   · `helpers/` (incl. the evidence hook `helpers/evidence.ts`, see `<result_organization>`)
+   · the env layer (`utils/env`) · `playwright.config.ts` · the per-story
+   `playwright.us-{id}.config.ts` · `reports/` · `screenshots/{user_story_name}/`
+   · `automation-logs/`.
 2. **First run** (any skeleton piece or this feature's area folder missing) →
    CREATE the missing hierarchy following the existing project convention BEFORE
    writing any file. Never scatter files outside the convention.
@@ -424,9 +501,12 @@ named helper is a layering failure. Route every helper to its owning layer:
 Scan the owning layer BEFORE writing a helper — these files already exist and already
 contain siblings of what you are about to write.
 
-**Only these may appear in a spec:** `test.describe` / `test` blocks, `beforeAll`/`afterAll`
-wiring that just *calls* a `prerequest` fixture, `beforeEach`/`afterEach` reporting-and-evidence
-hooks, locale/label constant tables, and a one-line delegating alias to a `prerequest` fixture.
+**Only these may appear in a spec:** `test.describe` / `test` blocks,
+`test.describe.configure({ mode: 'serial' | 'parallel' })` lines that apply the `<run_plan>`
+groups, `beforeAll`/`afterAll` wiring that just *calls* a `prerequest` fixture,
+`beforeEach`/`afterEach` reporting-and-evidence hooks (including the one-line call to the shared
+evidence hook that takes the per-TC screenshot), locale/label constant tables, and a one-line
+delegating alias to a `prerequest` fixture.
 
 **Constants must have one source of truth.** Do not redeclare a tolerance, timeout, or
 threshold in a spec when the owning layer defines it — import or alias it. And never merge
@@ -473,6 +553,11 @@ Internal step (no JSON handoff files) — normalize each approved TC:
 <selector_resolution>
 Selectors come from SOURCE ONLY — never from memory, never guessed:
 
+0. Grep `Testing/project-learning.md` for this feature's `[module: …]` / `[page: …]`
+   `[type: trick]` lines (and its `[similar: …]` pages): known identification patterns and
+   `data-testid` values recorded by earlier runs or by skill 3/4 are verified against source
+   once, not rediscovered. After resolution, record every newly confirmed pattern and value
+   there in words (`- [module: KPI] [page: KPI Details] [element: Save button] [type: trick] Identified by test id kpi-save-button; enabled only after all yearly values are filled.`).
 1. Scan the implementation files for the feature (Angular templates `*.html`,
    components `*.ts`, TSX/JSX) and build a `data-testid` index.
 2. Classify each logical target: RESOLVED (one certain match) · AMBIGUOUS ·
@@ -491,6 +576,88 @@ Selectors come from SOURCE ONLY — never from memory, never guessed:
    Deviations; use a source-confirmed stable fallback selector inside the page
    object with a `// TODO` note, or skip-guard the TC with the precise blocker.
 </selector_resolution>
+
+<run_plan>
+**Build the RUN PLAN for this User Story BEFORE writing specs — it decides what runs in
+parallel and what runs one after another, to minimise total run time without letting TCs
+corrupt each other's data.**
+
+Input: every automation-candidate TC in the approved document. Output:
+`{run_plan}` = `{results_root}/run-plan.json` (rewritten every run) + a short summary in
+the chat and in the progress log.
+
+**Classification — first matching rule wins:**
+
+| Signal | Result |
+|---|---|
+| TC field `Data effect: read-only` | **parallel** |
+| TC field `Data effect: creates / modifies / deletes` | **serial**; group = the `Shared data` value, else the entity named in the steps |
+| TC field `Shared data: {name}` present on two or more TCs | all of them **serial** in the same group `{name}` |
+| No fields → the steps or preconditions contain a mutating action (*create, add, new, edit, update, save, delete, remove, approve, reject, submit, upload, import, change status, assign*) or a precondition that depends on data another TC creates | **serial**; group = the entity / fixture named in Preconditions or Data Oracle (fall back to the screen name) |
+| The TC signs in with an account that only allows one session, or switches the application language for the whole session | **serial** in that account's / locale's group |
+| Everything else (open, view, search, filter, sort, paginate, check a label or message, validate a field, export) | **parallel** |
+| Cannot decide | **serial** (fail safe) — record the reason |
+
+Locale variants (`TC-01` and `TC-01b`) always share the classification of their base TC.
+Decisions driven by the TC fields are marked `field`; the rest `inferred`.
+
+**`run-plan.json` shape:**
+
+```json
+{
+  "user_story": "US-1031475", "generated": "ISO-8601",
+  "headed": true, "workers_parallel": 3,
+  "groups": [
+    { "name": "parallel", "mode": "parallel", "workers": 3, "tcs": ["KPI-001", "KPI-001b", "KPI-004"] },
+    { "name": "serial:kpi-yearly-values", "mode": "serial", "workers": 1,
+      "tcs": ["KPI-010", "KPI-011", "KPI-011b"], "reason": "all edit the same KPI yearly values" }
+  ],
+  "decisions": [
+    { "tc": "KPI-010", "mode": "serial", "source": "inferred", "why": "step 4 saves a new yearly value" },
+    { "tc": "KPI-001", "mode": "parallel", "source": "field", "why": "Data effect: read-only" }
+  ],
+  "estimate": { "serial_only_s": 0, "planned_s": 0 }
+}
+```
+
+**How the plan reaches the tests:**
+- Every test title carries, in addition to `@smoke` / `@positive` / `@negative`, exactly one
+  run tag: `@run:parallel` or `@run:serial-{group}` (kebab-case group name).
+- Each serial group is its own `test.describe('{group}', …)` block with
+  `test.describe.configure({ mode: 'serial' })`; parallel TCs live in a describe configured
+  `{ mode: 'parallel' }`. Nothing else about the spec changes (`<pom_mandatory>` still rules).
+- Execution order inside every stage is defined in `<staged_execution>`: parallel group first
+  with `--workers={workers_parallel}`, then each serial group with `--workers=1`.
+- Report `serial_only_s` (sum of average TC durations) vs `planned_s` (parallel group ÷
+  workers + serial groups in sequence) in the chat when the plan is built, and refresh both in
+  `<live_progress>` once real timings exist.
+- Read `Testing/project-learning.md` `[type: env]` / `[type: trick]` lines first — a serial
+  group discovered in an earlier run for the same module is reused; after the run, record new
+  groups and the worker count that ran cleanly as plain-English tagged lines.
+</run_plan>
+
+<us_config>
+**Generate a per-User-Story Playwright config instead of editing the shared one.**
+
+File: `{us_config}` = `{automation_root}/playwright.us-{UserStoryID}.config.ts`, rewritten
+every run. It imports the project's base `playwright.config.ts` and overrides ONLY:
+
+- `use.headless: false` when `{headed}` is true (the browser is visible while tests run);
+  `true` only on `--headless` or when the environment gate finds no display.
+- `workers: {workers_parallel}` (default 3) — overridden per command with `--workers`.
+- `fullyParallel: false` — parallelism is controlled by the describe-level `mode` from the
+  run plan, never by the file setting.
+- `use.screenshot: 'only-on-failure'` (Playwright's own failure attachment stays available) and
+  `outputDir: '{results_root}/artifacts'` (traces/attachments; replaced each run).
+- `reporter: [['line'], ['json', { outputFile: '{results_root}/last-run.json' }]]` — the
+  results JSON is always at a known path (replaced each run; phase files are built from it).
+- `testMatch` / `projects` / `baseURL` / env handling are **inherited**, never copied.
+
+Rules: the base `playwright.config.ts` is touched only for `testMatch` registration and the
+existing `screenshot: 'only-on-failure'` check. Every `{run_command}` in this skill runs with
+`--config {us_config} --project={browser_project}`. List the generated file in the Placement
+Manifest every run.
+</us_config>
 
 <spec_writing>
 Write the spec against `{automation_root}` following the project conventions:
@@ -514,6 +681,10 @@ Write the spec against `{automation_root}` following the project conventions:
   `@positive` / `@negative`; TCs marked `Smoke: YES` in the approved TC document
   ALSO carry `@smoke` (additive — the polarity tag stays). `@smoke` derives ONLY
   from the TC document's `Smoke:` field — never from this skill's own judgment.
+  Every title ALSO carries its `<run_plan>` tag — `@run:parallel` or
+  `@run:serial-{group}` — and serial groups sit in their own describe block with
+  `test.describe.configure({ mode: 'serial' })`. Every test calls the shared evidence
+  hook (`afterEach`) so `{TC-ID}.png` is written per `<result_organization>`.
   AAA structure; fixtures/seeding reused from
   `prerequest/` + `helpers/` (this is the data oracle — check before skip-guarding
   anything for "no data"); every api_setup precondition gets a matching
@@ -569,9 +740,37 @@ inside the structure's `reports/` folder.**
   (User Story · Phase N · date · links to earlier phases in the same folder), in
   the ADO summary comment, and in the final chat summary — it must be immediately
   clear which result belongs to which execution.
-- Failure screenshots go under `{automation_root}/screenshots/` per the structure
-  (they are also embedded as base64 in the phase HTML, so the report stays
-  self-contained).
+**Screenshots — every TC, one folder per User Story, REPLACED on every run:**
+
+```text
+{automation_root}/screenshots/
+  US-1031475-initiative-yearly-values/     ← {user_story_name}, same name skill 3 used
+    KPI-001.png            ← final state of the TC (full page), pass or fail
+    KPI-001b.png           ← the Arabic variant has its own image
+    KPI-010.png
+    KPI-010-failed.png     ← only when the TC failed: the failing step
+```
+
+- `{TC-ID}.png` is taken for **every executed TC** at its end by one shared evidence hook
+  (`helpers/evidence.ts` or the project's existing equivalent): an `afterEach` that reads the
+  `[TC-ID]` from the test title, takes a full-page screenshot to
+  `{screenshots_root}/{TC-ID}.png`, and on failure copies Playwright's failure attachment to
+  `{TC-ID}-failed.png`. Specs only call the hook — no screenshot code in a spec body.
+- **Fixed names → a re-run overwrites the previous image.** At run start, delete any image in
+  `{screenshots_root}` whose TC-ID is no longer in the approved document and report the count
+  (`stale images removed: N`). Never keep dated copies here — history lives in the phase HTML,
+  which embeds the images as base64 so each phase report stays self-contained.
+- A TC that was NOT_RUN or SKIPPED has no image; the report says so plainly.
+
+**Immutable vs replaced — be explicit in the output:**
+
+| Artifact | Behaviour |
+|---|---|
+| `reports/US-{id}/phase-N.json` / `.html` | immutable, new phase per run |
+| `automation-logs/US-{id}/run-progress-{stamp}.log` | immutable, new file per run |
+| `screenshots/{user_story_name}/*.png` | replaced each run |
+| `reports/US-{id}/run-plan.json`, `last-run.json`, `artifacts/` | replaced each run |
+| `playwright.us-{id}.config.ts` | regenerated each run |
 </result_organization>
 
 <automation_logs>
@@ -604,9 +803,10 @@ Positive execution → Negative execution → Result generation → Report gener
 ADO update → Finalization
 ```
 
-**Every log entry carries:** current stage · current activity · TCs completed /
-passed / failed / skipped / not-run · current TC-ID · overall progress % ·
-elapsed time · estimated remaining time · execution status.
+**Every log entry carries:** current stage · current run group (`parallel` /
+`serial:{group}`) · mode + workers (e.g. `parallel ×3, headed`) · current activity ·
+TCs completed / passed / failed / skipped / not-run · current TC-ID(s) (several when
+parallel) · overall progress % · elapsed time · estimated remaining time · execution status.
 
 **Playwright execution mechanics:**
 - Run every test command **in the background** (never a silent blocking foreground
@@ -618,17 +818,19 @@ elapsed time · estimated remaining time · execution status.
 **Chat update shape (each poll during execution; each stage transition otherwise):**
 
 ```text
-Current phase: Smoke Execution
+Current phase: Smoke Execution — group: parallel (×3 workers, headed)
 Progress: 7/15 TCs (47%)
 Passed: 6 · Failed: 1
-Elapsed: 02:14 · Estimated remaining: ~01:35
-Current TC: TC-YOBJ-018
+Elapsed: 02:14 · Estimated remaining: ~01:35 (serial-only would be ~04:10)
+Current TCs: TC-YOBJ-018, TC-YOBJ-021, TC-YOBJ-023
 ```
 
 **Estimated remaining time:** once ≥3 TCs (or one completed stage) have timing
-data, estimate remaining = average TC duration × TCs left (per stage, since
-stages differ in cost). Refresh the estimate on every update as real data
-accumulates — never state it once at the beginning and go quiet.
+data, estimate remaining = average TC duration × TCs left ÷ workers of the current
+group, plus the serial groups still queued at 1 worker (per stage, since stages differ
+in cost). Show the serial-only figure beside it so the saving is visible. Refresh the
+estimate on every update as real data accumulates — never state it once at the
+beginning and go quiet.
 
 **The same concept applies outside test execution:** while generating/updating
 automation report files done/total, while reviewing results report TCs
@@ -639,8 +841,23 @@ ADO report work items done/total.
 <staged_execution>
 **Priority order inside every run: 1) Smoke → gate → 2) Positive → 3) Negative.**
 
+**Inside every stage the `<run_plan>` groups run in this order, browser visible
+(`{headed}`), always with `--config {us_config} --project={browser_project}`:**
+
+```text
+stage S:
+  1. parallel group      → {run_command} --grep "<S tags>" --grep "@run:parallel"        --workers={workers_parallel}
+  2. serial group A      → {run_command} --grep "<S tags>" --grep "@run:serial-{groupA}" --workers=1
+  3. serial group B …    → one command per serial group, one after another
+```
+
+`--grep` values are combined with the stage's polarity filters below (Playwright ANDs
+repeated `--grep` flags). A group with no TCs in that stage is skipped and logged. No TC
+runs twice in one phase. Suites beyond ~40 tests are sliced per group and stage anyway
+(Windows resource rule in `<environment_gate>`), so slices never cut through a serial group.
+
 1. **Smoke stage** — run ONLY `@smoke`-tagged tests:
-   `{run_command}` + `--grep "@smoke"`.
+   `{run_command}` + `--grep "@smoke"` (parallel group, then serial groups as above).
 2. **Smoke gate** — compute `fail% = failed / total smoke tests`:
    - **fail% ≤ 30%** → proceed to the positive stage (the failures are still
      classified and handled by the normal rules).
@@ -659,11 +876,12 @@ ADO report work items done/total.
        `NOT_RUN — smoke gate failed (application errors)`. State the gate result
        in the ADO summary comment and the final chat summary.
 3. **Positive stage** — `--grep "@positive" --grep-invert "@smoke"` (smoke tests
-   already ran; never run a TC twice in one phase).
-4. **Negative stage** — `--grep "@negative" --grep-invert "@smoke"`.
-5. Merge the stage results into the single `phase-N.json` / `phase-N.html` —
-   per-stage counts preserved (see the JSON additions in `<second_run>`), and the
-   report shows the stage order and the gate outcome.
+   already ran; never run a TC twice in one phase) — parallel group, then serial groups.
+4. **Negative stage** — `--grep "@negative" --grep-invert "@smoke"` — same group order.
+5. Merge the stage and group results into the single `phase-N.json` / `phase-N.html` —
+   per-stage counts preserved (see the JSON additions in `<second_run>`), each TC
+   carrying its `run_group` / `run_mode`, and the report shows the stage order, the group
+   order, the gate outcome, and planned vs actual duration.
 </staged_execution>
 
 ---
@@ -671,32 +889,50 @@ ADO report work items done/total.
 ## PHASE 3 — FIRST RUN (IMPROVE)
 
 <environment_gate>
-Before executing: confirm the app/base URL responds, required services are
+Before executing: grep `Testing/project-learning.md` for `[type: env]` lines first — known
+environment quirks, VPN/proxy notes, slicing thresholds and past fixes are applied before
+diagnosing anything anew. Then confirm the app/base URL responds, required services are
 healthy, and seeded data is present. Any check fails → **ENVIRONMENT_BLOCKED**
 (name the unhealthy dependency; action for ops/human — NOT a code defect).
-Do not execute and do not attribute environment failures to the tests.
+Do not execute and do not attribute environment failures to the tests. Every environment
+fact learned or fixed in this gate is written back as a plain-English `[type: env]` line
+under `## Automation Tricks`.
 
-**Failure evidence must be capturable.** Confirm the Playwright config sets
-`screenshot: 'only-on-failure'` in its `use` block. Without it — and with `retries: 0`,
-which stops `trace: 'on-first-retry'` from ever firing — a failing test leaves NO visual
-evidence, and every bug entry rests on assertion text alone. If it is missing, add it
-before the first run and note it in the Placement Manifest. (Already present in
-`SMO_Automation_PW/playwright.config.ts`.)
+**The browser must be visible.** `{headed}` is true by default: confirm a display is
+available (an interactive Windows session, not a headless CI agent) by launching one headed
+browser through the generated `{us_config}` before the stages start. If no window can open,
+fall back to `headless: true` for this run, say so in the chat immediately, and list it under
+Deviations — never silently run headless when the user expects to watch.
 
-**Long sequential runs exhaust Windows resources.** A large headed suite run with
-`workers: 1` accumulates browser processes; past runs died mid-suite with
-`worker process exited unexpectedly (code=3221225794)` — `0xC0000142
-STATUS_DLL_INIT_FAILED`. That is an `environment_failure`, never an app or test defect,
-and it cascades: the crashing test plus every test after it in that worker report
-failed/not-run with no verdict. For suites beyond ~40 tests, run in slices and combine
-the results, and classify any `0xC0000142` cascade explicitly as environmental.
+**Failure evidence must be capturable — and every TC must leave a final screenshot.**
+Confirm the Playwright config sets `screenshot: 'only-on-failure'` in its `use` block
+(inherited by `{us_config}`). Without it — and with `retries: 0`, which stops
+`trace: 'on-first-retry'` from ever firing — a failing test leaves NO visual evidence, and
+every bug entry rests on assertion text alone. If it is missing, add it before the first
+run and note it in the Placement Manifest. (Already present in
+`SMO_Automation_PW/playwright.config.ts`.) Confirm the shared evidence hook exists and
+that `{screenshots_root}` is writable; remove stale images per `<result_organization>`.
+
+**Long runs exhaust Windows resources.** A large headed suite accumulates browser
+processes (3 visible windows for the parallel group make this worse, not better); past
+runs died mid-suite with `worker process exited unexpectedly (code=3221225794)` —
+`0xC0000142 STATUS_DLL_INIT_FAILED`. That is an `environment_failure`, never an app or
+test defect, and it cascades: the crashing test plus every test after it in that worker
+report failed/not-run with no verdict. For suites beyond ~40 tests, run in slices **per
+run-plan group and stage** (a slice never cuts through a serial group), combine the
+results, and classify any `0xC0000142` cascade explicitly as environmental. If it
+recurs, lower `{workers_parallel}` for the rest of the run and record the count that
+worked in the learning file.
 </environment_gate>
 
 <first_run>
-0. Initialize per `<result_organization>` (resolve US folder + next phase N) and
-   `<automation_logs>` (create this run's progress log, announce its path).
-1. Execute via `{run_command}` with the correct `--project={browser_project}`,
-   following `<staged_execution>` (smoke → gate → positive → negative) and
+0. Initialize per `<result_organization>` (resolve US folder + next phase N, create
+   `{screenshots_root}`, remove stale images) and `<automation_logs>` (create this run's
+   progress log, announce its path). Write `{run_plan}` and `{us_config}`; post the run-plan
+   summary (groups, TC counts, workers, planned vs serial-only estimate) in the chat.
+1. Execute via `{run_command}` with `--config {us_config} --project={browser_project}`,
+   following `<staged_execution>` (smoke → gate → positive → negative; inside each stage
+   parallel group ×{workers_parallel}, then serial groups ×1, browser visible) and
    `<live_progress>` (background run, log + chat updates with ETA).
    Timeouts: feature run 10 min · regression 45 min · full 90 min → on breach,
    abort and report completed vs not-executed.
@@ -720,6 +956,10 @@ the results, and classify any `0xC0000142` cascade explicitly as environmental.
 4. Re-run only the healed tests to confirm the heal. Maximum **2 heal iterations**;
    whatever still fails for test-code reasons after that is reported honestly as-is.
 5. Keep a **Heal Log**: | TC-ID | Failure | Classification | Fix applied | Result |
+6. Every `automation_failure` or `environment_failure` heal that would help the next run
+   (a wait that works, an element identified differently, an environment quirk) becomes one
+   plain-English tagged line under `## Automation Tricks` in `Testing/project-learning.md`.
+   `app_bug` findings are NOT written there — they belong in the bug report.
 </first_run>
 
 ---
@@ -731,9 +971,10 @@ the results, and classify any `0xC0000142` cascade explicitly as environmental.
    smoke → gate → positive → negative) with `<live_progress>` updates throughout.
    This run's results are the results of record — no fixes, no re-runs after it.
    A smoke-gate STOP in this run is itself the result of record.
-2. Read the framework's JSON output (`{automation_root}/results/run-results.json`
-   for the legacy SMO project; the project's configured output path otherwise)
-   for per-test status, duration, errors, and screenshot attachment paths.
+2. Read the framework's JSON output from `{results_root}/last-run.json` (written by
+   `{us_config}`; fall back to `{automation_root}/results/run-results.json` for the legacy
+   SMO project) for per-test status, duration, errors, and attachment paths, and pair each
+   TC with its `{screenshots_root}/{TC-ID}.png` (+ `-failed.png` when present).
 3. Emit the **machine-readable artifact**
    `{automation_root}/reports/US-{UserStoryID}/phase-{N}.json`
    (N from `<result_organization>` — never overwrite an earlier phase):
@@ -743,6 +984,9 @@ the results, and classify any `0xC0000142` cascade explicitly as environmental.
      "run_id": "...", "timestamp": "ISO-8601", "environment": "...",
      "framework": "playwright", "file_or_suite": "...", "user_story": "{ADO ID}",
      "user_story_id": "US-...", "phase": 1,
+     "headed": true, "workers_parallel": 3,
+     "run_plan": { "groups": 0, "parallel_tcs": 0, "serial_tcs": 0,
+                   "serial_only_estimate_s": 0, "planned_estimate_s": 0, "actual_s": 0 },
      "stages": {
        "smoke":    { "total": 0, "passed": 0, "failed": 0, "skipped": 0 },
        "positive": { "total": 0, "passed": 0, "failed": 0, "skipped": 0 },
@@ -757,7 +1001,9 @@ the results, and classify any `0xC0000142` cascade explicitly as environmental.
        "duration_ms": 0,
        "classification": "app_bug | selector_failure | ... | N/A",
        "error_message": "...", "root_cause": "...",
-       "screenshot_path": "... or null",
+       "run_group": "parallel | serial:{group}", "run_mode": "parallel | serial",
+       "final_screenshot": "screenshots/{user_story_name}/{TC-ID}.png or null (NOT_RUN/SKIP)",
+       "failure_screenshot": "screenshots/{user_story_name}/{TC-ID}-failed.png or null",
        "severity": "Critical | High | Medium | Low | N/A",
        "healed_in_first_run": true
      }]
@@ -770,14 +1016,19 @@ the results, and classify any `0xC0000142` cascade explicitly as environmental.
    no external requests, light/dark aware):
 
    - **Header:** feature, User Story link, **Phase N**, environment, build, run
-     date, run command, and links to the earlier phases in the same folder
-   - **Summary tiles:** passed / failed / skipped / not-run / duration / pass-rate
+     date, run command, headed/headless, and links to the earlier phases in the same folder
+   - **Summary tiles:** passed / failed / skipped / not-run / duration / pass-rate /
+     **planned vs actual duration** (with the serial-only estimate for comparison)
+   - **Run plan section:** each group (parallel ×N, serial:{group} ×1) with its TCs and
+     the reason for every serial group; inferred vs field-driven decisions marked
    - **Stage breakdown:** smoke / positive / negative counts + the smoke-gate
      verdict. If the gate stopped the run: a prominent **SMOKE GATE FAILED**
      banner at the top, smoke failures in full bug-report format, and every
      positive/negative TC listed as `NOT_RUN — smoke gate failed (application errors)`
    - **Per-TC results table:** TC-ID · REQ-ID · test name · status (colour-coded)
-     · duration · classification — traceable back to the approved TC document
+     · run group · duration · classification · **final screenshot thumbnail (every
+     executed TC)** + failure image when present — traceable back to the approved TC
+     document
    - **Bug Report section** — one entry per `app_bug`. Written for a human triaging the
      defect, NOT for someone reading the test code. See `<bug_report_format>` below.
    - **Healed in Run 1** changelog (the Heal Log — what was improved and why)
@@ -905,7 +1156,21 @@ requirements, Data Oracle, type, smoke and locale unchanged — PASS
 {failures, or "All items published"}
 
 ### Placement Manifest
-{File · Path · Registered · Status table}
+{File · Path · Registered · Status table — includes playwright.us-{id}.config.ts and helpers/evidence.ts}
+
+### Run plan
+| Group | Mode | Workers | TCs | Reason |
+|-------|------|---------|-----|--------|
+{one row per group; `parallel` first}
+**Decisions:** {N field-driven} · {N inferred} · {N fail-safe serial}
+**Estimate:** serial-only ~{s} vs planned ~{s} → actual {s}
+**Headed:** {yes | no — reason}
+**Run plan file:** {results_root}/run-plan.json
+
+### Screenshots
+**Folder:** {automation_root}/screenshots/{user_story_name}/
+**Written:** {N} final images · {N} failure images · **stale images removed:** {N}
+{TC-IDs without an image and why (NOT_RUN / SKIP)}
 
 ### Coverage
 | TC-ID | Smoke | Automation candidate | Implementation | Run 2 status |
@@ -928,7 +1193,9 @@ requirements, Data Oracle, type, smoke and locale unchanged — PASS
 | Positive | {passed}/{total} |
 | Negative | {passed}/{total} |
 | Total execution time | {hh:mm:ss} |
-| Estimated vs actual duration | ~{est} vs {actual} |
+| Planned vs actual duration | ~{planned} vs {actual} (serial-only would be ~{serial}) |
+| Headed / workers | {yes \| no} / parallel ×{N}, serial ×1 |
+| Screenshots | {automation_root}/screenshots/{user_story_name}/ — {N} images (replaced) |
 | Result folder | {automation_root}/reports/US-{ID}/ |
 | Progress log | {automation_root}/automation-logs/US-{ID}/run-progress-{stamp}.log |
 | HTML report | .../US-{ID}/phase-{N}.html |
@@ -942,6 +1209,9 @@ requirements, Data Oracle, type, smoke and locale unchanged — PASS
 
 ### Deviations
 {everything that differs from the approved document, with reasons — or "None"}
+
+### Learning file
+**Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}
 
 ---
 
@@ -998,6 +1268,9 @@ Before returning AUTOMATION COMPLETE:
 - [ ] **Progress log created at `automation-logs/US-{ID}/run-progress-{stamp}.log`, announced at start, appended across ALL stages (not just execution), historical logs untouched**
 - [ ] **Test runs executed in background with per-poll chat updates: counts, current TC, elapsed, and a REFRESHED estimated-remaining time**
 - [ ] **Stage order enforced: smoke → gate → positive → negative; no TC run twice in one phase**
+- [ ] **Run plan built from the approved TCs and written to `reports/US-{ID}/run-plan.json`; every TC carries one `@run:` tag; serial groups in `mode: 'serial'` describes; inside every stage the parallel group ran ×{workers_parallel} then serial groups ×1; reasons recorded for every serial decision**
+- [ ] **Browser visible (headed) via the generated `playwright.us-{ID}.config.ts` — or the headless fallback reported in chat AND under Deviations; base `playwright.config.ts` changed only for `testMatch`**
+- [ ] **Every executed TC has `screenshots/{user_story_name}/{TC-ID}.png`; every failed TC also has `{TC-ID}-failed.png`; stale images removed and counted; phase artifacts still immutable**
 - [ ] **Smoke gate math reported (fail%, majority classification, action); automation/env majority → heal + smoke re-run (≤2 cycles); app_bug majority → run stopped**
 - [ ] **On a gate stop: phase report still produced with SMOKE GATE FAILED banner and every positive/negative TC as NOT_RUN**
 - [ ] **`@smoke` tags derive only from the TC document's `Smoke:` field**
@@ -1010,4 +1283,8 @@ Before returning AUTOMATION COMPLETE:
 - [ ] ADO close-out: `Custom.TestAutomated = true` where earned (AutomationStatus stays
       `Planned` — the template rejects `Automated`); summary comment posted; ADO-MAP updated
 - [ ] Deviations honest and complete
+- [ ] Learning file searched (Index + tag grep, not the whole file) before every ask and before
+      selector/environment discovery; recorded and `[similar:]` knowledge reused
+- [ ] Learning file updated: user answers under Automation Model Q&A, automation tricks and env
+      facts as tagged plain-English lines, Index rows updated — no PATs, no code identifiers
 </quality_checklist>

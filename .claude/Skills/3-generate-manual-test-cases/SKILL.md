@@ -185,7 +185,7 @@ order: (1) explicit value in the task input → (2) auto-detection → (3) ask t
 | `credentials_per_role` | **NEVER auto-detected — ask the user** | — |
 | `tc_output_folder` | `Testing/Manual_Test/TestCases/{UserStoryName}/` — one folder PER User Story, named after the story, following the `generate-testing-structure` layout | same — create the subtree if missing |
 | `requirements_folder` | `Testing/Requirements/US-{storyID}-{kebab-name}/` — one folder per User Story | same — create if missing |
-| `learning_file` | task input | `.planning/project-learning.md` |
+| `learning_file` | task input | `Testing/project-learning.md` (shared knowledge base created by `1-generate-update-testing-structure`; a legacy `.planning/project-learning.md` is migrated into it and then ignored) |
 
 If a key cannot be resolved and the user does not answer → BLOCKED naming the
 exact missing key. Never invent a URL, a credential, or a spec path.
@@ -203,58 +203,61 @@ or any other location.
 <project_learning>
 **STEP 0.c — Project learning file (shared knowledge base for ALL agents).**
 
-`{learning_file}` is a simple, plain-English knowledge base of reusable project
-knowledge: how to reach screens, common flows, UI behaviour, test data, EN/AR
-differences, and answered questions. It exists to progressively eliminate
-rediscovery across stories.
+`{learning_file}` (`Testing/project-learning.md`) is the plain-English knowledge base
+shared by ALL QA skills 1-5: what the system does (modules, rules, roles), how to reach
+screens, common flows, UI behaviour, test data, EN/AR differences, automation tricks, and
+answered questions — separated per model. This skill's section is
+`### Manual TC Model (skill 3)` with `#### Knowledge` and `#### Questions and Answers`.
+It exists to progressively eliminate rediscovery and re-asking across stories.
 
 **Before starting work:**
 
-1. File missing → create it with this skeleton (keep the language simple; it is a
-   knowledge base, NOT another specification):
+1. File missing → create it with the skeleton defined in
+   `1-generate-update-testing-structure` section 2 (`## Index`, six shared sections,
+   `## Model Notes` with five model subsections). Keep the language simple; it is a
+   knowledge base, NOT another specification. A legacy `.planning/project-learning.md`
+   is merged into the new file under the matching sections and then no longer used.
 
-```markdown
-# Project Learning
-
-## Project Knowledge
-## Common Flows
-## UI Knowledge
-## Test Data
-## Locale Knowledge
-## Questions and Answers
-## Automation Notes
-
-## Model Notes
-### Manual TC Model
-### MCP Model
-### Automation Model
-```
-
-2. File exists → do NOT load the whole file if it is large. Grep the section
-   headers, then read only the sections relevant to the current work:
-   Manual TC design → Project Knowledge, Common Flows, UI Knowledge, Test Data,
-   Locale Knowledge, Questions and Answers, Manual TC Model.
-   MCP pass → additionally the MCP Model section.
+2. File exists → **targeted search, never the whole file:**
+   a. Read only the `## Index` block (one row per module: pages, similar modules, sections).
+   b. From the story title, feature and page names pick the module / page / element names
+      to look for; add the `Similar to` modules the Index lists for them.
+   c. Grep for those tags — `\[module: X\]`, `\[page: Y\]`, `\[element: Z\]`,
+      `\[similar: .*X` — and, for the MCP pass, `\[type: trick\]`. Read only the matching
+      lines (0-1 lines of context).
+   d. Before asking the user anything, grep this skill's `#### Questions and Answers` for
+      the question's keywords (e.g. `base URL`, `role`, `environment`).
+   e. Load a whole section only if it is under ~40 lines and the grep found nothing.
+      A file under 80 lines may be read whole.
 
 3. Anything already answered in the learning file is NOT re-asked to the user and
-   NOT re-discovered via MCP. Trust it unless live observation contradicts it —
-   then update the entry (see below).
+   NOT re-discovered via MCP. State what you are reusing so the user can override.
+   Trust it unless live observation or the spec contradicts it — then update the entry
+   (see below). A `[similar: …]` module's entries count as known knowledge for its
+   look-alikes unless observation shows otherwise.
 
 **After the work (before delivering — mandatory, not optional):**
 
-- Add genuinely new knowledge: common flows discovered, UI behaviour, useful test
-  data, EN/AR label differences, useful questions the user answered this run
-  (record Q + A under Questions and Answers).
-- Update any entry contradicted by live observation — never leave conflicting or
-  duplicate entries.
-- Store KNOWLEDGE, not requirements. "To open KPI Details: open the strategy →
-  open the objective → select the KPI" belongs here. "The system shall display
-  yearly KPI performance" belongs in the spec — never copy it here.
-- Selectors / `data-testid` values observed incidentally MAY go under
-  Automation Notes here (they help test-automation-agent). They must NEVER appear
-  in the TC deliverables.
-- Knowledge useful to the whole project goes in the general sections; knowledge
-  useful mainly to one agent goes under its Model Notes subsection.
+- Every question the user answered this run → one tagged line under
+  `### Manual TC Model (skill 3) → #### Questions and Answers`:
+  `- [module: X] [type: qa] **Q (skill 3, {YYYY-MM-DD}):** … — **A:** …`.
+  Project-wide answers (base URL per environment, roles, module names, implementation
+  status) are ALSO added to `## Project Knowledge`. Credentials are NEVER written.
+- Every new fact → one tagged line in the matching shared section (Common Flows, UI
+  Knowledge, Test Data, Locale Knowledge, Automation Tricks) or this skill's
+  `#### Knowledge`. Grep the same tags first; update or dedupe instead of appending twins.
+- A module / page / element that behaves like an existing one → add `[similar: …]` on
+  both entries instead of copying text; update the `## Index` row for every module touched.
+- Update any entry contradicted by live observation or by the spec — never leave
+  conflicting or duplicate entries. Specs and steering always win.
+- Store learned KNOWLEDGE in your own words, not requirement text. "To open KPI Details:
+  open the strategy → open the objective → select the KPI" belongs here, and so does
+  "A KPI cannot be closed while it has open initiatives (source: US-1234 AC-3)". Never
+  paste "The system shall …" sentences verbatim.
+- Plain English only: never method / class / function / file names, variables, CSS or
+  XPath selectors, code snippets, or stack traces. `data-testid` values observed
+  incidentally MAY go under `## Automation Tricks`, each explained in words on the same
+  line (they help skill 5). They must NEVER appear in the TC deliverables.
 </project_learning>
 
 ---
@@ -279,8 +282,14 @@ everything you need in ONE message and WAIT for the reply:
 
 Rules:
 - Skip any item the learning file already answers reliably (e.g. a recorded base
-  URL for this environment) — state what you are reusing so the user can override.
-  Credentials are asked fresh unless the task input provides them.
+  URL for this environment, found by grepping `[type: qa]` / `[type: env]` lines) —
+  state what you are reusing so the user can override.
+  Credentials are asked fresh unless the task input provides them, and are never
+  written to the learning file.
+- After the user replies, write every answer (except credentials) to
+  `### Manual TC Model (skill 3) → #### Questions and Answers` and promote
+  project-wide facts (URL per environment, roles, implementation status) to
+  `## Project Knowledge` BEFORE navigating anywhere.
 - If the story is known to be NOT implemented and the user confirms it, the URL and
   credentials MAY be skipped — Step 3 is then skipped per Step 3.0.
 - Do NOT navigate anywhere via MCP until the user replies.
@@ -466,9 +475,13 @@ percentages, server-loaded content):
 | Data Oracle | MANDATORY if the TC asserts on data values |
 | Smoke | YES / NO — YES only for the critical happy-path journeys that prove the feature is alive (login works, screen reachable, core flow functions). Keep the smoke set small: roughly 10–20% of TCs, at least 1 per screen. The automation agent runs `Smoke: YES` TCs FIRST behind a failure gate. Mark deliberately — never default everything to YES. |
 | Automation Candidate | YES / NO — see automation suitability below |
+| Data effect | OPTIONAL — `read-only` / `creates` / `modifies` / `deletes`. Tells the automation skill whether this TC may run in parallel with others (read-only) or must run one after another (it changes data). Leave blank to let the automation skill infer it from the steps. |
+| Shared data | OPTIONAL — the fixture, record, or account this TC shares with other TCs, in plain words (e.g. `KPI "Revenue" yearly values`, `single-session admin account`). TCs naming the same shared data run one after another. |
 | Validation | draft (set in Step 2; updated in Step 3 — see the six states there) |
 
 Do NOT include: selectors, code, attribute names, or framework-specific assertions.
+`Data effect` / `Shared data` are plain words only — never table names, fixture function
+names, or identifiers from the code.
 
 ### Automation suitability (proposal only — the human decides)
 
@@ -711,7 +724,7 @@ Write to `{tc_output_folder}` = `Testing/Manual_Test/TestCases/{UserStoryName}/`
 ```
 
 Then: summary table (ID, Type, Locale, Requirement, Smoke, Automation Candidate,
-Validation, Description) → full TC details (format from Step 2) → Existing-TC
+Data effect, Shared data, Validation, Description) → full TC details (format from Step 2) → Existing-TC
 Analysis table (Case 1 only) → enhancement log → self-review tables (traceability
 matrix, negative coverage, standards alignment) → Open Findings for the Human
 Reviewer (with gaps, defects, and pending-implementation items in separate
@@ -719,8 +732,11 @@ subsections).
 
 ### 5.2 Update `{learning_file}` (per Step 0.c "after the work" rules)
 
-New common flows, UI knowledge, test data, locale differences, Q&A from this run.
-Deduplicate; update contradicted entries; keep it simple English.
+New common flows, UI knowledge, test data, locale differences → tagged lines in the
+shared sections; this run's user answers → `### Manual TC Model (skill 3) → #### Questions
+and Answers`; project-wide facts → `## Project Knowledge`; `[similar: …]` links and the
+`## Index` row updated. Deduplicate by grepping the tags first; update contradicted
+entries; keep it simple English with no code identifiers.
 
 ### 5.3 `TC-REVIEW-{feature}.html` — the designed review page (written by THIS skill)
 
@@ -745,8 +761,11 @@ content.
   amber discrepancy / orange not-implemented / grey draft). `inferred` and
   `discrepancy` cards carry a short caption telling the reviewer to check them
   with extra care; `not-implemented` cards carry a "Pending Implementation"
-  caption. Inside: preconditions, numbered steps with inline assertions, expected
-  result, data oracle, and a "Reviewer notes" placeholder box.
+  caption. A small **run badge** shows `Data effect` / `Shared data` when set (so the
+  reviewer can see which TCs will run in parallel vs one after another). Inside:
+  preconditions, numbered steps with inline assertions, expected result, data oracle,
+  Data effect / Shared data (or "let automation infer"), and a "Reviewer notes"
+  placeholder box.
 - **Enhancement log** section (what the live app changed and why).
 - **Discrepancies & open findings** section, visually prominent (never collapsed),
   with requirement gaps, application defects, and pending-implementation items
@@ -764,7 +783,9 @@ Tell the reviewer, explicitly:
    review those with extra care. `not-implemented` TCs are requirement-based and
    pending implementation — they are not evidence of application defects.
 3. To approve: edit `TEST-CASES-{feature}.md` — adjust any **Automation Candidate**
-   markings, then change `Status:` to `APPROVED`.
+   markings, optionally set **Data effect** / **Shared data** on TCs that change data or
+   share records (this steers which TCs the automation runs in parallel vs one after
+   another), then change `Status:` to `APPROVED`.
 4. To request changes: reply with corrections (reference TC-IDs) → re-run this
    skill in REVISION mode.
 5. `test-automation-agent` only accepts the markdown file with `Status: APPROVED`
@@ -807,7 +828,7 @@ Tell the reviewer, explicitly:
 **MCP validation:** {validated}/{enhanced}/{inferred}/{discrepancy}/{not-implemented}/{draft}
 {Case 1: **Existing-TC analysis:** {kept}/{updated}/{merged}/{removed}/{new}}
 **Common flows validated:** {list}
-**Learning file updated:** {sections touched, entries added/updated}
+**Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}
 **Open findings for the reviewer:** {gaps / defects / pending-implementation, or "None"}
 **Next step:** {the approval instructions from 5.4}
 
@@ -819,7 +840,7 @@ Tell the reviewer, explicitly:
 **Corrections Applied:** {table}
 **Not addressed:** {item + reason, or "None"}
 **Files patched:** markdown {TC-IDs + header counts recomputed} · HTML {cards updated + tiles recomputed}
-**Learning file updated:** {or "no new knowledge"}
+**Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}
 
 ---
 
@@ -845,7 +866,7 @@ Before returning TEST CASES READY FOR HUMAN REVIEW:
 - [ ] Implementation status (Step 3.0) determined BEFORE any TC-level validation; evidence recorded
 - [ ] No not-implemented functionality marked validated, enhanced, or as a defect; gaps / defects / pending-implementation kept in separate lists
 - [ ] Project profile fully resolved — no invented URLs, credentials, or paths
-- [ ] Learning file checked first; relevant sections read (not the whole file); known knowledge reused, not re-asked or re-discovered
+- [ ] Learning file searched first (Index + tag grep, not the whole file); known and `[similar:]` knowledge reused, not re-asked or re-discovered
 - [ ] User asked for URL + credentials per role in ONE message, and answers received before any MCP navigation
 - [ ] All spec/steering sources read; all REQ-IDs verified verbatim
 - [ ] Draft designed from specs FIRST; discovery plan (common flows / gaps) built before any MCP navigation
@@ -861,7 +882,7 @@ Before returning TEST CASES READY FOR HUMAN REVIEW:
 - [ ] Self-review tables completed and included; own findings fixed in place
 - [ ] Automation Candidate marked on every TC with the heuristics applied
 - [ ] Smoke marked deliberately on every TC (small critical set, ≥1 per screen) — never defaulted to YES
-- [ ] Learning file updated: new knowledge added, duplicates removed, contradicted entries corrected
+- [ ] Learning file updated: user answers under Manual TC Model Q&A, new tagged knowledge added, Index row updated, duplicates removed, contradicted entries corrected, no credentials or code identifiers written
 - [ ] Both deliverables written; HTML is self-contained, badge-coded (incl. inferred + not-implemented), light/dark aware, tiles match cards
 - [ ] Final message includes the explicit approval instructions
 </quality_checklist>

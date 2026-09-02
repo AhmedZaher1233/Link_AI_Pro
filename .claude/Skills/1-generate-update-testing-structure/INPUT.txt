@@ -1,6 +1,7 @@
 SKILL: 1-generate-update-testing-structure
 WHAT IT DOES: Creates or repairs the project's testing environment — the Testing/ folder
-structure, Node/NPM + Playwright setup, MCP servers (.mcp.json), and QA agent definitions.
+structure, the docs/steering/ quality-authority documents (L1/L2/L3), Node/NPM + Playwright
+setup, MCP servers (.mcp.json), and QA agent definitions.
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE
@@ -17,17 +18,29 @@ ASKED DURING THE RUN (only if it cannot detect them):
 
 OPTIONAL:
   - A different automation folder name/location, if your project already has a convention.
+  - A source path for the steering documents (L1 / L2 / L3), if they are not already in
+    docs/steering/ and not available from the source repository. The skill NEVER writes
+    L1 or L2 itself — a missing layer is reported, not invented.
 
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
   Testing/
+    project-learning.md    (shared knowledge base: Index + shared sections + one section per
+                            skill; every skill reads it before asking you and updates it after)
     Requirements/          (per-User-Story folders are added later by skill 2)
     Manual_Test/TestCases/
     Automation/  (pages, tests, reports, screenshots, automation-logs)
     White_Box_Testing/
+  docs/steering/
+    README.md                       (index + resolution order — authored by this skill)
+    L1-testing-foundation.md        (generic, org-wide — copied, never authored)
+    L2-testing-qa-standards.md      (generic, cross-project — copied, never authored)
+    L3-project-testing.md           (this project's config/SLAs — template, you fill it in)
+  + non-canonical steering file names normalized (no spaces, no " 1"/" 2" suffixes) and all
+    references updated, so skills 3 and 5 can resolve them
   + Playwright installed & configured
   + .mcp.json with Playwright / Azure DevOps / Word MCP entries
-  + validation report (PASS/FAIL per component)
+  + validation report (PASS/FAIL per component, including Steering Docs)
 
 WHEN TO RUN: once per project, or after environment drift — BEFORE skills 2–5.

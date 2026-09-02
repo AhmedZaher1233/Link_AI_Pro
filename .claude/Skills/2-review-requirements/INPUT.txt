@@ -20,7 +20,9 @@ OPTIONAL:
     consistency | feasibility | risk        (default: all 6)
   - "all" — review every spec under specs/ and every story under test/User stories/
 
-IF YOU GIVE NOTHING: the skill asks you for the source before starting. It never guesses.
+IF YOU GIVE NOTHING: the skill first checks Testing/project-learning.md (recorded spec
+locations, Azure DevOps project, glossary); only what is still missing is asked. It never
+guesses. Your answers are saved to the file's "Requirements Review Model" section.
 
 ============================================================
 OUTPUT — WHAT YOU GET
@@ -29,5 +31,6 @@ OUTPUT — WHAT YOU GET
     REQ-{id}-{name}.md      ← structured requirement (input for skill 3)
     US-{id}-review.md       ← the review (ratings, gaps, questions, verdict)
   Testing/Requirements/SPEC-REVIEW-SUMMARY.md   (only for multi-story specs)
+  Testing/project-learning.md                   (updated: glossary, business rules, Q&A)
 
 WHEN TO RUN: after skill 1, before skill 3.
