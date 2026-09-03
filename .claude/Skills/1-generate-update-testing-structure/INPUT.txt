@@ -10,6 +10,16 @@ INPUT — WHAT YOU MUST PROVIDE
 REQUIRED:
   (nothing) — the skill scans the project itself. Just run it from the project root.
 
+ASKED DURING THE RUN:
+  0. RUN MODE — asked ONLY when the project already has a testing structure
+     (Testing/ or automation code, or two of: playwright config, .mcp.json, QA agents,
+     docs/steering/, project-learning.md). A brand-new project is never asked.
+       A) Health-check only   — verify everything, change nothing, report what B would fix
+       B) Update & repair     — pull latest skills, add missing agents/steering/folders/MCP
+                                entries, keep the current structure untouched
+       C) Restructure         — migrate to the canonical Testing/ + docs/steering/ layout
+                                after you confirm the old → new move plan (moves, no deletes)
+
 ASKED DURING THE RUN (only if it cannot detect them):
   1. Azure DevOps organization name        — for the azure-devops MCP entry
                                              (auto-detected from the git remote when possible)
@@ -44,3 +54,4 @@ OUTPUT — WHAT YOU GET
   + validation report (PASS/FAIL per component, including Steering Docs)
 
 WHEN TO RUN: once per project, or after environment drift — BEFORE skills 2–5.
+RE-RUNNING on a configured project is safe: the skill asks for mode A / B / C first.

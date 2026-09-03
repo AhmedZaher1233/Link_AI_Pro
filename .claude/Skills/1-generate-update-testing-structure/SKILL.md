@@ -11,9 +11,12 @@ description: >
   authority (canonical file names, generic L1/L2, project values only in L3);
   Node.js + NPM validation,
   Playwright install + config, and Playwright/Azure/Word MCP configuration with a full
-  health-check validation report. Never overwrites or duplicates a valid existing
-  structure; never hardcodes credentials or PATs. Use once per project (or on
-  environment drift) BEFORE spec-driven test design/automation agents run.
+  health-check validation report. On a NEW project it runs end to end without questions;
+  on a project that ALREADY has a testing structure it stops and asks which mode to run —
+  (A) health-check only, (B) update skills/agents/steering and repair what is missing, or
+  (C) restructure to the canonical layout with a confirmed move plan. Never overwrites or
+  duplicates a valid existing structure; never hardcodes credentials or PATs. Use once per
+  project (or on environment drift) BEFORE spec-driven test design/automation agents run.
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__playwright, mcp__azure-devops
 ---
 
@@ -34,6 +37,12 @@ unnecessarily**.
 
 Before scanning or changing anything, refresh the local skill set from the canonical
 source repository so every run uses the latest versions of skills 1-5:
+
+> **Existing-project note (Section 1A):** when the user later picks **Mode A (health-check
+> only)**, this step must be a **dry-run** (`/sync-skills --dry-run`) — report which skills
+> are behind, copy nothing. If the scan in Section 1 has not run yet, do the dry-run first,
+> classify the project, ask the mode question, and only then perform the real sync for
+> Modes B and C.
 
 ```text
 https://github.com/AhmedZaher1233/Link_AI_Pro
@@ -125,7 +134,135 @@ Determine:
 purpose.**
 
 If a valid testing structure already exists, reuse and improve it instead of creating
-a duplicate structure.
+a duplicate structure — and **go through Section 1A first**: an already-configured project
+must be asked which mode to run (health-check / update / restructure) before any change.
+
+---
+
+## 1A. Decide the Run Mode — New Project vs. Already-Configured Project
+
+The scan in Section 1 must end with an explicit classification **before anything is
+created, installed or modified**. There are exactly two outcomes.
+
+### 1A.1 Classification
+
+Count how many of these markers are present:
+
+| # | Marker | Where to look |
+|---|--------|---------------|
+| M1 | Testing root exists | `Testing/` (or legacy `automation/`, lowercase `testing/`) with at least one sub-folder |
+| M2 | Automation code exists | any `*.spec.ts` / `*.spec.js` / `*.test.ts` or a `pages/` folder with page objects |
+| M3 | Playwright configured | `playwright.config.ts` / `.js` present, or `@playwright/test` in `package.json` |
+| M4 | MCP configured | `.mcp.json` with at least one of `playwright`, `azure-devops`, `word` |
+| M5 | QA agents installed | `.claude/agents/Test Agents V2/*.md` |
+| M6 | Steering docs exist | `docs/steering/` with at least one L1/L2/L3 file |
+| M7 | Learning file exists | `Testing/project-learning.md` (or legacy `.planning/project-learning.md`) |
+
+* **NEW PROJECT** — none of M1–M7 is present, **or** only M3 is present (Playwright installed
+  for app development but no testing structure). Skip the question below and run the skill
+  normally, end to end (Sections 2 → 13).
+* **EXISTING PROJECT** — M1 or M2 is present, or **any two** of M3–M7 are present. The skill
+  is being re-run on a project that already went through setup (or has its own automation).
+  **Stop and ask the user which mode to run** — never pick a mode yourself.
+
+Report the classification and the evidence in one short block before asking:
+
+```text
+Project classification: EXISTING PROJECT
+Evidence: Testing/ (12 folders, 34 spec files), playwright.config.ts, .mcp.json (3 servers),
+          .claude/agents/Test Agents V2/ (2 agents), docs/steering/ (L1 L2 L3),
+          Testing/project-learning.md (last updated 2026-08-21)
+```
+
+### 1A.2 The question to ask (EXISTING PROJECT only)
+
+Ask exactly one question with these options and wait for the answer. Do not proceed under
+an assumed answer.
+
+```text
+This project already has a testing structure. What should I do?
+
+  A) HEALTH-CHECK ONLY (recommended first)
+     Verify everything is set up correctly and report — Node/NPM, Playwright, .mcp.json
+     and every MCP server, QA agents, steering docs (names, layers, L1/L2 generic),
+     learning file, folder layout. Changes nothing. Produces the PASS/FAIL table plus a
+     list of what would be fixed by option B.
+
+  B) UPDATE SKILLS AND REPAIR (keep the structure as it is)
+     Pull the latest skills 1-5 and the sync-skills command from the source repo, install
+     any missing QA agent, missing steering layer, missing folder or missing MCP entry,
+     normalize non-canonical steering file names, then run the full health-check.
+     Existing folders, tests, pages, configs, steering content and learning entries are
+     never moved, renamed or rewritten.
+
+  C) RESTRUCTURE TO THE CANONICAL LAYOUT
+     Migrate the current structure into the canonical Testing/ + docs/steering/ layout
+     (relocate automation/, pages/, tests/, reports/, screenshots/, steering files under the
+     right roots, update imports and config paths), then do everything in B.
+     I will show the exact move plan (old path → new path) and ask you to confirm it
+     before moving a single file. Nothing is deleted — only moved.
+
+Reply A, B or C.
+```
+
+If the user's message that triggered the skill already states the intent clearly
+(e.g. "just check the setup", "update the skills", "restructure to the standard layout"),
+map it to A/B/C, state the mapping in one line, and continue without re-asking.
+
+### 1A.3 What each mode runs
+
+| Section | A — Health-check | B — Update & repair | C — Restructure |
+|---------|------------------|---------------------|-----------------|
+| 0 Sync skills | dry-run only (report diff, copy nothing) | **run** | **run** |
+| 2 / 2A Create structure & steering | verify only | create **missing** items only | **run** after the move plan is confirmed |
+| 3 Preserve existing structure | verify only | **run** (extend in place, never relocate) | **run** (relocate with confirmation) |
+| 4–7 Node / NPM / Playwright | verify only | install/repair **missing** pieces | install/repair **missing** pieces |
+| 8 MCP servers | validate existing `.mcp.json` | add **missing** entries, never edit existing ones | add **missing** entries, never edit existing ones |
+| 9 QA agents | verify present + valid | copy **missing** agents only | copy **missing** agents only |
+| 9A Learning file | verify | create if missing, add setup entry | create if missing, add setup + migration entry |
+| 10–11 Validate MCPs | **run** | **run** | **run** |
+| 13 Final output | PASS/FAIL table + "Would be fixed by B" list | full report | full report + migration table (old → new) |
+
+**Mode A writes nothing.** If a check fails, the report says what is wrong and which mode
+fixes it. The only exception is the learning file: a Mode A run may append one
+`[setup] health-check {date}: {summary}` line under *Setup Model (skill 1)* if the file
+already exists.
+
+**Mode B never changes anything that already exists and is valid.** "Valid" means: the file
+is present, parses (JSON/TS/Markdown), and is at the canonical path. Anything invalid is
+reported, not rewritten — except non-canonical steering file names, which are renamed per
+Section 2A.3 (that is a rename with reference updates, never a content change).
+
+**Mode C requires a second confirmation.** After producing the move plan table, ask
+"Apply this move plan? (yes/no)". On anything other than an explicit yes, fall back to
+Mode B and say so. Migration steps: (1) `git status` must be clean or the user must accept
+working on a dirty tree; (2) move with `git mv` when the project is a git repo;
+(3) update every import path, `testDir`, `outputDir`, `reporter` path and steering
+reference that pointed at an old location; (4) re-run the Playwright test discovery
+(`npx playwright test --list`) to prove nothing broke; (5) record the migration in
+`Testing/project-learning.md` under *Setup Model (skill 1)*.
+
+### 1A.4 Health-check items (all modes end with this)
+
+Every mode finishes with this checklist. Each row is PASS, FAIL or WARN with a one-line
+reason; never report PASS without having actually run the check.
+
+```text
+Node.js         : node -v is a supported LTS
+NPM             : npm -v works; package.json present and parses
+Playwright      : @playwright/test in package.json, browsers installed, npx playwright --version works
+Playwright cfg  : playwright.config.* present; testDir / outputDir point at existing folders
+Folder layout   : Testing/{Requirements,Manual_Test/TestCases,Automation/{pages,tests,reports,screenshots,automation-logs},White_Box_Testing} present (or documented deviation)
+Steering Docs   : docs/steering/ has L1 + L2 + L3, canonical names, README.md, no product-specific text in L1/L2, glob resolves
+Learning File   : Testing/project-learning.md exists, has Index + 6 shared sections + 5 model sections
+.mcp.json       : parses; playwright + azure-devops + word entries present; no inline secrets
+Playwright MCP  : responds (Section 10)
+Azure DevOps MCP: responds; AZURE_DEVOPS_PAT_B64 set (value never printed)
+Word MCP        : responds
+QA Agents       : .claude/agents/Test Agents V2/manual-test-agent.md + test-automation-agent.md present, front-matter valid
+Skills          : .claude/Skills/1-5 match the source repo (Section 0 diff) — WARN if behind
+sync-skills cmd : .claude/commands/sync-skills.md present
+```
 
 ---
 
@@ -1148,6 +1285,8 @@ At the end, provide a concise setup report containing:
 
 ### Project Analysis
 
+* Run mode: `NEW PROJECT — full setup` or `EXISTING PROJECT — mode A | B | C (chosen by user)`
+  plus the evidence block from Section 1A.1
 * Existing testing/automation structure
 * Existing steering documents — which layers were found, which names were non-canonical,
   and any file at L1/L2 that turned out to be product-specific (Section 2A.5)
@@ -1212,6 +1351,12 @@ QA Agents      : PASS
 Learning File  : PASS   (Testing/project-learning.md exists, has Index + 6 shared sections + 5 model sections)
 ```
 
+Use the full checklist of Section 1A.4 (it adds `Playwright cfg`, `Folder layout`,
+`.mcp.json`, `Skills`, `sync-skills cmd`). In **Mode A** append a `Would be fixed by B:` list
+of every FAIL/WARN row that Mode B can repair, and a `Needs C:` list for layout deviations.
+In **Mode C** append the migration table (`old path → new path`, one row per move) and the
+result of `npx playwright test --list`.
+
 Finish with: `**Learning file:** read {sections} · updated {N added / M updated | "no new knowledge"}`.
 
 ### Remaining Actions
@@ -1235,8 +1380,11 @@ USER ACTION REQUIRED:
 
 ## Critical Rules
 
-1. **Scan first. Modify second.**
+1. **Scan first. Classify second (Section 1A). Modify third.**
 2. Never assume the project is empty.
+2a. **On an EXISTING PROJECT, always ask which mode to run (A health-check / B update /
+    C restructure) and wait for the answer.** Never pick a mode yourself; never start
+    Mode C without a confirmed move plan; Mode A writes nothing.
 3. Never duplicate an existing testing/automation structure.
 4. Never delete existing tests/configuration unless explicitly required.
 5. Never hardcode credentials.
