@@ -21,6 +21,12 @@ description: >
   (always-skipped, data-gated, access-only and role-variant tests are downgraded), weighted
   % against the L3 target with a soft block below it, plus a per-story coverage dashboard,
   CSVs and a categorized "what stays manual" list under reports/US-{id}/coverage/.
+  Still before the first run it checks PRECONDITIONS AND TEST DATA against the environment,
+  predicts every TC that would skip (data missing, precondition impossible, role user absent)
+  and asks the QC ONCE how to handle each gap — insert manually, let the skill use the
+  database, use an API it found in the codebase, create the data through an end-to-end UI
+  setup journey, or skip — then provisions, re-checks, and only then runs (created data is
+  cleaned up after the run unless the QC says keep).
   All folders and files follow the generate-testing-structure layout: automation code
   under Testing/Automation/ (pages, tests, reports, screenshots, automation-logs), TC
   documents under Testing/Manual_Test/TestCases/{UserStoryName}/. Results are organized
@@ -42,7 +48,9 @@ skill (or `manual-test-agent`), and you own everything from there to the final r
    document to Azure DevOps on the given User Story
 2. Generate Playwright automation code from the ORIGINAL approved document
    (POM mandatory, correct placement mandatory), then measure STATIC coverage of that
-   document from the spec source and pass the coverage gate before anything runs
+   document from the spec source and pass the coverage gate, then resolve TEST-DATA
+   READINESS with the QC (which TCs would skip, how each gap is provisioned) — all before
+   anything runs
 3. First run — improve: staged smoke→positive→negative execution, classify failures,
    self-heal TEST-CODE defects only
 4. Second run — report: designed HTML test report + plain-language bug report
@@ -137,6 +145,9 @@ Resolve:
 | `coverage_root` | `{results_root}/coverage/` — static coverage CSVs, dashboard and previous-run snapshot (see `<coverage_measurement>`), rewritten every run | same |
 | `coverage_target` | automation coverage target % from L3 (`docs/steering/L3-*.md`, e.g. "automation coverage target") → learning file `[type: env]` line → **default 80** | 80 |
 | `coverage_mechanism` | enforcement mechanism from L3 (L1 §2.4: `hard block` / `soft block` / `report-only`) → **default `soft block`** | soft block |
+| `readiness_file` | `{results_root}/data-readiness.json` — PHASE 2.6 requirements, QC decisions, predicted skips (see `<data_readiness>`), rewritten every run | same |
+| `data_setup_layer` | where provisioning code lives: API fixtures in `prerequest/` · UI setup journeys in `tests/{Area}_Tests/00-setup-{entity}.spec.ts` · DB helpers beside the existing DB-oracle helpers | same |
+| `db_access` | `helper` (the automation project already has a DB helper/connection) → `env:{VAR}` (the QC names the env var holding a connection string — value never read into the chat, logged, or written) → **default `none`** (DB option not offered) | none |
 | `workers_parallel` | task input `--workers N` → learning file `[type: env]` line → **default 3** | 3 |
 | `headed` | **true by default** (visible browser); task input `--headless` or no display available → false, reported as a Deviation | true |
 | `qa_standards` | glob `docs/steering/*` | L1/L2/L3 + testing-strategy |
@@ -177,8 +188,9 @@ section 2.
 2. From the User Story and the approved TC document pick the module / page / element names
    to look for; add the `Similar to` modules the Index lists for them.
 3. Grep for those tags — `\[module: X\]`, `\[page: Y\]`, `\[element: Z\]`,
-   `\[similar: .*X` — plus `\[type: trick\]`, `\[type: env\]`, `\[type: qa\]`. Read only
-   the matching lines (0-1 lines of context).
+   `\[similar: .*X` — plus `\[type: trick\]`, `\[type: env\]`, `\[type: qa\]`,
+   `\[type: data\]` (the `## Test Data` section: fixtures that exist per environment, how they
+   were created, whether they were kept). Read only the matching lines (0-1 lines of context).
 4. Before asking the user anything, grep this skill's `#### Questions and Answers` for the
    question's keywords.
 5. Load a whole section only if it is under ~40 lines and the grep found nothing. A file
@@ -198,6 +210,11 @@ NEVER written to the file.
   page (a pattern in words, plus the `data-testid` values used, each explained), which pages
   already have a page object (page name only), waits that work, environment quirks and their
   fixes, run slicing. Grep the same tags first; update or dedupe instead of appending twins.
+- Every fixture the QC chose to **keep** (PHASE 2.6) and every fixture found to exist → one
+  `[type: data]` line under `## Test Data`:
+  `- [module: X] [type: data] Fixture "{plain name}" — {what exists: entity, state, count, identifiers}; environment {env}; created by {api | ui journey | db | manual} on {YYYY-MM-DD}, kept.`
+  Every QC provisioning decision → a `[type: qa]` line in this skill's Q&A, so the next run
+  reuses it without asking.
 - Pages that follow the same identification pattern → `[similar: …]` on both entries; update
   the `## Index` row for every module touched.
 - Entries contradicted by the live run → correct them. The approved TC document and the
@@ -561,6 +578,11 @@ Internal step (no JSON handoff files) — normalize each approved TC:
 - Every TC ≥ 1 assertion. A step that cannot map deterministically → BLOCKED for
   that TC with the exact wording that is ambiguous (route back to the human —
   never interpret vague expected results).
+- **Precondition / data mapping:** every sentence in `Preconditions`, `Data Oracle`,
+  `Shared data` and every role named in the steps → one plain-English requirement
+  (`role user exists`, `record of type X in state Y exists (count N)`, `empty state for Z`,
+  `configuration / feature flag`, `external system or background job`). These feed
+  PHASE 2.6 `<data_readiness>`; a TC with none is `read-only, no data need`.
 </normalization>
 
 <selector_resolution>
@@ -608,6 +630,8 @@ the chat and in the progress log.
 | TC field `Shared data: {name}` present on two or more TCs | all of them **serial** in the same group `{name}` |
 | No fields → the steps or preconditions contain a mutating action (*create, add, new, edit, update, save, delete, remove, approve, reject, submit, upload, import, change status, assign*) or a precondition that depends on data another TC creates | **serial**; group = the entity / fixture named in Preconditions or Data Oracle (fall back to the screen name) |
 | The TC signs in with an account that only allows one session, or switches the application language for the whole session | **serial** in that account's / locale's group |
+| PHASE 2.6 created this TC's data (api / ui journey / db) | **serial** in the group named after the gap (`serial:{gap}`), scheduled after that gap's setup group; its teardown runs after the group |
+| The TC IS a PHASE 2.6 UI setup journey (`00-setup-{entity}.spec.ts`) | its own **setup group** `setup:{entity}`, **serial**, runs FIRST — before smoke |
 | Everything else (open, view, search, filter, sort, paginate, check a label or message, validate a field, export) | **parallel** |
 | Cannot decide | **serial** (fail safe) — record the reason |
 
@@ -620,6 +644,10 @@ Decisions driven by the TC fields are marked `field`; the rest `inferred`.
 {
   "user_story": "US-1031475", "generated": "ISO-8601",
   "headed": true, "workers_parallel": 3,
+  "setup_groups": [
+    { "name": "setup:kpi-yearly-values", "mode": "serial", "workers": 1, "spec": "tests/KPI_Tests/00-setup-kpi-yearly-values.spec.ts",
+      "provides": "KPI yearly values for 2026", "decision": "ui", "cleanup": "delete", "source": "qc" }
+  ],
   "groups": [
     { "name": "parallel", "mode": "parallel", "workers": 3, "tcs": ["KPI-001", "KPI-001b", "KPI-004"] },
     { "name": "serial:kpi-yearly-values", "mode": "serial", "workers": 1,
@@ -699,15 +727,18 @@ Write the spec against `{automation_root}` following the project conventions:
   `test.describe.configure({ mode: 'serial' })`. Every test calls the shared evidence
   hook (`afterEach`) so `{TC-ID}.png` is written per `<result_organization>`.
   AAA structure; fixtures/seeding reused from
-  `prerequest/` + `helpers/` (this is the data oracle — check before skip-guarding
-  anything for "no data"); every api_setup precondition gets a matching
-  `afterEach`/`afterAll` teardown.
+  `prerequest/` + `helpers/` (this is the data oracle); every api_setup precondition
+  gets a matching `afterEach`/`afterAll` teardown. Data a spec needs but the environment
+  lacks is NOT the spec author's problem to guess — it is a PHASE 2.6 requirement the QC
+  decides on (`<data_readiness>`).
 - **Banned:** `page.waitForTimeout()` · `test.only` · CSS/class/nth-child/text
   selectors when a data-testid exists · shared mutable state between tests ·
   commented-out test bodies. Waits are always web-first assertions
   (`expect(locator).toBeVisible()`, `page.waitForURL()`, …).
-- **Skip guards** only for genuinely missing data/deployment, with the precise
-  one-line blocker. Never to avoid a real failure.
+- **Skip guards** are written ONLY from a PHASE 2.6 outcome — a QC `skip` decision, the
+  pipeline default for an undecided gap, or an `IMPOSSIBLE` requirement — with the gap's
+  exact wording as the one-line reason. Never invented by the spec author, never to avoid a
+  real failure, never `test.skip(!data)` "just in case".
 </spec_writing>
 
 <self_check>
@@ -726,6 +757,8 @@ Before Phase 3 — review your own output as a gatekeeper would; FIX findings fi
 - [ ] Traceability header present; describe has REQ-ID; titles have [TC-ID] + polarity tag
       (+ `@smoke` where the document marks it)
 - [ ] Static coverage measured (PHASE 2.5) and the gate verdict recorded before any run
+- [ ] Test-data readiness resolved (PHASE 2.6): every predicted skip has a QC decision or the
+      pipeline default; every skip guard in the specs traces to one of them
 </self_check>
 
 ---
@@ -874,6 +907,112 @@ as plain-English `[type: env]` / `[type: trick]` lines under `### Automation Mod
 
 ---
 
+## PHASE 2.6 — PRECONDITION & TEST-DATA READINESS (QC decision gate)
+
+<data_readiness>
+**Runs after PHASE 2.5 and BEFORE anything executes.** A TC that would skip because its
+precondition cannot be met or its data is absent from the environment is **decided here by the
+QC — never discovered by the run.** The run must not be the first place a "no data" skip appears.
+
+**1. Collect the requirements** — the plain-English requirements produced by `<normalization>`
+(one per Preconditions / Data Oracle / Shared data sentence and per role used), de-duplicated
+across TCs, each with the list of TC-IDs that depend on it. Reuse the PHASE 2.5 flags
+(`dataGated`, `alwaysSkipped`) as hints for which requirements the generated code already
+doubts — do not re-derive them.
+
+**2. Probe the environment — cheap, once per distinct requirement, never per TC:**
+1. `Testing/project-learning.md` first: `[type: data]` lines (`## Test Data`), `[type: env]`
+   lines, and this skill's Q&A. A recorded fixture or a recorded decision is reused — say so.
+2. Role users: the env layer / role-user configuration of the automation project.
+3. Existing provisioning: `prerequest/*PreRequest.ts` fixtures, DB-oracle helpers in `pages/`,
+   `00-setup-*.spec.ts` journeys from earlier stories.
+4. One read probe per remaining data need: an existing API GET through the project's request
+   helper, or ONE Playwright MCP look at the listing screen for that entity. Nothing the
+   learning file already answers is probed again.
+
+**3. Classify every requirement** and map it back to TC-IDs:
+
+| Status | Meaning | Effect |
+|---|---|---|
+| `READY` | Present in the environment (or a fixture reliably creates it) | nothing to decide |
+| `MISSING` | Absent, but creatable (entity, state, count, role assignment) | QC decision |
+| `IMPOSSIBLE` | Needs a background job, an external system, a role that exists in no environment, or a state the app cannot reach through any interface | QC: `manual` or `skip` only |
+| `UNKNOWN` | Could not be probed (screen unreachable, no read access) | QC decision, flagged |
+
+Every TC touching a non-`READY` requirement goes on the **predicted-skip list** with the reason.
+
+**4. Discover the provisioning options per `MISSING` gap** (state what was found and where):
+- `api` — a create endpoint in the app or automation project: controllers / routes, swagger or
+  openapi files, an existing `prerequest` fixture that already creates the entity.
+- `ui` — a common flow in the learning file (`## Common Flows`) or an approved TC that creates
+  the entity through the screens → can become a setup journey built from page objects.
+- `db` — offered only when `{db_access}` is `helper`, or the QC names a connection env var.
+- `manual` — always available (the QC inserts the data; the skill re-checks).
+Recommended default: `api` when found → else `ui` → `db` only when the QC grants it → `manual`.
+
+**5. Ask the QC — ONE combined message** (the `<project_learning_file>` ask rule applies:
+learning file grepped first, nothing already answered is re-asked):
+
+```
+Test-data readiness — {N} TCs would be skipped without a decision
+| # | Gap (plain English)                         | Affected TCs        | Status     | Options found            | Recommended |
+|---|---------------------------------------------|---------------------|------------|--------------------------|-------------|
+| 1 | No KPI with yearly values for 2026 in UAT   | KPI-010, 011, 011b  | MISSING    | api (KPI create), ui     | api         |
+| 2 | No user with the Delivery Director role     | KPI-020, 020b       | IMPOSSIBLE | manual, skip             | skip        |
+Answer per gap:  api | ui | db | manual | skip   — add "keep" to leave created data in place
+Example: "1 api keep · 2 skip"
+db: also name the env var that holds the connection string (its value is never shown or stored).
+manual: reply "done" when the data is in — I re-check that gap before running.
+```
+
+Interactive → **WAIT** for the answer; the QC's reply is the decision of record. Pipeline /
+non-interactive → apply recorded decisions from the learning file; gaps with none → `skip`
+with the precise reason (`source: pipeline-default`), the run continues with the rest.
+
+**6. Execute the decisions** — under the PHASE 2 rules (POM mandatory, no banned patterns,
+never app business logic, never a credential in code, logs, or the learning file):
+
+| Decision | How | Teardown |
+|---|---|---|
+| `api` | `prerequest/{Entity}PreRequest.ts` — create + delete functions, find-or-create so re-runs are idempotent; wired through `beforeAll` / `afterAll` in the owning spec (single-line delegation only, per `<pom_mandatory>`) | delete in `afterAll` |
+| `ui` | `tests/{Area}_Tests/00-setup-{entity}.spec.ts` — an end-to-end journey built ONLY from page objects (login → navigate → create → assert it exists), tagged `@setup @run:setup-{entity}`; the run plan schedules it FIRST as its own serial setup group, before smoke | UI delete journey in `afterAll`, or the api/db delete when one exists |
+| `db` | `{db_access} = helper` → the project's DB helper; otherwise SQL through Bash (`sqlcmd` / `psql` / `mysql`) reading the connection string from the QC-named env var **at run time** — refuse if unset; never echo, log, write, or paste the value anywhere. Insert script + matching delete script, both idempotent, both under `{data_setup_layer}` | delete script in `afterAll` |
+| `manual` | wait for the QC's "done", then re-probe THAT requirement only | none (QC owns the data) |
+| `skip` | skip guard on every dependent TC with the gap's exact wording; counted as `SKIP` with reason | — |
+
+Cleanup default is **delete** after the run. `keep` → no teardown, and the fixture is written
+to `## Test Data` as a `[type: data]` line (plain English: what exists, counts, identifiers,
+environment, how it was created, date) so future runs and skill 3 find it.
+
+**7. Re-probe → verdict** `READY` · `READY-WITH-SKIPS ({n} TCs)` · `BLOCKED` (interactive
+QC chose to stop, or a chosen provisioning failed and the QC declined the alternatives).
+Update `{run_plan}`: setup groups first; TCs whose data was created → `serial:{gap}` after their
+setup group. Write `{readiness_file}` = `{results_root}/data-readiness.json` (replaced every run):
+
+```json
+{
+  "measuredAt": "ISO-8601", "verdict": "READY-WITH-SKIPS",
+  "requirements": [
+    { "id": "R1", "text": "KPI with yearly values for 2026 exists in UAT", "status": "MISSING→READY",
+      "tcs": ["KPI-010", "KPI-011", "KPI-011b"], "decision": "api", "source": "qc",
+      "provisioning": "prerequest/KpiPreRequest.ts (find-or-create)", "cleanup": "delete" },
+    { "id": "R2", "text": "A user with the Delivery Director role", "status": "IMPOSSIBLE",
+      "tcs": ["KPI-020", "KPI-020b"], "decision": "skip", "source": "qc", "provisioning": null, "cleanup": null }
+  ],
+  "predictedSkips": [ { "tc": "KPI-020", "reason": "no Delivery Director user exists in any environment (QC: skip)" } ]
+}
+```
+
+Live progress line (the `<live_progress>` format, stage `Data readiness`):
+`Data readiness: {ready}/{total} requirements ready — {n} TCs would skip — {awaiting QC decision | provisioning via api/ui/db | waiting for manual insert | READY | READY-WITH-SKIPS}`
+
+**8. Learning write-back:** every QC decision → `[type: qa]` line in this skill's Q&A; kept
+fixtures → `[type: data]` in `## Test Data`; environment facts ("no user exists for role X in
+any environment", "entity Y has no empty state anywhere") → `[type: env]`. Plain English only.
+</data_readiness>
+
+---
+
 ## RUN INFRASTRUCTURE — RESULTS, LOGS, LIVE PROGRESS (applies to PHASE 3 + PHASE 4)
 
 <result_organization>
@@ -927,7 +1066,7 @@ inside the structure's `reports/` folder.**
 | `reports/US-{id}/phase-N.json` / `.html` | immutable, new phase per run |
 | `automation-logs/US-{id}/run-progress-{stamp}.log` | immutable, new file per run |
 | `screenshots/{user_story_name}/*.png` | replaced each run |
-| `reports/US-{id}/run-plan.json`, `last-run.json`, `artifacts/` | replaced each run |
+| `reports/US-{id}/run-plan.json`, `data-readiness.json`, `last-run.json`, `artifacts/` | replaced each run |
 | `reports/US-{id}/coverage/*` (CSVs, dashboard, `coverage-previous.json`) | replaced each run — the delta vs the previous measurement is reported before overwriting |
 | `playwright.us-{id}.config.ts` | regenerated each run |
 </result_organization>
@@ -957,7 +1096,8 @@ timestamped):
 
 ```text
 Preparation → Spec/requirement validation → Code/implementation validation →
-Automation generation/update → Smoke execution → Smoke gate → Self-healing →
+Automation generation/update → Coverage measurement → Data readiness (QC decision +
+provisioning) → Setup journeys → Smoke execution → Smoke gate → Self-healing →
 Positive execution → Negative execution → Result generation → Report generation →
 ADO update → Finalization
 ```
@@ -998,7 +1138,14 @@ ADO report work items done/total.
 </live_progress>
 
 <staged_execution>
-**Priority order inside every run: 1) Smoke → gate → 2) Positive → 3) Negative.**
+**Priority order inside every run: 0) Setup journeys → 1) Smoke → gate → 2) Positive → 3) Negative.**
+
+**Stage 0 — setup groups** (only when PHASE 2.6 created `setup_groups`): each
+`00-setup-{entity}.spec.ts` runs alone, serially, `--grep "@setup"`, before smoke —
+`{run_command} --grep "@run:setup-{entity}" --workers=1`. A failed setup journey is
+`data_missing` for every TC of its `serial:{gap}` group: those TCs are marked `SKIP` with the
+gap reason and the rest of the run continues; the failure itself is reported under
+Test-data readiness, never counted against the smoke gate.
 
 **Inside every stage the `<run_plan>` groups run in this order, browser visible
 (`{headed}`), always with `--config {us_config} --project={browser_project}`:**
@@ -1050,11 +1197,14 @@ runs twice in one phase. Suites beyond ~40 tests are sliced per group and stage 
 <environment_gate>
 **Coverage gate first:** the PHASE 2.5 verdict must be `PASS`, `report-only`, or a recorded
 user override — otherwise do not execute (see `<coverage_measurement>`).
+**Readiness gate second:** the PHASE 2.6 verdict must be `READY` or `READY-WITH-SKIPS` — every
+predicted skip carries a QC decision or the pipeline default (see `<data_readiness>`). Test
+data is NOT re-checked here as a whole-run condition; it was settled per requirement in 2.6.
 
 Before executing: grep `Testing/project-learning.md` for `[type: env]` lines first — known
 environment quirks, VPN/proxy notes, slicing thresholds and past fixes are applied before
-diagnosing anything anew. Then confirm the app/base URL responds, required services are
-healthy, and seeded data is present. Any check fails → **ENVIRONMENT_BLOCKED**
+diagnosing anything anew. Then confirm the app/base URL responds and required services are
+healthy. Any check fails → **ENVIRONMENT_BLOCKED**
 (name the unhealthy dependency; action for ops/human — NOT a code defect).
 Do not execute and do not attribute environment failures to the tests. Every environment
 fact learned or fixed in this gate is written back as a plain-English `[type: env]` line
@@ -1105,7 +1255,8 @@ worked in the learning file.
    | `selector_failure` | Element not found by its selector — stale/wrong locator | SELF-HEAL: fix the page-object locator |
    | `assertion_failure` | Element found, assertion wrong — test-code defect (bad wait, wrong expected mapping from the TC doc) | SELF-HEAL: fix wait strategy / assertion mapping |
    | `app_bug` | Test is correct; the application violates the approved TC | DO NOT TOUCH THE TEST — add to bug list |
-   | `environment_failure` | Service down, data missing, auth expired, VPN/proxy/tunnel errors | ENVIRONMENT_BLOCKED path |
+   | `environment_failure` | Service down, auth expired, VPN/proxy/tunnel errors | ENVIRONMENT_BLOCKED path |
+   | `data_missing` | The data a TC needs is absent at run time. Requirement was `READY` in PHASE 2.6 → environment regression (ENVIRONMENT_BLOCKED path, name the requirement). Requirement was a `skip` decision → the TC is `SKIP` with that reason — not a failure, not healed. Provisioning created it but it is gone → re-run that setup group once, then treat as regression | per the two cases |
    | `timeout_failure` | Did not finish in time | investigate wait strategy; if genuine hang → report |
 
 3. **Self-heal ONLY test-code defects** (`selector_failure`, `assertion_failure`):
@@ -1270,9 +1421,10 @@ Using `{tc_output_folder}/ADO-MAP.md`:
      list of supported values`. Do not attempt it, and never write `Automated` into
      `ADO-MAP.md` — that records a status ADO refused. Leave `Planned` and rely on
      `Custom.TestAutomated` + the metadata fields to express automation.
-   - Keep `Planned` for candidates that ended up skip-guarded (note why in the map), and
-     for any TC whose PHASE 2.5 status is Partially / Not Covered — copy the reason from
-     `coverage-detail.csv` into the map so the ADO status never overstates the coverage.
+   - Keep `Planned` for candidates that ended up skip-guarded (note why in the map), for any
+     TC whose PHASE 2.5 status is Partially / Not Covered — copy the reason from
+     `coverage-detail.csv` — and for any TC skipped by a PHASE 2.6 decision — copy the gap
+     text from `data-readiness.json` — so the ADO status never overstates the coverage.
 2. Post ONE summary comment on the User Story: **phase number**, run-2 counts
    (pass/fail/skip/not-run), smoke-gate verdict, number of app bugs found (with
    TC-IDs), and the `phase-{N}.json` + `phase-{N}.html` artifact paths.
@@ -1331,6 +1483,16 @@ requirements, Data Oracle, type, smoke and locale unchanged — PASS
 **Headed:** {yes | no — reason}
 **Run plan file:** {results_root}/run-plan.json
 
+### Test-data readiness (PHASE 2.6)
+**Verdict:** {READY | READY-WITH-SKIPS ({n} TCs) | BLOCKED} · **QC asked:** {yes — {n} gaps in one message | no — all requirements ready or already decided in the learning file}
+| # | Gap | Affected TCs | Status | Decision | Source | Provisioning | Cleanup |
+|---|-----|--------------|--------|----------|--------|--------------|---------|
+{one row per non-READY requirement; Source = qc / learning / pipeline-default}
+**Predicted skips carried into the run:** {TC-IDs + reason — or "none"}
+**Setup groups run first:** {setup:{entity} → spec path — or "none"}
+**Created data:** {n} fixtures — deleted after run {n} · kept {n} (registered in `## Test Data`)
+**Readiness file:** {results_root}/data-readiness.json
+
 ### Screenshots
 **Folder:** {automation_root}/screenshots/{user_story_name}/
 **Written:** {N} final images · {N} failure images · **stale images removed:** {N}
@@ -1365,6 +1527,7 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 | Negative | {passed}/{total} |
 | Static coverage (pre-run) | {x}% weighted — target {t}% — {PASS \| user override \| report-only} |
 | Coverage folder | {automation_root}/reports/US-{ID}/coverage/ (dashboard + 3 CSVs, replaced) |
+| Test-data readiness (pre-run) | {READY \| READY-WITH-SKIPS ({n} TCs)} — {n} gaps decided by QC, {n} provisioned ({api}/{ui}/{db}/{manual}), {n} skipped |
 | Total execution time | {hh:mm:ss} |
 | Planned vs actual duration | ~{planned} vs {actual} (serial-only would be ~{serial}) |
 | Headed / workers | {yes \| no} / parallel ×{N}, serial ×1 |
@@ -1398,7 +1561,7 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 
 ## BLOCKED
 
-**Reason:** {unapproved TC doc | missing User Story | ambiguous US name | ADO auth | ambiguous TC step | missing profile key}
+**Reason:** {unapproved TC doc | missing User Story | ambiguous US name | ADO auth | ambiguous TC step | missing profile key | unresolved test-data precondition (QC chose stop, or provisioning failed and no alternative accepted)}
 **Details:** {exact item and what was observed}
 **Completed before blocking:** {phases/items}
 **Required from the user:** {the exact input or action needed}
@@ -1443,12 +1606,20 @@ Before returning AUTOMATION COMPLETE:
 - [ ] **`reports/US-{ID}/coverage/` written: coverage-summary.csv, coverage-detail.csv,
       manual-scenarios.csv (category + priority), self-contained coverage-dashboard.html,
       coverage-previous.json; delta vs the previous measurement reported**
+- [ ] **Test-data readiness resolved BEFORE the first run: requirements extracted per TC, probed once
+      each (learning file first), predicted skips listed, and the QC asked in ONE message per gap
+      (api / ui / db / manual / skip, + keep) — pipeline mode skipped undecided gaps with reason**
+- [ ] **Provisioning only through `prerequest/` fixtures, `00-setup-*.spec.ts` page-object journeys,
+      or the DB helper / CLI with a QC-named env var; teardown by default, `keep` registered in
+      `## Test Data`; no connection string or credential echoed, logged, or written anywhere**
+- [ ] **`reports/US-{ID}/data-readiness.json` written; every skip guard in the specs traces to a
+      readiness decision; decisions recorded in the learning file Q&A**
 - [ ] First run: every failure classified; only test-code defects healed (≤2 iterations); Heal Log kept
 - [ ] No assertion lowered, no skip added to hide a failure, no app bug masked
 - [ ] **Results under `reports/US-{ID}/` as `phase-{N}.*` — phase auto-incremented, NO prior phase overwritten or deleted**
 - [ ] **Progress log created at `automation-logs/US-{ID}/run-progress-{stamp}.log`, announced at start, appended across ALL stages (not just execution), historical logs untouched**
 - [ ] **Test runs executed in background with per-poll chat updates: counts, current TC, elapsed, and a REFRESHED estimated-remaining time**
-- [ ] **Stage order enforced: smoke → gate → positive → negative; no TC run twice in one phase**
+- [ ] **Stage order enforced: setup journeys (if any) → smoke → gate → positive → negative; no TC run twice in one phase; a failed setup journey skips its dependent TCs with reason and never counts against the smoke gate**
 - [ ] **Run plan built from the approved TCs and written to `reports/US-{ID}/run-plan.json`; every TC carries one `@run:` tag; serial groups in `mode: 'serial'` describes; inside every stage the parallel group ran ×{workers_parallel} then serial groups ×1; reasons recorded for every serial decision**
 - [ ] **Browser visible (headed) via the generated `playwright.us-{ID}.config.ts` — or the headless fallback reported in chat AND under Deviations; base `playwright.config.ts` changed only for `testMatch`**
 - [ ] **Every executed TC has `screenshots/{user_story_name}/{TC-ID}.png`; every failed TC also has `{TC-ID}-failed.png`; stale images removed and counted; phase artifacts still immutable**

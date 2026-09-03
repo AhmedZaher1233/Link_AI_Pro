@@ -316,6 +316,9 @@ Seed the file with exactly this skeleton (replace `{project name}` only):
 
 ## Test Data
 <!-- seeded entities, valid / invalid samples, boundaries — no credentials -->
+<!-- one fixture per line, e.g.:
+- [module: KPI] [type: data] Fixture "KPI Revenue 2026 yearly values" — 12 monthly rows, ids 401-412, status Approved; environment UAT; created by api on 2026-09-02, kept.
+-->
 
 ## Locale Knowledge
 <!-- EN / AR label differences, RTL quirks, date and number formats -->

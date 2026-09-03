@@ -32,8 +32,13 @@ what is missing is asked, and your answers are saved there. PATs are never writt
 
 PREREQUISITES (asked/checked, not guessed):
   - Azure DevOps PAT with Work Items + Test Management read/write, configured for the MCP
-  - Healthy app environment (URL responding, seeded data, VPN up) — otherwise the run
-    stops as ENVIRONMENT_BLOCKED
+  - Healthy app environment (URL responding, VPN up) — otherwise the run stops as
+    ENVIRONMENT_BLOCKED
+  - Test data: BEFORE the run the skill checks every TC's preconditions/data against the
+    environment, lists the TCs that would be skipped, and asks you ONCE per gap how to
+    handle it — api (an endpoint it found) / ui (an end-to-end setup journey) / db (only if
+    you name the env var holding the connection string) / manual (you insert, reply "done")
+    / skip. Created data is deleted after the run unless you add "keep".
 
 ============================================================
 OUTPUT — WHAT YOU GET
@@ -45,6 +50,8 @@ OUTPUT — WHAT YOU GET
                                                   {TC-ID}-failed.png   ← failed TCs only
                                                   (same names each run → re-run REPLACES them)
   {automation_root}/reports/US-{id}/run-plan.json                      ← parallel/serial groups
+  {automation_root}/reports/US-{id}/data-readiness.json                ← test-data gaps + your decisions
+  {automation_root}/reports/US-{id}/coverage/                          ← static coverage dashboard + CSVs
   {automation_root}/playwright.us-{id}.config.ts                       ← per-story config (headed)
   Azure DevOps: TC work items linked to the story + summary comment
   + live progress in the chat (counts, current TC, elapsed, estimated remaining)
