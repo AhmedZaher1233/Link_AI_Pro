@@ -13,10 +13,10 @@ description: >
   Playwright install + config, and Playwright/Azure/Word MCP configuration with a full
   health-check validation report. On a NEW project it runs end to end without questions;
   on a project that ALREADY has a testing structure it stops and asks which mode to run —
-  (A) health-check only, (B) update skills/agents/steering and repair what is missing, or
+  (A) health-check only, (B) update skills/steering and repair what is missing, or
   (C) restructure to the canonical layout with a confirmed move plan. Never overwrites or
   duplicates a valid existing structure; never hardcodes credentials or PATs. Use once per
-  project (or on environment drift) BEFORE spec-driven test design/automation agents run.
+  project (or on environment drift) BEFORE the spec-driven test design/automation skills run.
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__playwright, mcp__azure-devops
 ---
 
@@ -38,11 +38,15 @@ unnecessarily**.
 Before scanning or changing anything, refresh the local skill set from the canonical
 source repository so every run uses the latest versions of skills 1-5:
 
-> **Existing-project note (Section 1A):** when the user later picks **Mode A (health-check
-> only)**, this step must be a **dry-run** (`/sync-skills --dry-run`) — report which skills
-> are behind, copy nothing. If the scan in Section 1 has not run yet, do the dry-run first,
-> classify the project, ask the mode question, and only then perform the real sync for
-> Modes B and C.
+> **Missing skills are downloaded in EVERY mode.** If any of the five skill folders or
+> `.claude/commands/sync-skills.md` is missing from the project, download it from the
+> repository right now — before classifying the project and before asking any question.
+> This is never a dry-run and it applies to a new project and to Modes A, B and C alike.
+>
+> **Existing-project note (Section 1A):** for skills that are already present, when the user
+> later picks **Mode A (health-check only)** this step is a **dry-run** only
+> (`/sync-skills --dry-run`) — report which skills are behind, copy nothing. Modes B and C
+> and a new project run the full sync.
 
 ```text
 https://github.com/AhmedZaher1233/Link_AI_Pro
@@ -76,8 +80,8 @@ Procedure:
    the temp folder — it is the preferred source for Section 2A. Do **not** copy steering
    files here; Section 2A owns their naming, their generic-vs-project check, and the
    never-overwrite rule.
-5. Skills are the only files updated by this step — never touch agents, steering documents,
-   `.mcp.json`, tests, or app code here.
+5. Skills (and `.claude/commands/sync-skills.md`) are the only files updated by this step —
+   never touch steering documents, `.mcp.json`, tests, or app code here.
 6. Report which skills were added, updated, or already current. If the repository cannot
    be reached (offline, no access), say so explicitly and continue with the local copies —
    Section 2A then falls back to its other sources.
@@ -154,7 +158,7 @@ Count how many of these markers are present:
 | M2 | Automation code exists | any `*.spec.ts` / `*.spec.js` / `*.test.ts` or a `pages/` folder with page objects |
 | M3 | Playwright configured | `playwright.config.ts` / `.js` present, or `@playwright/test` in `package.json` |
 | M4 | MCP configured | `.mcp.json` with at least one of `playwright`, `azure-devops`, `word` |
-| M5 | QA agents installed | `.claude/agents/Test Agents V2/*.md` |
+| M5 | QA skills installed | `.claude/Skills/{1..5}/SKILL.md` present (missing ones are downloaded first — Step 0) |
 | M6 | Steering docs exist | `docs/steering/` with at least one L1/L2/L3 file |
 | M7 | Learning file exists | `Testing/project-learning.md` (or legacy `.planning/project-learning.md`) |
 
@@ -170,7 +174,7 @@ Report the classification and the evidence in one short block before asking:
 ```text
 Project classification: EXISTING PROJECT
 Evidence: Testing/ (12 folders, 34 spec files), playwright.config.ts, .mcp.json (3 servers),
-          .claude/agents/Test Agents V2/ (2 agents), docs/steering/ (L1 L2 L3),
+          .claude/Skills/ (5/5 skills, sync-skills command present), docs/steering/ (L1 L2 L3),
           Testing/project-learning.md (last updated 2026-08-21)
 ```
 
@@ -181,16 +185,18 @@ an assumed answer.
 
 ```text
 This project already has a testing structure. What should I do?
+(Missing QA skills were already downloaded from the source repo — that happens in every mode.)
 
   A) HEALTH-CHECK ONLY (recommended first)
      Verify everything is set up correctly and report — Node/NPM, Playwright, .mcp.json
-     and every MCP server, QA agents, steering docs (names, layers, L1/L2 generic),
+     and every MCP server, QA skills (all 5 present and current), steering docs (names,
+     layers, L1/L2 generic),
      learning file, folder layout. Changes nothing. Produces the PASS/FAIL table plus a
      list of what would be fixed by option B.
 
   B) UPDATE SKILLS AND REPAIR (keep the structure as it is)
      Pull the latest skills 1-5 and the sync-skills command from the source repo, install
-     any missing QA agent, missing steering layer, missing folder or missing MCP entry,
+     any missing steering layer, missing folder or missing MCP entry,
      normalize non-canonical steering file names, then run the full health-check.
      Existing folders, tests, pages, configs, steering content and learning entries are
      never moved, renamed or rewritten.
@@ -218,15 +224,16 @@ map it to A/B/C, state the mapping in one line, and continue without re-asking.
 | 3 Preserve existing structure | verify only | **run** (extend in place, never relocate) | **run** (relocate with confirmation) |
 | 4–7 Node / NPM / Playwright | verify only | install/repair **missing** pieces | install/repair **missing** pieces |
 | 8 MCP servers | validate existing `.mcp.json` | add **missing** entries, never edit existing ones | add **missing** entries, never edit existing ones |
-| 9 QA agents | verify present + valid | copy **missing** agents only | copy **missing** agents only |
+| 9 QA skills | verify + report diff (missing ones already downloaded) | sync all from the repo | sync all from the repo |
 | 9A Learning file | verify | create if missing, add setup entry | create if missing, add setup + migration entry |
 | 10–11 Validate MCPs | **run** | **run** | **run** |
 | 13 Final output | PASS/FAIL table + "Would be fixed by B" list | full report | full report + migration table (old → new) |
 
 **Mode A writes nothing.** If a check fails, the report says what is wrong and which mode
-fixes it. The only exception is the learning file: a Mode A run may append one
-`[setup] health-check {date}: {summary}` line under *Setup Model (skill 1)* if the file
-already exists.
+fixes it. Two exceptions: (1) skills missing from `.claude/Skills/` (or a missing
+`sync-skills` command) are downloaded from the repository in every mode (Step 0 /
+Section 9.2); (2) a Mode A run may append one `[setup] health-check {date}: {summary}`
+line under *Setup Model (skill 1)* if the learning file already exists.
 
 **Mode B never changes anything that already exists and is valid.** "Valid" means: the file
 is present, parses (JSON/TS/Markdown), and is at the canonical path. Anything invalid is
@@ -259,8 +266,8 @@ Learning File   : Testing/project-learning.md exists, has Index + 6 shared secti
 Playwright MCP  : responds (Section 10)
 Azure DevOps MCP: responds; AZURE_DEVOPS_PAT_B64 set (value never printed)
 Word MCP        : responds
-QA Agents       : .claude/agents/Test Agents V2/manual-test-agent.md + test-automation-agent.md present, front-matter valid
-Skills          : .claude/Skills/1-5 match the source repo (Section 0 diff) — WARN if behind
+QA Skills       : .claude/Skills/1-5 each has SKILL.md with valid front-matter; none missing (missing ones were downloaded)
+Skills current  : .claude/Skills/1-5 match the source repo (Section 0 diff) — WARN if behind
 sync-skills cmd : .claude/commands/sync-skills.md present
 ```
 
@@ -312,8 +319,8 @@ The purpose of each folder is:
 ### `Testing/Requirements/`
 
 Holds requirement inputs for the testing flow: user stories, acceptance criteria,
-spec documents, REQ-ID catalogues, and traceability material consumed by test design
-agents.
+spec documents, REQ-ID catalogues, and traceability material consumed by the test-design
+skills.
 
 Contents are organized **one folder per User Story** (written by the
 `2-review-requirements` skill):
@@ -334,7 +341,7 @@ Do not author requirement content during setup — create the empty folder (with
 Holds manual testing assets.
 
 Its `TestCases/` subfolder holds human-readable manual test case documents (the output
-of test design agents) and their review pages.
+of the test-design skills) and their review pages.
 
 Do not author test cases during setup — create the empty `Manual_Test/TestCases/`
 structure only.
@@ -547,8 +554,9 @@ Read `docs/steering/` before touching it. For each file found, record: which lay
 declares in its header, whether it is non-empty and readable, and whether its name is
 canonical.
 
-**If a valid steering document already exists for a layer, never overwrite it.** Same
-rule as the QA agent definitions (Section 9).
+**If a valid steering document already exists for a layer, never overwrite it.** (The QA
+skills of Section 9 are the one exception to this rule — they are always refreshed from
+the source repository.)
 
 ### 2A.3 Normalize non-canonical file names
 
@@ -936,157 +944,101 @@ during this setup phase unless explicitly requested.
 
 ---
 
-## 9. Install QA Agent Definitions
+## 9. Install / Validate the QA Skills
 
-After the project structure and MCP setup are validated, install the required QA Agent
-definitions.
+After the project structure and MCP setup are validated, make sure the project carries the
+complete, current QA skill set. **This skill manages `.claude/Skills/` only** — it never
+reads from or writes to `.claude/agents/` or any other `.claude/` sub-folder except
+`.claude/commands/sync-skills.md`.
 
-The required agents are:
-
-```text
-manual-test-agent.md
-test-automation-agent.md
-```
-
-The target location is:
+The required skills are:
 
 ```text
-.claude/agents/Test Agents V2/
+.claude/Skills/1-generate-update-testing-structure/
+.claude/Skills/2-review-requirements/
+.claude/Skills/3-generate-manual-test-cases/
+.claude/Skills/4-white-box-testing/
+.claude/Skills/5-test-run-automation/          (incl. assets/)
+.claude/commands/sync-skills.md
 ```
 
-### 9.1 Check Existing QA Agents
-
-First check:
+The **only** source is the canonical repository:
 
 ```text
-.claude/agents/Test Agents V2/
+https://github.com/AhmedZaher1233/Link_AI_Pro   (branch main)
 ```
 
-If the following files already exist:
+Never look for skills in the user's Downloads folder, in another project, or in any path
+the user "happens to have". Never ask the user to supply a skill file.
 
-```text
-manual-test-agent.md
-test-automation-agent.md
-```
+### 9.1 Check Which Skills Exist
 
-do **not** overwrite them.
+For each required folder check that `SKILL.md` exists, is non-empty and has YAML
+front-matter. For the command check that `.claude/commands/sync-skills.md` exists.
+Record each one as `PRESENT` or `MISSING`.
 
-Validate that each existing file:
+### 9.2 Download Every Missing Skill — in EVERY mode
 
-* Is not empty.
-* Contains valid YAML frontmatter.
-* Contains an agent definition.
-* Is readable.
+If anything is `MISSING`, download it from the repository now. This happens on a new
+project, and in Modes A, B and C alike — a missing skill is never "reported only".
+Mode A's write-nothing rule does not apply here, because without the skills the QA flow
+cannot run at all.
 
-If valid, keep the existing version.
+Preferred way: `/sync-skills` (install the command first if it is the missing piece — see
+Step 0). Manual fallback: the sparse clone or raw-download procedure of Step 0, copying
+only the missing skill folders.
 
-### 9.2 Find Missing Agent Definitions
+### 9.3 Refresh Skills That Are Present
 
-If one or both agents are missing, look for the source files in this order:
+For skills already `PRESENT`, apply the run mode:
 
-1. A source path explicitly provided by the user.
-2. The user's Downloads folder.
-3. Other explicitly configured project source locations.
+* **New project / Mode B / Mode C** — full sync from the repository (`/sync-skills`),
+  honouring its local-edit guard: a skill file with hand-made local edits is reported and
+  left alone unless the user passes `--force`.
+* **Mode A** — `/sync-skills --dry-run` only: report each skill as `CURRENT` or `BEHIND`
+  (with the source commit), copy nothing.
 
-Expected source files:
+### 9.4 Validate Every Skill
 
-```text
-manual-test-agent.md
-test-automation-agent.md
-```
+After downloading / syncing, validate each of the five skills and the command:
 
-Do not assume a different filename.
-
-### 9.3 Copy Missing Agents
-
-Copy only the missing agent definitions into:
-
-```text
-.claude/agents/Test Agents V2/
-```
-
-Example:
-
-```text
-.claude/
-└── agents/
-    └── Test Agents V2/
-        ├── manual-test-agent.md
-        └── test-automation-agent.md
-```
-
-#### Critical Rule
-
-**Never author these agent definitions from scratch.**
-
-This skill is only responsible for:
-
-* Finding the provided agent definitions.
-* Copying them.
-* Validating them.
-
-It must **not generate, rewrite, reconstruct, or create substitute versions** of these
-agents.
-
-### 9.4 Never Overwrite Existing Agents
-
-If an agent file already exists:
-
-```text
-.claude/agents/Test Agents V2/manual-test-agent.md
-```
-
-or:
-
-```text
-.claude/agents/Test Agents V2/test-automation-agent.md
-```
-
-do not overwrite it, even if a newer version exists in Downloads.
-
-Instead report:
-
-```text
-Existing QA agent detected — preserved without modification.
-```
-
-### 9.5 Verify Copied Agents
-
-After copying, validate each agent.
-
-Check that:
-
-* File exists.
-* File is non-empty.
-* YAML frontmatter exists.
-* Frontmatter is syntactically valid.
-* Agent definition content exists.
+* `SKILL.md` exists and is non-empty.
+* YAML front-matter parses and contains `name` and `description`.
+* The folder name matches the canonical name above (no copy suffixes such as ` 1`, ` (1)`).
+* `5-test-run-automation/assets/` exists.
 
 Expected result:
 
 ```text
-manual-test-agent.md      : PASS
-test-automation-agent.md  : PASS
+1-generate-update-testing-structure : PASS (current)
+2-review-requirements               : PASS (current)
+3-generate-manual-test-cases        : PASS (downloaded)
+4-white-box-testing                 : PASS (updated)
+5-test-run-automation               : PASS (current)
+commands/sync-skills.md             : PASS (current)
 ```
 
-If a required agent cannot be found or copied:
+### 9.5 If the Repository Is Unreachable
+
+If a skill is `MISSING` and the repository cannot be reached (offline, no access):
 
 ```text
-manual-test-agent.md      : FAIL
-test-automation-agent.md  : FAIL
+3-generate-manual-test-cases        : FAIL — could not fetch
+  https://raw.githubusercontent.com/AhmedZaher1233/Link_AI_Pro/main/.claude/Skills/3-generate-manual-test-cases/SKILL.md
 ```
 
-Clearly explain which file is missing and where the search happened.
+Report the exact URL that failed and stop `QA Skills` at FAIL. **Never author, reconstruct
+or substitute a skill from memory.** Skills that are `PRESENT` continue to be used as-is.
 
 ### 9.6 Reload Reminder
 
-After successfully installing or updating the QA Agent definitions, remind the user:
+After downloading or updating any skill (including this one), remind the user:
 
-> QA Agent definitions were installed successfully. Please reload/restart the Claude
-> Code session so the new agents are discovered and available.
+> QA skills were installed/updated. Please reload/restart the Claude Code session so the
+> new versions are discovered and used.
 
-Do not claim that the agents are available in the current session unless they have
-actually been detected by the environment.
+Do not claim that a newly installed skill is available in the current session unless the
+environment has actually re-listed it.
 
 ---
 
@@ -1180,16 +1132,16 @@ Playwright     : PASS / FAIL
 Playwright MCP : PASS / FAIL
 Azure MCP      : PASS / FAIL
 Word MCP       : PASS / FAIL
-QA Agents      : PASS / FAIL
+QA Skills      : PASS / FAIL
 Project        : PASS / FAIL
 ```
 
-`QA Agents : PASS` means:
+`QA Skills : PASS` means:
 
-* Both required agent files exist.
-* They are non-empty.
-* Their frontmatter is valid.
-* Existing agents were not overwritten.
+* All five skill folders and `.claude/commands/sync-skills.md` exist (missing ones were
+  downloaded from the source repository).
+* Every `SKILL.md` is non-empty with valid front-matter (`name`, `description`).
+* No locally edited skill file was silently overwritten (sync-skills local-edit guard).
 
 ---
 
@@ -1258,7 +1210,7 @@ Reports
 Screenshots
 ```
 
-The testing structure should be flexible enough to support future agents that will:
+The testing structure should be flexible enough to support the QA skills (2–5) that will:
 
 * Read the steering documents (from `docs/steering/`) as their quality authority, in the
   order L1 > L2 > L3 > CLAUDE.md > skill rules > learning file
@@ -1329,8 +1281,9 @@ Installed:
 - Playwright MCP
 - Azure MCP
 - Word MCP
-- .claude/agents/Test Agents V2/manual-test-agent.md
-- .claude/agents/Test Agents V2/test-automation-agent.md
+- .claude/Skills/3-generate-manual-test-cases/      (downloaded from source repo)
+- .claude/Skills/4-white-box-testing/               (updated from source repo)
+- .claude/commands/sync-skills.md
 ```
 
 Only list items that were actually created/installed.
@@ -1347,7 +1300,7 @@ Steering Docs  : PASS   (docs/steering/ — L1 + L2 + L3 present, canonical name
 Playwright MCP : PASS
 Azure MCP      : PASS
 Word MCP       : PASS
-QA Agents      : PASS
+QA Skills      : PASS   (5/5 skills + sync-skills command present, front-matter valid, current)
 Learning File  : PASS   (Testing/project-learning.md exists, has Index + 6 shared sections + 5 model sections)
 ```
 
@@ -1398,11 +1351,11 @@ USER ACTION REQUIRED:
 13. Keep the testing structure compatible with future Spec Development → Automation generation.
 14. Prefer minimal changes to the existing project.
 15. At every step, explain what you discovered and why a change is necessary.
-16. **Never overwrite an existing QA Agent definition.**
-17. **Never author or reconstruct QA Agent definitions from scratch. Copy only the provided agent definitions.**
-18. If an agent definition is missing, report it instead of inventing a replacement.
-19. Always validate copied agent definitions before marking `QA Agents` as PASS.
-20. Remind the user to reload/restart the Claude Code session after installing new agent definitions.
+16. **Skills live only under `.claude/Skills/` (plus `.claude/commands/sync-skills.md`).** This skill never reads from or writes to `.claude/agents/` or any other `.claude/` location.
+17. **Never author or reconstruct a skill from scratch.** Skills come only from https://github.com/AhmedZaher1233/Link_AI_Pro — never from Downloads, another project, or a user-supplied file.
+18. **A missing skill is always downloaded from the repository, in every mode (new project, A, B and C), before the mode question is asked.** If the repository is unreachable, report FAIL with the exact URL; never invent a replacement.
+19. Validate every skill's `SKILL.md` front-matter before marking `QA Skills` as PASS.
+20. Remind the user to reload/restart the Claude Code session after installing or updating skills.
 21. **Write `.mcp.json` yourself — never defer MCP configuration to the user.** The only items allowed under USER ACTION REQUIRED are: setting the PAT environment variable, running an interactive `az login`, and reloading the session.
 22. **Always run Step 0 first: pull the latest skills from https://github.com/AhmedZaher1233/Link_AI_Pro before creating or updating the testing structure.** Never use stale local skill copies when the repository is reachable.
 23. **Always create or validate `docs/steering/` (Section 2A).** Never author L1 or L2

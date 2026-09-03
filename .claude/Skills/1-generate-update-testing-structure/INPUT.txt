@@ -1,7 +1,7 @@
 SKILL: 1-generate-update-testing-structure
 WHAT IT DOES: Creates or repairs the project's testing environment — the Testing/ folder
 structure, the docs/steering/ quality-authority documents (L1/L2/L3), Node/NPM + Playwright
-setup, MCP servers (.mcp.json), and QA agent definitions.
+setup, MCP servers (.mcp.json), and the QA skills (.claude/Skills/1-5 + sync-skills command).
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE
@@ -12,13 +12,15 @@ REQUIRED:
 
 ASKED DURING THE RUN:
   0. RUN MODE — asked ONLY when the project already has a testing structure
-     (Testing/ or automation code, or two of: playwright config, .mcp.json, QA agents,
+     (Testing/ or automation code, or two of: playwright config, .mcp.json, QA skills,
      docs/steering/, project-learning.md). A brand-new project is never asked.
        A) Health-check only   — verify everything, change nothing, report what B would fix
-       B) Update & repair     — pull latest skills, add missing agents/steering/folders/MCP
+       B) Update & repair     — pull latest skills, add missing steering/folders/MCP
                                 entries, keep the current structure untouched
        C) Restructure         — migrate to the canonical Testing/ + docs/steering/ layout
                                 after you confirm the old → new move plan (moves, no deletes)
+     In EVERY mode, skills missing from .claude/Skills/ (and a missing sync-skills command)
+     are downloaded from the source repo first — before this question is asked.
 
 ASKED DURING THE RUN (only if it cannot detect them):
   1. Azure DevOps organization name        — for the azure-devops MCP entry
