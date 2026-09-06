@@ -1,11 +1,11 @@
-SKILL: 6-discover-business-rules
+SKILL: 7-discover-business-rules
 WHAT IT DOES: Discovers the code behind a User Story, extracts every business rule the code
 ENFORCES (field limits, formats, required fields, uniqueness of names/codes/IDs, defaults,
 ranges, state transitions, permissions, duplicate handling, messages, locale differences) as
 EARS statements with file:line evidence, compares them with the spec, and EXPORTS the rules
 that exist in the code but not in the spec — with proposed requirement wording and suggested
 test cases — as PROPOSALS for the Product Owner. Nothing is treated as fact (learning file,
-REQ, skills 3/5) until the PO's decisions are recorded and --apply-approved is run.
+REQ, skills 3/6) until the PO's decisions are recorded and --apply-approved is run.
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE

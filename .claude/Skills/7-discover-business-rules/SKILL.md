@@ -1,7 +1,7 @@
 ---
 name: discover-business-rules
 model: claude-opus-5
-description: Discover the business rules the CODE actually enforces for a User Story and export the ones the spec never mentions. Starting from a story ID, a REQ-*.md, a spec file, or pasted acceptance criteria, it locates the story's code (reusing the repository profile that 4-white-box-testing builds), reads validators, entities, migrations, services, guards and UI forms, and writes every observed rule as an EARS statement with code evidence — field lengths and formats, required/optional, uniqueness of names/IDs/codes, defaults, ranges and thresholds, allowed state transitions, permissions, duplicate handling, soft-delete/archival rules, calculated values, locale differences. It then compares that catalogue against the spec, classifies each rule as In spec / Partially in spec / Not in spec / Contradicts spec, and exports the "in code, not in spec" list as a review-ready document under Testing/Requirements/{US-id-name}/ (one folder per story — multi-story input is split; if the requirements folder does not exist it asks where to write) marked PENDING PO APPROVAL. Findings stay out of the learning file and the REQ until the Product Owner's decisions are recorded in the decision block and the skill is re-run with --apply-approved, which then records approved rules and hands bugs to skill 4 and test cases to skills 3 and 5. Never edits source code or the spec itself. Use when the user asks to "discover the code for this story", "what rules does the code enforce", "find hidden business rules", "compare code with spec", "export business rules from code", "what validations exist that are not in the spec", "field limits / uniqueness not documented", "reverse-engineer the story", "code vs spec".
+description: Discover the business rules the CODE actually enforces for a User Story and export the ones the spec never mentions. Starting from a story ID, a REQ-*.md, a spec file, or pasted acceptance criteria, it locates the story's code (reusing the repository profile that 4-white-box-testing builds), reads validators, entities, migrations, services, guards and UI forms, and writes every observed rule as an EARS statement with code evidence — field lengths and formats, required/optional, uniqueness of names/IDs/codes, defaults, ranges and thresholds, allowed state transitions, permissions, duplicate handling, soft-delete/archival rules, calculated values, locale differences. It then compares that catalogue against the spec, classifies each rule as In spec / Partially in spec / Not in spec / Contradicts spec, and exports the "in code, not in spec" list as a review-ready document under Testing/Requirements/{US-id-name}/ (one folder per story — multi-story input is split; if the requirements folder does not exist it asks where to write) marked PENDING PO APPROVAL. Findings stay out of the learning file and the REQ until the Product Owner's decisions are recorded in the decision block and the skill is re-run with --apply-approved, which then records approved rules and hands bugs to skill 4 and test cases to skills 3 and 6. Never edits source code or the spec itself. Use when the user asks to "discover the code for this story", "what rules does the code enforce", "find hidden business rules", "compare code with spec", "export business rules from code", "what validations exist that are not in the spec", "field limits / uniqueness not documented", "reverse-engineer the story", "code vs spec".
 argument-hint: "[<story-id>… | <feature-name> | <path/to/REQ-*.md> | <path/to/spec.md>] [--no-compare] [--reprofile] | --apply-approved <story-id>…"
 license: Adapted from jeffallan/claude-skills@spec-miner (MIT, https://github.com/Jeffallan/claude-skills) for the Link_AI_Pro QA skill set.
 ---
@@ -24,7 +24,7 @@ behaviour a QC can test.
   several stories except the summary described in 5.4.
 - **Findings are proposals until the Product Owner approves them.** The export file is marked
   `PENDING PO APPROVAL`. Nothing discovered by this skill is written to
-  `Testing/project-learning.md`, to a REQ-*.md, or handed to skills 3/5 as fact until the
+  `Testing/project-learning.md`, to a REQ-*.md, or handed to skills 3/6 as fact until the
   decision block has been filled and the skill is re-run with `--apply-approved` (Phase 7).
   The only learning-file writes during discovery are answers the user gave to this skill's
   questions (0.0, *Ask second*) and one pointer line saying an export is awaiting approval.
@@ -51,11 +51,11 @@ story (1.3).
 ### 0.0 Consult `Testing/project-learning.md` (every run, before anything else)
 
 <project_learning_file>
-**Project Learning File protocol — shared by skills 1-6 (read first, ask second, write back).**
+**Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
 
 `Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
 (created by `1-generate-update-testing-structure`). This skill's section is
-`### Rule Discovery Model (skill 6)`. If `Testing/` exists but the file does not, create it
+`### Rule Discovery Model (skill 7)`. If `Testing/` exists but the file does not, create it
 with the skeleton defined in skill 1, section 2. If the file exists but this skill's section
 is missing, add the section (`#### Knowledge`, `#### Questions and Answers`) without touching
 anything else.
@@ -82,13 +82,13 @@ written to the file.
 
 **During a discovery run (Phases 0-6) write ONLY:**
 - Every answered question → one tagged line under this skill's `#### Questions and Answers`:
-  `- [module: X] [type: qa] **Q (skill 6, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
+  `- [module: X] [type: qa] **Q (skill 7, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
   answers (e.g. where output files live) are ALSO added to `## Project Knowledge`.
 - One pointer line per story under this skill's `#### Knowledge`:
   `- [module: X] [type: status] US-{id}: {N} undocumented rules exported {YYYY-MM-DD}, awaiting PO approval (see the story's requirement folder).`
 - **Nothing else.** No rule, limit, message, default or permission discovered in the code goes
   into the learning file, however certain it looks — unapproved findings would otherwise be
-  treated as facts by skills 3 and 5.
+  treated as facts by skills 3 and 6.
 
 **After the PO decides (`--apply-approved`, Phase 7) write:**
 - Every rule marked *Intended* in the decision block → one tagged line, plain English, in

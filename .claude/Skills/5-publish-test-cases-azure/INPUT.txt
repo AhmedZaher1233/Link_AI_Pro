@@ -1,0 +1,50 @@
+SKILL: 5-publish-test-cases-azure
+WHAT IT DOES: Takes the HUMAN-APPROVED TC document → BEAUTIFIES it into a separate upload
+document (asserting titles, login-first journeys, canonical step verbs, delegations expanded,
+every step confirmed) → PUBLISHES that document to Azure DevOps as Test Case work items
+linked to the User Story (idempotent, no duplicates) → writes ADO-MAP.md, the entry gate for
+skill 6. Nothing is automated or executed here.
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+
+REQUIRED:
+  1. Approved TC document path   — Testing/Manual_Test/TestCases/{Story}/TEST-CASES-*.md
+                                   MUST contain "Status: APPROVED" (skill refuses anything
+                                   else — it never flips the status itself)
+  2. User Story ID or EXACT title — the Azure DevOps work item the TCs belong to
+
+OPTIONAL FLAGS:
+  --beautify-only   — produce the beautified document, publish nothing (dry review)
+  --republish       — update every ADO item even if the beautified content is unchanged
+
+ASKED ONLY IF NEEDED:
+  - App URL + a role user, when ONE step cannot be confirmed from page objects, the learning
+    file or the app source and Playwright MCP must look at the screen (logged per use)
+  - Azure DevOps organisation / project, when not derivable from git remote or .mcp.json
+
+BEFORE ASKING: the skill searches Testing/project-learning.md (Publish Model, Common Flows,
+Automation Tricks) for ADO settings, template quirks and how screens are reached. Only what
+is missing is asked; answers are saved there. PATs are never written to it.
+
+PREREQUISITES (checked, not guessed):
+  - Azure DevOps MCP connected with a read/write PAT (Work Items + Test Management). On
+    401/403 the skill asks you to reconnect the MCP server — it never asks for the token.
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+  Testing/Manual_Test/TestCases/{Story}/
+    TEST-CASES-{feature}-beautified.md   ← upload document (build artifact, stamped with the
+                                           source hash; regenerated every run, never hand-edit)
+    ADO-MAP.md                           ← TC-ID → work item ID (+ source hash) — skill 6's gate
+  Azure DevOps: one Test Case work item per TC, Tested-By linked to the story,
+                AutomationStatus = Planned, tags {feature} / smoke / automation,
+                "Needs human review" notes carried into the description
+  Testing/project-learning.md            ← updated: ADO facts, confirmed navigation, Q&A
+  The approved source document is NEVER modified.
+
+WHEN TO RUN: after a human set Status: APPROVED on skill 3's output, and BEFORE
+6-test-run-automation (which refuses to start without a matching ADO-MAP.md).
+Re-run after any change to the approved document — re-runs update, never duplicate.

@@ -36,9 +36,9 @@ unnecessarily**.
 ## 0. Sync the Latest Skills from the Source Repository (ALWAYS FIRST)
 
 Before scanning or changing anything, refresh the local skill set from the canonical
-source repository so every run uses the latest versions of skills 1-5:
+source repository so every run uses the latest versions of skills 1-7:
 
-> **Missing skills are downloaded in EVERY mode.** If any of the five skill folders or
+> **Missing skills are downloaded in EVERY mode.** If any of the seven skill folders or
 > `.claude/commands/sync-skills.md` is missing from the project, download it from the
 > repository right now — before classifying the project and before asking any question.
 > This is never a dry-run and it applies to a new project and to Modes A, B and C alike.
@@ -73,7 +73,8 @@ Procedure:
    `https://raw.githubusercontent.com/AhmedZaher1233/Link_AI_Pro/main/.claude/Skills/...`.
 2. Compare each remote skill folder (`1-generate-update-testing-structure`,
    `2-review-requirements`, `3-generate-manual-test-cases`, `4-white-box-testing`,
-   `5-test-run-automation`) against the project's local `.claude/Skills/`.
+   `5-publish-test-cases-azure`, `6-test-run-automation`, `7-discover-business-rules`)
+   against the project's local `.claude/Skills/`.
 3. Copy new or changed skill files into the project's `.claude/Skills/`.
 4. If the repository also carries a `docs/steering/` tree, sparse-checkout it in the same
    clone (`git -C <tmp> sparse-checkout set .claude/Skills docs/steering`) and leave it in
@@ -158,7 +159,7 @@ Count how many of these markers are present:
 | M2 | Automation code exists | any `*.spec.ts` / `*.spec.js` / `*.test.ts` or a `pages/` folder with page objects |
 | M3 | Playwright configured | `playwright.config.ts` / `.js` present, or `@playwright/test` in `package.json` |
 | M4 | MCP configured | `.mcp.json` with at least one of `playwright`, `azure-devops`, `word` |
-| M5 | QA skills installed | `.claude/Skills/{1..5}/SKILL.md` present (missing ones are downloaded first — Step 0) |
+| M5 | QA skills installed | `.claude/Skills/{1..7}/SKILL.md` present (missing ones are downloaded first — Step 0) |
 | M6 | Steering docs exist | `docs/steering/` with at least one L1/L2/L3 file |
 | M7 | Learning file exists | `Testing/project-learning.md` (or legacy `.planning/project-learning.md`) |
 
@@ -174,7 +175,7 @@ Report the classification and the evidence in one short block before asking:
 ```text
 Project classification: EXISTING PROJECT
 Evidence: Testing/ (12 folders, 34 spec files), playwright.config.ts, .mcp.json (3 servers),
-          .claude/Skills/ (5/5 skills, sync-skills command present), docs/steering/ (L1 L2 L3),
+          .claude/Skills/ (7/7 skills, sync-skills command present), docs/steering/ (L1 L2 L3),
           Testing/project-learning.md (last updated 2026-08-21)
 ```
 
@@ -189,13 +190,13 @@ This project already has a testing structure. What should I do?
 
   A) HEALTH-CHECK ONLY (recommended first)
      Verify everything is set up correctly and report — Node/NPM, Playwright, .mcp.json
-     and every MCP server, QA skills (all 5 present and current), steering docs (names,
+     and every MCP server, QA skills (all 7 present and current), steering docs (names,
      layers, L1/L2 generic),
      learning file, folder layout. Changes nothing. Produces the PASS/FAIL table plus a
      list of what would be fixed by option B.
 
   B) UPDATE SKILLS AND REPAIR (keep the structure as it is)
-     Pull the latest skills 1-5 and the sync-skills command from the source repo, install
+     Pull the latest skills 1-7 and the sync-skills command from the source repo, install
      any missing steering layer, missing folder or missing MCP entry,
      normalize non-canonical steering file names, then run the full health-check.
      Existing folders, tests, pages, configs, steering content and learning entries are
@@ -261,13 +262,13 @@ Playwright      : @playwright/test in package.json, browsers installed, npx play
 Playwright cfg  : playwright.config.* present; testDir / outputDir point at existing folders
 Folder layout   : Testing/{Requirements,Manual_Test/TestCases,Automation/{pages,tests,reports,screenshots,automation-logs},White_Box_Testing} present (or documented deviation)
 Steering Docs   : docs/steering/ has L1 + L2 + L3, canonical names, README.md, no product-specific text in L1/L2, glob resolves
-Learning File   : Testing/project-learning.md exists, has Index + 6 shared sections + 5 model sections
+Learning File   : Testing/project-learning.md exists, has Index + 6 shared sections + 7 model sections
 .mcp.json       : parses; playwright + azure-devops + word entries present; no inline secrets
 Playwright MCP  : responds (Section 10)
 Azure DevOps MCP: responds; AZURE_DEVOPS_PAT_B64 set (value never printed)
 Word MCP        : responds
-QA Skills       : .claude/Skills/1-5 each has SKILL.md with valid front-matter; none missing (missing ones were downloaded)
-Skills current  : .claude/Skills/1-5 match the source repo (Section 0 diff) — WARN if behind
+QA Skills       : .claude/Skills/1-7 each has SKILL.md with valid front-matter; none missing (missing ones were downloaded)
+Skills current  : .claude/Skills/1-7 match the source repo (Section 0 diff) — WARN if behind
 sync-skills cmd : .claude/commands/sync-skills.md present
 ```
 
@@ -426,22 +427,24 @@ Do not generate white box tests during setup — create the folder structure onl
 
 ### `Testing/project-learning.md` — shared project knowledge base
 
-One plain-English file, directly under `Testing/`, that every QA skill (1-5) reads
+One plain-English file, directly under `Testing/`, that every QA skill (1-7) reads
 **before asking the QC/user anything** and updates **after learning anything**. It holds
 what the team learns about the system (modules, rules, roles, screens, flows, test data,
 EN/AR differences) and the automation tricks that work in this app — separated per model
 (one section per skill), each with its own `Knowledge` and `Questions and Answers`.
 
 **Create it only if it is missing.** If it exists, never delete or rewrite content: only
-verify the `## Index`, the shared sections, and the five model subsections exist, and add
-any that are missing. If a legacy `.planning/project-learning.md` exists and the new file
+verify the `## Index`, the shared sections, and the seven model subsections exist, and add
+any that are missing. A legacy heading `### Automation Model (skill 5)` (from before the
+publish/automation split) is renamed in place to `### Automation Model (skill 6)`, keeping
+its content, and the missing `### Publish Model (skill 5)` section is added before it. If a legacy `.planning/project-learning.md` exists and the new file
 does not, move its content under the matching sections of the new file and tell the user.
 
 Seed the file with exactly this skeleton (replace `{project name}` only):
 
 ```markdown
 # Project Learning — {project name}
-<!-- Shared knowledge base for all QA skills (skills 1-5). Read before asking; update after learning.
+<!-- Shared knowledge base for all QA skills (skills 1-7). Read before asking; update after learning.
      One tagged line per fact, plain English. Never store credentials, tokens or secrets here.
      Specs and steering documents always win over this file. -->
 
@@ -489,9 +492,19 @@ Seed the file with exactly this skeleton (replace `{project name}` only):
 <!-- which business area each feature belongs to, rules the code enforces (in words), where checks happen, bug patterns; link to White_Box_Testing/.project-profile.md -->
 #### Questions and Answers
 
-### Automation Model (skill 5)
+### Publish Model (skill 5)
+#### Knowledge
+<!-- Azure DevOps organisation/project, process-template quirks (accepted AutomationStatus values, custom fields), tagging convention -->
+#### Questions and Answers
+
+### Automation Model (skill 6)
 #### Knowledge
 <!-- pages that already have page objects (page names only), how to run, environment presets, heal patterns -->
+#### Questions and Answers
+
+### Rule Discovery Model (skill 7)
+#### Knowledge
+<!-- rules the code enforces that the spec never stated (in words, with the story as source), UI-only / DB-only enforcement, QC decisions on undocumented rules -->
 #### Questions and Answers
 ```
 
@@ -521,7 +534,7 @@ instead). The only technical tokens allowed are `data-testid` values and URLs, o
 
 ## 2A. Create the Steering Documents Structure (`docs/steering/`)
 
-Every QA skill (1-5) reads its quality standards from the project's **steering
+Every QA skill (1-7) reads its quality standards from the project's **steering
 documents**. They outrank `CLAUDE.md`, the skills' own rules, and the learning file, so
 the testing structure is not complete until they exist, are correctly named, and are
 discoverable by a plain glob.
@@ -629,7 +642,7 @@ document normally declares itself to be that file. Confirm which one this projec
   points at it.
 
 Never populate the contract yourself. Report unfilled keys under `USER ACTION REQUIRED`,
-because L2 §17.8 makes an incomplete contract a QA blocker for skills 3 and 5.
+because L2 §17.8 makes an incomplete contract a QA blocker for skills 3, 5 and 6.
 
 ### 2A.7 Seed `docs/steering/README.md`
 
@@ -669,10 +682,10 @@ Mark `Steering Docs` PASS only when all of the following hold:
 * `docs/steering/` exists and contains at least L1 and L2.
 * Every file name is canonical per 2A.1, and every file is non-empty and readable.
 * No two files claim the same layer.
-* `glob docs/steering/*` resolves — the discovery mechanism skills 3 and 5 rely on.
+* `glob docs/steering/*` resolves — the discovery mechanism skills 3, 5 and 6 rely on.
 * Every reference to a renamed file has been updated.
 
-Report `PARTIAL` when L3 is missing or its contract keys are unfilled (skills 3 and 5 will
+Report `PARTIAL` when L3 is missing or its contract keys are unfilled (skills 3, 5 and 6 will
 still run, but with unresolved project values). Report `FAIL` with the exact missing layer
 when L1 or L2 could not be found — do not paper over it.
 
@@ -686,7 +699,7 @@ Before creating anything:
 * Check whether steering documents already live somewhere other than `docs/steering/`
   (e.g. `steering/`, `docs/qa/`, `.claude/rules/`). Relocate them into `docs/steering/`
   only with explicit user confirmation — otherwise leave them, document the deviation,
-  and record the actual path so skills 3 and 5 can be pointed at it.
+  and record the actual path so skills 3, 5 and 6 can be pointed at it.
 * Check whether `pages/`, `tests/`, `reports/`, or `screenshots/` already exist elsewhere.
 * Treat older lowercase names under `Testing/` (`requirements/`, `automation/`,
   `white-box-testing/`) as valid existing structure — do not duplicate them with the
@@ -958,7 +971,9 @@ The required skills are:
 .claude/Skills/2-review-requirements/
 .claude/Skills/3-generate-manual-test-cases/
 .claude/Skills/4-white-box-testing/
-.claude/Skills/5-test-run-automation/          (incl. assets/)
+.claude/Skills/5-publish-test-cases-azure/
+.claude/Skills/6-test-run-automation/           (incl. assets/)
+.claude/Skills/7-discover-business-rules/       (incl. references/)
 .claude/commands/sync-skills.md
 ```
 
@@ -1000,12 +1015,12 @@ For skills already `PRESENT`, apply the run mode:
 
 ### 9.4 Validate Every Skill
 
-After downloading / syncing, validate each of the five skills and the command:
+After downloading / syncing, validate each of the seven skills and the command:
 
 * `SKILL.md` exists and is non-empty.
 * YAML front-matter parses and contains `name` and `description`.
 * The folder name matches the canonical name above (no copy suffixes such as ` 1`, ` (1)`).
-* `5-test-run-automation/assets/` exists.
+* `6-test-run-automation/assets/` and `7-discover-business-rules/references/` exist.
 
 Expected result:
 
@@ -1014,7 +1029,9 @@ Expected result:
 2-review-requirements               : PASS (current)
 3-generate-manual-test-cases        : PASS (downloaded)
 4-white-box-testing                 : PASS (updated)
-5-test-run-automation               : PASS (current)
+5-publish-test-cases-azure          : PASS (downloaded)
+6-test-run-automation               : PASS (current)
+7-discover-business-rules           : PASS (downloaded)
 commands/sync-skills.md             : PASS (current)
 ```
 
@@ -1062,7 +1079,7 @@ itself is also added to `## Project Knowledge`. Never write the PAT, its variabl
 or any credential.
 
 <project_learning_file>
-**Project Learning File protocol — shared by skills 1-5 (read first, ask second, write back).**
+**Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
 
 `Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills. This
 skill's section is `### Setup Model (skill 1)`.
@@ -1138,7 +1155,7 @@ Project        : PASS / FAIL
 
 `QA Skills : PASS` means:
 
-* All five skill folders and `.claude/commands/sync-skills.md` exist (missing ones were
+* All seven skill folders and `.claude/commands/sync-skills.md` exist (missing ones were
   downloaded from the source repository).
 * Every `SKILL.md` is non-empty with valid front-matter (`name`, `description`).
 * No locally edited skill file was silently overwritten (sync-skills local-edit guard).
@@ -1300,8 +1317,8 @@ Steering Docs  : PASS   (docs/steering/ — L1 + L2 + L3 present, canonical name
 Playwright MCP : PASS
 Azure MCP      : PASS
 Word MCP       : PASS
-QA Skills      : PASS   (5/5 skills + sync-skills command present, front-matter valid, current)
-Learning File  : PASS   (Testing/project-learning.md exists, has Index + 6 shared sections + 5 model sections)
+QA Skills      : PASS   (7/7 skills + sync-skills command present, front-matter valid, current)
+Learning File  : PASS   (Testing/project-learning.md exists, has Index + 6 shared sections + 7 model sections)
 ```
 
 Use the full checklist of Section 1A.4 (it adds `Playwright cfg`, `Folder layout`,

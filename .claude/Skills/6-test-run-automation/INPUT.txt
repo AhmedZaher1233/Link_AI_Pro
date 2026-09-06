@@ -1,8 +1,10 @@
-SKILL: 5-test-run-automation
-WHAT IT DOES: Takes the HUMAN-APPROVED TC document → publishes beautified TCs to Azure
-DevOps → generates Playwright automation (POM mandatory) → runs smoke-gated staged
-execution (smoke → positive → negative) with live progress + ETA in the chat → produces
-the phase HTML report + bug report → closes the loop in DevOps.
+SKILL: 6-test-run-automation
+WHAT IT DOES: Takes the HUMAN-APPROVED TC document that skill 5 has ALREADY published to
+Azure DevOps → generates Playwright automation (POM mandatory) → measures static coverage →
+resolves test-data readiness with you → runs smoke-gated staged execution (smoke → positive →
+negative) with live progress + ETA in the chat → produces the phase HTML report + bug report →
+closes the loop in DevOps (Custom.TestAutomated on the work items skill 5 created).
+It does NOT beautify or publish TCs — that is 5-publish-test-cases-azure.
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE
@@ -13,6 +15,10 @@ REQUIRED:
                                    MUST contain "Status: APPROVED" (skill refuses anything
                                    else — it never flips the status itself)
   2. User Story ID or EXACT title — the Azure DevOps work item the TCs belong to
+
+ENTRY GATE (checked, not asked): skill 5 must have run on THIS version of the document —
+  {Story}/ADO-MAP.md and TEST-CASES-*-beautified.md exist and carry the same source hash as
+  the approved document. Missing or stale → BLOCKED with "run 5-publish-test-cases-azure first".
 
 OPTIONAL:
   3. Environment                 — target test environment (defaults to the automation
@@ -31,7 +37,8 @@ Tricks) for the environment, run settings, known elements and past environment f
 what is missing is asked, and your answers are saved there. PATs are never written to it.
 
 PREREQUISITES (asked/checked, not guessed):
-  - Azure DevOps PAT with Work Items + Test Management read/write, configured for the MCP
+  - Azure DevOps MCP connected with a read/write PAT (Work Items + Test Management) — needed
+    for the close-out; on 401/403 the skill asks you to reconnect the MCP server
   - Healthy app environment (URL responding, VPN up) — otherwise the run stops as
     ENVIRONMENT_BLOCKED
   - Test data: BEFORE the run the skill checks every TC's preconditions/data against the
@@ -53,8 +60,10 @@ OUTPUT — WHAT YOU GET
   {automation_root}/reports/US-{id}/data-readiness.json                ← test-data gaps + your decisions
   {automation_root}/reports/US-{id}/coverage/                          ← static coverage dashboard + CSVs
   {automation_root}/playwright.us-{id}.config.ts                       ← per-story config (headed)
-  Azure DevOps: TC work items linked to the story + summary comment
+  Azure DevOps: Custom.TestAutomated + automated-test metadata on the TC work items,
+                summary comment on the story; {Story}/ADO-MAP.md updated with the final status
   + live progress in the chat (counts, current TC, elapsed, estimated remaining)
   Testing/project-learning.md  ← updated: automation tricks, element identification, env fixes, Q&A
 
-WHEN TO RUN: last — only after a human set Status: APPROVED on skill 3's output.
+WHEN TO RUN: last — after a human set Status: APPROVED on skill 3's output AND skill 5
+published it to Azure DevOps.

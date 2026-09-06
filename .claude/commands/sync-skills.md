@@ -1,6 +1,6 @@
 ---
-description: Pull the latest QA skills (1-5) and this command from the canonical GitHub repo AhmedZaher1233/Link_AI_Pro into the current project's .claude/ folder. Use in ANY project. Args: [skill names…] [--dry-run] [--branch <name>] [--force]
-argument-hint: "[1-generate-update-testing-structure … 5-test-run-automation] [--dry-run] [--branch main] [--force]"
+description: Pull the latest QA skills (1-7) and this command from the canonical GitHub repo AhmedZaher1233/Link_AI_Pro into the current project's .claude/ folder. Use in ANY project. Args: [skill names…] [--dry-run] [--branch <name>] [--force]
+argument-hint: "[1-generate-update-testing-structure … 7-discover-business-rules] [--dry-run] [--branch main] [--force]"
 allowed-tools: Bash, Read, Glob, Grep
 ---
 
@@ -13,11 +13,13 @@ Source of truth: `https://github.com/AhmedZaher1233/Link_AI_Pro` (branch `main` 
 - `.claude/Skills/2-review-requirements/`
 - `.claude/Skills/3-generate-manual-test-cases/`
 - `.claude/Skills/4-white-box-testing/`
-- `.claude/Skills/5-test-run-automation/` (incl. `assets/`)
+- `.claude/Skills/5-publish-test-cases-azure/`
+- `.claude/Skills/6-test-run-automation/` (incl. `assets/`)
+- `.claude/Skills/7-discover-business-rules/` (incl. `references/`)
 - `.claude/commands/sync-skills.md` (this command — it updates itself)
 
 Arguments: `$ARGUMENTS`
-- No skill names → sync all five skills + this command.
+- No skill names → sync all seven skills + this command.
 - One or more skill folder names → sync only those (+ this command).
 - `--dry-run` → show what would change, copy nothing.
 - `--force` → overwrite local files even if they have local edits (see step 4).
@@ -62,7 +64,7 @@ Arguments: `$ARGUMENTS`
    suggestion to re-run with `--force` or commit first.
 
 5. **Copy** (`--dry-run` → skip this step): mirror each selected skill folder from the temp
-   clone into `.claude/Skills/<name>/` — including sub-folders such as `assets/` — and
+   clone into `.claude/Skills/<name>/` — including sub-folders such as `assets/` and `references/` — and
    `commands/sync-skills.md` into `.claude/commands/`. Preserve file names exactly (case
    included). Remove the temp folder afterwards.
 

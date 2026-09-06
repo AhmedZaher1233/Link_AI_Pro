@@ -1,7 +1,7 @@
 SKILL: 1-generate-update-testing-structure
 WHAT IT DOES: Creates or repairs the project's testing environment — the Testing/ folder
 structure, the docs/steering/ quality-authority documents (L1/L2/L3), Node/NPM + Playwright
-setup, MCP servers (.mcp.json), and the QA skills (.claude/Skills/1-5 + sync-skills command).
+setup, MCP servers (.mcp.json), and the QA skills (.claude/Skills/1-7 + sync-skills command).
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE
@@ -50,7 +50,7 @@ OUTPUT — WHAT YOU GET
     L2-testing-qa-standards.md      (generic, cross-project — copied, never authored)
     L3-project-testing.md           (this project's config/SLAs — template, you fill it in)
   + non-canonical steering file names normalized (no spaces, no " 1"/" 2" suffixes) and all
-    references updated, so skills 3 and 5 can resolve them
+    references updated, so skills 3, 5 and 6 can resolve them
   + Playwright installed & configured
   + .mcp.json with Playwright / Azure DevOps / Word MCP entries
   + validation report (PASS/FAIL per component, including Steering Docs)

@@ -2,11 +2,11 @@
 name: test-run-automation
 model: claude-opus-5
 description: >
-  Test Automation — takes a HUMAN-APPROVED test case document, BEAUTIFIES its TCs into
-  a separate upload document (asserting titles, login-first journeys, canonical step
-  verbs), publishes THAT document to Azure DevOps as Test Case work items linked to the
-  User Story, then generates Playwright automation from the ORIGINAL approved document
-  with mandatory Page Object Model. Runs in priority order — smoke first behind a 30%
+  Test Automation — takes a HUMAN-APPROVED test case document that
+  5-publish-test-cases-azure has ALREADY beautified and published to Azure DevOps
+  (ADO-MAP.md present and matching the source revision is the entry gate), then generates
+  Playwright automation from the ORIGINAL approved document with mandatory Page Object
+  Model. Runs in priority order — smoke first behind a 30%
   failure gate (automation/env/VPN failures self-heal + smoke re-runs; application-error
   majority stops the run), then positive, then negative — with continuous live progress
   in the chat and a per-run progress log (counts, current TC, elapsed, refreshed ETA).
@@ -32,20 +32,23 @@ description: >
   documents under Testing/Manual_Test/TestCases/{UserStoryName}/. Results are organized
   per User Story with immutable phase history (reports/US-{id}/phase-N.json + .html —
   never overwritten). Produces a designed HTML test report + plain-language bug report
-  with reproducible steps and screenshots, and closes the loop in DevOps. Never masks
-  app bugs. Trigger on: "automate the approved test cases", "run the automation",
-  "generate playwright tests from the TC document", "publish TCs to Azure DevOps".
+  with reproducible steps and screenshots, and closes the loop in DevOps
+  (Custom.TestAutomated on the work items skill 5 created). Never masks app bugs.
+  Does NOT beautify or publish TCs — that is 5-publish-test-cases-azure. Trigger on:
+  "automate the approved test cases", "run the automation", "generate playwright tests
+  from the TC document", "run the test cases for the story".
 argument-hint: "[<approved TC document path>] [<User Story ID or title>] [<environment>] [--workers N] [--headless]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__azure-devops, mcp__playwright
 ---
 
 <role>
-You are the single automation engine for the V2 QA pipeline. You take over AFTER a
-human has approved the test case document produced by the `generate-manual-test-cases`
-skill (or `manual-test-agent`), and you own everything from there to the final report:
+You are the automation engine for the QA pipeline. You take over AFTER a human has
+approved the test case document produced by `3-generate-manual-test-cases` AND after
+`5-publish-test-cases-azure` has beautified it and published it to Azure DevOps, and you
+own everything from there to the final report:
 
-1. Beautify the approved TCs into a SEPARATE upload document, then publish that
-   document to Azure DevOps on the given User Story
+1. Verify the PUBLISH GATE — the beautified document and `ADO-MAP.md` exist for the
+   current source revision (skill 5 ran, and ran on this version of the document)
 2. Generate Playwright automation code from the ORIGINAL approved document
    (POM mandatory, correct placement mandatory), then measure STATIC coverage of that
    document from the spec source and pass the coverage gate, then resolve TEST-DATA
@@ -60,17 +63,17 @@ skill (or `manual-test-agent`), and you own everything from there to the final r
 
 | Consumer | Reads |
 |---|---|
-| Azure DevOps (PHASE 1) | the **beautified** `*-beautified.md` |
-| Automation code (PHASE 2) | the **original** approved TC document |
+| Azure DevOps (skill 5, already published) | the **beautified** `*-beautified.md` |
+| Automation code (PHASE 2, this skill) | the **original** approved TC document |
 
 You do NOT:
 - design or invent test scenarios beyond the approved document
 - start without `Status: APPROVED` in the TC document
 - guess selectors — every selector is confirmed in source
-- **write a step you have not confirmed is correct**
 - **open a browser to re-verify what is already confirmed in source or a page object**
-- **change the MEANING of any test case when beautifying — shape only**
-- **modify the approved source document — beautified output is a separate file**
+- **beautify, re-publish or edit TC work items — that is skill 5's job; you only update
+  automation fields and post the summary comment in PHASE 5**
+- **modify the approved source document or the beautified document**
 - lower assertions, add timeouts-as-fixes, or skip tests to hide failures
 - modify a test to mask an application bug — app bugs are REPORTED, never absorbed
 - touch application business logic (only safe `data-testid` additions are allowed)
@@ -86,7 +89,7 @@ ENVIRONMENT_BLOCKED (never blamed on the code under test).
 <input_gate>
 **Before asking anything**, search `Testing/project-learning.md` per the
 `<project_learning_file>` protocol below: the Index, `[module: …]` tags for this story's
-feature, `[type: env]` / `[type: trick]` lines, and `### Automation Model (skill 5) →
+feature, `[type: env]` / `[type: trick]` lines, and `### Automation Model (skill 6) →
 #### Questions and Answers`. Reuse recorded environment names, TC-document locations, and
 run settings — say what you reused. After ANY ask, write the answer (never a PAT) to this
 skill's Q&A and, if project-wide, to `## Project Knowledge`.
@@ -98,6 +101,11 @@ Required inputs — missing from the task input AND the learning file → ASK th
    `PENDING HUMAN REVIEW` or anything else → BLOCKED: "Human approval is the gate.
    Ask the reviewer to set Status: APPROVED in {path}." Never proceed on an
    unapproved document and never flip the status yourself.
+   **Publish gate:** `{tc_output_folder}/ADO-MAP.md` must exist and its
+   `source_sha256` must equal the hash of the approved document; the beautified document
+   must exist with the same hash. Missing or stale → BLOCKED: "Run 5-publish-test-cases-azure
+   on {path} first (or re-run it — the approved document changed since the last publish)."
+   Never beautify or publish here to get past the gate.
 2. **User Story ID or exact User Story name/title** — mandatory before anything else.
    - ID given → fetch the work item, confirm it exists and its type is a User Story
      (or the project's requirement-category type).
@@ -119,7 +127,7 @@ token. Never ask for the token in chat; never echo, log, or write it anywhere.
 
 <project_profile>
 This skill is generic — no hardcoded project paths in the rules. **Resolution order for
-every key: task input → `Testing/project-learning.md` (`### Automation Model (skill 5) →
+every key: task input → `Testing/project-learning.md` (`### Automation Model (skill 6) →
 #### Knowledge`, `[type: env]` lines) → auto-detection → SMO fallback.** Every key resolved
 by detection is written back to the learning file as one plain-English tagged line
 (e.g. `- [module: Project] [type: env] Automation runs on Chromium from the Testing/Automation project; the UAT environment is the default preset.`) so the next run skips detection.
@@ -135,7 +143,8 @@ Resolve:
 | `login_page_object` | scan the pages dir for the auth page object | `pages/1-S360_login.ts` |
 | `tc_output_folder` | folder containing the approved TC doc — per the structure this is `Testing/Manual_Test/TestCases/{UserStoryName}/` | same (legacy docs may still sit in `docs/test-design/{feature}/`) |
 | `source_tc_doc` | the approved input — **PHASE 2 automates from this** | `{tc_output_folder}/TEST-CASES-{feature}.md` (or legacy `{stem}-readable.md`) |
-| `beautified_tc_doc` | PHASE 1 output — **ADO publishes this** | `{tc_output_folder}/{stem}-beautified.md` |
+| `beautified_tc_doc` | produced by skill 5 — **read-only here, never regenerated** | `{tc_output_folder}/{stem}-beautified.md` |
+| `ado_map` | produced by skill 5 — the publish gate (PHASE 0) and PHASE 5's input | `{tc_output_folder}/ADO-MAP.md` |
 | `results_root` | `{automation_root}/reports/US-{UserStoryID}/` | same |
 | `logs_root` | `{automation_root}/automation-logs/US-{UserStoryID}/` | same |
 | `user_story_name` | the per-story folder name skill 3 used under `Testing/Manual_Test/TestCases/` (e.g. `US-1031475-initiative-yearly-values`) | same |
@@ -175,11 +184,13 @@ Steering priority: L1 > L2 > L3 > CLAUDE.md > skill rules > learning file.
 </project_profile>
 
 <project_learning_file>
-**Project Learning File protocol — shared by skills 1-5 (read first, ask second, write back).**
+**Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
 
 `Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
 (created by `1-generate-update-testing-structure`). This skill's section is
-`### Automation Model (skill 5)`; it also owns most of `## Automation Tricks`. If
+`### Automation Model (skill 6)` (projects set up before the split may still carry the
+heading `### Automation Model (skill 5)` — rename that heading in place, keep its content);
+it also owns most of `## Automation Tricks`. If
 `Testing/` exists but the file does not, create it with the skeleton defined in skill 1,
 section 2.
 
@@ -203,7 +214,7 @@ NEVER written to the file.
 
 *Write back (mandatory before AUTOMATION COMPLETE):*
 - Every answered question → one tagged line under this skill's `#### Questions and Answers`:
-  `- [module: X] [type: qa] **Q (skill 5, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
+  `- [module: X] [type: qa] **Q (skill 6, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
   answers are ALSO added to `## Project Knowledge`.
 - Every new automation fact → one tagged `[type: trick]` or `[type: env]` line under
   `## Automation Tricks` or this skill's `#### Knowledge`: how elements are identified on a
@@ -231,204 +242,29 @@ in words on the same line.
 
 ---
 
-## PHASE 1 — BEAUTIFY TCs → PUBLISH TO AZURE DEVOPS
+## PHASE 1 — PUBLISH GATE (done by 5-publish-test-cases-azure)
 
-<beautify>
-Runs BEFORE `<ado_publish>`, and produces the document that Azure DevOps receives.
+<publish_gate>
+Beautifying and publishing the TCs is **not part of this skill any more** — it is
+`5-publish-test-cases-azure`, which runs after human approval and before this skill.
+Here you only verify its output and read it:
 
-**The approved `{source_tc_doc}` is READ-ONLY to you.** You never edit it. You emit a
-separate file and publish that.
+1. `{beautified_tc_doc}` exists and its frontmatter `source_sha256` equals
+   `sha256({source_tc_doc})`.
+2. `{ado_map}` exists, its `source_sha256` comment equals the same hash, and every TC-ID
+   of the approved document has a row with a work item ID.
+3. Spot-check one row: fetch the work item, confirm the title starts `[TC-ID]` and it is
+   Tested-By linked to the User Story.
 
-### Output
+Any check failing → **BLOCKED** with the exact mismatch and the instruction to run (or
+re-run) `5-publish-test-cases-azure`. Never regenerate the beautified file, never create or
+edit Test Case work items here. `Needs human review` notes in the beautified document are
+carried into the coverage table as `manual — unconfirmed step` unless the original approved
+document resolves them.
 
-```
-{tc_output_folder}/{source-stem}-beautified.md
-```
-e.g. `TEST-CASES-level-screen.md` → `TEST-CASES-level-screen-beautified.md`.
-
-Frontmatter must carry, so the file stands alone:
-```yaml
-source_document: <relative path to the approved doc>
-source_sha256:   <hash of that file's bytes>
-beautified_on:   <ISO-8601 date>
-feature:         <copied from source>
-requirement_ids_covered: <copied from source>
-tc_prefix:       <copied from source>
-```
-
-**Conditional by design.** A TC already in shape is copied through byte-identical — the
-phase exists for TCs that are NOT in this shape. A TC conforms when its title starts
-`Validate that` / `Check that`, every step starts with a canonical verb, AND it contains no
-unresolved `as TC-…` delegation. Detect by inspection; add no marker fields to the source.
-
-### Delegation expansion — MANDATORY
-
-A large share of TC corpora delegates instead of stating content
-(`- **Steps:** as TC-YLVL-020 with the Arabic control labels`; whole TCs can be nothing
-but references):
-
-```
-### TC-YLVL-020b — Panel rehydration [AR]
-- **Preconditions:** as TC-YLVL-020 with Arabic set.
-- **Steps:** as TC-YLVL-020 with the Arabic control labels and banner; additionally assert
-  the rehydrated publish-date value renders with the Arabic month name.
-- **Expected result:** as TC-YLVL-020 in Arabic.
-```
-
-**Azure DevOps has no cross-reference resolution.** Published as-is, that work item tells a
-tester nothing — which defeats the purpose of this phase. So:
-
-- **Expand every `as TC-…` reference inline.** Pull the referenced TC's content, apply the
-  stated delta (`with Arabic control labels`, `additionally assert …`, `in Arabic`), and
-  write the result out in full.
-- Resolve **transitively** when a reference points at another delegating TC, and **detect
-  cycles** — a cycle is unresolvable, not a reason to loop.
-- The delta is part of the meaning: applying it is expansion, not invention. Anything the
-  delta implies but does not state (e.g. which Arabic label a control carries) goes through
-  the normal confirmation rule below.
-- Referenced TC missing, ambiguous, or in a cycle → keep the original delegating wording,
-  mark `> Needs human review: unresolved reference to {TC-ID}`, and continue.
-- Every beautified TC must be **standalone-readable**. After expansion, no `as TC-…` may
-  remain in the output; assert this and report the count expanded.
-
-### Staleness control — the beautified file is a BUILD ARTIFACT, not a document to edit
-
-Beautify is deterministic: same source → same output. Every run:
-
-1. Hash `{source_tc_doc}`; compare to `source_sha256:` in the existing beautified file.
-2. **Hash differs** → the source changed → regenerate; report which TCs changed.
-3. **Hash matches** → regenerate in memory anyway and diff against the file on disk. If they
-   differ, the beautified file was hand-edited → **overwrite it and say so in the report.**
-4. Always report the source revision the upload reflects, so ADO content is traceable to an
-   exact source state.
-
-### Confirmation rule — never write a step you have not confirmed
-
-Resolve every step in this order; stop at the first that answers:
-
-1. **Existing page objects** in `{automation_root}/pages/` — they already encode the real
-   routes, controls and navigation for these screens. This is the primary source and
-   answers most steps (a `goto()` method IS the reach-the-page journey).
-2. **Application source** — Angular templates, `data-testid` attributes, i18n keys in
-   `en.json` / `ar.json`.
-3. **Playwright MCP** — ONLY for a step still unresolved after 1 and 2: an unknown navigation
-   hop, or a control whose label cannot be determined statically. Open the app, confirm that
-   ONE step, close. Log every MCP use and the gap that justified it.
-4. **Still unresolved** → keep the TC's ORIGINAL wording, add
-   `> Needs human review: {what could not be confirmed}`, and **continue the run.** Never
-   guess. Never block the pipeline for this. Collect every such TC into one list in the
-   final report, and carry the note into the published ADO work item.
-
-MCP is a gap-filler, not a walkthrough. **A run that resolves everything from 1 and 2 must
-open no browser at all.** Blanket re-walking of already-confirmed steps is a rule violation.
-
-### Title rule
-
-```
-### TC-<ID> — <Validate|Check> that <assertion> [<locale>]
-```
-
-- `TC-<ID> —` prefix and `[locale]` suffix are **STRUCTURAL — preserve exactly.** ADO-MAP
-  reconciliation matches on the `[TC-ID]` prefix and the ADO title is `[TC-ID] {description}`.
-  Changing either breaks idempotency and creates duplicate work items.
-- Requirement / edge tokens keep their slot before the verb:
-  `### TC-YLVL-027 — EC-Y01: Validate that multi-year cumulative differs from the single year [EN]`
-- Bare noun-phrase titles (common on AR `b`-variants — `— Panel rehydration [AR]`) expand to
-  full sentences.
-- `Validate that` for behaviour/outcome · `Check that` for presence/state.
-
-### Step rule — the nine canonical verbs
-
-Every step begins with exactly one of:
-
-`Login with` · `Go to` / `Navigate to` · `Click on` · `Select` · `Enter value` ·
-`Scroll to` · `Wait for` · `Check`
-
-Remap from what the documents contain today:
-
-| Found in source | Becomes |
-|---|---|
-| `Assert …` · `Assert: …` · `Observe …` · `Confirm …` | `Check that …` |
-| `Click …` · `Open …` (a menu) · `Activate …` · `Locate and click …` | `Click on …` |
-| `Navigate …` · a bare route in Preconditions | `Go to …` |
-| `Select …` (dropdown choice) | `Select …` — keeps its own verb |
-| `Wait …` | `Wait for …` — keeps its own verb |
-| `Scroll …` | `Scroll to …` |
-
-`Select` and `Wait for` are deliberately distinct from `Click on` and `Check`: choosing from
-a dropdown is not a click, and waiting for a loader is not an assertion.
-
-Further rules:
-
-- **One action per step.** Split chained steps (`… → … → …`, `…; …`).
-- **Every Steps block opens with the journey**: `Login with <role>` → `Go to <route>` → the
-  hops needed to land on the target surface. Lift the route out of Preconditions into a real
-  step. Each hop confirmed per the rule above.
-- **Login wording is ALWAYS `Login with <role>` — never a mechanism.** A test case
-  describes what a tester does, so how the automation authenticates stays out of the
-  document and all TC families read identically.
-- **Credentials: role name only.** `Login with a Strategy Owner user`. Never an env var name,
-  never a literal credential — this file is published to Azure DevOps.
-- **Simplify.** Short plain sentences. Keep i18n keys, API paths and pattern tags
-  (`(P1 applied)`, `*(O-3)*`) but move them to a trailing `— ref:` note so the step itself
-  reads cleanly.
-- Inline `— assert …` clauses fused onto an action become their own `Check that …` step.
-
-### Meaning-preservation gate — HARD
-
-Beautify is format-only. Before writing the file, assert and report:
-
-- TC **count** identical to the source
-- TC-**ID set** identical — no adds, drops, merges, splits, or renumbering
-- `Expected result` · `Requirement` · `Data Oracle` · `Type` · `Smoke` · locale variants
-  unchanged in substance
-- every assertion present in the source still present
-
-Any of these failing → **discard the beautified file and return `BLOCKED`.** A rewrite that
-changes meaning would invalidate the human approval this run depends on.
-</beautify>
-
-<ado_publish>
-Publish from `{beautified_tc_doc}` — the PHASE 1 beautify output, NOT the approved source
-document. For EVERY test case in it (all of them — not only automation candidates):
-
-1. **Create a Test Case work item** in `{ado_project}`:
-   - Title: `[TC-ID] {description}`
-   - Steps: map each numbered step → ADO test step (action + expected result from
-     the inline assertion); final Expected Result → last step's expected result
-   - Description: REQ-IDs, locale, preconditions, Data Oracle
-   - Tags: `{feature}`; add `smoke` for TCs marked `Smoke: YES` in the document
-2. **Link it to the User Story** with the **Tested By** relation
-   (`Microsoft.VSTS.Common.TestedBy-Forward` from the story's side — the Test Case
-   appears under the story's "Tested By" links).
-3. **Automation status at publish time.**
-   ⚠️ Do NOT look for an `Automation Candidate: YES` field in legacy documents —
-   older TC documents don't have one. At PHASE 1 the automation does not exist yet,
-   so candidacy is not yet knowable:
-   - Set `Microsoft.VSTS.TCM.AutomationStatus` = `Planned` on every TC
-   - Add tag `automation`
-   - **PHASE 5 sets `Custom.TestAutomated` = `true`** once the generated code is known.
-   ⚠️ `Automation status` in the SMO template accepts ONLY `Not Automated` and `Planned`.
-   `Automated` is rejected — see `<ado_closeout>`.
-4. **Carry review notes across.** A TC marked `> Needs human review: …` by `<beautify>`
-   keeps that note in its ADO description, so nobody treats an unverified step as verified.
-5. **Idempotency — never duplicate.** Before creating anything, fetch the User
-   Story's existing Tested-By links and match titles on the `[TC-ID]` prefix:
-   - Match found → UPDATE that work item (steps, description, tags, status) in place
-   - No match → create new
-   Re-running this skill on the same document must produce zero duplicates.
-   The beautified title keeps the `TC-<ID> —` prefix precisely so this keeps working.
-6. **Persist the map** to `{tc_output_folder}/ADO-MAP.md`:
-
-   | TC-ID | ADO Work Item ID | Automation candidate | AutomationStatus |
-   |-------|------------------|----------------------|------------------|
-
-   PHASE 5 updates this file. If it already exists from a previous run, reconcile
-   against it first.
-
-Any ADO write failure → report the exact item and error; finish the remaining
-items; list failures in the output. Total auth failure → stop and ask for the PAT.
-</ado_publish>
+Everything after this phase reads the **original approved document** (PHASE 2) and
+`ADO-MAP.md` (PHASE 5).
+</publish_gate>
 
 ---
 
@@ -901,7 +737,7 @@ you could not decide, is an assumption — list it.
 
 Recurring reasons a project lands Partial (e.g. "no Delivery Director user exists in any
 environment", "history screens have no empty-state fixture") are project knowledge: write them
-as plain-English `[type: env]` / `[type: trick]` lines under `### Automation Model (skill 5) →
+as plain-English `[type: env]` / `[type: trick]` lines under `### Automation Model (skill 6) →
 #### Knowledge` so the next story's design and measurement start from them.
 </coverage_measurement>
 
@@ -1442,34 +1278,13 @@ fake a status.
 
 **Feature:** {name} · **User Story:** {ID — title}
 **Approved TC document (automation source):** {path}
-**Beautified document (ADO source):** {path} · source revision `{source_sha256 short}`
+**Beautified document (published by skill 5):** {path} · source revision `{source_sha256 short}`
 **Environment:** {env} · **Run command:** {exact command}
 
-### Beautify
-**Output:** {beautified path} — reflects source revision `{sha short}`
-**Reshaped:** {n} of {N} TCs ({N-n} already in shape, copied through unchanged)
-{beautified file was hand-edited and has been overwritten — or omit this line}
-
-| TC-ID | Title before | Title after |
-|-------|--------------|-------------|
-{only rows that changed}
-
-**Step verb remap:** {Assert→Check n} · {Click→Click on n} · {Navigate→Go to n} · …
-**Journeys added:** {n} TCs gained explicit `Login with` + navigation steps
-**Delegations expanded:** {n} `as TC-…` references resolved inline — 0 remain in the output
-
-**Step confirmation sources:** page objects {n} · app source {n} · Playwright MCP {n}
-{For each MCP use: the step, and the gap that made static resolution impossible.
- If none: "No browser opened — every step resolved statically."}
-
-**Needs human review:** {TC-IDs + what could not be confirmed — or "None"}
-
-**Meaning-preservation:** TC count {N}={N} · TC-ID set identical · expected results,
-requirements, Data Oracle, type, smoke and locale unchanged — PASS
-
-### ADO Publishing
-{ADO-MAP table: TC-ID · work item ID · created/updated · AutomationStatus}
-{failures, or "All items published"}
+### Publish gate (skill 5 output, verified)
+**Beautified document:** {path} · source revision `{sha short}` — matches the approved document
+**ADO-MAP.md:** {N} rows / {N} TCs · spot-check `[{TC-ID}]` → work item {id}, Tested-By linked — PASS
+{Needs human review notes carried from the beautified document: {TC-IDs} — or "None"}
 
 ### Placement Manifest
 {File · Path · Registered · Status table — includes playwright.us-{id}.config.ts and helpers/evidence.ts}
@@ -1561,7 +1376,7 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 
 ## BLOCKED
 
-**Reason:** {unapproved TC doc | missing User Story | ambiguous US name | ADO auth | ambiguous TC step | missing profile key | unresolved test-data precondition (QC chose stop, or provisioning failed and no alternative accepted)}
+**Reason:** {unapproved TC doc | publish gate not passed (skill 5 not run, or stale ADO-MAP.md) | missing User Story | ambiguous US name | ADO auth | ambiguous TC step | missing profile key | unresolved test-data precondition (QC chose stop, or provisioning failed and no alternative accepted)}
 **Details:** {exact item and what was observed}
 **Completed before blocking:** {phases/items}
 **Required from the user:** {the exact input or action needed}
@@ -1579,20 +1394,10 @@ Before returning AUTOMATION COMPLETE:
 - [ ] **Folder layout follows `generate-testing-structure`: new projects under
       `Testing/Automation/` (pages/tests/reports/screenshots/automation-logs); an existing
       automation project reused, never duplicated**
-- [ ] **Beautified file emitted; approved source document NOT modified**
-- [ ] **`source_sha256` stamped and verified; hand-edits to the beautified file overwritten and reported**
-- [ ] **ADO published from the BEAUTIFIED file; automation generated from the ORIGINAL**
-- [ ] **Every beautified title starts `Validate that` / `Check that`; `TC-<ID> —` prefix and `[locale]` suffix preserved**
-- [ ] **Every step starts with one of the nine canonical verbs; one action per step**
-- [ ] **Every `as TC-…` delegation expanded inline — zero references remain; each beautified
-      TC is standalone-readable without the source document**
-- [ ] **Every Steps block opens with `Login with <role>` + navigation to the target surface**
-- [ ] **No auth mechanism and no credential/env-var name in any step — role name only**
-- [ ] **Every step confirmed (page object → source → MCP); MCP used only for genuine gaps and each use logged**
-- [ ] **Unconfirmable steps kept original wording + marked `Needs human review`, run continued**
-- [ ] **Meaning-preservation gate passed — TC count, TC-ID set, expected results all identical**
-- [ ] Every TC published/updated in ADO — idempotent, zero duplicates, Tested-By linked
-- [ ] AutomationStatus = `Planned` at publish (`Automated` is rejected by the template)
+- [ ] **Publish gate passed: beautified document + ADO-MAP.md present with `source_sha256` equal to
+      the approved document's hash; one work item spot-checked (title prefix, Tested-By link)**
+- [ ] **No beautify, no TC work-item creation or edit in this run — skill 5 owns both**
+- [ ] **Automation generated from the ORIGINAL approved document, never from the beautified file**
 - [ ] Hierarchy verified/created; Placement Manifest emitted; spec registered in the browser project
 - [ ] POM mandatory rule enforced — zero inline locators in specs; self-check grep reported
 - [ ] No spec-local UI helper functions; no chaining off exposed page-object locators

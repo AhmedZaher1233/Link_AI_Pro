@@ -212,7 +212,7 @@ or any other location.
 **STEP 0.c — Project learning file (shared knowledge base for ALL agents).**
 
 `{learning_file}` (`Testing/project-learning.md`) is the plain-English knowledge base
-shared by ALL QA skills 1-5: what the system does (modules, rules, roles), how to reach
+shared by ALL QA skills 1-7: what the system does (modules, rules, roles), how to reach
 screens, common flows, UI behaviour, test data, EN/AR differences, automation tricks, and
 answered questions — separated per model. This skill's section is
 `### Manual TC Model (skill 3)` with `#### Knowledge` and `#### Questions and Answers`.
@@ -265,7 +265,7 @@ It exists to progressively eliminate rediscovery and re-asking across stories.
 - Plain English only: never method / class / function / file names, variables, CSS or
   XPath selectors, code snippets, or stack traces. `data-testid` values observed
   incidentally MAY go under `## Automation Tricks`, each explained in words on the same
-  line (they help skill 5). They must NEVER appear in the TC deliverables.
+  line (they help skill 6). They must NEVER appear in the TC deliverables.
 </project_learning>
 
 ---

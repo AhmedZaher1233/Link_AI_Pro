@@ -33,7 +33,7 @@ names, glossary terms, and earlier answers under `### Requirements Review Model 
 Only what the file does not answer is asked. Follow the protocol below.
 
 <project_learning_file>
-**Project Learning File protocol — shared by skills 1-5 (read first, ask second, write back).**
+**Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
 
 `Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
 (created by `1-generate-update-testing-structure`). This skill's section is

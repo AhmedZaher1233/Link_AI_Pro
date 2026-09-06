@@ -37,7 +37,7 @@ area a feature belongs to, rules the system is known to enforce, earlier white-b
 and answers under `### White-Box Model (skill 4)`. Reuse what it knows and say so.
 
 <project_learning_file>
-**Project Learning File protocol — shared by skills 1-5 (read first, ask second, write back).**
+**Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
 
 `Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
 (created by `1-generate-update-testing-structure`). This skill's section is

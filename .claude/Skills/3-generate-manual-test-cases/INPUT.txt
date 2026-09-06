@@ -47,6 +47,6 @@ OUTPUT — WHAT YOU GET
 
 YOUR NEXT STEP: review, adjust Smoke / Automation Candidate markings, optionally fill the
 "Data effect" (read-only / creates / modifies / deletes) and "Shared data" fields on TCs
-that change or share data (skill 5 uses them to decide parallel vs one-after-another
+that change or share data (skill 6 uses them to decide parallel vs one-after-another
 execution; blank = it infers), then set Status: APPROVED in the markdown — that unlocks
-skill 5.
+skill 5 (publish to Azure DevOps) and then skill 6 (automation).
