@@ -1,4 +1,4 @@
-# Link_AI_Pro — QA Skills for Claude Code
+# Link_AI_Pro — QC Skills for Claude Code
 
 A set of Claude Code skills that take a User Story from **requirement review** to **manual test
 cases**, **implementation audit**, **hidden-rule discovery**, **Azure DevOps publishing** and
