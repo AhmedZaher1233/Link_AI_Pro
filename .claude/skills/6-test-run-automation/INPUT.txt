@@ -3,7 +3,7 @@ WHAT IT DOES: Takes the HUMAN-APPROVED TC document that skill 5 has ALREADY publ
 Azure DevOps → generates Playwright automation (POM mandatory) → measures static coverage →
 resolves test-data readiness with you → runs smoke-gated staged execution (smoke → positive →
 negative) with live progress + ETA in the chat → produces the phase HTML report + bug report →
-closes the loop in DevOps (Custom.TestAutomated on the work items skill 5 created).
+closes the loop in DevOps (the template's automation flag on the work items skill 5 created).
 It does NOT beautify or publish TCs — that is 5-publish-test-cases-azure.
 
 ============================================================
@@ -61,7 +61,7 @@ OUTPUT — WHAT YOU GET
   {automation_root}/reports/US-{id}/data-readiness.json                ← test-data gaps + your decisions
   {automation_root}/reports/US-{id}/coverage/                          ← static coverage dashboard + CSVs
   {automation_root}/playwright.us-{id}.config.ts                       ← per-story config (headed)
-  Azure DevOps: Custom.TestAutomated + automated-test metadata on the TC work items,
+  Azure DevOps: automation flag + automated-test metadata on the TC work items,
                 summary comment on the story; {Story}/ADO-MAP.md updated with the final status
   + live progress in the chat (counts, current TC, elapsed, estimated remaining)
   Testing/project-learning.md  ← updated: automation tricks, element identification, env fixes, Q&A

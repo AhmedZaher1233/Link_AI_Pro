@@ -34,7 +34,7 @@ description: >
   per User Story with immutable phase history (reports/US-{id}/phase-N.json + .html —
   never overwritten). Produces a designed HTML test report + plain-language bug report
   with reproducible steps and screenshots, and closes the loop in DevOps
-  (Custom.TestAutomated on the work items skill 5 created). Never masks app bugs.
+  (the process template's automation flag on the work items skill 5 created). Never masks app bugs.
   Does NOT beautify or publish TCs — that is 5-publish-test-cases-azure. Trigger on:
   "automate the approved test cases", "run the automation", "generate playwright tests
   from the TC document", "run the test cases for the story".
@@ -58,7 +58,7 @@ own everything from there to the final report:
 3. First run — improve: staged smoke→positive→negative execution, classify failures,
    self-heal TEST-CODE defects only
 4. Second run — report: designed HTML test report + plain-language bug report
-5. Close the loop in DevOps (`Custom.TestAutomated`, summary comment)
+5. Close the loop in DevOps (the template's automation flag, summary comment)
 
 **Two documents, two consumers — never confuse them:**
 
@@ -142,26 +142,26 @@ file overrides neither). Behaviour knowledge stays in `Testing/project-learning.
 <project_profile>
 This skill is generic — no hardcoded project paths in the rules. **Resolution order for
 every key: task input → `Testing/project-learning.md` (`### Automation Model (skill 6) →
-#### Knowledge`, `[type: env]` lines) → auto-detection → SMO fallback.** Every key resolved
+#### Knowledge`, `[type: env]` lines) → auto-detection → the default in the last column.** Every key resolved
 by detection is written back to the learning file as one plain-English tagged line
 (e.g. `- [module: Project] [type: env] Automation runs on Chromium from the Testing/Automation project; the UAT environment is the default preset.`) so the next run skips detection.
 Resolve:
 
-| Profile key | Auto-detection | Fallback for this repo (SMO) |
+| Profile key | Auto-detection | Default when nothing is found |
 |---|---|---|
-| `automation_root` | an EXISTING Playwright project (search for `playwright.config.ts`) is reused — never duplicated. No existing project → `Testing/Automation/` per the `generate-testing-structure` layout | `SMO_Automation_PW/` (pre-existing project) |
-| `ado_org` / `ado_project` | task input → derive from `git remote` | `Link-Dev` / `SMO` |
-| `run_command` | from the automation project's config + docs | `cd SMO_Automation_PW && npx playwright test {file} --project=chromium` |
+| `automation_root` | an EXISTING Playwright project (search for `playwright.config.ts`) is reused — never duplicated. No existing project → `Testing/Automation/` per the `generate-testing-structure` layout | `Testing/Automation/` (new project) |
+| `ado_org` / `ado_project` | task input → derive from `git remote` → `ADO-MAP.md` header written by skill 5 | **ask the user** — never guessed |
+| `run_command` | from the automation project's config + docs | `cd {automation_root} && npx playwright test {file} --project={browser_project}` |
 | `browser_project` | the playwright.config project that runs UI specs | `chromium` (registered via `testMatch`) |
-| `env_layer` | the automation project's env module | `SMO_Automation_PW/utils/env` (`TEST_ENV` presets, `STRATEGY360_*` overrides) |
-| `login_page_object` | scan the pages dir for the auth page object | `pages/1-S360_login.ts` |
+| `env_layer` | the automation project's env module (per-environment presets + `process.env` overrides) | `{automation_root}/utils/env.ts` — created if absent; reads `.env`, never hardcodes URLs or credentials |
+| `login_page_object` | scan the pages dir for the auth page object (file or class name containing `login`/`auth`) | `pages/LoginPage.ts` — created if absent |
 | `tc_output_folder` | folder containing the approved TC doc — per the structure this is `Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/` (skill 3 nests stories that came from a spec file under a `SPEC-*` folder) | same; given only a story ID, locate the doc with glob `Testing/Manual_Test/TestCases/**/US-{id}-*/TEST-CASES-*.md` (legacy docs may still sit in `docs/test-design/{feature}/`) |
 | `source_tc_doc` | the approved input — **PHASE 2 automates from this** | `{tc_output_folder}/TEST-CASES-{feature}.md` (or legacy `{stem}-readable.md`) |
 | `beautified_tc_doc` | produced by skill 5 — **read-only here, never regenerated** | `{tc_output_folder}/{stem}-beautified.md` |
 | `ado_map` | produced by skill 5 — the publish gate (PHASE 0) and PHASE 5's input | `{tc_output_folder}/ADO-MAP.md` |
 | `results_root` | `{automation_root}/reports/US-{UserStoryID}/` | same |
 | `logs_root` | `{automation_root}/automation-logs/US-{UserStoryID}/` | same |
-| `user_story_name` | the per-story folder name skill 3 used under `Testing/Manual_Test/TestCases/` or under its `SPEC-{spec-name}/` sub-folder (e.g. `US-1031475-initiative-yearly-values`) — always the leaf `US-*` name, never the `SPEC-*` parent; reports, screenshots and logs keep this flat name | same |
+| `user_story_name` | the per-story folder name skill 3 used under `Testing/Manual_Test/TestCases/` or under its `SPEC-{spec-name}/` sub-folder (e.g. `US-1234-create-order`) — always the leaf `US-*` name, never the `SPEC-*` parent; reports, screenshots and logs keep this flat name | same |
 | `screenshots_root` | `{automation_root}/screenshots/{user_story_name}/` — one folder per User Story, **replaced** on every run (see `<result_organization>`) | same |
 | `us_config` | `{automation_root}/playwright.us-{UserStoryID}.config.ts` — generated per story, extends the base config (see `<us_config>`) | same |
 | `run_plan` | `{results_root}/run-plan.json` — parallel/serial groups for this story (see `<run_plan>`), rewritten every run | same |
@@ -188,7 +188,7 @@ Testing/Automation/
 └── playwright.us-{id}.config.ts  ← generated per-story config (headed, workers, evidence), extends playwright.config.ts
 ```
 
-An EXISTING automation project (e.g. `SMO_Automation_PW/`) is reused with its own
+An EXISTING automation project (any folder that already has a `playwright.config.ts`) is reused with its own
 internal convention — never create a parallel `Testing/Automation/` beside it; the
 per-User-Story `reports/US-{id}/` and `automation-logs/US-{id}/` trees are created
 INSIDE whatever `{automation_root}` resolves to.
@@ -293,7 +293,7 @@ Legacy documents have no `Automation Candidate` field. Where the field exists (n
 `generate-manual-test-cases` output) respect it; otherwise **derive** candidacy: a TC is
 automatable when every step maps deterministically to an action and an assertion (see
 `<normalization>`). Record the decision and the reason per TC — that record is what PHASE 5
-publishes as `Custom.TestAutomated`. TCs that cannot be automated deterministically appear in
+publishes as the template's automation flag. TCs that cannot be automated deterministically appear in
 the coverage table as `manual — not automated`, with the reason stated.
 
 <hierarchy_verification>
@@ -328,10 +328,9 @@ the coverage table as `manual — not automated`, with the reason stated.
 
 - Every screen interaction in a spec goes through a page-object method.
 - REUSE an existing page object from `pages/` when it fits (scan the directory
-  first — for SMO: `KpiScreensPage.ts`, `InitiativeScreensPage.ts`,
-  `ObjectiveScreenPage.ts`, `LevelScreenPage.ts`, `S360_login.ts`,
-  `pages/components/FilterPanelComponent.ts`, …). Never report "no POM exists"
-  without checking.
+  first — list every `pages/*.ts` and `pages/components/*.ts` and match them to the
+  screens the TC touches by name, then by the locators inside). Never report "no POM
+  exists" without checking.
 - EXTEND the relevant page object with new methods when it partially fits —
   match the file's existing style.
 - CREATE a new page-object class (matching the conventions of the existing
@@ -354,7 +353,7 @@ This list exists because a previous run shipped every one of them:
 | `page.waitForSelector('#loader', …)` | `waitForLoaderHidden()` |
 | `page.addInitScript(…)` seeding browser state | a named seeding method, e.g. `seedCorruptedFilterState()` |
 | `page.keyboard.press(...)` aimed at a specific control | `activateXByKeyboard()` returning the observable result |
-| `new S360_login(page)` + `login()` + `new XPage()` + `goto()` | a `static openX(page, fixture, lang)` factory |
+| `new LoginPage(page)` + `login()` + `new XPage()` + `goto()` | a `static openX(page, fixture, lang)` factory |
 | `expect(pageObject.someLocator).toBeVisible()` | `expectXVisible()` on the page object |
 
 **Locator exposure rule.** A page object MAY expose `readonly` locators, but a spec may
@@ -363,20 +362,20 @@ only pass them to a page-object method — never chain `.locator()`, `.evaluate(
 violation as writing the selector inline; it just hides it one level deeper.
 
 **No UI helper functions in spec files.** A spec must not declare a function that takes
-`page`/a page object and drives the screen (`async function openLevel(page, …)`,
-`applyYearly(level, …)`, `readSelectedYear(level)`). Those are page-object methods that
+`page`/a page object and drives the screen (`async function openRecord(page, …)`,
+`applyFilter(list, …)`, `readSelectedValue(list)`). Those are page-object methods that
 were written in the wrong file. Compose multi-step flows as page-object methods
-(`applyYearlyMode(mode, year?)`), not as spec-local helpers.
+(`applyFilterMode(mode, value?)`), not as spec-local helpers.
 
 **A spec file contains TEST CASES ONLY.** Not "mostly test cases" — a spec declaring any
 named helper is a layering failure. Route every helper to its owning layer:
 
 | Helper kind | Owning layer | Example |
 |---|---|---|
-| Screen interaction, waits, composite UI flows | `pages/XPage.ts` | `applyYearlyMode()`, `openFilter()` |
-| Oracle key resolution, DB lookups, tolerance assertions | `pages/XPage.ts`, beside the existing DB-oracle helpers | `resolveSnapshotLevelId()`, `expectMatchesAnnualOracle()` |
-| Fixture seeding / teardown via API | `prerequest/*PreRequest.ts` | `setupYearlyLevelFixture()` |
-| Reusable domain calculations | `utils/*` | `computeObjectiveQuarterly()` |
+| Screen interaction, waits, composite UI flows | `pages/XPage.ts` | `applyFilterMode()`, `openFilter()` |
+| Oracle key resolution, DB lookups, tolerance assertions | `pages/XPage.ts`, beside the existing DB-oracle helpers | `resolveRecordId()`, `expectMatchesOracle()` |
+| Fixture seeding / teardown via API | `prerequest/*PreRequest.ts` | `setupRecordFixture()` |
+| Reusable domain calculations | `utils/*` | `computeExpectedTotal()` |
 
 Scan the owning layer BEFORE writing a helper — these files already exist and already
 contain siblings of what you are about to write.
@@ -402,7 +401,7 @@ than the approved TC's steps, the abstraction is in the wrong place — move it.
 **Self-check commands — run BOTH before Phase 3 and paste the results in your output:**
 ```bash
 # 1. No element access or raw page driving in the spec
-grep -nE "\.locator\(|getByTestId\(|getByRole\(|\.evaluate\(|page\.(goto|reload|waitForSelector|addInitScript|keyboard)\(|new S360_login" <spec-file>
+grep -nE "\.locator\(|getByTestId\(|getByRole\(|\.evaluate\(|page\.(goto|reload|waitForSelector|addInitScript|keyboard)\(|new [A-Za-z_]*(Login|Auth)[A-Za-z_]*\(" <spec-file>
 
 # 2. No helper declarations in the spec (only a one-line prerequest alias is allowed)
 grep -nE "^(async )?function |^const [a-zA-Z_]+ = (async )?\(" <spec-file>
@@ -412,13 +411,14 @@ itself is not a hit — it takes `page`, not a locator), and any hit from (2) th
 is not a single-line delegation to a `prerequest` fixture, must be moved to its owning layer
 before you execute anything. Report both as `POM self-check: clean` or list what you moved.
 
-**Verify your typecheck actually runs.** `npx tsc --noEmit -p tsconfig.json` in
-`SMO_Automation_PW` currently reports **zero errors even for a deliberate type error**: the
-config sets `moduleResolution: "bundler"` with `module: "commonjs"`, so tsc aborts with
-`TS5095` before checking anything. A clean run there proves nothing. Typecheck with
-`moduleResolution: "node"` (e.g. `tsconfig.check.json`) and prove the checker works by
-injecting a throwaway type error first. Never report "typecheck clean" from a run you have
-not confirmed is actually checking.
+**Verify your typecheck actually runs.** Some automation projects' `tsconfig.json` makes
+`npx tsc --noEmit -p tsconfig.json` report **zero errors even for a deliberate type error**
+— for example `moduleResolution: "bundler"` combined with `module: "commonjs"` makes tsc
+abort with `TS5095` before checking anything. A clean run there proves nothing. Prove the
+checker works by injecting a throwaway type error first; if it is not caught, typecheck with
+a dedicated config (e.g. `tsconfig.check.json` with `moduleResolution: "node"`) and record
+that in the learning file. Never report "typecheck clean" from a run you have not confirmed
+is actually checking.
 </pom_mandatory>
 
 <normalization>
@@ -445,7 +445,7 @@ Selectors come from SOURCE ONLY — never from memory, never guessed:
    `[type: trick]` lines (and its `[similar: …]` pages): known identification patterns and
    `data-testid` values recorded by earlier runs or by skill 3/4 are verified against source
    once, not rediscovered. After resolution, record every newly confirmed pattern and value
-   there in words (`- [module: KPI] [page: KPI Details] [element: Save button] [type: trick] Identified by test id kpi-save-button; enabled only after all yearly values are filled.`).
+   there in words (`- [module: Orders] [page: Order Details] [element: Save button] [type: trick] Identified by test id order-save-button; enabled only after all required fields are filled.`).
 1. Scan the implementation files for the feature (Angular templates `*.html`,
    components `*.ts`, TSX/JSX) and build a `data-testid` index.
 2. Classify each logical target: RESOLVED (one certain match) · AMBIGUOUS ·
@@ -495,20 +495,20 @@ Decisions driven by the TC fields are marked `field`; the rest `inferred`.
 
 ```json
 {
-  "user_story": "US-1031475", "generated": "ISO-8601",
+  "user_story": "US-1234", "generated": "ISO-8601",
   "headed": true, "workers_parallel": 3,
   "setup_groups": [
-    { "name": "setup:kpi-yearly-values", "mode": "serial", "workers": 1, "spec": "tests/KPI_Tests/00-setup-kpi-yearly-values.spec.ts",
-      "provides": "KPI yearly values for 2026", "decision": "ui", "cleanup": "delete", "source": "qc" }
+    { "name": "setup:order-items", "mode": "serial", "workers": 1, "spec": "tests/Orders_Tests/00-setup-order-items.spec.ts",
+      "provides": "an order with line items", "decision": "ui", "cleanup": "delete", "source": "qc" }
   ],
   "groups": [
-    { "name": "parallel", "mode": "parallel", "workers": 3, "tcs": ["KPI-001", "KPI-001b", "KPI-004"] },
-    { "name": "serial:kpi-yearly-values", "mode": "serial", "workers": 1,
-      "tcs": ["KPI-010", "KPI-011", "KPI-011b"], "reason": "all edit the same KPI yearly values" }
+    { "name": "parallel", "mode": "parallel", "workers": 3, "tcs": ["TC-001", "TC-001b", "TC-004"] },
+    { "name": "serial:order-items", "mode": "serial", "workers": 1,
+      "tcs": ["TC-010", "TC-011", "TC-011b"], "reason": "all edit the same order's line items" }
   ],
   "decisions": [
-    { "tc": "KPI-010", "mode": "serial", "source": "inferred", "why": "step 4 saves a new yearly value" },
-    { "tc": "KPI-001", "mode": "parallel", "source": "field", "why": "Data effect: read-only" }
+    { "tc": "TC-010", "mode": "serial", "source": "inferred", "why": "step 4 saves a new line item" },
+    { "tc": "TC-001", "mode": "parallel", "source": "field", "why": "Data effect: read-only" }
   ],
   "estimate": { "serial_only_s": 0, "planned_s": 0 }
 }
@@ -761,7 +761,7 @@ Quote any CSV field containing a comma; use these exact headers.
 renders. Any TC-ID in the approved document missing from `coverage-detail.csv`, or any status
 you could not decide, is an assumption — list it.
 
-Recurring reasons a project lands Partial (e.g. "no Delivery Director user exists in any
+Recurring reasons a project lands Partial (e.g. "no Approver user exists in any
 environment", "history screens have no empty-state fixture") are project knowledge: write them
 as plain-English `[type: env]` / `[type: trick]` lines under `### Automation Model (skill 6) →
 #### Knowledge` so the next story's design and measurement start from them.
@@ -819,8 +819,8 @@ learning file grepped first, nothing already answered is re-asked):
 Test-data readiness — {N} TCs would be skipped without a decision
 | # | Gap (plain English)                         | Affected TCs        | Status     | Options found            | Recommended |
 |---|---------------------------------------------|---------------------|------------|--------------------------|-------------|
-| 1 | No KPI with yearly values for 2026 in UAT   | KPI-010, 011, 011b  | MISSING    | api (KPI create), ui     | api         |
-| 2 | No user with the Delivery Director role     | KPI-020, 020b       | IMPOSSIBLE | manual, skip             | skip        |
+| 1 | No order with line items in UAT             | TC-010, 011, 011b   | MISSING    | api (order create), ui   | api         |
+| 2 | No user with the Approver role              | TC-020, 020b        | IMPOSSIBLE | manual, skip             | skip        |
 Answer per gap:  api | ui | db | manual | skip   — add "keep" to leave created data in place
 Example: "1 api keep · 2 skip"
 db: also name the env var that holds the connection string (its value is never shown or stored).
@@ -855,13 +855,13 @@ setup group. Write `{readiness_file}` = `{results_root}/data-readiness.json` (re
 {
   "measuredAt": "ISO-8601", "verdict": "READY-WITH-SKIPS",
   "requirements": [
-    { "id": "R1", "text": "KPI with yearly values for 2026 exists in UAT", "status": "MISSING→READY",
-      "tcs": ["KPI-010", "KPI-011", "KPI-011b"], "decision": "api", "source": "qc",
-      "provisioning": "prerequest/KpiPreRequest.ts (find-or-create)", "cleanup": "delete" },
-    { "id": "R2", "text": "A user with the Delivery Director role", "status": "IMPOSSIBLE",
-      "tcs": ["KPI-020", "KPI-020b"], "decision": "skip", "source": "qc", "provisioning": null, "cleanup": null }
+    { "id": "R1", "text": "An order with line items exists in UAT", "status": "MISSING→READY",
+      "tcs": ["TC-010", "TC-011", "TC-011b"], "decision": "api", "source": "qc",
+      "provisioning": "prerequest/OrderPreRequest.ts (find-or-create)", "cleanup": "delete" },
+    { "id": "R2", "text": "A user with the Approver role", "status": "IMPOSSIBLE",
+      "tcs": ["TC-020", "TC-020b"], "decision": "skip", "source": "qc", "provisioning": null, "cleanup": null }
   ],
-  "predictedSkips": [ { "tc": "KPI-020", "reason": "no Delivery Director user exists in any environment (QC: skip)" } ]
+  "predictedSkips": [ { "tc": "TC-020", "reason": "no Approver user exists in any environment (QC: skip)" } ]
 }
 ```
 
@@ -888,7 +888,7 @@ inside the structure's `reports/` folder.**
 
 ```text
 {automation_root}/reports/
-  US-1031475/
+  US-1234/
     phase-1.json      ← run-of-record JSON of that execution
     phase-1.html      ← designed HTML report of that execution
     phase-2.json      ← the next execution
@@ -903,12 +903,12 @@ inside the structure's `reports/` folder.**
 
 ```text
 {automation_root}/screenshots/
-  US-1031475-initiative-yearly-values/     ← {user_story_name}, same name skill 3 used
-    KPI-001.png            ← the ASSERTION POINT of the TC (full page): the screen as it
+  US-1234-create-order/    ← {user_story_name}, same name skill 3 used
+    TC-001.png             ← the ASSERTION POINT of the TC (full page): the screen as it
                              looks when the expected result is verified, pass or fail
-    KPI-001b.png           ← the Arabic variant has its own image
-    KPI-010.png
-    KPI-010-failed.png     ← only when the TC failed: the failing step
+    TC-001b.png            ← the second-locale variant has its own image
+    TC-010.png
+    TC-010-failed.png      ← only when the TC failed: the failing step
 ```
 
 **Evidence contract — screenshot at the ASSERTION POINT, never at test end.**
@@ -965,7 +965,7 @@ exists so no module ever inherits that defect:
 
 ```text
 {automation_root}/automation-logs/
-  US-1031475/
+  US-1234/
     run-progress-2026-09-02-0754.log
     run-progress-2026-09-02-1420.log   ← later run, new file
 ```
@@ -1110,8 +1110,7 @@ Confirm the Playwright config sets `screenshot: 'only-on-failure'` in its `use` 
 (inherited by `{us_config}`). Without it — and with `retries: 0`, which stops
 `trace: 'on-first-retry'` from ever firing — a failing test leaves NO visual evidence, and
 every bug entry rests on assertion text alone. If it is missing, add it before the first
-run and note it in the Placement Manifest. (Already present in
-`SMO_Automation_PW/playwright.config.ts`.) Confirm the shared evidence helper
+run and note it in the Placement Manifest. Confirm the shared evidence helper
 (`captureEvidence`) exists, that every generated test calls it at its assertion point and
 not in `afterEach` (see `<result_organization>`), and that `{screenshots_root}` is writable;
 remove stale images per `<result_organization>`.
@@ -1177,8 +1176,8 @@ worked in the learning file.
    This run's results are the results of record — no fixes, no re-runs after it.
    A smoke-gate STOP in this run is itself the result of record.
 2. Read the framework's JSON output from `{results_root}/last-run.json` (written by
-   `{us_config}`; fall back to `{automation_root}/results/run-results.json` for the legacy
-   SMO project) for per-test status, duration, errors, and attachment paths, and pair each
+   `{us_config}`; if the base config already declares its own JSON reporter, read from that
+   path instead) for per-test status, duration, errors, and attachment paths, and pair each
    TC with its `{screenshots_root}/{TC-ID}.png` (+ `-failed.png` when present).
 3. Emit the **machine-readable artifact**
    `{automation_root}/reports/US-{UserStoryID}/phase-{N}.json`
@@ -1248,9 +1247,9 @@ Every `app_bug` entry — in the HTML report and in anything filed to DevOps —
 
 ```
 The system doesn't display the username validation message when the user enters an invalid username
-The system doesn't redirect to the login page when an unauthenticated user opens the Level screen
-The system still shows the live performance value when the user selects a past year
-The system keeps the read-only warning visible after the user returns to Current Period
+The system doesn't redirect to the login page when an unauthenticated user opens the Orders screen
+The system still shows the current total when the user filters by a past order date
+The system keeps the read-only warning visible after the user clears the date filter
 ```
 
 Pattern: `The system <doesn't do X> when <condition>` — or `The system <does the wrong X>
@@ -1265,20 +1264,20 @@ Same nine canonical verbs as the test cases. Anyone must be able to follow them 
 reading the automation:
 
 ```
-1. Login with a Strategy Owner user
-2. Go to the Level screen for a strategy that has a published snapshot
+1. Login with an Approver user
+2. Go to the Orders list for a customer that has a pending order
 3. Click on the filter panel open button
-4. Select "Year" from the Display Type dropdown
-5. Select the latest publish date
+4. Select "Pending" from the Status dropdown
+5. Select the latest order date
 6. Click on Apply
-7. Check the performance value shown in the breadcrumb
+7. Check the total value shown in the page header
 ```
 
 ### Expected / Actual — one simple sentence each
 
 ```
-Expected: The breadcrumb shows the selected year's snapshot value.
-Actual:   The breadcrumb still shows the live value (88.3%).
+Expected: The page header shows the total for the selected order date.
+Actual:   The page header still shows the current total (88.3%).
 ```
 
 No stack traces, no locators, no framework vocabulary in either line.
@@ -1301,18 +1300,23 @@ If no screenshot exists, say so plainly rather than omitting the field —
 Using `{tc_output_folder}/ADO-MAP.md`:
 
 1. For every TC whose automation now exists and executed in run 2:
-   - `Custom.TestAutomated` = `true` — **this is the SMO template's real automation flag**
-     (boolean, default `false`). Set it to `true` once the automation exists. Leave it
-     `false` only where automation was deliberately never written.
+   - **Resolve the template's automation flag ONCE per project** (`automation_flag`):
+     learning file `[type: env]` line → skill 5's `tc_template_quirks` → inspect the
+     Test Case work item type's fields (`_apis/wit/workitemtypes/Test Case/fields`).
+     Preference order: (a) a boolean custom field whose name means "automated"
+     (e.g. `Custom.TestAutomated`) → set it `true`; (b) otherwise
+     `Microsoft.VSTS.TCM.AutomationStatus` = `Automated`. Leave the flag unset / `false`
+     only where automation was deliberately never written. Record the resolved field and its
+     accepted values in the learning file as one `[type: env]` line so no later run re-probes.
    - Set automated-test metadata
      (`Microsoft.VSTS.TCM.AutomatedTestName` = the spec test title,
      `Microsoft.VSTS.TCM.AutomatedTestStorage` = the spec file path). Both verified writable.
-   - `Microsoft.VSTS.TCM.AutomationStatus`: **⚠️ the SMO process template accepts ONLY
-     `Not Automated` and `Planned`. `Automated` is REJECTED** with
+   - `Microsoft.VSTS.TCM.AutomationStatus`: **⚠️ some process templates accept ONLY
+     `Not Automated` and `Planned` and REJECT `Automated`** with
      `400 The field 'Automation status' contains the value 'Automated' that is not in the
-     list of supported values`. Do not attempt it, and never write `Automated` into
-     `ADO-MAP.md` — that records a status ADO refused. Leave `Planned` and rely on
-     `Custom.TestAutomated` + the metadata fields to express automation.
+     list of supported values`. On that error: keep `Planned`, rely on the custom flag +
+     the metadata fields to express automation, never write `Automated` into `ADO-MAP.md`
+     (that records a status ADO refused), and record the restriction in the learning file.
    - Keep `Planned` for candidates that ended up skip-guarded (note why in the map), for any
      TC whose PHASE 2.5 status is Partially / Not Covered — copy the reason from
      `coverage-detail.csv` — and for any TC skipped by a PHASE 2.6 decision — copy the gap
@@ -1495,8 +1499,9 @@ Before returning AUTOMATION COMPLETE:
 - [ ] **Every app_bug has numbered reproduce steps starting at login, in the canonical verbs,
       plus one-sentence Expected and Actual**
 - [ ] Every app_bug has root cause and a screenshot (or states plainly that none was captured)
-- [ ] ADO close-out: `Custom.TestAutomated = true` where earned (AutomationStatus stays
-      `Planned` — the template rejects `Automated`); summary comment posted; ADO-MAP updated
+- [ ] ADO close-out: the resolved automation flag set where earned (if the template rejects
+      `AutomationStatus = Automated`, it stays `Planned` and the custom flag carries the
+      status); summary comment posted; ADO-MAP updated
 - [ ] Deviations honest and complete
 - [ ] Learning file searched (Index + tag grep, not the whole file) before every ask and before
       selector/environment discovery; recorded and `[similar:]` knowledge reused
