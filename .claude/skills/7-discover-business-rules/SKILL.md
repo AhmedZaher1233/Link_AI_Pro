@@ -1,7 +1,7 @@
 ---
 name: discover-business-rules
 model: claude-opus-5
-description: Discover the business rules the CODE actually enforces for a User Story and export the ones the spec never mentions. Starting from a story ID, a REQ-*.md, a spec file, or pasted acceptance criteria, it locates the story's code (reusing the repository profile that 4-white-box-testing builds), reads validators, entities, migrations, services, guards and UI forms, and writes every observed rule as an EARS statement with code evidence — field lengths and formats, required/optional, uniqueness of names/IDs/codes, defaults, ranges and thresholds, allowed state transitions, permissions, duplicate handling, soft-delete/archival rules, calculated values, locale differences. It then compares that catalogue against the spec, classifies each rule as In spec / Partially in spec / Not in spec / Contradicts spec, and exports the "in code, not in spec" list as a review-ready document under Testing/Requirements/{US-id-name}/ (one folder per story — multi-story input is split; if the requirements folder does not exist it asks where to write) marked PENDING PO APPROVAL. Findings stay out of the learning file and the REQ until the Product Owner's decisions are recorded in the decision block and the skill is re-run with --apply-approved, which then records approved rules and hands bugs to skill 4 and test cases to skills 3 and 6. Never edits source code or the spec itself. Use when the user asks to "discover the code for this story", "what rules does the code enforce", "find hidden business rules", "compare code with spec", "export business rules from code", "what validations exist that are not in the spec", "field limits / uniqueness not documented", "reverse-engineer the story", "code vs spec".
+description: Discover the business rules the CODE actually enforces for a User Story and export the ones the spec never mentions. Starting from a story ID, a REQ-*.md, a spec file, or pasted acceptance criteria, it locates the story's code (reusing the repository profile that 4-white-box-testing builds), reads validators, entities, migrations, services, guards and UI forms, and writes every observed rule as an EARS statement with code evidence — field lengths and formats, required/optional, uniqueness of names/IDs/codes, defaults, ranges and thresholds, allowed state transitions, permissions, duplicate handling, soft-delete/archival rules, calculated values, locale differences. It then compares that catalogue against the spec, classifies each rule as In spec / Partially in spec / Not in spec / Contradicts spec, and exports the "in code, not in spec" list as a review-ready document under Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/ — the same story folder 2-review-requirements uses, nested under a SPEC-* folder when the story came from a spec file (one folder per story — multi-story input is split; if the requirements folder does not exist it asks where to write) marked PENDING PO APPROVAL. Findings stay out of the learning file and the REQ until the Product Owner's decisions are recorded in the decision block and the skill is re-run with --apply-approved, which then records approved rules and hands bugs to skill 4 and test cases to skills 3 and 6. Never edits source code or the spec itself. Use when the user asks to "discover the code for this story", "what rules does the code enforce", "find hidden business rules", "compare code with spec", "export business rules from code", "what validations exist that are not in the spec", "field limits / uniqueness not documented", "reverse-engineer the story", "code vs spec".
 argument-hint: "[<story-id>… | <feature-name> | <path/to/REQ-*.md> | <path/to/spec.md>] [--no-compare] [--reprofile] | --apply-approved <story-id>…"
 license: Adapted from jeffallan/claude-skills@spec-miner (MIT, https://github.com/Jeffallan/claude-skills) for the Link_AI_Pro QA skill set.
 ---
@@ -19,7 +19,7 @@ database and back; the **QA hat** turns every branch, guard and constraint into 
 behaviour a QC can test.
 
 **Constraints**
-- Write output ONLY to the story's requirement folder — `Testing/Requirements/US-{id}-{name}/`
+- Write output ONLY to the story's requirement folder — `Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/` (the folder skill 2 created; the `SPEC-*` level exists for stories taken from a spec file)
   (or the folder the user names in 0.3) — one folder per User Story, never a shared file for
   several stories except the summary described in 5.4.
 - **Findings are proposals until the Product Owner approves them.** The export file is marked
@@ -148,12 +148,20 @@ cat "Testing/White_Box_Testing/.project-profile.md" 2>/dev/null || echo "NO_PROF
 
 ### 0.3 Locate the requirements root and the story folder
 
-Output lands in the folder skill 2 uses: `Testing/Requirements/US-{id}-{kebab-name}/`
+Output lands in the folder skill 2 uses: `Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{kebab-name}/`
 (`{id}` digits only; `{kebab-name}` from the story title, lowercase, hyphens, ≤ 6 words).
+The `SPEC-{spec-name}/` level exists only for stories that came from a spec FILE:
+`{spec-name}` = the spec file stem, extension stripped, lowercase kebab-case, ≤ 6 words; a
+generic stem (`spec`, `specification`, `requirements`, `prd`, `readme`) → the parent folder
+name (`docs/specs/resource-request/spec.md` → `resource-request`). Stories from Azure DevOps,
+Word or pasted text sit directly under `Testing/Requirements/`.
 
 1. **Requirements root present** (`Testing/Requirements/` exists, or the legacy lowercase
-   `Testing/requirements/`) → use it. If the story folder exists, reuse it and read the
-   `REQ-*.md` and `US-{id}-review.md` inside; if only the folder is missing, create it.
+   `Testing/requirements/`) → use it. Glob `Testing/Requirements/**/US-{id}-*/` first: if the
+   story folder exists at any level, reuse it (and its level) and read the `REQ-*.md` and
+   `US-{id}-review.md` inside. If it is missing, create it — under `SPEC-{spec-name}/` when the
+   input was a spec file, otherwise directly under the root. Never create the same story at
+   two levels.
 2. **Requirements root missing** (no `Testing/Requirements/`, or no `Testing/` at all) →
    **do not create it and do not guess.** First grep the learning file (`[type: qa]` in this
    skill's Q&A and `## Project Knowledge`) for a recorded output location. If none, ask the
@@ -162,15 +170,15 @@ Output lands in the folder skill 2 uses: `Testing/Requirements/US-{id}-{kebab-na
    ```text
    I could not find Testing/Requirements/ in this project. Where should the code-rules
    export for US-{id} be written?
-     A) Create the standard layout now: Testing/Requirements/US-{id}-{name}/  (recommended —
-        or run 1-generate-update-testing-structure first for the full setup)
+     A) Create the standard layout now: Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/
+        (recommended — or run 1-generate-update-testing-structure first for the full setup)
      B) An existing folder you name: <path>
    ```
 
    WAIT for the answer. Record it under this skill's `#### Questions and Answers` and in
    `## Project Knowledge` (if the learning file exists) so the next run does not ask again.
    Under B, still create one sub-folder per story inside the named path
-   (`<path>/US-{id}-{name}/`).
+   (`<path>/[SPEC-{spec-name}/]US-{id}-{name}/`).
 
 ---
 
@@ -212,6 +220,8 @@ Then:
    (unless the IDs were passed explicitly).
 2. Run Phases 2-5 **once per story**, each with its own vocabulary, Spec Rule List, Rule
    Catalogue and export file in its own folder `…/US-{id}-{name}/US-{id}-code-rules.md`.
+   When the split came from a spec FILE, every story folder sits under
+   `{requirements-root}/SPEC-{spec-name}/` (same rule as skill 2 — see 0.3).
    Never merge two stories' findings into one file.
 3. A rule enforced by code that serves several stories goes into the export of the story
    whose spec owns the entity/field; the other exports get one cross-reference line
@@ -316,7 +326,8 @@ Rate each exported rule:
 
 ### 5.1 Write the export file
 
-Write `Testing/Requirements/US-{id}-{name}/US-{id}-code-rules.md` using
+Write `Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/US-{id}-code-rules.md` (the story
+folder located in 0.3) using
 `references/report-template.md`. Sections, in order:
 
 1. **Header** — story, spec source(s), profile date, commit sha, files analysed, counts
@@ -351,8 +362,10 @@ default from the export is written now. The export header carries
 
 ### 5.4 Cross-story summary (multi-story runs only)
 
-When 1.3 split the input, also write `{requirements-root}/CODE-RULES-SUMMARY.md`
-(next to skill 2's `SPEC-REVIEW-SUMMARY.md`): the stories analysed with links to each
+When 1.3 split the input, also write `CODE-RULES-SUMMARY.md` next to skill 2's
+`SPEC-REVIEW-SUMMARY.md`: inside `{requirements-root}/SPEC-{spec-name}/` when the stories came
+from a spec file, at `{requirements-root}/CODE-RULES-SUMMARY.md` only when they were plain IDs
+with no spec file. Contents: the stories analysed with links to each
 export, per-story verdict counts, rules that span stories (with the owning story), and the
 shared UI-only / DB-only warnings. It never repeats a rule's detail — the story files own them.
 
@@ -382,8 +395,8 @@ shared UI-only / DB-only warnings. It never repeats a rule's detail — the stor
 
 **UI-only rules (bypassable)**: N · **DB-only rules (technical error, no message)**: N
 
-**Export**: {requirements-root}/US-{id}-{name}/US-{id}-code-rules.md — **Status: PENDING PO APPROVAL**
-{multi-story: one block per story + **Summary**: {requirements-root}/CODE-RULES-SUMMARY.md}
+**Export**: {requirements-root}/[SPEC-{spec-name}/]US-{id}-{name}/US-{id}-code-rules.md — **Status: PENDING PO APPROVAL**
+{multi-story: one block per story + **Summary**: {requirements-root}/[SPEC-{spec-name}/]CODE-RULES-SUMMARY.md}
 **Next**: QC reviews with the Product Owner and fills the decision block (Intended / Bug /
 Ignore) → re-run this skill with `--apply-approved US-{id}` → approved rules reach the
 learning file and the REQ delta → skill 2 folds them into the REQ → skill 3 adds the

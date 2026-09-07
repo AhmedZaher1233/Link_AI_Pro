@@ -1,7 +1,7 @@
 ---
 name: 2-review-requirements
 model: claude-opus-5
-description: Review requirements, user stories, and acceptance criteria for testability, completeness, clarity, consistency, feasibility, and risk. Accepts EVERY input type — an Azure DevOps User Story (via Azure DevOps MCP), a Word document (via Word MCP), directly pasted text, a small spec file, or a big spec file containing multiple user stories. A multi-story spec is SPLIT: each user story is reviewed separately and its output lands in its own folder under Testing/Requirements/{US-id-name}/ (per the 1-generate-update-testing-structure layout), holding both the extracted structured requirement file (REQ-*.md) and the review file, plus a top-level SPEC-REVIEW-SUMMARY.md for cross-story findings. Use whenever the user asks to review requirements, review a spec or spec.md, analyze user stories, check acceptance criteria, assess testability, find gaps in specs, or evaluate any PRD/feature document for QA readiness. Trigger on phrases like "review this spec", "review this story", "check requirements", "is this testable", "requirements analysis", "acceptance criteria review", "QA this spec", "QA this story", "review-user-story".
+description: Review requirements, user stories, and acceptance criteria for testability, completeness, clarity, consistency, feasibility, and risk. Accepts EVERY input type — an Azure DevOps User Story (via Azure DevOps MCP), a Word document (via Word MCP), directly pasted text, a small spec file, or a big spec file containing multiple user stories. A multi-story spec is SPLIT: each user story is reviewed separately and its output lands in its own folder — stories that come from a spec FILE are grouped under a parent folder named after that spec, Testing/Requirements/SPEC-{spec-name}/US-{id}-{name}/, while Azure DevOps / Word / pasted-text stories go directly under Testing/Requirements/US-{id}-{name}/ (per the 1-generate-update-testing-structure layout) — holding both the extracted structured requirement file (REQ-*.md) and the review file, plus a SPEC-REVIEW-SUMMARY.md inside the spec folder for cross-story findings. Follows the spec's DEPENDENCIES: when the spec refers to other files (another spec, a glossary, data model, permission matrix, API contract, story IDs defined elsewhere) it resolves them, reads them, checks the spec against them, and fully reviews any dependency spec that has no review yet in its own SPEC-{dep-name}/ folder. Use whenever the user asks to review requirements, review a spec or spec.md, analyze user stories, check acceptance criteria, assess testability, find gaps in specs, or evaluate any PRD/feature document for QA readiness. Trigger on phrases like "review this spec", "review this story", "check requirements", "is this testable", "requirements analysis", "acceptance criteria review", "QA this spec", "QA this story", "review-user-story".
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__azure-devops
 argument-hint: "[<story-id> | <feature-name> | <path/to/spec.md> | <path/to/story.md> | <pasted text> | all]"
 ---
@@ -150,6 +150,80 @@ When the input is a `spec.md`, treat its sections as the review material:
 
 ---
 
+## Dependency Resolution — specs that depend on other files
+
+A spec is rarely self-contained. Before rating anything, find every file the input depends on,
+read those files too, and review them — a gap or conflict in a dependency is a gap in this spec.
+
+### 1. Detect the dependencies
+
+Scan the whole input (all stories, shared sections, footnotes) for:
+
+- Markdown links or plain paths to other files: `[..](../other/spec.md)`, `docs/x.md`,
+  `*.docx`, `*.xlsx`, `*.json`, `*.yaml`, `*.pdf`, images/diagrams.
+- Wording that hands off a definition: "see", "as defined in", "refer to", "per", "depends on",
+  "extends", "inherits", "prerequisite", "based on", "shared with", "same as in", "reuses".
+- Story or requirement IDs that are NOT defined in this spec (`US-\d+`, `REQ-…`, `FR-…`) and
+  feature / module / spec names that are only mentioned, never described.
+- Named shared artifacts: glossary, data model, permission matrix, workflow / state diagram,
+  API contract, validation rules, localisation file, design / Figma link.
+
+Build a **dependency list** (`what is referenced` · `where in this spec` · `what this spec relies
+on from it`). Follow dependencies of dependencies up to **2 levels**; stop at a cycle or when a
+file adds nothing this spec relies on.
+
+### 2. Resolve each one — never guess
+
+In order: path relative to the spec file's folder → same name anywhere in the repo (glob by
+file name; `specs/**`, `docs/**`, `Testing/Requirements/**`) → `Testing/project-learning.md`
+(`[module: …]` tags, recorded spec locations) → Azure DevOps by ID (IDs only) → **ask the user**.
+Unresolved dependencies go into the ONE combined Step 0 question ("this spec refers to
+`Pricing rules` and `US-1029001` — where are they? or reply `skip` to review without them").
+`skip` = record the dependency as **Unresolved**, never treat it as satisfied.
+
+External links (Figma, Confluence, SharePoint) you cannot open: record as **Unreadable** and ask
+the user for an export only if an acceptance criterion cannot be rated without it.
+
+Report the resolved dependency tree to the user in the same message as the story count
+("This spec contains 3 user stories and depends on 2 files: …").
+
+### 3. Review the dependency files — what "review" means per type
+
+| Dependency type | What to do |
+|---|---|
+| Another **spec / story file** (has user stories or acceptance criteria) | Check whether it already has a review (`Testing/Requirements/**/US-{id}-review.md` or `SPEC-{dep-name}/`). **Not reviewed yet → give it the FULL review too**: split, REQ + review per story, into its own `Testing/Requirements/SPEC-{dep-spec-name}/` folder (same rules as any spec file). **Already reviewed → reuse** that review (read it, do not regenerate) and only re-run the cross-spec consistency check below; refresh it only if the dependency file changed after the review date. Tell the user which happened. |
+| **Shared definition file** (glossary, data model, permission matrix, state / workflow diagram, API contract, validation rules, localisation file) | Read it read-only. Verify every item this spec relies on actually exists there and says what this spec assumes (field names, types, lengths, states, roles, messages, rules). No REQ / review file is produced for it — its findings live in the depending story's review. |
+| **Design / image / external link** | Read if possible; otherwise mark Unreadable. Use only to rate completeness/clarity of the ACs that point to it. |
+| **Missing / Unresolved** | The ACs that rely on it are rated ⚠️ at best; add a clarification question naming the file. |
+
+### 4. Cross-spec consistency check (always, for every resolved dependency)
+
+- Referenced section / item exists and is unambiguous.
+- This spec's assumptions match the dependency: same field names, states, roles, limits,
+  error messages, defaults, terminology (glossary).
+- Neither file contradicts the other; neither duplicates the other's rules with a drift.
+- Dependency prerequisites are stated (order of delivery, feature flags, data that must exist).
+- Version / date: the dependency is not older than a rule this spec changed (stale dependency).
+
+Record results in **Dimension 4 (Consistency)** — a conflict with a dependency is an
+inconsistency of THIS story — and in **Dimension 5 (Feasibility)** for missing / unbuilt
+dependencies. Every cross-spec finding is written in the review of EVERY affected story on both
+sides (the depending story and, when it was reviewed, the dependency's story) and in the
+`SPEC-REVIEW-SUMMARY.md` of the depending spec under **Dependencies**.
+
+### 5. Rules
+
+- Dependency files are **read-only**: never edit them, never copy them into the output folders.
+- Reviews of a dependency spec land in ITS OWN `SPEC-{dep-spec-name}/` folder, never inside the
+  depending spec's folder. The depending spec's summary links to them.
+- Sibling artifacts of a `spec.md` (`plan.md`, `data-model.md`, `contracts/`, `tasks.md`) are
+  dependencies of the shared-definition type when the spec refers to them; otherwise they stay
+  optional context as stated above.
+- Never load a large dependency in full when a grep for the referenced item answers the
+  question; never re-review a dependency the user asked to skip.
+
+---
+
 ## Multi-Story Splitting — big specs
 
 Before reviewing, detect how many user stories the input contains:
@@ -162,38 +236,58 @@ Before reviewing, detect how many user stories the input contains:
 
 Then:
 
+- **Derive `{spec-name}` first** (spec FILE inputs only — `.md` / `.txt` / `.docx` path):
+  the file stem with the extension stripped, lowercased, kebab-case, at most 6 words
+  (`Resource Request Hours v2.docx` → `resource-request-hours-v2`). When the stem is generic
+  (`spec`, `specification`, `requirements`, `prd`, `readme`), use the parent folder name instead
+  (`docs/specs/resource-request/spec.md` → `resource-request`). Every story extracted from
+  that file lands under the parent folder `Testing/Requirements/SPEC-{spec-name}/`.
 - **More than 1 story** → run the FULL review process PER STORY. Each story gets its own
-  output folder and files (layout below). Shared/global spec sections (overview, glossary,
-  common constraints) are reviewed once and referenced in each story's review under a
-  short **"Shared spec context"** note — never duplicated in full.
-- **Exactly 1 story** → one folder, same layout.
+  output folder and files inside `SPEC-{spec-name}/` (layout below). Shared/global spec
+  sections (overview, glossary, common constraints) are reviewed once and referenced in each
+  story's review under a short **"Shared spec context"** note — never duplicated in full.
+- **Exactly 1 story** → one story folder, still inside `SPEC-{spec-name}/` when the input was
+  a spec file; directly under `Testing/Requirements/` for Azure DevOps / Word / pasted text.
 - **Cross-story consistency** (Dimension 4) still compares the stories against each other.
   A cross-story finding (conflict, duplication, dependency) is recorded in EVERY affected
-  story's review AND in the top-level summary:
-  `Testing/Requirements/SPEC-REVIEW-SUMMARY.md` — spec source, list of stories reviewed,
-  per-story verdicts, cross-story conflicts/dependencies, and the folder path per story.
-  Regenerate this summary per reviewed spec; name it
-  `SPEC-REVIEW-SUMMARY-{spec-name}.md` when more than one spec has been reviewed.
+  story's review AND in the spec-level summary:
+  `Testing/Requirements/SPEC-{spec-name}/SPEC-REVIEW-SUMMARY.md` — spec source, list of
+  stories reviewed, per-story verdicts, cross-story conflicts/dependencies, the folder
+  path per story, and a **Dependencies** block: every file this spec depends on, its
+  resolved path, status (Found / Reviewed at `SPEC-…/` / Reused existing review / Missing /
+  Unreadable / Skipped) and the cross-spec findings. Regenerate this summary on every re-review of the same spec; the spec
+  folder keeps summaries of different specs apart, so the file name never changes.
 
 ---
 
 ## Output Location — `1-generate-update-testing-structure` layout
 
-All output goes under `Testing/Requirements/`, **one folder per user story**:
+All output goes under `Testing/Requirements/`, **one folder per user story**. Stories that
+come from a spec FILE are grouped under a parent folder named after that spec
+(`SPEC-{spec-name}/`); stories from Azure DevOps, Word or pasted text sit directly under
+`Testing/Requirements/`:
 
 ```text
 Testing/Requirements/
-  US-1031475-initiative-yearly-values/
-    REQ-1031475-initiative-yearly-values.md    ← structured requirement (extracted/converted)
-    US-1031475-review.md                       ← the full review
-  US-1031476-.../
-    REQ-...
-    US-1031476-review.md
-  SPEC-REVIEW-SUMMARY.md                        ← only for multi-story specs
+  SPEC-initiative-management/                   ← one per spec FILE (1 or many stories)
+    US-1031475-initiative-yearly-values/
+      REQ-1031475-initiative-yearly-values.md  ← structured requirement (extracted/converted)
+      US-1031475-review.md                     ← the full review
+    US-1031476-.../
+      REQ-...
+      US-1031476-review.md
+    SPEC-REVIEW-SUMMARY.md                      ← only when the spec held >1 story
+  US-2000001-from-azure-devops/                 ← ADO / Word / pasted text: no spec level
+    REQ-2000001-from-azure-devops.md
+    US-2000001-review.md
 ```
 
 Rules:
 
+0. **Spec level**: input is a spec FILE → parent folder `SPEC-{spec-name}/` (derived in
+   Multi-Story Splitting above), story folders inside it. Input is an Azure DevOps story,
+   a Word story, or pasted text → story folder directly under `Testing/Requirements/`.
+   `{story-folder}` below means `Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/`.
 1. Folder name: `US-{id}-{kebab-case-story-name}` (no ID available → `{kebab-case-story-name}`).
    Create the folder if missing. If `Testing/` does not exist, run the
    `1-generate-update-testing-structure` skill first or create the needed subtree —
@@ -209,7 +303,10 @@ Rules:
    `US-{id}-{dimension}-review.md` in the same folder
    (e.g. `US-1003547-auto-cancel/US-1003547-testability-review.md`).
 4. Re-reviewing a story overwrites its review file (the review reflects the current
-   requirement state) — but never touches other stories' folders.
+   requirement state) — but never touches other stories' folders. Re-reviewing the same
+   spec file reuses its existing `SPEC-{spec-name}/` folder (glob
+   `Testing/Requirements/**/US-{id}-*/` to find a story that already exists before creating
+   a new folder — never create a second copy of a story at another level).
 
 ---
 
@@ -264,6 +361,8 @@ Cross-check against related requirements and the codebase:
 - Does it align with the current data model?
 - Do stories contradict each other? (for multi-story specs, compare every pair)
 - Are dependencies between stories identified?
+- Does it agree with every file it depends on (Dependency Resolution §4): same fields, states,
+  roles, limits, messages, terminology? A drift or contradiction with a dependency is rated here.
 
 **Rate:** `✅ Consistent` / `⚠️ Potential Conflict` / `❌ Inconsistent`
 
@@ -274,6 +373,8 @@ Assess technical risk:
 - Are there known constraints (auth, roles, performance) not addressed?
 - Are integrations (APIs, external services, background jobs) implied but not specified?
 - Are there dependencies on unbuilt or unstable components?
+- Is any file this spec depends on Missing, Unresolved or Unreadable (Dependency Resolution)?
+  Missing dependency → at most ⚠️ Risky for the ACs that rely on it.
 
 **Rate:** `✅ Feasible` / `⚠️ Risky` / `❌ Infeasible`
 
@@ -290,13 +391,15 @@ Classify overall risk:
 
 ## Full Review Template
 
-Write to `Testing/Requirements/{US-{id}-{name}}/US-{id}-review.md`:
+Write to `{story-folder}/US-{id}-review.md` — i.e.
+`Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/US-{id}-review.md`:
 
 ```markdown
 # Requirement Review — {Story Name}
 **Date**: {YYYY-MM-DD}
 **Source**: {work item URL | docx path | spec path + section | "inline text"}
 **Requirement file**: {REQ-*.md path in this folder, or the referenced repo file}
+**Depends on**: {comma-separated resolved paths of the files this story relies on | "none"}
 **Reviewer**: Claude Code QC Agent
 
 ---
@@ -318,6 +421,13 @@ Write to `Testing/Requirements/{US-{id}-{name}}/US-{id}-review.md`:
 
 ## Shared spec context
 {multi-story specs only: one short note referencing the shared sections reviewed once — or omit}
+
+## Dependency Check
+{omit when the story depends on nothing}
+
+| Dependency | Referenced from | Resolved path | Status | This story relies on | Result |
+|---|---|---|---|---|---|
+| {name as written in the spec} | {AC / section} | {path or "—"} | Found · Reviewed (`SPEC-…/`) · Reused existing review · Missing · Unreadable · Skipped | {fields / rules / states taken from it} | ✅ Consistent / ⚠️ Gap / ❌ Conflict — {one line} |
 
 ## Requirement Text
 
@@ -423,6 +533,10 @@ Per the `<project_learning_file>` protocol, write to `Testing/project-learning.m
 ## Final message to the user
 
 Report: source type resolved · number of stories found (and the split, if >1) ·
+dependencies: {N} files found — which were reviewed fully (their `SPEC-…/` folders), which
+reused an existing review, which are Missing / Unreadable / Skipped, and the count of
+cross-spec conflicts ·
+the spec folder `Testing/Requirements/SPEC-{spec-name}/` (spec-file input) ·
 per-story folder paths + verdicts · summary file path (multi-story) · that the
 `REQ-*.md` files are ready as input for the `3-generate-manual-test-cases` skill · and
 `**Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}`.
@@ -438,3 +552,6 @@ per-story folder paths + verdicts · summary file path (multi-story) · that the
    English, tagged; never secrets, never code identifiers, never verbatim requirement text.
 4. The spec always wins over the learning file; fix the learning entry on conflict.
 5. Never guess a story, a source, or a scope — ask.
+6. Never rate a spec in isolation when it depends on other files: resolve, read and check every
+   dependency first (Dependency Resolution); an unresolved dependency is reported, never
+   assumed satisfied. Dependency files are read-only.

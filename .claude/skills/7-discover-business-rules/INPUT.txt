@@ -42,13 +42,15 @@ NOTES:
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
-  {requirements-root}/US-{id}-{name}/            (one folder PER STORY; default Testing/Requirements/)
+  {requirements-root}/[SPEC-{spec-name}/]US-{id}-{name}/   (one folder PER STORY; default root
+                                                   Testing/Requirements/; SPEC-{spec-name}/ only for
+                                                   stories taken from a spec file — same as skill 2)
     US-{id}-code-rules.md        ← Status PENDING PO APPROVAL · A partially specified ·
                                    B NOT IN SPEC (main export) · C contradictions ·
                                    D in spec not in code · enforcement matrix (UI/server/DB) ·
                                    spec coverage · QC / PO decision block · proposed REQ delta
                                    → after --apply-approved: Status APPROVED + approved REQ delta
-  {requirements-root}/CODE-RULES-SUMMARY.md     ← multi-story runs only: links + counts per story
+  {requirements-root}/[SPEC-{spec-name}/]CODE-RULES-SUMMARY.md  ← multi-story runs only: links + counts per story
   Testing/White_Box_Testing/.project-profile.md   ← created only if missing (shared with skill 4)
   Testing/project-learning.md                     ← discovery: Q&A + pending pointer only;
                                                      approval: approved rules, UI limits, test data

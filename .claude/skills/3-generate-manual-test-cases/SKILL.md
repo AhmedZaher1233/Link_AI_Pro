@@ -15,7 +15,10 @@ description: >
   implementation status (Implemented / Partially implemented / Not implemented /
   Cannot be validated) BEFORE treating TCs as executable, and mark
   pending-implementation TCs instead of validating them live. A multi-story input is
-  SPLIT: one folder, document and review page per story. Delivers the markdown
+  SPLIT: one folder, document and review page per story; stories that come from a
+  spec FILE are grouped under a parent folder named after the spec
+  (Testing/Manual_Test/TestCases/SPEC-{spec-name}/US-{id}-{name}/), mirroring where
+  2-review-requirements put their REQ files. Delivers the markdown
   TC document (source of truth) PLUS a designed HTML review page for HUMAN approval,
   scores requirement coverage (weighted Fully / Partially / Not Covered per acceptance
   criterion, shown as a gauge in the review page) and lists the scenarios that will stay

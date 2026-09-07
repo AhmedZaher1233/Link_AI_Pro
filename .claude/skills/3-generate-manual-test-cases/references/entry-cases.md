@@ -85,10 +85,12 @@ Generate Manual TCs → Review**
    description, numbered acceptance criteria, derived requirement IDs (`REQ-{storyID}-NN`, one
    per testable statement), roles, out-of-scope notes, and open questions.
 3. Store it in the story's own folder inside the requirements tree —
-   `{requirements_folder}/US-{storyID}-{kebab-name}/REQ-{storyID}-{feature}.md` (the same
-   per-story layout `2-review-requirements` writes). Check that folder FIRST: if
-   `2-review-requirements` already produced a `REQ-*.md` there, reuse it instead of
-   regenerating.
+   `{requirements_folder}/REQ-{storyID}-{feature}.md` (`{requirements_folder}` already ends in
+   `US-{storyID}-{kebab-name}/`; the same per-story layout `2-review-requirements` writes).
+   When the story came from a spec FILE (a `.md`/`.txt`/`.docx` given as the source), the
+   folder sits under `SPEC-{spec_name}/` — see the profile table. Check that folder FIRST
+   (glob `{paths.requirements}/**/US-{storyID}-*/`): if `2-review-requirements` already
+   produced a `REQ-*.md` there, reuse it — and its folder location — instead of regenerating.
 4. Use that requirement file as `spec_sources` for TC generation — the normal FRESH DESIGN flow
    (the design phase onward) then applies unchanged.
 
@@ -98,15 +100,22 @@ When the input names more than one User Story (several IDs, or a spec file holdi
 stories), split it the way `2-review-requirements` and `7-discover-business-rules` do:
 
 1. List the stories you detected and state the split in one message before designing anything.
+   When the input is a spec FILE, also state the derived `{spec_name}` and the spec folder
+   `{paths.manualTestCases}/SPEC-{spec_name}/` that will hold every story of that spec.
 2. Run the whole per-story flow (entry case → deliverables) once per story. Every story gets its own
    `{tc_output_folder}` folder, its own `TEST-CASES-{feature}.md` and its own
-   `TC-REVIEW-{feature}.html`. No rule changes per story.
+   `TC-REVIEW-{feature}.html`. Stories from a spec file: `{tc_output_folder}` =
+   `{paths.manualTestCases}/SPEC-{spec_name}/US-{storyID}-{kebab-name}/`. Stories given as
+   Azure DevOps IDs with no spec file: `{paths.manualTestCases}/US-{storyID}-{kebab-name}/`.
+   No rule changes per story.
 3. Shared knowledge discovered for story A (common flows, labels, fixtures) is reused for
    story B — record it in the learning file once, not per story.
-4. Only when more than one story was processed, also write
-   `{manual test-cases root}/TC-GENERATION-SUMMARY.md`: one row per story (story ID · folder ·
-   TC count · weighted coverage · implementation status · open findings count) plus
-   cross-story findings.
+4. Only when more than one story was processed, also write `TC-GENERATION-SUMMARY.md`: one row per
+   story (story ID · folder · TC count · weighted coverage · implementation status · open
+   findings count) plus cross-story findings. Location: inside the spec folder
+   (`{paths.manualTestCases}/SPEC-{spec_name}/TC-GENERATION-SUMMARY.md`) when the stories came
+   from a spec file; at `{paths.manualTestCases}/TC-GENERATION-SUMMARY.md` only when they were
+   plain Azure DevOps IDs with no spec file.
 5. One story unblockable (spec missing, TCs unreadable) does not stop the others: finish every
    story you can and list the blocked ones with the reason.
 
@@ -126,8 +135,11 @@ user.** Never invent a URL, a credential, or a spec path.
 | `required_locales` | — | `qa_standards` / CLAUDE.md i18n rules; ask when neither states them |
 | `app_base_url` | — | **NEVER auto-detected — learning file (`[type: env]`) or ask the user** |
 | `credentials_per_role` | — | **NEVER auto-detected, NEVER stored — always ask (unless given in the task input)** |
-| `tc_output_folder` | `paths.manualTestCases` + `/{UserStoryName}/` | `Testing/Manual_Test/TestCases/{UserStoryName}/` |
-| `requirements_folder` | `paths.requirements` + `/US-{storyID}-{kebab-name}/` | `Testing/Requirements/US-{storyID}-{kebab-name}/` |
+| `spec_name` | — | derived only when the source is a spec FILE: file stem, extension stripped, lowercase kebab-case, ≤ 6 words (`Resource Request Hours v2.docx` → `resource-request-hours-v2`); a generic stem (`spec`, `specification`, `requirements`, `prd`, `readme`) → use the parent folder name (`docs/specs/resource-request/spec.md` → `resource-request`). When the source is a `REQ-*.md` that already lives under `Testing/Requirements/SPEC-{x}/…`, `spec_name` = `{x}`. Empty for ADO / Word / pasted stories |
+| `spec_level` | — | `SPEC-{spec_name}/` when `spec_name` is set, otherwise empty. The same rule `2-review-requirements` uses |
+| `UserStoryName` | — | `US-{storyID}-{kebab-name}` — identical to the requirement folder name skill 2 used |
+| `tc_output_folder` | `paths.manualTestCases` + `/{spec_level}{UserStoryName}/` | `Testing/Manual_Test/TestCases/[SPEC-{spec_name}/]US-{storyID}-{kebab-name}/` |
+| `requirements_folder` | `paths.requirements` + `/{spec_level}US-{storyID}-{kebab-name}/` | `Testing/Requirements/[SPEC-{spec_name}/]US-{storyID}-{kebab-name}/` |
 | `white_box_reports` | `paths.whiteBox` | `Testing/White_Box_Testing/` |
 | `learning_file` | `paths.learningFile` | `Testing/project-learning.md` |
 
@@ -135,7 +147,13 @@ If a key cannot be resolved and the user does not answer → BLOCKED naming the 
 
 **Directory structure rule:** deliverables ALWAYS follow the
 `1-generate-update-testing-structure` layout — every User Story's TCs live in their own folder
-`{tc_output_folder}` (both the markdown and the HTML review page). Create the subtree if it is
+`{tc_output_folder}` (both the markdown and the HTML review page). The TC folder MIRRORS the
+requirement folder's position relative to the requirements root: a story whose `REQ-*.md` sits at
+`Testing/Requirements/SPEC-{spec_name}/US-{id}-{name}/` gets its TCs at
+`Testing/Manual_Test/TestCases/SPEC-{spec_name}/US-{id}-{name}/`; a story directly under
+`Testing/Requirements/US-{id}-{name}/` gets `Testing/Manual_Test/TestCases/US-{id}-{name}/`.
+Before creating a TC folder, glob `{paths.manualTestCases}/**/US-{storyID}-*/` and reuse an
+existing one rather than creating the same story at another level. Create the subtree if it is
 missing; never fall back to `docs/test-design/` or any other location. When the manifest is
 absent, use the detection fallbacks and tell the user to run
 `/1-generate-update-testing-structure` (audit first, then repair) — never invoke that skill

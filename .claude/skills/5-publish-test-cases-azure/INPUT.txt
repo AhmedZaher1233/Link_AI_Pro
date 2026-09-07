@@ -10,7 +10,7 @@ INPUT — WHAT YOU MUST PROVIDE
 ============================================================
 
 REQUIRED:
-  1. Approved TC document path   — Testing/Manual_Test/TestCases/{Story}/TEST-CASES-*.md
+  1. Approved TC document path   — Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{Story}/TEST-CASES-*.md
                                    MUST contain "Status: APPROVED" (skill refuses anything
                                    else — it never flips the status itself)
   2. User Story ID or EXACT title — the Azure DevOps work item the TCs belong to
@@ -35,7 +35,7 @@ PREREQUISITES (checked, not guessed):
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
-  Testing/Manual_Test/TestCases/{Story}/
+  Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{Story}/
     TEST-CASES-{feature}-beautified.md   ← upload document (build artifact, stamped with the
                                            source hash; regenerated every run, never hand-edit)
     ADO-MAP.md                           ← TC-ID → work item ID (+ source hash) — skill 6's gate

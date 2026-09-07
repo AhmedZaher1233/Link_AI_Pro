@@ -154,7 +154,7 @@ Input is human feedback referencing TC-IDs (or a corrected file).
 **Implementation status:** {Implemented | Partially implemented | Not implemented | Cannot be validated}
 **Deliverables:** {tc_output_folder}/TEST-CASES-{feature}.md · {tc_output_folder}/TC-REVIEW-{feature}.html
 {Case 2: **Requirement file generated:** {requirements_folder}/REQ-{storyID}-{feature}.md}
-{Multi-story: **Stories processed:** {N} — summary: {manual test-cases root}/TC-GENERATION-SUMMARY.md}
+{Multi-story: **Stories processed:** {N} — spec folder: {manual test-cases root}/SPEC-{spec_name}/ (spec-file input) — summary: {manual test-cases root}/[SPEC-{spec_name}/]TC-GENERATION-SUMMARY.md}
 **Status:** PENDING HUMAN REVIEW
 **Totals:** {N} TCs ({breakdown}) · {N} automation candidates
 **Requirement coverage:** {x}% weighted — Full {n} / Partial {n} / None {n} of {ACs} ACs

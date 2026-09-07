@@ -29,8 +29,8 @@ project has no conventions yet.
 
 | Folder | Purpose | Written by |
 |---|---|---|
-| `Requirements/` | one folder per User Story: `US-{id}-{kebab-name}/` holding `REQ-{id}-{name}.md`, `US-{id}-review.md`, `US-{id}-code-rules.md`; `SPEC-REVIEW-SUMMARY.md` / `CODE-RULES-SUMMARY.md` for multi-story specs | skills 2, 7 |
-| `Manual_Test/TestCases/` | one folder per User Story: `TEST-CASES-{feature}.md` (source of truth), `TC-REVIEW-{feature}.html`, `TEST-CASES-{feature}-beautified.md`, `ADO-MAP.md` | skills 3, 5 |
+| `Requirements/` | one folder per User Story: `US-{id}-{kebab-name}/` holding `REQ-{id}-{name}.md`, `US-{id}-review.md`, `US-{id}-code-rules.md`. Stories extracted from a spec FILE are grouped under a parent folder `SPEC-{spec-name}/` (spec file stem, kebab-case) that also holds `SPEC-REVIEW-SUMMARY.md` / `CODE-RULES-SUMMARY.md` for multi-story specs; ADO / Word / pasted stories sit directly under `Requirements/`. Both `SPEC-*/` and `US-*/` children are valid — never flag them as deviations | skills 2, 7 |
+| `Manual_Test/TestCases/` | one folder per User Story: `TEST-CASES-{feature}.md` (source of truth), `TC-REVIEW-{feature}.html`, `TEST-CASES-{feature}-beautified.md`, `ADO-MAP.md`. Mirrors `Requirements/`: stories from a spec file live under `SPEC-{spec-name}/US-{id}-{kebab-name}/` (with `TC-GENERATION-SUMMARY.md` inside the spec folder); others directly under `TestCases/US-{id}-{kebab-name}/` | skills 3, 5 |
 | `Automation/pages/` | Page Object Model files (`+ pages/components/`) | skill 6 |
 | `Automation/tests/` | Playwright specs in `{Area}_Tests/` folders | skill 6 |
 | `Automation/reports/` | `US-{id}/phase-N.json` + `.html` (immutable history), `run-plan.json`, `data-readiness.json`, `coverage/` | skill 6 |

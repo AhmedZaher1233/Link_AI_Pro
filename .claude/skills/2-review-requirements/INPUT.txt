@@ -1,7 +1,9 @@
 SKILL: 2-review-requirements
 WHAT IT DOES: Reviews a requirement / user story / spec for completeness, clarity,
 testability, consistency, feasibility, and risk. Splits multi-story specs and writes one
-folder per User Story under Testing/Requirements/ (REQ file + review file).
+folder per User Story (REQ file + review file). Stories taken from a spec FILE are grouped
+under Testing/Requirements/SPEC-{spec-name}/; ADO / Word / pasted stories go directly under
+Testing/Requirements/.
 
 ============================================================
 INPUT — PROVIDE EXACTLY ONE SOURCE
@@ -11,9 +13,17 @@ Pick ONE of these five:
   1. Azure DevOps User Story   — the story ID (e.g. 1031475) or its EXACT title
   2. Word document             — path to the .docx file
   3. Direct text               — paste the requirement/PRD text in the chat
-  4. Small spec file           — path to the .md file (one user story)
+  4. Small spec file           — path to the .md file (one user story; output still lands
+                                 under SPEC-{spec-name}/)
   5. Big spec file             — path to the .md file (multiple user stories — it will be
-                                 split, one review per story)
+                                 split, one review per story, all under SPEC-{spec-name}/)
+
+DEPENDENCIES ARE FOLLOWED AUTOMATICALLY: if the spec refers to other files (another spec,
+a glossary, data model, permission matrix, API contract, a story ID defined elsewhere…), the
+skill finds them (relative path → repo search → learning file → asks you), reads them, checks
+this spec against them, and gives an unreviewed dependency spec its own full review under
+Testing/Requirements/SPEC-{dep-spec-name}/. Dependency files are never modified.
+Reply "skip" for a dependency you do not want followed — it is then reported as Unresolved.
 
 OPTIONAL:
   - A dimension to limit the review: completeness | clarity | testability |
@@ -27,10 +37,20 @@ guesses. Your answers are saved to the file's "Requirements Review Model" sectio
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
+  Spec FILE input (cases 4 and 5):
+  Testing/Requirements/SPEC-{spec-name}/        ← {spec-name} = file stem, kebab-case
+    US-{id}-{name}/                             ← one per story found in the spec
+      REQ-{id}-{name}.md    ← structured requirement (input for skill 3)
+      US-{id}-review.md     ← the review (ratings, gaps, questions, verdict)
+    SPEC-REVIEW-SUMMARY.md  (only when the spec held several stories; includes the
+                             Dependencies block: each file it depends on + status + conflicts)
+  Testing/Requirements/SPEC-{dep-spec-name}/    ← a dependency spec that had no review yet
+                                                  gets its own full review here
+
+  ADO / Word / pasted text (cases 1-3):
   Testing/Requirements/US-{id}-{name}/
-    REQ-{id}-{name}.md      ← structured requirement (input for skill 3)
-    US-{id}-review.md       ← the review (ratings, gaps, questions, verdict)
-  Testing/Requirements/SPEC-REVIEW-SUMMARY.md   (only for multi-story specs)
+    REQ-{id}-{name}.md
+    US-{id}-review.md
   Testing/project-learning.md                   (updated: glossary, business rules, Q&A)
 
 WHEN TO RUN: after skill 1, before skill 3.

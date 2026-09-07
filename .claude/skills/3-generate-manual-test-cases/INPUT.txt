@@ -18,7 +18,8 @@ PICK YOUR STARTING POINT (tell the skill which case applies):
         the TCs as text. The skill updates/normalizes them instead of starting over.
   Case 2 — No TCs and no spec file:
       → give the Azure DevOps story ID (or Word doc path). The skill retrieves the story,
-        writes REQ-{id}.md into the requirements folder US-{id}-{name}/, and designs from it.
+        writes REQ-{id}.md into the requirements folder US-{id}-{name}/ (under
+        SPEC-{spec-name}/ when the source was a spec file), and designs from it.
   Default — Spec/requirement file exists, no TCs:
       → give the spec path, or let the skill find it
         (Testing/Requirements/**/REQ-*.md, docs/specs/).
@@ -55,11 +56,20 @@ and WAITS. It never assumes. Your answers (never credentials) are saved to the f
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
-  Testing/Manual_Test/TestCases/{UserStoryName}/     (paths come from Testing/qa-manifest.json)
-    TEST-CASES-{feature}.md   <- source of truth (Status: PENDING HUMAN REVIEW)
-    TC-REVIEW-{feature}.html  <- visual review page (coverage gauge, badges, what stays manual)
+  Stories from a spec FILE (roots come from Testing/qa-manifest.json):
+  Testing/Manual_Test/TestCases/SPEC-{spec-name}/   <- {spec-name} = spec file stem, kebab-case
+    US-{id}-{name}/                                 <- one per story (same name as skill 2's folder)
+      TEST-CASES-{feature}.md   <- source of truth (Status: PENDING HUMAN REVIEW)
+      TC-REVIEW-{feature}.html  <- visual review page (coverage gauge, badges, what stays manual)
+    TC-GENERATION-SUMMARY.md    (only when several stories were run)
+
+  Stories given as ADO IDs / Word / pasted text (no spec file):
+  Testing/Manual_Test/TestCases/US-{id}-{name}/
+    TEST-CASES-{feature}.md
+    TC-REVIEW-{feature}.html
   Testing/Manual_Test/TestCases/TC-GENERATION-SUMMARY.md   (only when several stories were run)
-  Testing/Requirements/US-{id}-{name}/REQ-{id}-{feature}.md (Case 2 only)
+
+  Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/REQ-{id}-{feature}.md (Case 2 only)
   Testing/project-learning.md <- updated: flows, UI behaviour, test data, locale notes, Q&A
 
   An existing document with Status: APPROVED is never overwritten — the skill stops and offers

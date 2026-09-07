@@ -11,7 +11,7 @@ INPUT — WHAT YOU MUST PROVIDE
 ============================================================
 
 REQUIRED:
-  1. Approved TC document path   — Testing/Manual_Test/TestCases/{Story}/TEST-CASES-*.md
+  1. Approved TC document path   — Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{Story}/TEST-CASES-*.md
                                    MUST contain "Status: APPROVED" (skill refuses anything
                                    else — it never flips the status itself)
   2. User Story ID or EXACT title — the Azure DevOps work item the TCs belong to
@@ -53,7 +53,8 @@ OUTPUT — WHAT YOU GET
   {automation_root}/reports/US-{id}/phase-N.json + phase-N.html   ← run of record
                                                                     (history never overwritten)
   {automation_root}/automation-logs/US-{id}/run-progress-{stamp}.log  ← live tailable log
-  {automation_root}/screenshots/{UserStoryName}/{TC-ID}.png            ← EVERY TC, final state
+  {automation_root}/screenshots/{UserStoryName}/{TC-ID}.png            ← EVERY TC, taken at the
+                                                  ASSERTION POINT (before any data cleanup)
                                                   {TC-ID}-failed.png   ← failed TCs only
                                                   (same names each run → re-run REPLACES them)
   {automation_root}/reports/US-{id}/run-plan.json                      ← parallel/serial groups

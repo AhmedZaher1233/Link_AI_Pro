@@ -118,7 +118,7 @@ run skips detection. Resolve:
 | Profile key | Auto-detection | Default |
 |---|---|---|
 | `ado_org` / `ado_project` | task input → derive from `git remote` → `.mcp.json` azure-devops entry | ask |
-| `tc_output_folder` | folder containing the approved TC doc — per the structure `Testing/Manual_Test/TestCases/{UserStoryName}/` | same (legacy docs may sit in `docs/test-design/{feature}/`) |
+| `tc_output_folder` | folder containing the approved TC doc — per the structure `Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/` (skill 3 nests stories that came from a spec file under a `SPEC-*` folder) | same; given only a story ID, locate the doc with glob `Testing/Manual_Test/TestCases/**/US-{id}-*/TEST-CASES-*.md` (legacy docs may sit in `docs/test-design/{feature}/`) |
 | `source_tc_doc` | the approved input — **read-only** | `{tc_output_folder}/TEST-CASES-{feature}.md` |
 | `beautified_tc_doc` | PHASE 1 output — **ADO publishes this** | `{tc_output_folder}/{stem}-beautified.md` |
 | `ado_map` | PHASE 2 output — **skill 6's entry gate** | `{tc_output_folder}/ADO-MAP.md` |

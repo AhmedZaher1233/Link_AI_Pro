@@ -14,8 +14,9 @@ description: >
   in parallel and which must run one after another (shared data, create/edit/delete
   flows) — and generates a per-story Playwright config that runs HEADED (visible browser,
   up to 3 windows for the parallel group, 1 for serial groups) to minimise run time.
-  Every TC gets a final-state screenshot ({TC-ID}.png, plus {TC-ID}-failed.png on
-  failure) in screenshots/{UserStoryName}/, replaced on every re-run.
+  Every TC gets an ASSERTION-POINT screenshot ({TC-ID}.png — captured at the moment the
+  expected result is verified, BEFORE any teardown / data cleanup runs — plus
+  {TC-ID}-failed.png on failure) in screenshots/{UserStoryName}/, replaced on every re-run.
   BEFORE the first run it measures STATIC automation coverage — every TC of the approved
   document classified Fully / Partially / Not Covered by reading the generated spec source
   (always-skipped, data-gated, access-only and role-variant tests are downgraded), weighted
@@ -29,7 +30,7 @@ description: >
   cleaned up after the run unless the QC says keep).
   All folders and files follow the generate-testing-structure layout: automation code
   under Testing/Automation/ (pages, tests, reports, screenshots, automation-logs), TC
-  documents under Testing/Manual_Test/TestCases/{UserStoryName}/. Results are organized
+  documents under Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/. Results are organized
   per User Story with immutable phase history (reports/US-{id}/phase-N.json + .html —
   never overwritten). Produces a designed HTML test report + plain-language bug report
   with reproducible steps and screenshots, and closes the loop in DevOps
@@ -154,13 +155,13 @@ Resolve:
 | `browser_project` | the playwright.config project that runs UI specs | `chromium` (registered via `testMatch`) |
 | `env_layer` | the automation project's env module | `SMO_Automation_PW/utils/env` (`TEST_ENV` presets, `STRATEGY360_*` overrides) |
 | `login_page_object` | scan the pages dir for the auth page object | `pages/1-S360_login.ts` |
-| `tc_output_folder` | folder containing the approved TC doc — per the structure this is `Testing/Manual_Test/TestCases/{UserStoryName}/` | same (legacy docs may still sit in `docs/test-design/{feature}/`) |
+| `tc_output_folder` | folder containing the approved TC doc — per the structure this is `Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/` (skill 3 nests stories that came from a spec file under a `SPEC-*` folder) | same; given only a story ID, locate the doc with glob `Testing/Manual_Test/TestCases/**/US-{id}-*/TEST-CASES-*.md` (legacy docs may still sit in `docs/test-design/{feature}/`) |
 | `source_tc_doc` | the approved input — **PHASE 2 automates from this** | `{tc_output_folder}/TEST-CASES-{feature}.md` (or legacy `{stem}-readable.md`) |
 | `beautified_tc_doc` | produced by skill 5 — **read-only here, never regenerated** | `{tc_output_folder}/{stem}-beautified.md` |
 | `ado_map` | produced by skill 5 — the publish gate (PHASE 0) and PHASE 5's input | `{tc_output_folder}/ADO-MAP.md` |
 | `results_root` | `{automation_root}/reports/US-{UserStoryID}/` | same |
 | `logs_root` | `{automation_root}/automation-logs/US-{UserStoryID}/` | same |
-| `user_story_name` | the per-story folder name skill 3 used under `Testing/Manual_Test/TestCases/` (e.g. `US-1031475-initiative-yearly-values`) | same |
+| `user_story_name` | the per-story folder name skill 3 used under `Testing/Manual_Test/TestCases/` or under its `SPEC-{spec-name}/` sub-folder (e.g. `US-1031475-initiative-yearly-values`) — always the leaf `US-*` name, never the `SPEC-*` parent; reports, screenshots and logs keep this flat name | same |
 | `screenshots_root` | `{automation_root}/screenshots/{user_story_name}/` — one folder per User Story, **replaced** on every run (see `<result_organization>`) | same |
 | `us_config` | `{automation_root}/playwright.us-{UserStoryID}.config.ts` — generated per story, extends the base config (see `<us_config>`) | same |
 | `run_plan` | `{results_root}/run-plan.json` — parallel/serial groups for this story (see `<run_plan>`), rewritten every run | same |
@@ -383,8 +384,10 @@ contain siblings of what you are about to write.
 **Only these may appear in a spec:** `test.describe` / `test` blocks,
 `test.describe.configure({ mode: 'serial' | 'parallel' })` lines that apply the `<run_plan>`
 groups, `beforeAll`/`afterAll` wiring that just *calls* a `prerequest` fixture,
-`beforeEach`/`afterEach` reporting-and-evidence hooks (including the one-line call to the shared
-evidence hook that takes the per-TC screenshot), locale/label constant tables, and a one-line
+`beforeEach`/`afterEach` reporting hooks (the `afterEach` evidence hook only copies Playwright's
+failure attachment to `{TC-ID}-failed.png` — it never takes the `{TC-ID}.png` evidence image),
+the one-line `await captureEvidence(page, testInfo)` call placed at the assertion point of every
+test body (see `<result_organization>`), locale/label constant tables, and a one-line
 delegating alias to a `prerequest` fixture.
 
 **Constants must have one source of truth.** Do not redeclare a tolerance, timeout, or
@@ -404,7 +407,8 @@ grep -nE "\.locator\(|getByTestId\(|getByRole\(|\.evaluate\(|page\.(goto|reload|
 # 2. No helper declarations in the spec (only a one-line prerequest alias is allowed)
 grep -nE "^(async )?function |^const [a-zA-Z_]+ = (async )?\(" <spec-file>
 ```
-Any hit from (1) outside a `beforeEach`/`afterEach` evidence hook, and any hit from (2) that
+Any hit from (1) outside a `beforeEach`/`afterEach` evidence hook (the `captureEvidence()` call
+itself is not a hit — it takes `page`, not a locator), and any hit from (2) that
 is not a single-line delegation to a `prerequest` fixture, must be moved to its owning layer
 before you execute anything. Report both as `POM self-check: clean` or list what you moved.
 
@@ -573,11 +577,16 @@ Write the spec against `{automation_root}` following the project conventions:
   from the TC document's `Smoke:` field — never from this skill's own judgment.
   Every title ALSO carries its `<run_plan>` tag — `@run:parallel` or
   `@run:serial-{group}` — and serial groups sit in their own describe block with
-  `test.describe.configure({ mode: 'serial' })`. Every test calls the shared evidence
-  hook (`afterEach`) so `{TC-ID}.png` is written per `<result_organization>`.
+  `test.describe.configure({ mode: 'serial' })`. Every test calls
+  `await captureEvidence(page, testInfo)` **at its assertion point** — the line right
+  before (or, for multi-assert TCs, right before the LAST) `expect(...)` of the Assert
+  step, while the screen still shows the state the TC verifies — so `{TC-ID}.png` is
+  written per `<result_organization>`. The call is NEVER placed in `afterEach`, after a
+  cleanup/delete/reset call, or after navigation away from the verified screen.
   AAA structure; fixtures/seeding reused from
   `prerequest/` + `helpers/` (this is the data oracle); every api_setup precondition
-  gets a matching `afterEach`/`afterAll` teardown. Data a spec needs but the environment
+  gets a matching `afterEach`/`afterAll` teardown — teardown always runs AFTER the
+  evidence image is on disk, so a cleaned-up screen can never be what the image shows. Data a spec needs but the environment
   lacks is NOT the spec author's problem to guess — it is a PHASE 2.6 requirement the QC
   decides on (`<data_readiness>`).
 - **Banned:** `page.waitForTimeout()` · `test.only` · CSS/class/nth-child/text
@@ -602,6 +611,10 @@ Before Phase 3 — review your own output as a gatekeeper would; FIX findings fi
 - [ ] Coverage table matches the approved document exactly (no invented scenarios)
 - [ ] No banned patterns (waitForTimeout / test.only / hardcoded creds or URLs)
 - [ ] AAA identifiable in every test; every test has ≥1 assertion
+- [ ] **Evidence at the assertion point: every test body has exactly one
+      `captureEvidence(page, testInfo)` call, located at its Assert step and BEFORE any
+      teardown / cleanup / delete call — `grep -n "captureEvidence" <spec-file>` count equals
+      the test count, and no `afterEach` contains it** (see `<result_organization>`)
 - [ ] Isolation: each test runnable alone; teardown for every api_setup
 - [ ] Traceability header present; describe has REQ-ID; titles have [TC-ID] + polarity tag
       (+ `@smoke` where the document marks it)
@@ -891,17 +904,44 @@ inside the structure's `reports/` folder.**
 ```text
 {automation_root}/screenshots/
   US-1031475-initiative-yearly-values/     ← {user_story_name}, same name skill 3 used
-    KPI-001.png            ← final state of the TC (full page), pass or fail
+    KPI-001.png            ← the ASSERTION POINT of the TC (full page): the screen as it
+                             looks when the expected result is verified, pass or fail
     KPI-001b.png           ← the Arabic variant has its own image
     KPI-010.png
     KPI-010-failed.png     ← only when the TC failed: the failing step
 ```
 
-- `{TC-ID}.png` is taken for **every executed TC** at its end by one shared evidence hook
-  (`helpers/evidence.ts` or the project's existing equivalent): an `afterEach` that reads the
-  `[TC-ID]` from the test title, takes a full-page screenshot to
-  `{screenshots_root}/{TC-ID}.png`, and on failure copies Playwright's failure attachment to
-  `{TC-ID}-failed.png`. Specs only call the hook — no screenshot code in a spec body.
+**Evidence contract — screenshot at the ASSERTION POINT, never at test end.**
+A screenshot taken after the test finishes is taken after `afterEach`/`afterAll` teardown
+has already deleted or reset the test data, so it shows an empty list, a "not found" page,
+or the pre-test state — evidence that contradicts the PASS it is attached to. This contract
+exists so no module ever inherits that defect:
+
+- `{TC-ID}.png` is taken for **every executed TC** by one shared evidence helper
+  (`helpers/evidence.ts` exporting `captureEvidence(page, testInfo)`, or the project's
+  existing equivalent): it reads the `[TC-ID]` from `testInfo.title` and writes a full-page
+  screenshot to `{screenshots_root}/{TC-ID}.png`. The spec calls it **inside the test body at
+  the assertion point** — immediately before the (last) `expect(...)` of the Assert step,
+  while the created/edited/deleted record, message, or value the TC verifies is on screen.
+  One call per test; a TC that verifies several screens captures the last one (the state
+  the TC's Expected Result describes).
+- Order inside every test is fixed: **Arrange → Act → `captureEvidence` → Assert →
+  (teardown in `afterEach`/`afterAll`)**. Teardown, cleanup, "delete created data", state
+  resets and navigation away from the verified screen all happen AFTER the image is on disk.
+  If a TC's own steps end with a delete (e.g. "Validate that the record is removed"), the
+  assertion point is the screen that proves the removal — that IS the evidence.
+- The `afterEach` evidence hook is limited to **failure handling**: on failure it copies
+  Playwright's failure attachment to `{TC-ID}-failed.png`, and if the test failed before
+  reaching `captureEvidence` (so no `{TC-ID}.png` exists yet) it writes the current screen
+  as `{TC-ID}.png` so every executed TC still has an image. It never overwrites an existing
+  `{TC-ID}.png` — the assertion-point image always wins.
+- Specs only call the helper — no `page.screenshot(...)` in a spec body, ever.
+- **Evidence sanity check (PHASE 3 and PHASE 4):** for every PASS, confirm the image shows
+  the state named in the TC's Expected Result (record present, message visible, value shown)
+  and not a cleaned-up screen. A PASS whose image shows post-cleanup state is classified
+  `evidence_failure` (a test-code defect: the call sits after teardown or after navigation)
+  and is self-healed by moving the call to the assertion point — it never counts as an
+  `app_bug` and never ships in the phase report uncorrected.
 - **Fixed names → a re-run overwrites the previous image.** At run start, delete any image in
   `{screenshots_root}` whose TC-ID is no longer in the approved document and report the count
   (`stale images removed: N`). Never keep dated copies here — history lives in the phase HTML,
@@ -1065,14 +1105,16 @@ browser through the generated `{us_config}` before the stages start. If no windo
 fall back to `headless: true` for this run, say so in the chat immediately, and list it under
 Deviations — never silently run headless when the user expects to watch.
 
-**Failure evidence must be capturable — and every TC must leave a final screenshot.**
+**Failure evidence must be capturable — and every TC must leave an assertion-point screenshot.**
 Confirm the Playwright config sets `screenshot: 'only-on-failure'` in its `use` block
 (inherited by `{us_config}`). Without it — and with `retries: 0`, which stops
 `trace: 'on-first-retry'` from ever firing — a failing test leaves NO visual evidence, and
 every bug entry rests on assertion text alone. If it is missing, add it before the first
 run and note it in the Placement Manifest. (Already present in
-`SMO_Automation_PW/playwright.config.ts`.) Confirm the shared evidence hook exists and
-that `{screenshots_root}` is writable; remove stale images per `<result_organization>`.
+`SMO_Automation_PW/playwright.config.ts`.) Confirm the shared evidence helper
+(`captureEvidence`) exists, that every generated test calls it at its assertion point and
+not in `afterEach` (see `<result_organization>`), and that `{screenshots_root}` is writable;
+remove stale images per `<result_organization>`.
 
 **Long runs exhaust Windows resources.** A large headed suite accumulates browser
 processes (3 visible windows for the parallel group make this worse, not better); past
@@ -1107,8 +1149,9 @@ worked in the learning file.
    | `environment_failure` | Service down, auth expired, VPN/proxy/tunnel errors | ENVIRONMENT_BLOCKED path |
    | `data_missing` | The data a TC needs is absent at run time. Requirement was `READY` in PHASE 2.6 → environment regression (ENVIRONMENT_BLOCKED path, name the requirement). Requirement was a `skip` decision → the TC is `SKIP` with that reason — not a failure, not healed. Provisioning created it but it is gone → re-run that setup group once, then treat as regression | per the two cases |
    | `timeout_failure` | Did not finish in time | investigate wait strategy; if genuine hang → report |
+   | `evidence_failure` | Test passed but `{TC-ID}.png` shows a post-cleanup / post-navigation screen instead of the verified state (the `captureEvidence` call sits after teardown, after a delete, or after leaving the page) | SELF-HEAL: move the call to the assertion point; re-run the TC; never an app_bug |
 
-3. **Self-heal ONLY test-code defects** (`selector_failure`, `assertion_failure`):
+3. **Self-heal ONLY test-code defects** (`selector_failure`, `assertion_failure`, `evidence_failure`):
    - fixes live in page objects / spec waits — never in app business logic
    - re-verify the selector against source before changing it
    - HARD RULES: never lower an assertion threshold · never broaden an assertion
@@ -1164,7 +1207,7 @@ worked in the learning file.
        "classification": "app_bug | selector_failure | ... | N/A",
        "error_message": "...", "root_cause": "...",
        "run_group": "parallel | serial:{group}", "run_mode": "parallel | serial",
-       "final_screenshot": "screenshots/{user_story_name}/{TC-ID}.png or null (NOT_RUN/SKIP)",
+       "evidence_screenshot": "screenshots/{user_story_name}/{TC-ID}.png or null (NOT_RUN/SKIP) — captured at the assertion point",
        "failure_screenshot": "screenshots/{user_story_name}/{TC-ID}-failed.png or null",
        "severity": "Critical | High | Medium | Low | N/A",
        "healed_in_first_run": true
@@ -1188,8 +1231,8 @@ worked in the learning file.
      banner at the top, smoke failures in full bug-report format, and every
      positive/negative TC listed as `NOT_RUN — smoke gate failed (application errors)`
    - **Per-TC results table:** TC-ID · REQ-ID · test name · status (colour-coded)
-     · run group · duration · classification · **final screenshot thumbnail (every
-     executed TC)** + failure image when present — traceable back to the approved TC
+     · run group · duration · classification · **assertion-point screenshot thumbnail
+     (every executed TC)** + failure image when present — traceable back to the approved TC
      document
    - **Bug Report section** — one entry per `app_bug`. Written for a human triaging the
      defect, NOT for someone reading the test code. See `<bug_report_format>` below.
@@ -1323,7 +1366,8 @@ fake a status.
 
 ### Screenshots
 **Folder:** {automation_root}/screenshots/{user_story_name}/
-**Written:** {N} final images · {N} failure images · **stale images removed:** {N}
+**Written:** {N} assertion-point images · {N} failure images · **stale images removed:** {N}
+**Evidence sanity check:** {N} PASS images verified against Expected Result · {N} `evidence_failure` healed
 {TC-IDs without an image and why (NOT_RUN / SKIP)}
 
 ### Coverage
@@ -1440,7 +1484,8 @@ Before returning AUTOMATION COMPLETE:
 - [ ] **Stage order enforced: setup journeys (if any) → smoke → gate → positive → negative; no TC run twice in one phase; a failed setup journey skips its dependent TCs with reason and never counts against the smoke gate**
 - [ ] **Run plan built from the approved TCs and written to `reports/US-{ID}/run-plan.json`; every TC carries one `@run:` tag; serial groups in `mode: 'serial'` describes; inside every stage the parallel group ran ×{workers_parallel} then serial groups ×1; reasons recorded for every serial decision**
 - [ ] **Browser visible (headed) via the generated `playwright.us-{ID}.config.ts` — or the headless fallback reported in chat AND under Deviations; base `playwright.config.ts` changed only for `testMatch`**
-- [ ] **Every executed TC has `screenshots/{user_story_name}/{TC-ID}.png`; every failed TC also has `{TC-ID}-failed.png`; stale images removed and counted; phase artifacts still immutable**
+- [ ] **Every executed TC has `screenshots/{user_story_name}/{TC-ID}.png` captured AT THE ASSERTION POINT (before teardown / cleanup / navigation away — never from `afterEach`); every failed TC also has `{TC-ID}-failed.png`; stale images removed and counted; phase artifacts still immutable**
+- [ ] **Evidence sanity check done: no PASS image shows a cleaned-up screen; every `evidence_failure` healed by moving the call, not by editing the image or the assertion**
 - [ ] **Smoke gate math reported (fail%, majority classification, action); automation/env majority → heal + smoke re-run (≤2 cycles); app_bug majority → run stopped**
 - [ ] **On a gate stop: phase report still produced with SMOKE GATE FAILED banner and every positive/negative TC as NOT_RUN**
 - [ ] **`@smoke` tags derive only from the TC document's `Smoke:` field**

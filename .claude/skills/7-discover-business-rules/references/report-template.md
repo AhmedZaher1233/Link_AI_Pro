@@ -1,4 +1,4 @@
-# Export template — `Testing/Requirements/US-{id}-{name}/US-{id}-code-rules.md`
+# Export template — `Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/US-{id}-code-rules.md`
 
 ```markdown
 # Business Rules in Code — US-{id} {Story title}
@@ -113,7 +113,7 @@ above is a proposal, not a fact.
 
 <!-- --apply-approved appends a second block "REQ delta — approved" holding only the Intended rules -->
 
-# Multi-story summary — `{requirements-root}/CODE-RULES-SUMMARY.md` (only when the input held several stories)
+# Multi-story summary — `{requirements-root}/[SPEC-{spec-name}/]CODE-RULES-SUMMARY.md` (only when the input held several stories; inside the spec folder when they came from a spec file)
 
 ```markdown
 # Code Rules Summary — {spec or feature name}
