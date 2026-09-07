@@ -1,14 +1,16 @@
 SKILL: 3-generate-manual-test-cases
-WHAT IT DOES: Designs complete manual test cases (EN + AR) from the requirement, validates
-them against the LIVE application via Playwright MCP, and delivers a markdown TC document
-plus an HTML review page for HUMAN approval.
+WHAT IT DOES: Designs complete manual test cases (all required locales) from the requirement,
+validates them against the LIVE application via Playwright MCP, and delivers a markdown TC
+document plus an HTML review page for HUMAN approval.
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE
 ============================================================
 
 ALWAYS REQUIRED:
-  1. Feature name / User Story ID          — what to design TCs for
+  1. Feature name / User Story ID          — what to design TCs for. Several stories at once is
+                                             fine: they are SPLIT, one folder + document +
+                                             review page per story, plus a cross-story summary.
 
 PICK YOUR STARTING POINT (tell the skill which case applies):
   Case 1 — Manual TCs already exist:
@@ -16,34 +18,53 @@ PICK YOUR STARTING POINT (tell the skill which case applies):
         the TCs as text. The skill updates/normalizes them instead of starting over.
   Case 2 — No TCs and no spec file:
       → give the Azure DevOps story ID (or Word doc path). The skill retrieves the story,
-        writes REQ-{id}.md into Testing/Requirements/US-{id}-{name}/, and designs from it.
+        writes REQ-{id}.md into the requirements folder US-{id}-{name}/, and designs from it.
   Default — Spec/requirement file exists, no TCs:
       → give the spec path, or let the skill find it
         (Testing/Requirements/**/REQ-*.md, docs/specs/).
+  No Word MCP attached? Export the .docx to markdown/text or paste its content — the skill
+  asks for that instead of failing.
+
+OPTIONAL FLAGS:
+  --revision   Apply the reviewer's corrections to the TCs they name (patch, never regenerate).
+  --audit      Health-check only: reports the resolved profile, the entry case, existing
+               deliverables, the planned TC count and coverage, and what WOULD be overwritten.
+               Writes NOTHING — not even the learning file.
 
 ASKED DURING THE RUN (before any live validation):
-  2. Application base URL                  — reused from Testing/project-learning.md when
-                                             recorded there; otherwise asked
+  2. Application base URL                  — reused from the learning file when recorded there;
+                                             otherwise asked
   3. Username + password PER ROLE          — exact accounts used in the TC steps
-                                             (ALWAYS asked fresh; never stored in the file)
+                                             (ALWAYS asked fresh; usernames appear in the steps,
+                                             passwords are NEVER written to any file)
   4. Is the story implemented?             — implemented / partially / not implemented /
                                              not sure (skill verifies live either way)
 
-OPTIONAL:
-  - Learning file path                     — default Testing/project-learning.md (shared
-                                             knowledge base created by skill 1)
+  No Playwright MCP server attached? The skill detects that BEFORE asking for credentials,
+  skips the ask, still designs and delivers the full document, and marks every TC
+  "draft — not app-validated" with the reason.
 
-IF ANYTHING IS MISSING: the skill searches Testing/project-learning.md first, then asks you
-in ONE message and WAITS. It never assumes. Your answers are saved to the file's
+OPTIONAL:
+  - Learning file path                     — default from qa-manifest.json
+                                             (Testing/project-learning.md, created by skill 1)
+
+IF ANYTHING IS MISSING: the skill searches the learning file first, then asks you in ONE message
+and WAITS. It never assumes. Your answers (never credentials) are saved to the file's
 "Manual TC Model" section so they are not asked again.
 
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
-  Testing/Manual_Test/TestCases/{UserStoryName}/
-    TEST-CASES-{feature}.md   ← source of truth (Status: PENDING HUMAN REVIEW)
-    TC-REVIEW-{feature}.html  ← visual review page
-  Testing/project-learning.md ← updated: flows, UI behaviour, test data, EN/AR notes, Q&A
+  Testing/Manual_Test/TestCases/{UserStoryName}/     (paths come from Testing/qa-manifest.json)
+    TEST-CASES-{feature}.md   <- source of truth (Status: PENDING HUMAN REVIEW)
+    TC-REVIEW-{feature}.html  <- visual review page (coverage gauge, badges, what stays manual)
+  Testing/Manual_Test/TestCases/TC-GENERATION-SUMMARY.md   (only when several stories were run)
+  Testing/Requirements/US-{id}-{name}/REQ-{id}-{feature}.md (Case 2 only)
+  Testing/project-learning.md <- updated: flows, UI behaviour, test data, locale notes, Q&A
+
+  An existing document with Status: APPROVED is never overwritten — the skill stops and offers
+  --revision, the Case 1 update route, or an explicit overwrite (which then needs skill 5
+  --republish, because the published revision changed).
 
 YOUR NEXT STEP: review, adjust Smoke / Automation Candidate markings, optionally fill the
 "Data effect" (read-only / creates / modifies / deletes) and "Shared data" fields on TCs

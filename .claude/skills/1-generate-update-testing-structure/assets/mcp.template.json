@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp",
+        "--browser", "chrome",
+        "--headless",
+        "--test-id-attribute", "data-testid",
+        "--codegen", "typescript"
+      ]
+    },
+    "azure-devops": {
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "{ORG_NAME}", "--authentication", "pat"],
+      "env": { "PERSONAL_ACCESS_TOKEN": "${AZURE_DEVOPS_PAT_B64}" }
+    },
+    "word": {
+      "command": "uvx",
+      "args": ["--from", "office-word-mcp-server", "word_mcp_server"]
+    }
+  },
+  "_optional_azure_resources_server": {
+    "azure": {
+      "command": "npx",
+      "args": ["-y", "@azure/mcp@latest", "server", "start"]
+    }
+  }
+}

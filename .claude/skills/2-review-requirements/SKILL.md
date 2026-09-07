@@ -32,6 +32,19 @@ spec/story locations, the Azure DevOps project and area path, story-ID conventio
 names, glossary terms, and earlier answers under `### Requirements Review Model (skill 2)`.
 Only what the file does not answer is asked. Follow the protocol below.
 
+<qa_manifest>
+**Structure contract — read `Testing/qa-manifest.json` first.** Written by
+`1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
+requirements, manual test cases, automation root, pages, tests, reports, screenshots, logs,
+white-box folder, learning file), the steering file paths, the framework config and every
+documented deviation. Use its paths before any auto-detection; fall back to detection only when
+the manifest is absent, and then tell the user to run `/1-generate-update-testing-structure`
+(audit first, then repair) — never invoke that skill yourself. Steering conflicts resolve per
+the rules in `docs/steering/README.md` (L1 baseline, L2 refines, L3 values + stricter +
+approved exemptions; specs govern business truth, steering governs quality policy, the learning
+file overrides neither). Behaviour knowledge stays in `Testing/project-learning.md`.
+</qa_manifest>
+
 <project_learning_file>
 **Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
 
@@ -68,7 +81,7 @@ NEVER written to the file.
   entries instead of copying text.
 - Update the `## Index` row (new module, page, similar link, section).
 - Entries contradicted by a spec → correct them. Specs and steering always win
-  (L1 > L2 > L3 > CLAUDE.md > skill rules > learning file).
+  (resolution rules in docs/steering/README.md).
 
 *Content rules:* plain English a QC can read; one fact per line; what the user does, what
 the system shows, which data works, what to avoid. Never method / class / function / file

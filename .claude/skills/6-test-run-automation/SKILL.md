@@ -125,6 +125,19 @@ the user, then retry the read once. 403 → a scope is missing on an otherwise v
 token. Never ask for the token in chat; never echo, log, or write it anywhere.
 </input_gate>
 
+<qa_manifest>
+**Structure contract — read `Testing/qa-manifest.json` first.** Written by
+`1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
+requirements, manual test cases, automation root, pages, tests, reports, screenshots, logs,
+white-box folder, learning file), the steering file paths, the framework config and every
+documented deviation. Use its paths before any auto-detection; fall back to detection only when
+the manifest is absent, and then tell the user to run `/1-generate-update-testing-structure`
+(audit first, then repair) — never invoke that skill yourself. Steering conflicts resolve per
+the rules in `docs/steering/README.md` (L1 baseline, L2 refines, L3 values + stricter +
+approved exemptions; specs govern business truth, steering governs quality policy, the learning
+file overrides neither). Behaviour knowledge stays in `Testing/project-learning.md`.
+</qa_manifest>
+
 <project_profile>
 This skill is generic — no hardcoded project paths in the rules. **Resolution order for
 every key: task input → `Testing/project-learning.md` (`### Automation Model (skill 6) →
@@ -180,7 +193,7 @@ per-User-Story `reports/US-{id}/` and `automation-logs/US-{id}/` trees are creat
 INSIDE whatever `{automation_root}` resolves to.
 
 **Mandatory reading before any code:** `./CLAUDE.md` + the `qa_standards` files.
-Steering priority: L1 > L2 > L3 > CLAUDE.md > skill rules > learning file.
+Steering priority: the resolution rules in docs/steering/README.md, then CLAUDE.md, skill rules, and last the learning file.
 </project_profile>
 
 <project_learning_file>

@@ -50,6 +50,19 @@ story (1.3).
 
 ### 0.0 Consult `Testing/project-learning.md` (every run, before anything else)
 
+<qa_manifest>
+**Structure contract — read `Testing/qa-manifest.json` first.** Written by
+`1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
+requirements, manual test cases, automation root, pages, tests, reports, screenshots, logs,
+white-box folder, learning file), the steering file paths, the framework config and every
+documented deviation. Use its paths before any auto-detection; fall back to detection only when
+the manifest is absent, and then tell the user to run `/1-generate-update-testing-structure`
+(audit first, then repair) — never invoke that skill yourself. Steering conflicts resolve per
+the rules in `docs/steering/README.md` (L1 baseline, L2 refines, L3 values + stricter +
+approved exemptions; specs govern business truth, steering governs quality policy, the learning
+file overrides neither). Behaviour knowledge stays in `Testing/project-learning.md`.
+</qa_manifest>
+
 <project_learning_file>
 **Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
 
@@ -433,5 +446,5 @@ the PO directly). Input: the story ID(s) or the export path(s).
 - **Learning file first.** Search before profiling and before asking; write every rule and
   answer back in plain English; never delete entries; never write secrets, paths or code
   identifiers there.
-- Steering (L1 > L2 > L3) and the spec always win over this skill's defaults and over the
-  learning file.
+- Steering (per the resolution rules in `docs/steering/README.md`) and the spec always win
+  over this skill's defaults and over the learning file.

@@ -1,59 +1,60 @@
 SKILL: 1-generate-update-testing-structure
-WHAT IT DOES: Creates or repairs the project's testing environment — the Testing/ folder
-structure, the docs/steering/ quality-authority documents (L1/L2/L3), Node/NPM + Playwright
-setup, MCP servers (.mcp.json), and the QA skills (.claude/Skills/1-7 + sync-skills command).
+WHAT IT DOES: Audits, repairs or restructures the project's QA foundation — the Testing/
+layout, docs/steering/ (L1/L2/L3), Node/NPM + Playwright, .mcp.json (Playwright, Azure DevOps,
+Word MCP), the QA skills 1-7 (.claude/skills/), Testing/project-learning.md and
+Testing/qa-manifest.json — with a read-only preflight first and a deterministic PASS/FAIL
+validation at the end. Invoke it explicitly; other skills never run it for you.
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE
 ============================================================
 
 REQUIRED:
-  (nothing) — the skill scans the project itself. Just run it from the project root.
+  (nothing) — run it from the project root. The preflight script scans the project itself.
 
-ASKED DURING THE RUN:
-  0. RUN MODE — asked ONLY when the project already has a testing structure
-     (Testing/ or automation code, or two of: playwright config, .mcp.json, QA skills,
-     docs/steering/, project-learning.md). A brand-new project is never asked.
-       A) Health-check only   — verify everything, change nothing, report what B would fix
-       B) Update & repair     — pull latest skills, add missing steering/folders/MCP
-                                entries, keep the current structure untouched
-       C) Restructure         — migrate to the canonical Testing/ + docs/steering/ layout
-                                after you confirm the old → new move plan (moves, no deletes)
-     In EVERY mode, skills missing from .claude/Skills/ (and a missing sync-skills command)
-     are downloaded from the source repo first — before this question is asked.
+OPTIONAL ARGUMENT (existing projects; skips the mode question):
+  audit        — Mode A: health-check only. Writes NOTHING (no downloads, installs, renames,
+                 learning-file or manifest updates). Lists what B would fix.
+  repair       — Mode B: sync skills 1-7 + sync-skills command, add missing folders / steering
+                 layers / MCP entries / learning-file sections, normalize names (steering files,
+                 .claude/Skills → .claude/skills, legacy learning heading), write the manifest.
+                 Never moves or rewrites existing valid content.
+  restructure  — Mode C: everything in B plus a migration to the canonical layout, applied only
+                 after you confirm the old → new move plan (git mv, nothing deleted).
+  A brand-new project (no Testing/, no automation code) runs the full setup without asking.
 
-ASKED DURING THE RUN (only if it cannot detect them):
-  1. Azure DevOps organization name        — for the azure-devops MCP entry
-                                             (auto-detected from the git remote when possible)
-  2. AZURE_DEVOPS_PAT_B64 environment var  — you set it yourself; value = base64(":" + PAT).
-                                             The skill never asks for the raw token.
-
-OPTIONAL:
-  - A different automation folder name/location, if your project already has a convention.
-  - A source path for the steering documents (L1 / L2 / L3), if they are not already in
-    docs/steering/ and not available from the source repository. The skill NEVER writes
-    L1 or L2 itself — a missing layer is reported, not invented.
+ASKED DURING THE RUN (only if it cannot detect them and the learning file has no answer):
+  1. Which mode (A/B/C) — existing projects without an argument
+  2. Azure DevOps organization name — for the azure-devops MCP entry (git remote first)
+  3. Confirmation of the move plan — Mode C only
+  4. A source path for a missing L1/L2 steering document when the source repo has none —
+     the skill NEVER writes L1 or L2 itself
+  5. The Azure DevOps PAT — when the azure-devops MCP entry is written and the user-level
+     variable AZURE_DEVOPS_PAT_B64 does not exist on this PC, the skill asks you to run
+     scripts/set-azure-devops-pat.ps1 (or .sh) in YOUR OWN terminal. The script prompts for the
+     token with hidden input, stores base64(":" + PAT) as a user environment variable, and
+     verifies it. The token never passes through the chat; the skill only checks that the
+     variable exists. Reopen the terminal / Claude Code afterwards.
 
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
   Testing/
-    project-learning.md    (shared knowledge base: Index + shared sections + one section per
-                            skill; every skill reads it before asking you and updates it after)
-    Requirements/          (per-User-Story folders are added later by skill 2)
-    Manual_Test/TestCases/
-    Automation/  (pages, tests, reports, screenshots, automation-logs)
+    project-learning.md      (shared knowledge base — created from the template if missing)
+    qa-manifest.json         (paths, steering files, framework, deviations — read by skills 2-7)
+    Requirements/  Manual_Test/TestCases/  Automation/{pages,tests,reports,screenshots,automation-logs}
     White_Box_Testing/
   docs/steering/
-    README.md                       (index + resolution order — authored by this skill)
-    L1-testing-foundation.md        (generic, org-wide — copied, never authored)
-    L2-testing-qa-standards.md      (generic, cross-project — copied, never authored)
-    L3-project-testing.md           (this project's config/SLAs — template, you fill it in)
-  + non-canonical steering file names normalized (no spaces, no " 1"/" 2" suffixes) and all
-    references updated, so skills 3, 5 and 6 can resolve them
-  + Playwright installed & configured
-  + .mcp.json with Playwright / Azure DevOps / Word MCP entries
-  + validation report (PASS/FAIL per component, including Steering Docs)
+    README.md                (index + the single set of resolution rules — authored by this skill)
+    L1-testing-foundation.md / L2-testing-qa-standards.md   (copied from the source repo, never authored)
+    L3-project-testing.md    (template — you fill the placeholders)
+  .claude/skills/1-7 + .claude/commands/sync-skills.md  (synced from the source repo)
+  .mcp.json                  (Playwright / Azure DevOps / Word entries, env-var placeholder for the PAT)
+  playwright.config.ts       (created only if missing)
+  Validation table: Node.js · NPM · Playwright · Playwright cfg · Folder layout · Steering Docs ·
+  L1/L2 generic · Learning File · .mcp.json · Playwright MCP · Azure DevOps MCP · Word MCP ·
+  QA Skills · Skills current · sync-skills cmd · Manifest — each PASS / WARN / FAIL / NOT_RUN,
+  never PASS without the check having run.
+  Mode A adds "Would be fixed by B" and "Needs C" lists and changes nothing.
 
-WHEN TO RUN: once per project, or after environment drift — BEFORE skills 2–5.
-RE-RUNNING on a configured project is safe: the skill asks for mode A / B / C first.
+WHEN TO RUN: once per project BEFORE skills 2-7; again (audit first) whenever the setup drifts.
