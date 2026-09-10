@@ -114,8 +114,10 @@ consistency, feasibility, risk). Multi-story specs also get `SPEC-REVIEW-SUMMARY
 Designs complete manual test cases (EN + AR) from the REQ file and the learning file, then
 uses Playwright MCP to discover the live application (asks for URL and credentials first).
 Detects whether the story is implemented before validating. Delivers the markdown TC document
-(source of truth, `Status: PENDING HUMAN REVIEW`) plus an HTML review page with a coverage
-gauge. **A human must set `Status: APPROVED`** — that unlocks skills 5 and 6.
+(source of truth, `Status: PENDING HUMAN REVIEW`), a plain-English `TEST-DATA-{feature}.md`
+per story (what data the TCs need, whether it exists, how to create what is missing — skill 6
+starts its test-data readiness from it) and an HTML review page with a coverage gauge.
+**A human must set `Status: APPROVED`** — that unlocks skills 5 and 6.
 
 ### 4 — white-box-testing
 Stack-agnostic implementation audit. First run profiles the repository (languages,

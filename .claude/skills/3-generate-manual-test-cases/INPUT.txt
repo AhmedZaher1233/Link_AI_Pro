@@ -27,6 +27,7 @@ PICK YOUR STARTING POINT (tell the skill which case applies):
   asks for that instead of failing.
 
 OPTIONAL FLAGS:
+  --lang ar|en Language of the HTML review page (TEST-CASES / TEST-DATA markdown stay English).
   --revision   Apply the reviewer's corrections to the TCs they name (patch, never regenerate).
   --audit      Health-check only: reports the resolved profile, the entry case, existing
                deliverables, the planned TC count and coverage, and what WOULD be overwritten.
@@ -40,6 +41,11 @@ ASKED DURING THE RUN (before any live validation):
                                              passwords are NEVER written to any file)
   4. Is the story implemented?             — implemented / partially / not implemented /
                                              not sure (skill verifies live either way)
+  5. Review page language                  — taken from --lang or a saved project preference
+                                             when present (a saved Arabic preference applies
+                                             even to an English REQ); asked ONLY when the
+                                             requirement is written in Arabic and nothing is
+                                             saved; the answer is saved to the learning file
 
   No Playwright MCP server attached? The skill detects that BEFORE asking for credentials,
   skips the ask, still designs and delivers the full document, and marks every TC
@@ -57,15 +63,23 @@ and WAITS. It never assumes. Your answers (never credentials) are saved to the f
 OUTPUT — WHAT YOU GET
 ============================================================
   Stories from a spec FILE (roots come from Testing/qa-manifest.json):
-  Testing/Manual_Test/TestCases/SPEC-{spec-name}/   <- {spec-name} = spec file stem, kebab-case
+  Testing/Manual_Test/TestCases/SPEC-{spec-name}/   <- {spec-name} = spec file stem, kebab-case;
+                                                       ALSO used when the REQ-*.md you give sits
+                                                       under Testing/Requirements/SPEC-{spec-name}/
     US-{id}-{name}/                                 <- one per story (same name as skill 2's folder)
-      TEST-CASES-{feature}.md   <- source of truth (Status: PENDING HUMAN REVIEW)
-      TC-REVIEW-{feature}.html  <- visual review page (coverage gauge, badges, what stays manual)
+      TEST-CASES-{feature}.md   <- source of truth (Status: PENDING HUMAN REVIEW) — always English
+      TEST-DATA-{feature}.md    <- plain-English test data per story: what data the TCs need,
+                                   whether it exists (READY / MISSING / IMPOSSIBLE / UNKNOWN),
+                                   problems, and how to create what is missing (e2e scenario /
+                                   api / db / set directly / manual). Skill 6 starts from it.
+      TC-REVIEW-{feature}.html  <- visual review page (coverage gauge, badges, what stays manual,
+                                   test data) in the chosen language (Arabic pages are RTL)
     TC-GENERATION-SUMMARY.md    (only when several stories were run)
 
-  Stories given as ADO IDs / Word / pasted text (no spec file):
+  Stories given as ADO IDs / Word / pasted text (no spec file, REQ directly under Requirements/):
   Testing/Manual_Test/TestCases/US-{id}-{name}/
     TEST-CASES-{feature}.md
+    TEST-DATA-{feature}.md
     TC-REVIEW-{feature}.html
   Testing/Manual_Test/TestCases/TC-GENERATION-SUMMARY.md   (only when several stories were run)
 
@@ -79,5 +93,7 @@ OUTPUT — WHAT YOU GET
 YOUR NEXT STEP: review, adjust Smoke / Automation Candidate markings, optionally fill the
 "Data effect" (read-only / creates / modifies / deletes) and "Shared data" fields on TCs
 that change or share data (skill 6 uses them to decide parallel vs one-after-another
-execution; blank = it infers), then set Status: APPROVED in the markdown — that unlocks
-skill 5 (publish to Azure DevOps) and then skill 6 (automation).
+execution; blank = it infers), check the Problems table in TEST-DATA-{feature}.md (fix or
+accept each data gap — skill 6 will validate the MISSING / UNKNOWN items before running),
+then set Status: APPROVED in the markdown — that unlocks skill 5 (publish to Azure DevOps)
+and then skill 6 (automation).

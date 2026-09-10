@@ -50,16 +50,29 @@ PREREQUISITES (asked/checked, not guessed):
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
-  {automation_root}/reports/US-{id}/phase-N.json + phase-N.html   ← run of record
+  Results mirror the TC folder: [SPEC-{spec-name}/] appears below whenever the approved
+  document sits under Testing/Manual_Test/TestCases/SPEC-{spec-name}/; otherwise the paths
+  are flat US-{id}/ as before.
+
+  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/phase-N.json + phase-N.html  ← run of record
                                                                     (history never overwritten)
-  {automation_root}/automation-logs/US-{id}/run-progress-{stamp}.log  ← live tailable log
-  {automation_root}/screenshots/{UserStoryName}/{TC-ID}.png            ← EVERY TC, taken at the
-                                                  ASSERTION POINT (before any data cleanup)
-                                                  {TC-ID}-failed.png   ← failed TCs only
-                                                  (same names each run → re-run REPLACES them)
-  {automation_root}/reports/US-{id}/run-plan.json                      ← parallel/serial groups
-  {automation_root}/reports/US-{id}/data-readiness.json                ← test-data gaps + your decisions
-  {automation_root}/reports/US-{id}/coverage/                          ← static coverage dashboard + CSVs
+  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/stages/*.json  ← one Playwright JSON per
+                                                  execution stage / group (replaced each run)
+  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/merged-results.json ← all stages merged per
+                                                  test variant (browser × data variation) with
+                                                  full attempt history; a TC is Passed only when
+                                                  EVERY required variant passed, otherwise
+                                                  INCOMPLETE (never published as Passed)
+  {automation_root}/automation-logs/[SPEC-{spec-name}/]US-{id}/run-progress-{stamp}.log ← live tailable log
+  {automation_root}/screenshots/[SPEC-{spec-name}/]{UserStoryName}/
+      phase-{N}/{TC-ID}/{browser}--{variation}--r{n}/attempt-{a}.png   ← EVERY attempt of every
+                                                  variant, taken at the ASSERTION POINT (before
+                                                  any data cleanup); attempt-{a}-failed.png on
+                                                  failure. NEVER overwritten or deleted — earlier
+                                                  attempts and earlier phases stay
+  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/run-plan.json        ← parallel/serial groups + required variants per TC
+  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/data-readiness.json  ← test-data gaps + your decisions
+  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/coverage/            ← static coverage dashboard + CSVs
   {automation_root}/playwright.us-{id}.config.ts                       ← per-story config (headed)
   Azure DevOps: automation flag + automated-test metadata on the TC work items,
                 summary comment on the story; {Story}/ADO-MAP.md updated with the final status

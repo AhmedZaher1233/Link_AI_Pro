@@ -10,6 +10,14 @@ call — check what the task input already provides:
 - Spec or requirement source (file path, or the Azure DevOps story to retrieve)
 - Implementation status, if the tester knows it
 - Output folder, if non-standard
+- Review-page language (`review_page_language`, §3) — resolved in this order, first hit wins:
+  explicit task choice (`--lang ar|en`, "output in Arabic") → the saved learning-file
+  preference (applies to an English `REQ-*.md` too) → **asked only when the spec/story is
+  written in Arabic** (requirement body / ACs mainly in Arabic script; IDs, paths and code
+  tokens ignored) → English. Detection needs the spec read, so when the question is still open
+  at intake it joins the step-6 combined ask — never a separate message. Question wording:
+  > "The requirement is written in Arabic. Which language do you want the review output in —
+  > Arabic or English? (Requirement files / TC markdown always stay English for the next skills.)"
 
 **If ANY required item is missing or ambiguous → ask the user in ONE combined intake message
 listing exactly what is needed, and WAIT for the reply. Do NOT start any phase, read specs,
@@ -18,6 +26,11 @@ resolve the entry case, or navigate anywhere on assumptions.**
 Skip the ask only when every needed item is already provided in the task input or reliably
 recorded in the learning file — and state explicitly what you are reusing so the user can
 override it.
+
+**Always state the resolved `tc_output_folder`** (and `requirements_folder` in Case 2) in the
+chat before designing anything — for single-story runs as well as for the multi-story split —
+so the user can override the location before a file is written. Once stated, the path is
+immutable for the run (SKILL.md invariant 9b).
 
 (The URL/credentials ask happens later, after the specs are read and the
 Playwright MCP probe has run — this gate covers only the information needed to START the flow.)
@@ -112,7 +125,8 @@ stories), split it the way `2-review-requirements` and `7-discover-business-rule
    story B — record it in the learning file once, not per story.
 4. Only when more than one story was processed, also write `TC-GENERATION-SUMMARY.md`: one row per
    story (story ID · folder · TC count · weighted coverage · implementation status · open
-   findings count) plus cross-story findings. Location: inside the spec folder
+   findings count · data gaps (missing / impossible / unknown, from that story's
+   `TEST-DATA-*.md`)) plus cross-story findings. Location: inside the spec folder
    (`{paths.manualTestCases}/SPEC-{spec_name}/TC-GENERATION-SUMMARY.md`) when the stories came
    from a spec file; at `{paths.manualTestCases}/TC-GENERATION-SUMMARY.md` only when they were
    plain Azure DevOps IDs with no spec file.
@@ -133,12 +147,13 @@ user.** Never invent a URL, a credential, or a spec path.
 | `spec_sources` | `paths.requirements` (per-story `REQ-*.md`) | CLAUDE.md "Spec Source" table; `docs/specs/*`; Case 2 generates one |
 | `qa_standards` | `steering.readme`, `steering.L1`, `steering.L2`, `steering.L3` | glob `docs/steering/*` |
 | `required_locales` | — | `qa_standards` / CLAUDE.md i18n rules; ask when neither states them |
+| `review_page_language` | — | language of `TC-REVIEW-{feature}.html` only (the markdown deliverables are always English). Resolution: task input `--lang ar|en` / explicit sentence → learning file (grep `output language`, `لغة` under `## Project Knowledge` and the skill Q&A; a saved Arabic preference applies even when the REQ is English) → **ask only when the source is Arabic** (in the combined ask) → default `English`. This is the *document* language for the human reviewer — distinct from `required_locales`, which are the application locales the TCs must cover |
 | `app_base_url` | — | **NEVER auto-detected — learning file (`[type: env]`) or ask the user** |
 | `credentials_per_role` | — | **NEVER auto-detected, NEVER stored — always ask (unless given in the task input)** |
-| `spec_name` | — | derived only when the source is a spec FILE: file stem, extension stripped, lowercase kebab-case, ≤ 6 words (`Resource Request Hours v2.docx` → `resource-request-hours-v2`); a generic stem (`spec`, `specification`, `requirements`, `prd`, `readme`) → use the parent folder name (`docs/specs/resource-request/spec.md` → `resource-request`). When the source is a `REQ-*.md` that already lives under `Testing/Requirements/SPEC-{x}/…`, `spec_name` = `{x}`. Empty for ADO / Word / pasted stories |
-| `spec_level` | — | `SPEC-{spec_name}/` when `spec_name` is set, otherwise empty. The same rule `2-review-requirements` uses |
+| `spec_name` | — | **First rule — path wins:** when the resolved `spec_sources` path contains `/SPEC-{x}/` (a `REQ-*.md` under `Testing/Requirements/SPEC-{x}/…`), `spec_name` = `{x}` — always; a REQ under a SPEC folder counts as spec-file origin. **Else**, when the source is a spec FILE: file stem, extension stripped, lowercase kebab-case, ≤ 6 words (`Resource Request Hours v2.docx` → `resource-request-hours-v2`); a generic stem (`spec`, `specification`, `requirements`, `prd`, `readme`) → use the parent folder name (`docs/specs/resource-request/spec.md` → `resource-request`). **Else** empty (ADO / Word / pasted stories, REQ directly under `Testing/Requirements/US-…/`) |
+| `spec_level` | — | `SPEC-{spec_name}/` when `spec_name` is set, otherwise empty. The same rule `2-review-requirements` uses. **Immutable once resolved for the run** |
 | `UserStoryName` | — | `US-{storyID}-{kebab-name}` — identical to the requirement folder name skill 2 used |
-| `tc_output_folder` | `paths.manualTestCases` + `/{spec_level}{UserStoryName}/` | `Testing/Manual_Test/TestCases/[SPEC-{spec_name}/]US-{storyID}-{kebab-name}/` |
+| `tc_output_folder` | `paths.manualTestCases` + `/{spec_level}{UserStoryName}/` | `Testing/Manual_Test/TestCases/[SPEC-{spec_name}/]US-{storyID}-{kebab-name}/` — MUST contain `SPEC-{spec_name}/` whenever the REQ path does; never a flat `US-*` folder for a story whose REQ sits under a `SPEC-*` parent |
 | `requirements_folder` | `paths.requirements` + `/{spec_level}US-{storyID}-{kebab-name}/` | `Testing/Requirements/[SPEC-{spec_name}/]US-{storyID}-{kebab-name}/` |
 | `white_box_reports` | `paths.whiteBox` | `Testing/White_Box_Testing/` |
 | `learning_file` | `paths.learningFile` | `Testing/project-learning.md` |
@@ -152,9 +167,16 @@ requirement folder's position relative to the requirements root: a story whose `
 `Testing/Requirements/SPEC-{spec_name}/US-{id}-{name}/` gets its TCs at
 `Testing/Manual_Test/TestCases/SPEC-{spec_name}/US-{id}-{name}/`; a story directly under
 `Testing/Requirements/US-{id}-{name}/` gets `Testing/Manual_Test/TestCases/US-{id}-{name}/`.
-Before creating a TC folder, glob `{paths.manualTestCases}/**/US-{storyID}-*/` and reuse an
-existing one rather than creating the same story at another level. Create the subtree if it is
-missing; never fall back to `docs/test-design/` or any other location. When the manifest is
+Before creating a TC folder, glob `{paths.manualTestCases}/**/US-{storyID}-*/`. **Reuse an
+existing folder only when its full path equals the resolved `tc_output_folder`** (same
+`SPEC-*` parent, same `US-*` leaf). A folder for the same story at another level (for
+example a flat `TestCases/US-{id}-…/` left by an older run while the REQ now sits under
+`SPEC-{x}/`) is a stray/legacy location: report its path and what it holds, never write to it,
+move it or delete it, and write this run's deliverables to the resolved path. An approved
+`TEST-CASES-*.md` inside the stray folder still triggers invariant 7 (never overwrite an
+approved document) — tell the user and stop. Create the subtree if it is
+missing; never fall back to `docs/test-design/` or any other location. Once resolved, the
+path is immutable for the run (invariant 9b). When the manifest is
 absent, use the detection fallbacks and tell the user to run
 `/1-generate-update-testing-structure` (audit first, then repair) — never invoke that skill
 yourself.

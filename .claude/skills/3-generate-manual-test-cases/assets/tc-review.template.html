@@ -5,8 +5,13 @@
      the gauge and the chip/bar grammar match 6-test-run-automation/assets/coverage-dashboard.css
      so both stages read the same way. Self-contained: no external requests, ever.
      Never render a password, token, selector or code identifier on this page.
-     Repeatable blocks are marked REPEAT; delete a whole section when it does not apply. -->
-<html lang="en">
+     Repeatable blocks are marked REPEAT; delete a whole section when it does not apply.
+     LANGUAGE: fill {{lang}} / {{dir}} from review_page_language — "en" / "ltr" for English,
+     "ar" / "rtl" for Arabic. An Arabic page is a faithful translation of the English markdown
+     (same meaning, same order). The CSS uses logical properties, so the layout mirrors by
+     itself. Keep every ID, path, username, URL, date and Status keyword Latin, wrapped in
+     <span class="ltr">…</span> (already placed on the ID placeholders below). -->
+<html lang="{{lang}}" dir="{{dir}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -20,7 +25,7 @@
   --green: #1F9D40; --amber: #B98207; --red: #D24B32; --orange: #C2660C;
   --purple: #7A4FD0; --blue: #1F6FD0;
   --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Tahoma, "Noto Sans Arabic", "Noto Naskh Arabic", Roboto, Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -44,8 +49,8 @@ h1 { font-weight: 800; font-size: clamp(26px, 5vw, 42px); letter-spacing: -0.02e
 .sub { color: var(--muted); font-size: 14px; max-width: 70ch; margin: 0 0 12px; }
 .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 26px; }
 .meta b { color: var(--text); font-weight: 600; }
-.banner { border: 1px solid var(--line); border-left: 4px solid var(--amber); background: var(--panel); border-radius: 10px; padding: 14px 18px; margin-bottom: 26px; }
-.banner.impl { border-left-color: var(--orange); }
+.banner { border: 1px solid var(--line); border-inline-start: 4px solid var(--amber); background: var(--panel); border-radius: 10px; padding: 14px 18px; margin-bottom: 26px; }
+.banner.impl { border-inline-start-color: var(--orange); }
 .banner b { font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase; font-size: 12px; }
 /* ---- Tiles ---- */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 28px; }
@@ -62,8 +67,8 @@ h1 { font-weight: 800; font-size: clamp(26px, 5vw, 42px); letter-spacing: -0.02e
 .gauge-num b { display: block; font-family: var(--mono); font-size: clamp(30px, 8vw, 44px); font-weight: 700; line-height: 1; }
 .gauge-num span { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
 .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.chip { background: var(--panel-2); border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 12px 14px; }
-.chip.full { border-left-color: var(--green); } .chip.partial { border-left-color: var(--amber); } .chip.none { border-left-color: var(--muted); }
+.chip { background: var(--panel-2); border: 1px solid var(--line); border-inline-start-width: 4px; border-radius: 8px; padding: 12px 14px; }
+.chip.full { border-inline-start-color: var(--green); } .chip.partial { border-inline-start-color: var(--amber); } .chip.none { border-inline-start-color: var(--muted); }
 .chip b { font-family: var(--mono); font-size: 22px; font-weight: 700; display: block; line-height: 1; }
 .chip span { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 /* ---- Per-AC depth bars ---- */
@@ -71,7 +76,7 @@ h1 { font-weight: 800; font-size: clamp(26px, 5vw, 42px); letter-spacing: -0.02e
 .story-top { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .story-id { font-family: var(--mono); font-size: 13px; color: var(--accent); }
 .story-name { font-size: 14px; font-weight: 600; }
-.story-pct { margin-left: auto; font-family: var(--mono); font-size: 16px; font-weight: 700; }
+.story-pct { margin-inline-start: auto; font-family: var(--mono); font-size: 16px; font-weight: 700; }
 .bar { display: flex; height: 28px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); background: var(--panel-2); }
 .seg { display: flex; align-items: center; justify-content: center; min-width: 0; }
 .seg.happy { background: var(--green); } .seg.neg { background: var(--blue); } .seg.loc { background: var(--purple); } .seg.missing { background: transparent; }
@@ -80,17 +85,17 @@ h1 { font-weight: 800; font-size: clamp(26px, 5vw, 42px); letter-spacing: -0.02e
 section { margin-top: 40px; }
 .sec-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 22px; }
 .sec-head h2 { font-size: 13px; font-family: var(--mono); letter-spacing: 0.2em; text-transform: uppercase; font-weight: 600; margin: 0; }
-.sec-head .note { color: var(--muted); font-size: 13px; margin-left: auto; }
+.sec-head .note { color: var(--muted); font-size: 13px; margin-inline-start: auto; }
 /* ---- Tables: always scroll inside their own container ---- */
 .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
-th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th, td { text-align: start; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 tr:last-child td { border-bottom: none; }
 tr.gap td { background: color-mix(in srgb, var(--red) 12%, transparent); }
-tr.prio-high td:first-child { border-left: 4px solid var(--red); }
-tr.prio-medium td:first-child { border-left: 4px solid var(--amber); }
-tr.prio-low td:first-child { border-left: 4px solid var(--muted); }
+tr.prio-high td:first-child { border-inline-start: 4px solid var(--red); }
+tr.prio-medium td:first-child { border-inline-start: 4px solid var(--amber); }
+tr.prio-low td:first-child { border-inline-start: 4px solid var(--muted); }
 /* ---- Badges ---- */
 .badge { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--muted); white-space: nowrap; }
 .badge.type { color: var(--text); }
@@ -104,6 +109,11 @@ tr.prio-low td:first-child { border-left: 4px solid var(--muted); }
 .badge.v-notimpl { border-color: var(--orange); color: var(--orange); }
 .badge.v-draft { border-color: var(--muted); }
 .badge.run { border-style: dashed; }
+/* test-data statuses — same four words as TEST-DATA-{feature}.md and skill 6 */
+.badge.d-ready { border-color: var(--green); color: var(--green); }
+.badge.d-missing { border-color: var(--amber); color: var(--amber); }
+.badge.d-impossible { border-color: var(--red); color: var(--red); }
+.badge.d-unknown { border-color: var(--muted); }
 /* ---- TC cards ---- */
 details.tc { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; }
 details.tc > summary { cursor: pointer; padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; list-style: none; }
@@ -112,20 +122,28 @@ details.tc > summary::-webkit-details-marker { display: none; }
 .tc-desc { font-size: 14px; flex: 1 1 260px; min-width: 0; }
 .tc-body { padding: 0 16px 18px; border-top: 1px solid var(--line); }
 .tc-body h4 { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
-.tc-body ol, .tc-body ul { margin: 0; padding-left: 22px; font-size: 13.5px; }
+.tc-body ol, .tc-body ul { margin: 0; padding-inline-start: 22px; font-size: 13.5px; }
 .tc-body li { margin-bottom: 6px; }
-.caption { border-left: 3px solid var(--purple); background: var(--panel-2); border-radius: 0 8px 8px 0; padding: 9px 13px; font-size: 12.5px; margin: 12px 0 0; }
-.caption.discrepancy { border-left-color: var(--amber); }
-.caption.notimpl { border-left-color: var(--orange); }
+.caption { border-inline-start: 3px solid var(--purple); background: var(--panel-2); border-start-start-radius: 0; border-end-start-radius: 0; border-start-end-radius: 8px; border-end-end-radius: 8px; padding: 9px 13px; font-size: 12.5px; margin: 12px 0 0; }
+.caption.discrepancy { border-inline-start-color: var(--amber); }
+.caption.notimpl { border-inline-start-color: var(--orange); }
 .notes { border: 1px dashed var(--line); border-radius: 8px; padding: 12px 14px; color: var(--muted); font-size: 12.5px; margin-top: 16px; }
 .oracle { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 13px; }
 /* ---- Findings ---- */
-.findings { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--red); border-radius: 12px; padding: 18px 20px; }
+.findings { background: var(--panel); border: 1px solid var(--line); border-inline-start: 4px solid var(--red); border-radius: 12px; padding: 18px 20px; }
 .findings h3 { font-size: 13px; font-family: var(--mono); letter-spacing: 0.14em; text-transform: uppercase; margin: 20px 0 8px; }
 .findings h3:first-child { margin-top: 0; }
-.findings.gaps { border-left-color: var(--amber); }
-.findings.pending { border-left-color: var(--orange); }
-[dir="rtl"] { text-align: right; }
+.findings.gaps { border-inline-start-color: var(--amber); }
+.findings.pending { border-inline-start-color: var(--orange); }
+/* ---- Direction: the page direction comes from <html dir="{{dir}}">; logical properties above mirror the layout.
+   Latin tokens (IDs, paths, usernames, URLs, dates, Status) always sit in .ltr so they read correctly inside Arabic text. ---- */
+.ltr, code { direction: ltr; unicode-bidi: isolate; }
+.ltr { display: inline-block; }
+/* Arabic has no upper case and breaks under wide tracking — switch both off on an RTL page. */
+[dir="rtl"] .eyebrow, [dir="rtl"] .meta, [dir="rtl"] .banner b, [dir="rtl"] .tile span, [dir="rtl"] .chip span,
+[dir="rtl"] .gauge-num span, [dir="rtl"] .sec-head h2, [dir="rtl"] th, [dir="rtl"] .badge, [dir="rtl"] .tc-body h4,
+[dir="rtl"] .findings h3 { letter-spacing: 0; text-transform: none; }
+[dir="rtl"] h1 { letter-spacing: 0; }
 footer { margin-top: 44px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 footer code { font-family: var(--mono); color: var(--text); }
 @media (max-width: 760px) { .hero { grid-template-columns: 1fr; } .legend { grid-template-columns: 1fr; } }
@@ -138,11 +156,12 @@ footer code { font-family: var(--mono); color: var(--text); }
   <h1>{{feature}}</h1>
   <p class="sub">{{one-line scope of this story}}</p>
   <div class="meta">
-    <span><b>Status</b> {{PENDING HUMAN REVIEW}}</span>
-    <span><b>Date</b> {{YYYY-MM-DD}}</span>
+    <span><b>Status</b> <span class="ltr">{{PENDING HUMAN REVIEW}}</span></span>
+    <span><b>Date</b> <span class="ltr">{{YYYY-MM-DD}}</span></span>
+    <span><b>Language</b> {{English | Arabic}}</span>
     <span><b>Entry case</b> {{fresh design | existing-TC update | retrieved from ADO/Word}}</span>
-    <span><b>REQ-IDs</b> {{list}}</span>
-    <span><b>Source of truth</b> TEST-CASES-{{feature}}.md</span>
+    <span><b>REQ-IDs</b> <span class="ltr">{{list}}</span></span>
+    <span><b>Source of truth</b> <span class="ltr">TEST-CASES-{{feature}}.md</span> (English)</span>
   </div>
 
   <div class="banner"><b>Pending human review</b> — {{what the reviewer must do: adjust Automation Candidate / Smoke / Data effect, then set Status: APPROVED in the markdown. Approval unlocks skill 5 (publish to Azure DevOps), then skill 6 (automation).}}</div>
@@ -156,6 +175,7 @@ footer code { font-family: var(--mono); color: var(--text); }
     <div class="tile"><b>{{N}}</b><span>Smoke</span></div>
     <div class="tile"><b>{{N}}</b><span>Automation candidates</span></div>
     <div class="tile"><b>{{v}}/{{e}}/{{i}}/{{d}}/{{ni}}/{{dr}}</b><span>Validated / enhanced / inferred / discrepancy / not-impl / draft</span></div>
+    <div class="tile"><b>{{N}} · {{r}}/{{m}}/{{imp}}/{{u}}</b><span>Test data items · ready / missing / impossible / unknown</span></div>
   </div>
 
   <div class="hero">
@@ -173,7 +193,7 @@ footer code { font-family: var(--mono); color: var(--text); }
     <div class="sec-head"><h2>Coverage depth per acceptance criterion</h2><span class="note">segment widths = share of that AC's checks present</span></div>
     <!-- REPEAT per AC -->
     <div class="story">
-      <div class="story-top"><span class="story-id">{{AC-n}}</span><span class="story-name">{{AC summary}}</span><span class="story-pct">{{status}}</span></div>
+      <div class="story-top"><span class="story-id ltr">{{AC-n}}</span><span class="story-name">{{AC summary}}</span><span class="story-pct">{{status}}</span></div>
       <div class="bar">
         <div class="seg happy" style="flex: {{w1}}"><b>happy {{n}}</b></div>
         <div class="seg neg" style="flex: {{w2}}"><b>negative {{n}}</b></div>
@@ -188,7 +208,7 @@ footer code { font-family: var(--mono); color: var(--text); }
     <div class="tablewrap"><table>
       <thead><tr><th>Acceptance criterion</th><th>REQ-ID</th><th>Test cases</th><th>Status</th><th>Missing</th></tr></thead>
       <tbody>
-        <tr><td>{{AC}}</td><td>{{REQ-ID}}</td><td>{{TC-IDs}}</td><td>{{Fully | Partially | Not covered}}</td><td>{{what is missing}}</td></tr>
+        <tr><td>{{AC}}</td><td><span class="ltr">{{REQ-ID}}</span></td><td><span class="ltr">{{TC-IDs}}</span></td><td>{{Fully | Partially | Not covered}}</td><td>{{what is missing}}</td></tr>
       </tbody>
     </table></div>
   </section>
@@ -198,7 +218,25 @@ footer code { font-family: var(--mono); color: var(--text); }
     <div class="tablewrap"><table>
       <thead><tr><th>Category</th><th>TC-ID</th><th>Scenario</th><th>Why manual</th><th>Priority</th></tr></thead>
       <tbody>
-        <tr class="prio-high"><td>{{category}}</td><td>{{TC-ID}}</td><td>{{scenario}}</td><td>{{why}}</td><td>High</td></tr>
+        <tr class="prio-high"><td>{{category}}</td><td><span class="ltr">{{TC-ID}}</span></td><td>{{scenario}}</td><td>{{why}}</td><td>High</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>Test data</h2><span class="note">{{N}} items · ready {{r}} · missing {{m}} · impossible {{imp}} · unknown {{u}} — details in TEST-DATA-{{feature}}.md</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Data item</th><th>Must look like</th><th>Used by TCs</th><th>Status</th><th>Best way to get it</th></tr></thead>
+      <tbody>
+        <!-- REPEAT per data item; status badge class: d-ready | d-missing | d-impossible | d-unknown -->
+        <tr><td><span class="ltr">{{D1}}</span></td><td>{{plain name}}</td><td>{{state, count, key values}}</td><td><span class="ltr">{{TC-IDs}}</span></td><td><span class="badge d-ready">{{READY | MISSING | IMPOSSIBLE | UNKNOWN}}</span></td><td>{{— | e2e scenario (TC-…) | api | db | set directly | manual | see Problems #n | to check}}</td></tr>
+      </tbody>
+    </table></div>
+    <!-- REPEAT/DELETE: keep only when the Problems table has rows -->
+    <div class="tablewrap" style="margin-top:14px"><table>
+      <thead><tr><th>#</th><th>Data item</th><th>Problem</th><th>Why</th><th>What the QC / PO must decide</th></tr></thead>
+      <tbody>
+        <tr class="prio-high"><td>{{1}}</td><td>{{Dn}}</td><td>{{problem}}</td><td>{{why}}</td><td>{{decision needed}}</td></tr>
       </tbody>
     </table></div>
   </section>
@@ -217,7 +255,7 @@ footer code { font-family: var(--mono); color: var(--text); }
     <!-- REPEAT per TC -->
     <details class="tc">
       <summary>
-        <span class="tc-id">{{TC-ID}}</span>
+        <span class="tc-id ltr">{{TC-ID}}</span>
         <span class="tc-desc">{{description}}</span>
         <span class="badge type">{{happy-path | edge-case | negative}}</span>
         <span class="badge">{{locale}}</span>
@@ -228,7 +266,7 @@ footer code { font-family: var(--mono); color: var(--text); }
       </summary>
       <div class="tc-body">
         <p class="caption">{{inferred: confirmed from prior knowledge, not directly observed — review with extra care}}</p>
-        <h4>Requirement</h4><p>{{REQ-IDs}}</p>
+        <h4>Requirement</h4><p><span class="ltr">{{REQ-IDs}}</span></p>
         <h4>Preconditions</h4><ul><li>{{page-load state, language, role + exact username, data state}}</li></ul>
         <h4>Steps</h4><ol><li>{{action + element label per locale + value + inline assertion}}</li></ol>
         <h4>Expected result</h4><p>{{specific, assertable, labels per locale}}</p>
@@ -243,7 +281,7 @@ footer code { font-family: var(--mono); color: var(--text); }
     <div class="sec-head"><h2>Enhancement log</h2><span class="note">what the live app changed</span></div>
     <div class="tablewrap"><table>
       <thead><tr><th>TC-ID</th><th>Validation</th><th>What changed</th><th>Why (what the app showed)</th></tr></thead>
-      <tbody><tr><td>{{TC-ID}}</td><td>{{state}}</td><td>{{change}}</td><td>{{observation}}</td></tr></tbody>
+      <tbody><tr><td><span class="ltr">{{TC-ID}}</span></td><td>{{state}}</td><td>{{change}}</td><td>{{observation}}</td></tr></tbody>
     </table></div>
   </section>
 
@@ -264,7 +302,8 @@ footer code { font-family: var(--mono); color: var(--text); }
   </section>
 
   <footer>
-    Source of truth: <code>TEST-CASES-{{feature}}.md</code> — this page is generated from it and adds nothing.
+    Source of truth: <code>TEST-CASES-{{feature}}.md</code> (always English) — this page is generated from it and adds nothing; when the page is Arabic it is a faithful translation.
+    Test data: <code>TEST-DATA-{{feature}}.md</code> — what each TC needs, whether it exists, and how to create what is missing.
     To approve: adjust Automation Candidate / Smoke / Data effect / Shared data in the markdown, then set
     <code>Status: APPROVED</code>. Approval unlocks <code>5-publish-test-cases-azure</code>, then
     <code>6-test-run-automation</code>. To request changes, reply with corrections by TC-ID and re-run this

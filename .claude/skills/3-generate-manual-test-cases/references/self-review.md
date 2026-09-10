@@ -48,9 +48,19 @@ gate is the human.
     (discrepancies), and pending-implementation items appear in three distinct lists — never
     mixed.
 12. **Secrets and code** — no password, token, selector, attribute name, code snippet or file
-    identifier anywhere in either deliverable. Usernames and role names only.
+    identifier anywhere in any deliverable (TC document, test-data file, HTML page). Usernames
+    and role names only.
 13. **Case 1 only** — the Existing-TC Analysis table accounts for every original TC exactly once
     (kept / updated / merged / removed).
+14. **Test-data consistency** (`TEST-DATA-{feature}.md`, `deliverables.md` §2b) — every
+    `Preconditions` / `Data Oracle` / `Shared data` sentence and every role used maps to a data
+    item, and every data item maps back to real TC-IDs; every `MISSING` / `IMPOSSIBLE` item has
+    at least one **available** way or a row in the Problems table; no item is `MISSING` without
+    a recorded check (unchecked = `UNKNOWN`); no `api` / `db` way is shown as available without
+    confirmation from the learning file or the user; the header counts equal the table rows;
+    "shared" means the TCs use the same data item, with execution order stated only for a real
+    dependency; no locator, endpoint path, table / column name, code identifier or secret
+    anywhere in the file.
 
 Anything you cannot fix yourself (spec ambiguity, missing fixture, discrepancy) is listed under
 **Open Findings for the Human Reviewer** — never silently resolved.

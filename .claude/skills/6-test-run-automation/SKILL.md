@@ -14,14 +14,16 @@ description: >
   in parallel and which must run one after another (shared data, create/edit/delete
   flows) — and generates a per-story Playwright config that runs HEADED (visible browser,
   up to 3 windows for the parallel group, 1 for serial groups) to minimise run time.
-  Every TC gets an ASSERTION-POINT screenshot ({TC-ID}.png — captured at the moment the
-  expected result is verified, BEFORE any teardown / data cleanup runs — plus
-  {TC-ID}-failed.png on failure) in screenshots/{UserStoryName}/, replaced on every re-run.
+  Every TC gets an ASSERTION-POINT screenshot — captured at the moment the
+  expected result is verified, BEFORE any teardown / data cleanup runs — plus a failure
+  image on failure, stored per phase, variant (browser project + data variation) and attempt
+  under screenshots/[SPEC-{spec-name}/]{UserStoryName}/phase-{N}/{TC-ID}/…, immutable history
+  that is never overwritten or deleted.
   BEFORE the first run it measures STATIC automation coverage — every TC of the approved
   document classified Fully / Partially / Not Covered by reading the generated spec source
   (always-skipped, data-gated, access-only and role-variant tests are downgraded), weighted
   % against the L3 target with a soft block below it, plus a per-story coverage dashboard,
-  CSVs and a categorized "what stays manual" list under reports/US-{id}/coverage/.
+  CSVs and a categorized "what stays manual" list under reports/[SPEC-{spec-name}/]US-{id}/coverage/.
   Still before the first run it checks PRECONDITIONS AND TEST DATA against the environment,
   predicts every TC that would skip (data missing, precondition impossible, role user absent)
   and asks the QC ONCE how to handle each gap — insert manually, let the skill use the
@@ -30,9 +32,13 @@ description: >
   cleaned up after the run unless the QC says keep).
   All folders and files follow the generate-testing-structure layout: automation code
   under Testing/Automation/ (pages, tests, reports, screenshots, automation-logs), TC
-  documents under Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/. Results are organized
-  per User Story with immutable phase history (reports/US-{id}/phase-N.json + .html —
-  never overwritten). Produces a designed HTML test report + plain-language bug report
+  documents under Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/. Results,
+  logs and screenshots mirror that folder — the same [SPEC-{spec-name}/] parent when the
+  TCs have one — per User Story with immutable phase history
+  (reports/[SPEC-{spec-name}/]US-{id}/phase-N.json + .html — never overwritten). Every
+  execution stage writes its own Playwright JSON (never a CLI --reporter override), the
+  stage files are merged per test variant with full attempt history, and a TC passes only
+  when every required variant passed. Produces a designed HTML test report + plain-language bug report
   with reproducible steps and screenshots, and closes the loop in DevOps
   (the process template's automation flag on the work items skill 5 created). Never masks app bugs.
   Does NOT beautify or publish TCs — that is 5-publish-test-cases-azure. Trigger on:
@@ -155,14 +161,18 @@ Resolve:
 | `browser_project` | the playwright.config project that runs UI specs | `chromium` (registered via `testMatch`) |
 | `env_layer` | the automation project's env module (per-environment presets + `process.env` overrides) | `{automation_root}/utils/env.ts` — created if absent; reads `.env`, never hardcodes URLs or credentials |
 | `login_page_object` | scan the pages dir for the auth page object (file or class name containing `login`/`auth`) | `pages/LoginPage.ts` — created if absent |
-| `tc_output_folder` | folder containing the approved TC doc — per the structure this is `Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/` (skill 3 nests stories that came from a spec file under a `SPEC-*` folder) | same; given only a story ID, locate the doc with glob `Testing/Manual_Test/TestCases/**/US-{id}-*/TEST-CASES-*.md` (legacy docs may still sit in `docs/test-design/{feature}/`) |
+| `tc_output_folder` | folder containing the approved TC doc — per the structure this is `Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/` (skill 3 nests stories that came from a spec file, or whose REQ sits under `Requirements/SPEC-*/`, under a `SPEC-*` folder) | same; given only a story ID, locate the doc with glob `Testing/Manual_Test/TestCases/**/US-{id}-*/TEST-CASES-*.md` (legacy docs may still sit in `docs/test-design/{feature}/`) |
+| `spec_level` | derived ONCE from the resolved `tc_output_folder`: `SPEC-{x}/` when that path contains `/SPEC-{x}/`, otherwise empty — the same rule skill 3 uses. Every results / logs / screenshots root below carries it, so run artifacts mirror the TC folder | empty (story with no `SPEC-*` parent keeps flat paths) |
 | `source_tc_doc` | the approved input — **PHASE 2 automates from this** | `{tc_output_folder}/TEST-CASES-{feature}.md` (or legacy `{stem}-readable.md`) |
 | `beautified_tc_doc` | produced by skill 5 — **read-only here, never regenerated** | `{tc_output_folder}/{stem}-beautified.md` |
 | `ado_map` | produced by skill 5 — the publish gate (PHASE 0) and PHASE 5's input | `{tc_output_folder}/ADO-MAP.md` |
-| `results_root` | `{automation_root}/reports/US-{UserStoryID}/` | same |
-| `logs_root` | `{automation_root}/automation-logs/US-{UserStoryID}/` | same |
-| `user_story_name` | the per-story folder name skill 3 used under `Testing/Manual_Test/TestCases/` or under its `SPEC-{spec-name}/` sub-folder (e.g. `US-1234-create-order`) — always the leaf `US-*` name, never the `SPEC-*` parent; reports, screenshots and logs keep this flat name | same |
-| `screenshots_root` | `{automation_root}/screenshots/{user_story_name}/` — one folder per User Story, **replaced** on every run (see `<result_organization>`) | same |
+| `results_root` | `{automation_root}/reports/{spec_level}US-{UserStoryID}/` | same |
+| `legacy_results_root` | `{automation_root}/reports/US-{UserStoryID}/` — only meaningful when `spec_level` is non-empty AND that flat folder exists from earlier runs; read-only history (phase numbering, previous-phase links, coverage delta — see `<result_organization>`) | none |
+| `logs_root` | `{automation_root}/automation-logs/{spec_level}US-{UserStoryID}/` | same |
+| `user_story_name` | the per-story leaf folder name skill 3 used (e.g. `US-1234-create-order`) — the `US-*` leaf; the `SPEC-*` parent is carried separately by `spec_level` | same |
+| `screenshots_root` | `{automation_root}/screenshots/{spec_level}{user_story_name}/` — one folder per User Story holding `phase-{N}/{TC-ID}/{variant_slug}/attempt-{a}.png` — **immutable history, never replaced or deleted** (see `<result_organization>`) | same |
+| `stage_json_path` | the JSON file the EFFECTIVE config actually writes for one stage command: `PW_STAGE_JSON` (`{results_root}/stages/{stage}-{group}[-attempt{n}].json`) when the us-config JSON reporter is active, else the base config's own JSON `outputFile` (then copied to the stage file after the command). Every freshness check and the merge use this resolved path, never an assumed one | `{results_root}/stages/…` |
+| `merged_results` | `{results_root}/merged-results.json` — the per-variant / per-attempt merge of all stage JSONs of this phase (schema `skill6-merged/1`, see `<second_run>`); replaced each run | same |
 | `us_config` | `{automation_root}/playwright.us-{UserStoryID}.config.ts` — generated per story, extends the base config (see `<us_config>`) | same |
 | `run_plan` | `{results_root}/run-plan.json` — parallel/serial groups for this story (see `<run_plan>`), rewritten every run | same |
 | `coverage_root` | `{results_root}/coverage/` — static coverage CSVs, dashboard and previous-run snapshot (see `<coverage_measurement>`), rewritten every run | same |
@@ -175,6 +185,13 @@ Resolve:
 | `headed` | **true by default** (visible browser); task input `--headless` or no display available → false, reported as a Deviation | true |
 | `qa_standards` | glob `docs/steering/*` | L1/L2/L3 + testing-strategy |
 
+**Resolved paths are immutable for the run.** Once `tc_output_folder`, `spec_level`,
+`results_root`, `logs_root` or `screenshots_root` is resolved for a run, it is immutable for
+that run. All subsequent writes must use the resolved path and must not recompute or fall
+back to a flat `US-*` path. Resolve once at the start, state the three roots in the chat and
+in the progress log's first lines, and reuse the stored values for every write (run plan,
+readiness file, stage JSONs, merged results, phase files, coverage folder, log, screenshots).
+
 **Directory-structure rule (`generate-testing-structure` compliance):** for a NEW
 automation project, everything lives under `Testing/Automation/`:
 
@@ -182,15 +199,21 @@ automation project, everything lives under `Testing/Automation/`:
 Testing/Automation/
 ├── pages/            ← Page Object Model files (+ pages/components/)
 ├── tests/            ← specs, organized in {Area}_Tests folders
-├── reports/          ← run-of-record artifacts, per User Story (see <result_organization>)
-├── screenshots/      ← one folder per User Story: {TC-ID}.png for EVERY TC (+ {TC-ID}-failed.png), replaced each run
-├── automation-logs/  ← live progress logs, per User Story (see <automation_logs>)
-└── playwright.us-{id}.config.ts  ← generated per-story config (headed, workers, evidence), extends playwright.config.ts
+├── reports/          ← run-of-record artifacts: [SPEC-{spec-name}/]US-{id}/ (see <result_organization>)
+├── screenshots/      ← [SPEC-{spec-name}/]{UserStoryName}/phase-{N}/{TC-ID}/{variant}/attempt-{a}.png — immutable
+├── automation-logs/  ← live progress logs: [SPEC-{spec-name}/]US-{id}/ (see <automation_logs>)
+└── playwright.us-{id}.config.ts  ← generated per-story config (headed, workers, evidence, per-stage JSON), extends playwright.config.ts
 ```
+
+`reports/`, `screenshots/` and `automation-logs/` MIRROR the TC folder: a story whose approved
+document sits at `TestCases/SPEC-{x}/US-{id}-{name}/` gets `reports/SPEC-{x}/US-{id}/`,
+`automation-logs/SPEC-{x}/US-{id}/` and `screenshots/SPEC-{x}/US-{id}-{name}/`; a story with no
+`SPEC-*` parent keeps the flat `US-*` paths. `pages/`, `tests/` and the per-story config are code
+layout, not results — they do not nest.
 
 An EXISTING automation project (any folder that already has a `playwright.config.ts`) is reused with its own
 internal convention — never create a parallel `Testing/Automation/` beside it; the
-per-User-Story `reports/US-{id}/` and `automation-logs/US-{id}/` trees are created
+per-User-Story `reports/{spec_level}US-{id}/` and `automation-logs/{spec_level}US-{id}/` trees are created
 INSIDE whatever `{automation_root}` resolves to.
 
 **Mandatory reading before any code:** `./CLAUDE.md` + the `qa_standards` files.
@@ -304,8 +327,8 @@ the coverage table as `manual — not automated`, with the reason stated.
    `tests/{Area}_Tests/` folders · `pages/` (+ `pages/components/`) · `prerequest/`
    · `helpers/` (incl. the evidence hook `helpers/evidence.ts`, see `<result_organization>`)
    · the env layer (`utils/env`) · `playwright.config.ts` · the per-story
-   `playwright.us-{id}.config.ts` · `reports/` · `screenshots/{user_story_name}/`
-   · `automation-logs/`.
+   `playwright.us-{id}.config.ts` · `reports/{spec_level}US-{id}/` ·
+   `screenshots/{spec_level}{user_story_name}/` · `automation-logs/{spec_level}US-{id}/`.
 2. **First run** (any skeleton piece or this feature's area folder missing) →
    CREATE the missing hierarchy following the existing project convention BEFORE
    writing any file. Never scatter files outside the convention.
@@ -384,7 +407,7 @@ contain siblings of what you are about to write.
 `test.describe.configure({ mode: 'serial' | 'parallel' })` lines that apply the `<run_plan>`
 groups, `beforeAll`/`afterAll` wiring that just *calls* a `prerequest` fixture,
 `beforeEach`/`afterEach` reporting hooks (the `afterEach` evidence hook only copies Playwright's
-failure attachment to `{TC-ID}-failed.png` — it never takes the `{TC-ID}.png` evidence image),
+failure attachment to `attempt-{a}-failed.png` — it never takes the assertion-point evidence image),
 the one-line `await captureEvidence(page, testInfo)` call placed at the assertion point of every
 test body (see `<result_organization>`), locale/label constant tables, and a one-line
 delegating alias to a `prerequest` fixture.
@@ -491,12 +514,26 @@ the chat and in the progress log.
 Locale variants (`TC-01` and `TC-01b`) always share the classification of their base TC.
 Decisions driven by the TC fields are marked `field`; the rest `inferred`.
 
+**Required variants per TC.** The plan also records, for every TC, the set of test variants that
+MUST pass for the TC to count as passed: every Playwright project the story runs (`projects[]` —
+normally just `{browser_project}`) × every data variation the spec defines for that TC
+(parameterised tests whose titles carry a variation label, e.g. `— variation A`; `none` when the
+test has no variation). Locale variants `TC-01` / `TC-01b` are separate TCs, not variations. The
+`variant_slug` is `{project}--{data-variation-slug}--r{repeat}` (`r0` unless `repeatEach` is used).
+`<second_run>` compares the executed variants against this list — a TC with a required variant
+missing is `INCOMPLETE`, never `PASS`.
+
 **`run-plan.json` shape:**
 
 ```json
 {
   "user_story": "US-1234", "generated": "ISO-8601",
   "headed": true, "workers_parallel": 3,
+  "projects": ["chromium"],
+  "required_variants": {
+    "TC-001": ["chromium--none--r0"],
+    "TC-007": ["chromium--variation-a--r0", "chromium--variation-b--r0"]
+  },
   "setup_groups": [
     { "name": "setup:order-items", "mode": "serial", "workers": 1, "spec": "tests/Orders_Tests/00-setup-order-items.spec.ts",
       "provides": "an order with line items", "decision": "ui", "cleanup": "delete", "source": "qc" }
@@ -543,14 +580,23 @@ every run. It imports the project's base `playwright.config.ts` and overrides ON
   run plan, never by the file setting.
 - `use.screenshot: 'only-on-failure'` (Playwright's own failure attachment stays available) and
   `outputDir: '{results_root}/artifacts'` (traces/attachments; replaced each run).
-- `reporter: [['line'], ['json', { outputFile: '{results_root}/last-run.json' }]]` — the
-  results JSON is always at a known path (replaced each run; phase files are built from it).
+- `reporter: [['line'], ['json', { outputFile: process.env.PW_STAGE_JSON ?? '{results_root}/stages/unnamed.json' }]]`
+  — `line` feeds the live progress; `json` writes ONE file PER STAGE COMMAND because every
+  stage / run-group command sets `PW_STAGE_JSON={results_root}/stages/{stage}-{group}[-attempt{n}].json`
+  (e.g. `smoke-parallel.json`, `smoke-parallel-attempt2.json` after a heal re-run,
+  `positive-serial-orders.json`). Separate commands therefore never overwrite each other's
+  results. **The JSON reporter is the only source of run results and must never be overridden
+  from the CLI** — `npx playwright test --reporter=…` REPLACES the config reporters and
+  silently drops the JSON file. If the base config already declares its own JSON reporter,
+  `{stage_json_path}` is THAT file: copy it to the stage file right after each command.
+- No `html` reporter: `phase-N.html` is this skill's own designed report built from
+  `merged-results.json`; Playwright's built-in HTML reporter is added only if the user asks.
 - `testMatch` / `projects` / `baseURL` / env handling are **inherited**, never copied.
 
 Rules: the base `playwright.config.ts` is touched only for `testMatch` registration and the
 existing `screenshot: 'only-on-failure'` check. Every `{run_command}` in this skill runs with
-`--config {us_config} --project={browser_project}`. List the generated file in the Placement
-Manifest every run.
+`--config {us_config} --project={browser_project}` and **never with `--reporter`**. List the
+generated file in the Placement Manifest every run.
 </us_config>
 
 <spec_writing>
@@ -580,8 +626,9 @@ Write the spec against `{automation_root}` following the project conventions:
   `test.describe.configure({ mode: 'serial' })`. Every test calls
   `await captureEvidence(page, testInfo)` **at its assertion point** — the line right
   before (or, for multi-assert TCs, right before the LAST) `expect(...)` of the Assert
-  step, while the screen still shows the state the TC verifies — so `{TC-ID}.png` is
-  written per `<result_organization>`. The call is NEVER placed in `afterEach`, after a
+  step, while the screen still shows the state the TC verifies — so the per-variant /
+  per-attempt evidence image is written per `<result_organization>`. The call is NEVER placed
+  in `afterEach`, after a
   cleanup/delete/reset call, or after navigation away from the verified screen.
   AAA structure; fixtures/seeding reused from
   `prerequest/` + `helpers/` (this is the data oracle); every api_setup precondition
@@ -776,13 +823,24 @@ as plain-English `[type: env]` / `[type: trick]` lines under `### Automation Mod
 precondition cannot be met or its data is absent from the environment is **decided here by the
 QC — never discovered by the run.** The run must not be the first place a "no data" skip appears.
 
-**1. Collect the requirements** — the plain-English requirements produced by `<normalization>`
-(one per Preconditions / Data Oracle / Shared data sentence and per role used), de-duplicated
-across TCs, each with the list of TC-IDs that depend on it. Reuse the PHASE 2.5 flags
-(`dataGated`, `alwaysSkipped`) as hints for which requirements the generated code already
-doubts — do not re-derive them.
+**1. Collect the requirements** — start from skill 3's
+`{tc_output_folder}/TEST-DATA-{feature}.md` when it exists: take its data items, TC mapping,
+accounts, statuses (`READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN`), Problems table and
+recommended ways as the inventory of record — **do not rebuild the inventory from scratch**.
+Add only requirements the approved TC document carries that the file lacks (a Preconditions /
+Data Oracle / Shared data sentence or a role with no data item), and say which were added.
+Skill 3 owns that file — never edit it; record outcomes in the learning file and
+`data-readiness.json` only. When the file is missing, derive the requirements from
+`<normalization>` as before (one per Preconditions / Data Oracle / Shared data sentence and per
+role used), de-duplicated across TCs, each with the list of TC-IDs that depend on it. Either
+way, reuse the PHASE 2.5 flags (`dataGated`, `alwaysSkipped`) as hints for which requirements
+the generated code already doubts — do not re-derive them.
 
-**2. Probe the environment — cheap, once per distinct requirement, never per TC:**
+**2. Probe the environment — cheap, once per distinct requirement, never per TC.** Items the
+test-data file marks `READY` are re-confirmed from the learning file only; probe the `MISSING`
+/ `UNKNOWN` items (and `IMPOSSIBLE` ones only to look for a way the file did not know). A way
+the file marks "to be confirmed" (`api` / `db`) is offered to the QC only after step 4 finds
+it:
 1. `Testing/project-learning.md` first: `[type: data]` lines (`## Test Data`), `[type: env]`
    lines, and this skill's Q&A. A recorded fixture or a recorded decision is reused — say so.
 2. Role users: the env layer / role-user configuration of the automation project.
@@ -879,37 +937,77 @@ any environment", "entity Y has no empty state anywhere") → `[type: env]`. Pla
 
 <result_organization>
 **All run artifacts are organized per User Story, with immutable phase history —
-inside the structure's `reports/` folder.**
+inside the structure's `reports/` folder, mirroring the TC folder's `SPEC-*` parent.**
 
-- Result root: `{automation_root}/reports/US-{UserStoryID}/`.
-- Every execution of the same User Story is a NEW phase. At run start, scan the
-  folder for the highest existing `phase-N.*` and use `N+1`. **NEVER overwrite,
-  edit, or delete a previous phase's artifacts** — history is the point.
+- Result root: `{results_root}` = `{automation_root}/reports/{spec_level}US-{UserStoryID}/`
+  (resolved once, immutable for the run — see `<project_profile>`).
+- Every execution of the same User Story is a NEW phase. At run start, scan BOTH
+  `{results_root}` and, when it exists, the legacy flat `{legacy_results_root}`
+  (`reports/US-{UserStoryID}/` from runs before the `SPEC-*` mirroring) for the highest
+  existing `phase-N.*` and use `N+1`. Write only to `{results_root}`. **NEVER overwrite,
+  edit, or delete a previous phase's artifacts** — in either folder — history is the point.
+- **Legacy locations are first-class history.** Previous-phase links in `phase-N.html` are
+  built from the union of `phase-*.html` found in `{results_root}` and `{legacy_results_root}`,
+  each with its own relative path — never assume all phases sit in one folder. The coverage
+  delta reads `coverage-previous.json` from `{coverage_root}` first, else from
+  `{legacy_results_root}/coverage/`, and states which one it compared against. The phase
+  JSON records `previous_phase_path` explicitly. Legacy `automation-logs/US-{id}/` and
+  `screenshots/{user_story_name}/` folders are left untouched and mentioned once in the chat.
 
 ```text
 {automation_root}/reports/
-  US-1234/
-    phase-1.json      ← run-of-record JSON of that execution
-    phase-1.html      ← designed HTML report of that execution
-    phase-2.json      ← the next execution
-    phase-2.html
+  SPEC-initiative-management/        ← only when the TC folder has this parent
+    US-1234/
+      stages/                        ← one Playwright JSON per stage command of THIS phase (replaced each run)
+        smoke-parallel.json
+        smoke-parallel-attempt2.json ← smoke re-run after a heal
+        positive-parallel.json
+        positive-serial-orders.json
+        negative-parallel.json
+      merged-results.json            ← per-variant / per-attempt merge of the stage files (replaced each run)
+      phase-1.json                   ← run-of-record JSON of that execution
+      phase-1.html                   ← designed HTML report of that execution
+      phase-2.json                   ← the next execution
+      phase-2.html
+  US-2000001/                        ← a story without a SPEC-* parent: flat, as before
+    phase-1.json …
 ```
 
 - The phase number appears in the JSON (`"phase": N`), in the HTML report header
-  (User Story · Phase N · date · links to earlier phases in the same folder), in
+  (User Story · Phase N · date · links to earlier phases, nested and legacy), in
   the ADO summary comment, and in the final chat summary — it must be immediately
   clear which result belongs to which execution.
-**Screenshots — every TC, one folder per User Story, REPLACED on every run:**
+
+**Screenshots — every TC, every variant, every attempt; one folder per User Story; IMMUTABLE:**
 
 ```text
 {automation_root}/screenshots/
-  US-1234-create-order/    ← {user_story_name}, same name skill 3 used
-    TC-001.png             ← the ASSERTION POINT of the TC (full page): the screen as it
-                             looks when the expected result is verified, pass or fail
-    TC-001b.png            ← the second-locale variant has its own image
-    TC-010.png
-    TC-010-failed.png      ← only when the TC failed: the failing step
+  SPEC-initiative-management/                  ← same {spec_level} as the reports
+    US-1234-create-order/                      ← {user_story_name}, same leaf name skill 3 used
+      phase-3/
+        variants.json                          ← slug → full title path, project, spec file
+        TC-001/
+          chromium--none--r0/
+            attempt-1.png                      ← ASSERTION POINT (full page): the screen when the
+                                                 expected result is verified, pass or fail
+        TC-001b/                               ← the second-locale variant is its own TC
+          chromium--none--r0/attempt-1.png
+        TC-007/
+          chromium--variation-a--r0/attempt-1.png
+          chromium--variation-b--r0/attempt-1.png
+        TC-010/
+          chromium--none--r0/
+            attempt-1.png
+            attempt-1-failed.png               ← failing step of attempt 1
+            attempt-2.png                      ← the heal re-run / retry — attempt 1 stays
+      phase-2/ …                               ← earlier phases, never touched again
 ```
+
+`variant_slug` = `{project}--{data-variation-slug}--r{repeat}` — `project` =
+`testInfo.project.name`; `data-variation-slug` = kebab-case of the variation label in the test
+title (`none` when the test has no variation); `r{repeat}` = `testInfo.repeatEachIndex` (`r0`
+normally). `{a}` counts every execution of that variant in this phase — stage re-runs after a
+heal AND Playwright retries (`testInfo.retry`) — starting at 1.
 
 **Evidence contract — screenshot at the ASSERTION POINT, never at test end.**
 A screenshot taken after the test finishes is taken after `afterEach`/`afterAll` teardown
@@ -917,24 +1015,30 @@ has already deleted or reset the test data, so it shows an empty list, a "not fo
 or the pre-test state — evidence that contradicts the PASS it is attached to. This contract
 exists so no module ever inherits that defect:
 
-- `{TC-ID}.png` is taken for **every executed TC** by one shared evidence helper
+- The assertion-point image is taken for **every executed test** by one shared evidence helper
   (`helpers/evidence.ts` exporting `captureEvidence(page, testInfo)`, or the project's
-  existing equivalent): it reads the `[TC-ID]` from `testInfo.title` and writes a full-page
-  screenshot to `{screenshots_root}/{TC-ID}.png`. The spec calls it **inside the test body at
-  the assertion point** — immediately before the (last) `expect(...)` of the Assert step,
-  while the created/edited/deleted record, message, or value the TC verifies is on screen.
-  One call per test; a TC that verifies several screens captures the last one (the state
-  the TC's Expected Result describes).
+  existing equivalent): it reads every `[TC-ID]` token from `testInfo.title`, derives the
+  `variant_slug` from `testInfo.project.name`, the variation label in the title and
+  `testInfo.repeatEachIndex`, and the attempt number from `testInfo.retry` plus the env vars
+  the run command sets (`PW_PHASE`, `PW_STAGE_ATTEMPT`), then writes a full-page screenshot to
+  `{screenshots_root}/phase-{N}/{TC-ID}/{variant_slug}/attempt-{a}.png` for EACH TC-ID in the
+  title (a `[TC-05][TC-06]` test writes the same image under both TC folders). **It never
+  writes to an existing path** — if the target exists it increments `{a}` — and it appends
+  the slug → title mapping to `phase-{N}/variants.json`. The spec calls it **inside the test
+  body at the assertion point** — immediately before the (last) `expect(...)` of the Assert
+  step, while the created/edited/deleted record, message, or value the TC verifies is on
+  screen. One call per test; a TC that verifies several screens captures the last one (the
+  state the TC's Expected Result describes).
 - Order inside every test is fixed: **Arrange → Act → `captureEvidence` → Assert →
   (teardown in `afterEach`/`afterAll`)**. Teardown, cleanup, "delete created data", state
   resets and navigation away from the verified screen all happen AFTER the image is on disk.
   If a TC's own steps end with a delete (e.g. "Validate that the record is removed"), the
   assertion point is the screen that proves the removal — that IS the evidence.
 - The `afterEach` evidence hook is limited to **failure handling**: on failure it copies
-  Playwright's failure attachment to `{TC-ID}-failed.png`, and if the test failed before
-  reaching `captureEvidence` (so no `{TC-ID}.png` exists yet) it writes the current screen
-  as `{TC-ID}.png` so every executed TC still has an image. It never overwrites an existing
-  `{TC-ID}.png` — the assertion-point image always wins.
+  Playwright's failure attachment to `…/{variant_slug}/attempt-{a}-failed.png`, and if the test
+  failed before reaching `captureEvidence` (so no `attempt-{a}.png` exists yet for this
+  attempt) it writes the current screen as `attempt-{a}.png` so every executed attempt still
+  has an image. It never overwrites an existing image — the assertion-point image always wins.
 - Specs only call the helper — no `page.screenshot(...)` in a spec body, ever.
 - **Evidence sanity check (PHASE 3 and PHASE 4):** for every PASS, confirm the image shows
   the state named in the TC's Expected Result (record present, message visible, value shown)
@@ -942,22 +1046,27 @@ exists so no module ever inherits that defect:
   `evidence_failure` (a test-code defect: the call sits after teardown or after navigation)
   and is self-healed by moving the call to the assertion point — it never counts as an
   `app_bug` and never ships in the phase report uncorrected.
-- **Fixed names → a re-run overwrites the previous image.** At run start, delete any image in
-  `{screenshots_root}` whose TC-ID is no longer in the approved document and report the count
-  (`stale images removed: N`). Never keep dated copies here — history lives in the phase HTML,
-  which embeds the images as base64 so each phase report stays self-contained.
+- **Evidence is immutable history, like the phase reports.** Nothing under `{screenshots_root}`
+  is ever overwritten or deleted — not stale TC-IDs, not earlier attempts, not earlier phases.
+  Evidence referenced by an earlier attempt or by an earlier `phase-N.html` must stay exactly
+  where that report points. Each phase writes only into its own `phase-{N}/` folder. The phase
+  HTML still embeds the images it shows as base64 so every report stays self-contained.
+- Every attempt's exact image path is stored in `merged-results.json`
+  (`variants[].attempts[].evidence_screenshot` / `failure_screenshot`) and in the phase JSON;
+  `results[].evidence_screenshot` points at the status-of-record attempt.
 - A TC that was NOT_RUN or SKIPPED has no image; the report says so plainly.
 
-**Immutable vs replaced — be explicit in the output:**
+**Immutable vs replaced — be explicit in the output** (all paths under `{spec_level}`):
 
 | Artifact | Behaviour |
 |---|---|
-| `reports/US-{id}/phase-N.json` / `.html` | immutable, new phase per run |
-| `automation-logs/US-{id}/run-progress-{stamp}.log` | immutable, new file per run |
-| `screenshots/{user_story_name}/*.png` | replaced each run |
-| `reports/US-{id}/run-plan.json`, `data-readiness.json`, `last-run.json`, `artifacts/` | replaced each run |
-| `reports/US-{id}/coverage/*` (CSVs, dashboard, `coverage-previous.json`) | replaced each run — the delta vs the previous measurement is reported before overwriting |
+| `reports/[SPEC-*/]US-{id}/phase-N.json` / `.html` | immutable, new phase per run |
+| `automation-logs/[SPEC-*/]US-{id}/run-progress-{stamp}.log` | immutable, new file per run |
+| `screenshots/[SPEC-*/]{user_story_name}/phase-{N}/**` | immutable — never overwritten or deleted |
+| `reports/[SPEC-*/]US-{id}/run-plan.json`, `data-readiness.json`, `stages/`, `merged-results.json`, `artifacts/` | replaced each run |
+| `reports/[SPEC-*/]US-{id}/coverage/*` (CSVs, dashboard, `coverage-previous.json`) | replaced each run — the delta vs the previous measurement (nested or legacy) is reported before overwriting |
 | `playwright.us-{id}.config.ts` | regenerated each run |
+| legacy flat `reports/US-{id}/`, `automation-logs/US-{id}/`, `screenshots/{user_story_name}/` | read-only history — never written again |
 </result_organization>
 
 <automation_logs>
@@ -965,15 +1074,19 @@ exists so no module ever inherits that defect:
 
 ```text
 {automation_root}/automation-logs/
-  US-1234/
-    run-progress-2026-09-02-0754.log
-    run-progress-2026-09-02-1420.log   ← later run, new file
+  SPEC-initiative-management/          ← same {spec_level} as the reports (absent for a story with no SPEC-* parent)
+    US-1234/
+      run-progress-2026-09-02-0754.log
+      run-progress-2026-09-02-1420.log   ← later run, new file
 ```
 
-- Create `automation-logs/US-{UserStoryID}/run-progress-{YYYY-MM-DD-HHmm}.log` at
-  the very start of the run and tell the user the path immediately, so they can
-  tail it live (`Get-Content -Wait <path>` on Windows).
-- One NEW file per run. Never append to or overwrite a previous run's log.
+- Create `{logs_root}/run-progress-{YYYY-MM-DD-HHmm}.log`
+  (`automation-logs/{spec_level}US-{UserStoryID}/`) at the very start of the run and tell the
+  user the path immediately, so they can tail it live (`Get-Content -Wait <path>` on Windows).
+  Its first lines record the resolved `results_root`, `logs_root`, `screenshots_root` and the
+  run start time.
+- One NEW file per run. Never append to or overwrite a previous run's log. A legacy flat
+  `automation-logs/US-{id}/` folder is left as is.
 </automation_logs>
 
 <live_progress>
@@ -998,10 +1111,22 @@ parallel) · overall progress % · elapsed time · estimated remaining time · e
 
 **Playwright execution mechanics:**
 - Run every test command **in the background** (never a silent blocking foreground
-  call), with `--reporter=line` output teed/appended into the progress log.
+  call). The command carries only `--config {us_config} --project={browser_project}` plus the
+  stage's `--grep` / `--grep-invert` / `--workers` flags, and the environment variables
+  `PW_STAGE_JSON` (this stage's JSON file), `PW_PHASE` and `PW_STAGE_ATTEMPT`. **Never pass
+  `--reporter` on the CLI** — it replaces the config reporters and silently drops the JSON
+  file. The config's `line` reporter still prints one line per test; tee/append that command
+  output into the progress log.
+- Record `stage_started_at` immediately before each command starts.
 - Poll the background output at short intervals; parse the per-test lines to
   update counts, current TC, and ETA; append a progress entry to the log and post
   a status update in the chat on each poll.
+- **Per-stage freshness gate — after EVERY stage / run-group command (Phase 3 and Phase 4):**
+  `{stage_json_path}` must exist and its modified time must be later than that command's
+  `stage_started_at`. Missing or stale → **STOP the run**: write the failure to the progress
+  log, fix the reporting / run step (a `--reporter` flag, wrong `--config`, wrong `outputFile`,
+  a base-config reporter override), re-run that stage, and only then continue. Never build
+  `phase-N.*` from a stale or absent file, never hand-assemble results from the line output.
 
 **Chat update shape (each poll during execution; each stage transition otherwise):**
 
@@ -1037,14 +1162,19 @@ gap reason and the rest of the run continues; the failure itself is reported und
 Test-data readiness, never counted against the smoke gate.
 
 **Inside every stage the `<run_plan>` groups run in this order, browser visible
-(`{headed}`), always with `--config {us_config} --project={browser_project}`:**
+(`{headed}`), always with `--config {us_config} --project={browser_project}`, never with
+`--reporter`, each command with its own `PW_STAGE_JSON`:**
 
 ```text
 stage S:
-  1. parallel group      → {run_command} --grep "<S tags>" --grep "@run:parallel"        --workers={workers_parallel}
-  2. serial group A      → {run_command} --grep "<S tags>" --grep "@run:serial-{groupA}" --workers=1
-  3. serial group B …    → one command per serial group, one after another
+  1. parallel group      → PW_STAGE_JSON={results_root}/stages/S-parallel.json        {run_command} --grep "<S tags>" --grep "@run:parallel"        --workers={workers_parallel}
+  2. serial group A      → PW_STAGE_JSON={results_root}/stages/S-serial-{groupA}.json {run_command} --grep "<S tags>" --grep "@run:serial-{groupA}" --workers=1
+  3. serial group B …    → one command per serial group, one after another (own JSON each)
+  (a re-run of the same stage/group after a heal appends -attempt{n} to the file name)
 ```
+
+After every command: the freshness gate from `<live_progress>` (the stage JSON exists at
+`{stage_json_path}` and is newer than that command's start) — STOP on failure.
 
 `--grep` values are combined with the stage's polarity filters below (Playwright ANDs
 repeated `--grep` flags). A group with no TCs in that stage is skipped and logged. No TC
@@ -1073,10 +1203,13 @@ runs twice in one phase. Suites beyond ~40 tests are sliced per group and stage 
 3. **Positive stage** — `--grep "@positive" --grep-invert "@smoke"` (smoke tests
    already ran; never run a TC twice in one phase) — parallel group, then serial groups.
 4. **Negative stage** — `--grep "@negative" --grep-invert "@smoke"` — same group order.
-5. Merge the stage and group results into the single `phase-N.json` / `phase-N.html` —
-   per-stage counts preserved (see the JSON additions in `<second_run>`), each TC
-   carrying its `run_group` / `run_mode`, and the report shows the stage order, the group
-   order, the gate outcome, and planned vs actual duration.
+5. Merge the stage JSONs into `merged-results.json` (per variant, per attempt — rules in
+   `<second_run>`), then into the single `phase-N.json` / `phase-N.html` —
+   per-stage counts preserved, each TC carrying its `run_group` / `run_mode` and its
+   variants, and the report shows the stage order, the group order, the gate outcome, and
+   planned vs actual duration. Before the merge, every stage planned in the run plan must
+   have a fresh stage JSON — or an explicit "stage not run — smoke gate STOP" marker;
+   otherwise STOP as in the freshness gate.
 </staged_execution>
 
 ---
@@ -1112,8 +1245,9 @@ Confirm the Playwright config sets `screenshot: 'only-on-failure'` in its `use` 
 every bug entry rests on assertion text alone. If it is missing, add it before the first
 run and note it in the Placement Manifest. Confirm the shared evidence helper
 (`captureEvidence`) exists, that every generated test calls it at its assertion point and
-not in `afterEach` (see `<result_organization>`), and that `{screenshots_root}` is writable;
-remove stale images per `<result_organization>`.
+not in `afterEach` (see `<result_organization>`), that it writes per phase / variant /
+attempt and never overwrites, and that `{screenshots_root}/phase-{N}/` is writable. Never
+delete anything under `{screenshots_root}`.
 
 **Long runs exhaust Windows resources.** A large headed suite accumulates browser
 processes (3 visible windows for the parallel group make this worse, not better); past
@@ -1128,14 +1262,18 @@ worked in the learning file.
 </environment_gate>
 
 <first_run>
-0. Initialize per `<result_organization>` (resolve US folder + next phase N, create
-   `{screenshots_root}`, remove stale images) and `<automation_logs>` (create this run's
-   progress log, announce its path). Write `{run_plan}` and `{us_config}`; post the run-plan
-   summary (groups, TC counts, workers, planned vs serial-only estimate) in the chat.
-1. Execute via `{run_command}` with `--config {us_config} --project={browser_project}`,
+0. Initialize per `<result_organization>` (resolve `{spec_level}` + the three roots ONCE,
+   state them, find the next phase N across the nested and legacy folders, create
+   `{results_root}/stages/` (emptied) and `{screenshots_root}/phase-{N}/`) and
+   `<automation_logs>` (create this run's progress log, announce its path). Write
+   `{run_plan}` (incl. `required_variants`) and `{us_config}`; post the run-plan summary
+   (groups, TC counts, workers, planned vs serial-only estimate) in the chat.
+1. Execute via `{run_command}` with `--config {us_config} --project={browser_project}` (no
+   `--reporter`; `PW_STAGE_JSON` / `PW_PHASE` / `PW_STAGE_ATTEMPT` set per command),
    following `<staged_execution>` (smoke → gate → positive → negative; inside each stage
    parallel group ×{workers_parallel}, then serial groups ×1, browser visible) and
-   `<live_progress>` (background run, log + chat updates with ETA).
+   `<live_progress>` (background run, log + chat updates with ETA, freshness gate after
+   every command).
    Timeouts: feature run 10 min · regression 45 min · full 90 min → on breach,
    abort and report completed vs not-executed.
 2. **Classify every failure:**
@@ -1148,7 +1286,7 @@ worked in the learning file.
    | `environment_failure` | Service down, auth expired, VPN/proxy/tunnel errors | ENVIRONMENT_BLOCKED path |
    | `data_missing` | The data a TC needs is absent at run time. Requirement was `READY` in PHASE 2.6 → environment regression (ENVIRONMENT_BLOCKED path, name the requirement). Requirement was a `skip` decision → the TC is `SKIP` with that reason — not a failure, not healed. Provisioning created it but it is gone → re-run that setup group once, then treat as regression | per the two cases |
    | `timeout_failure` | Did not finish in time | investigate wait strategy; if genuine hang → report |
-   | `evidence_failure` | Test passed but `{TC-ID}.png` shows a post-cleanup / post-navigation screen instead of the verified state (the `captureEvidence` call sits after teardown, after a delete, or after leaving the page) | SELF-HEAL: move the call to the assertion point; re-run the TC; never an app_bug |
+   | `evidence_failure` | Test passed but its `attempt-{a}.png` shows a post-cleanup / post-navigation screen instead of the verified state (the `captureEvidence` call sits after teardown, after a delete, or after leaving the page) | SELF-HEAL: move the call to the assertion point; re-run the TC (a new attempt — the earlier image stays); never an app_bug |
 
 3. **Self-heal ONLY test-code defects** (`selector_failure`, `assertion_failure`, `evidence_failure`):
    - fixes live in page objects / spec waits — never in app business logic
@@ -1175,64 +1313,130 @@ worked in the learning file.
    smoke → gate → positive → negative) with `<live_progress>` updates throughout.
    This run's results are the results of record — no fixes, no re-runs after it.
    A smoke-gate STOP in this run is itself the result of record.
-2. Read the framework's JSON output from `{results_root}/last-run.json` (written by
-   `{us_config}`; if the base config already declares its own JSON reporter, read from that
-   path instead) for per-test status, duration, errors, and attachment paths, and pair each
-   TC with its `{screenshots_root}/{TC-ID}.png` (+ `-failed.png` when present).
-3. Emit the **machine-readable artifact**
-   `{automation_root}/reports/US-{UserStoryID}/phase-{N}.json`
-   (N from `<result_organization>` — never overwrite an earlier phase):
+2. **Merge the stage results** of this phase from `{results_root}/stages/*.json` (every file
+   passed the freshness gate; each is a raw Playwright JSON report) into
+   `{results_root}/merged-results.json`:
+
+   - **Execution** = one Playwright test result entry from one stage JSON.
+   - **Variant identity** (`variant_key`) = spec file + full title path (describe chain + test
+     title) + Playwright **project name** + repeat index. Different projects (browsers) or
+     data variations are different variants and are **never merged**; `variant_slug` is the
+     file-safe form from `<result_organization>`.
+   - **Attempt** = another execution of the SAME variant (smoke heal re-run, Playwright
+     retry). All attempts are kept in order; the variant's `final_status` is the **latest**
+     attempt.
+   - **TC mapping**: every `[TC-ID]` token in the title maps the execution to that TC — a title
+     may carry several (`[TC-01][TC-02]` or `[TC-01, TC-02]`), then the variant counts toward
+     each of them. A TC may also be covered by several variants (chromium + firefox, variation
+     A + B).
+   - **Required variants** come from `run-plan.json` `required_variants[tc_id]`.
+   - **Overall TC status** — complete coverage required: any required variant `FAIL` →
+     `FAIL`; all required variants executed and `PASS` → `PASS`; at least one required variant
+     `PASS` but another required variant `SKIP` / `NOT_RUN` / missing → **`INCOMPLETE`** (never
+     `PASS`) with `missing_variants[]`; only `SKIP` → `SKIP`; nothing executed → `NOT_RUN`.
+     Extra, non-required variants are kept and reported but never make up for a missing
+     required one.
+   - **Totals count TCs**, one per TC-ID, from the overall status — a TC is never counted
+     twice; per-variant counts go to `variant_totals`.
+
+   `merged-results.json` schema (`"schema": "skill6-merged/1"`):
+
+   ```json
+   {
+     "schema": "skill6-merged/1", "user_story_id": "US-...", "phase": 3,
+     "stages": [{ "name": "smoke", "group": "parallel", "attempt": 1, "project": "chromium",
+                  "json_path": "stages/smoke-parallel.json", "started_at": "ISO-8601", "finished_at": "ISO-8601" }],
+     "executions": [{ "variant_key": "tests/Orders_Tests/03-create-order.spec.ts::REQ-01: …::[TC-007] … — variation A @positive @run:parallel::chromium::r0",
+                      "variant_slug": "chromium--variation-a--r0", "tc_ids": ["TC-007"], "title": "…", "file": "…",
+                      "project": "chromium", "stage": "positive", "group": "parallel", "attempt": 1,
+                      "status": "PASS | FAIL | SKIP", "duration_ms": 0, "error": "… or null", "attachments": [] }],
+     "variants": [{ "variant_key": "…", "variant_slug": "chromium--variation-a--r0", "tc_ids": ["TC-007"], "project": "chromium",
+                    "attempts": [{ "attempt": 1, "stage": "smoke", "status": "FAIL", "evidence_screenshot": "…/attempt-1.png", "failure_screenshot": "…/attempt-1-failed.png" },
+                                 { "attempt": 2, "stage": "smoke", "status": "PASS", "evidence_screenshot": "…/attempt-2.png", "failure_screenshot": null }],
+                    "final_status": "PASS" }],
+     "tcs": [{ "tc_id": "TC-007", "required_variants": ["chromium--variation-a--r0", "chromium--variation-b--r0"],
+               "variant_slugs": ["chromium--variation-a--r0", "chromium--variation-b--r0"],
+               "status": "PASS | FAIL | INCOMPLETE | SKIP | NOT_RUN", "missing_variants": [], "skipped_variants": [] }],
+     "variant_totals": { "passed": 0, "failed": 0, "skipped": 0, "not_run": 0 }
+   }
+   ```
+
+3. Emit the **machine-readable artifact** `{results_root}/phase-{N}.json`
+   (`reports/{spec_level}US-{UserStoryID}/`; N from `<result_organization>` — never overwrite an
+   earlier phase). `results[]` keeps ONE row per `tc_id` with the fields below unchanged (the HTML
+   report, the Phase 5 ADO summary and the checklist read them); `variants[]`, `attempts` and
+   `variant_totals` are additions:
 
    ```json
    {
      "run_id": "...", "timestamp": "ISO-8601", "environment": "...",
      "framework": "playwright", "file_or_suite": "...", "user_story": "{ADO ID}",
      "user_story_id": "US-...", "phase": 1,
+     "results_root": "reports/[SPEC-{spec-name}/]US-{id}/", "previous_phase_path": "…/phase-{N-1}.html or null (nested or legacy folder)",
      "headed": true, "workers_parallel": 3,
      "run_plan": { "groups": 0, "parallel_tcs": 0, "serial_tcs": 0,
                    "serial_only_estimate_s": 0, "planned_estimate_s": 0, "actual_s": 0 },
      "stages": {
-       "smoke":    { "total": 0, "passed": 0, "failed": 0, "skipped": 0 },
-       "positive": { "total": 0, "passed": 0, "failed": 0, "skipped": 0 },
-       "negative": { "total": 0, "passed": 0, "failed": 0, "skipped": 0 }
+       "smoke":    { "total": 0, "passed": 0, "failed": 0, "incomplete": 0, "skipped": 0 },
+       "positive": { "total": 0, "passed": 0, "failed": 0, "incomplete": 0, "skipped": 0 },
+       "negative": { "total": 0, "passed": 0, "failed": 0, "incomplete": 0, "skipped": 0 }
      },
      "smoke_gate": { "fail_pct": 0, "verdict": "passed | healed-then-passed | FAILED-STOPPED", "action_taken": "..." },
-     "passed": 0, "failed": 0, "skipped": 0, "not_run": 0,
+     "passed": 0, "failed": 0, "incomplete": 0, "skipped": 0, "not_run": 0,
+     "variant_totals": { "passed": 0, "failed": 0, "skipped": 0, "not_run": 0 },
      "total_duration_ms": 0,
      "results": [{
        "tc_id": "TC-01", "req_id": "REQ-01", "test_name": "...",
-       "status": "PASS | FAIL | SKIP | NOT_RUN",
+       "status": "PASS | FAIL | INCOMPLETE | SKIP | NOT_RUN",
        "duration_ms": 0,
        "classification": "app_bug | selector_failure | ... | N/A",
        "error_message": "...", "root_cause": "...",
        "run_group": "parallel | serial:{group}", "run_mode": "parallel | serial",
-       "evidence_screenshot": "screenshots/{user_story_name}/{TC-ID}.png or null (NOT_RUN/SKIP) — captured at the assertion point",
-       "failure_screenshot": "screenshots/{user_story_name}/{TC-ID}-failed.png or null",
+       "evidence_screenshot": "screenshots/[SPEC-{spec-name}/]{user_story_name}/phase-{N}/{TC-ID}/{variant_slug}/attempt-{a}.png of the status-of-record attempt, or null (NOT_RUN/SKIP)",
+       "failure_screenshot": "…/attempt-{a}-failed.png or null",
        "severity": "Critical | High | Medium | Low | N/A",
-       "healed_in_first_run": true
+       "healed_in_first_run": true,
+       "attempts": 2,
+       "missing_variants": [],
+       "variants": [{
+         "variant_slug": "chromium--none--r0", "project": "chromium", "final_status": "PASS", "duration_ms": 0,
+         "attempts": [{ "attempt": 1, "stage": "smoke", "status": "FAIL", "evidence_screenshot": "…/attempt-1.png", "failure_screenshot": "…/attempt-1-failed.png" },
+                      { "attempt": 2, "stage": "smoke", "status": "PASS", "evidence_screenshot": "…/attempt-2.png", "failure_screenshot": null }]
+       }]
      }]
    }
    ```
 
-4. Generate the **designed HTML report**
-   `{automation_root}/reports/US-{UserStoryID}/phase-{N}.html` —
+   **`INCOMPLETE` is never published as Passed** — in the HTML it has its own colour with the
+   missing variants named; in the Phase 5 ADO close-out its test outcome is `Inconclusive` (or
+   the project's configured non-pass outcome, never `Passed`) with the variant detail in the
+   result comment; the summary tiles and the final chat table carry an `Incomplete` count.
+
+4. Generate the **designed HTML report** `{results_root}/phase-{N}.html` — generated from
+   `merged-results.json` via `phase-{N}.json` plus the screenshots it references (Playwright's
+   built-in HTML reporter is not used) —
    fully self-contained (inline CSS, screenshots embedded as base64 data URIs,
    no external requests, light/dark aware):
 
    - **Header:** feature, User Story link, **Phase N**, environment, build, run
-     date, run command, headed/headless, and links to the earlier phases in the same folder
-   - **Summary tiles:** passed / failed / skipped / not-run / duration / pass-rate /
-     **planned vs actual duration** (with the serial-only estimate for comparison)
+     date, run command, headed/headless, and links to the earlier phases — the union of the
+     nested `{results_root}` and the legacy flat folder, each with its own relative path
+   - **Summary tiles:** passed / failed / **incomplete** / skipped / not-run (TC counts) ·
+     variant totals · duration / pass-rate / **planned vs actual duration** (with the
+     serial-only estimate for comparison)
    - **Run plan section:** each group (parallel ×N, serial:{group} ×1) with its TCs and
      the reason for every serial group; inferred vs field-driven decisions marked
    - **Stage breakdown:** smoke / positive / negative counts + the smoke-gate
      verdict. If the gate stopped the run: a prominent **SMOKE GATE FAILED**
      banner at the top, smoke failures in full bug-report format, and every
      positive/negative TC listed as `NOT_RUN — smoke gate failed (application errors)`
-   - **Per-TC results table:** TC-ID · REQ-ID · test name · status (colour-coded)
-     · run group · duration · classification · **assertion-point screenshot thumbnail
+   - **Per-TC results table:** TC-ID · REQ-ID · test name · status (colour-coded; `INCOMPLETE`
+     in its own colour with the missing variants named) · run group · duration ·
+     classification · **assertion-point screenshot thumbnail of the status-of-record attempt
      (every executed TC)** + failure image when present — traceable back to the approved TC
-     document
+     document. A TC with more than one variant or attempt gets an **expandable sub-row per
+     variant and attempt** (project, variation, attempt number, stage, status, its own
+     embedded image; non-final attempts collapsed) so every earlier outcome stays visible
    - **Bug Report section** — one entry per `app_bug`. Written for a human triaging the
      defect, NOT for someone reading the test code. See `<bug_report_format>` below.
    - **Healed in Run 1** changelog (the Heal Log — what was improved and why)
@@ -1321,9 +1525,16 @@ Using `{tc_output_folder}/ADO-MAP.md`:
      TC whose PHASE 2.5 status is Partially / Not Covered — copy the reason from
      `coverage-detail.csv` — and for any TC skipped by a PHASE 2.6 decision — copy the gap
      text from `data-readiness.json` — so the ADO status never overstates the coverage.
+   - **Test outcome per TC** (where the project records outcomes on test points / results):
+     `PASS` → `Passed`; `FAIL` → `Failed`; **`INCOMPLETE` → `Inconclusive`** (or the project's
+     configured non-pass outcome — never `Passed`), with the missing variants and every
+     variant's result in the result comment; `SKIP` → `Not Applicable` / the project's skip
+     outcome; `NOT_RUN` → left not executed. A TC with one required variant passed and another
+     skipped or not run is therefore never reported as Passed anywhere in ADO.
 2. Post ONE summary comment on the User Story: **phase number**, run-2 counts
-   (pass/fail/skip/not-run), smoke-gate verdict, number of app bugs found (with
-   TC-IDs), and the `phase-{N}.json` + `phase-{N}.html` artifact paths.
+   (pass/fail/incomplete/skip/not-run — TC counts, plus variant totals), smoke-gate verdict,
+   number of app bugs found (with TC-IDs), and the `phase-{N}.json` + `phase-{N}.html`
+   artifact paths (under `reports/{spec_level}US-{id}/`).
 3. Update `ADO-MAP.md` with the final AutomationStatus column.
 
 ADO failures here degrade gracefully: report what could not be updated — never
@@ -1369,10 +1580,11 @@ fake a status.
 **Readiness file:** {results_root}/data-readiness.json
 
 ### Screenshots
-**Folder:** {automation_root}/screenshots/{user_story_name}/
-**Written:** {N} assertion-point images · {N} failure images · **stale images removed:** {N}
+**Folder:** {automation_root}/screenshots/{spec_level}{user_story_name}/phase-{N}/
+**Written:** {N} assertion-point images · {N} failure images · across {N} variants / {N} attempts · **nothing overwritten or deleted** (earlier phases untouched)
 **Evidence sanity check:** {N} PASS images verified against Expected Result · {N} `evidence_failure` healed
 {TC-IDs without an image and why (NOT_RUN / SKIP)}
+{Legacy flat `screenshots/{user_story_name}/` present: yes (left untouched) | no}
 
 ### Coverage
 | TC-ID | Smoke | Automation candidate | Implementation | Static coverage | Run 2 status |
@@ -1397,21 +1609,25 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 | User Story | US-{ID} — {title} |
 | Run / Phase | Phase {N} |
 | Total TCs | {N} |
-| Passed / Failed / Skipped / NOT_RUN | {n} / {n} / {n} / {n} |
+| Passed / Failed / Incomplete / Skipped / NOT_RUN | {n} / {n} / {n} / {n} / {n} (TC counts — each TC-ID once) |
+| Variants executed | {n} passed / {n} failed / {n} skipped over {N} required variants ({projects} × data variations); attempts {n} |
+| Incomplete TCs | {TC-IDs with their missing variants — or "none"} (published to ADO as Inconclusive, never Passed) |
 | Smoke | {n} TCs — gate: {passed \| healed-then-passed \| FAILED-STOPPED} (fail% {x}%) |
 | Positive | {passed}/{total} |
 | Negative | {passed}/{total} |
 | Static coverage (pre-run) | {x}% weighted — target {t}% — {PASS \| user override \| report-only} |
-| Coverage folder | {automation_root}/reports/US-{ID}/coverage/ (dashboard + 3 CSVs, replaced) |
+| Coverage folder | {results_root}/coverage/ (dashboard + 3 CSVs, replaced) — delta computed against {nested | legacy} coverage-previous.json |
 | Test-data readiness (pre-run) | {READY \| READY-WITH-SKIPS ({n} TCs)} — {n} gaps decided by QC, {n} provisioned ({api}/{ui}/{db}/{manual}), {n} skipped |
 | Total execution time | {hh:mm:ss} |
 | Planned vs actual duration | ~{planned} vs {actual} (serial-only would be ~{serial}) |
 | Headed / workers | {yes \| no} / parallel ×{N}, serial ×1 |
-| Screenshots | {automation_root}/screenshots/{user_story_name}/ — {N} images (replaced) |
-| Result folder | {automation_root}/reports/US-{ID}/ |
-| Progress log | {automation_root}/automation-logs/US-{ID}/run-progress-{stamp}.log |
-| HTML report | .../US-{ID}/phase-{N}.html |
-| JSON results | .../US-{ID}/phase-{N}.json |
+| Screenshots | {screenshots_root}/phase-{N}/ — {N} images across {N} variants / {N} attempts (immutable) |
+| Result folder | {results_root} = {automation_root}/reports/{spec_level}US-{ID}/ |
+| Stage results | {results_root}/stages/ — {N} stage files, all fresh · merged: {results_root}/merged-results.json |
+| Progress log | {logs_root}/run-progress-{stamp}.log |
+| HTML report | {results_root}/phase-{N}.html (built from merged-results.json) |
+| JSON results | {results_root}/phase-{N}.json |
+| Earlier phases | {list with folder — nested and legacy — or "none"} |
 | Overall status | {GREEN \| FAILURES \| SMOKE GATE FAILED \| ENVIRONMENT_BLOCKED} |
 
 **App bugs found:** {N} — {TC-IDs + one-line titles}
@@ -1455,6 +1671,10 @@ Before returning AUTOMATION COMPLETE:
 - [ ] **Folder layout follows `generate-testing-structure`: new projects under
       `Testing/Automation/` (pages/tests/reports/screenshots/automation-logs); an existing
       automation project reused, never duplicated**
+- [ ] **`spec_level` derived once from the approved document's folder; `results_root`, `logs_root`
+      and `screenshots_root` carry the same `[SPEC-{spec-name}/]` parent as the TC folder, were
+      stated at the start, and never changed or fell back to a flat `US-*` path during the run;
+      legacy flat folders read as history only, never written**
 - [ ] **Publish gate passed: beautified document + ADO-MAP.md present with `source_sha256` equal to
       the approved document's hash; one work item spot-checked (title prefix, Tested-By link)**
 - [ ] **No beautify, no TC work-item creation or edit in this run — skill 5 owns both**
@@ -1469,31 +1689,34 @@ Before returning AUTOMATION COMPLETE:
       and role-variant tests downgraded); weighted % computed overall and per stage**
 - [ ] **Gate verdict recorded with target + source (L3 or default 80 %) + mechanism; below target →
       one repair pass, re-measure, then the user asked — never silently run; override reported**
-- [ ] **`reports/US-{ID}/coverage/` written: coverage-summary.csv, coverage-detail.csv,
+- [ ] **`{results_root}/coverage/` written: coverage-summary.csv, coverage-detail.csv,
       manual-scenarios.csv (category + priority), self-contained coverage-dashboard.html,
-      coverage-previous.json; delta vs the previous measurement reported**
+      coverage-previous.json; delta vs the previous measurement (nested, else legacy folder —
+      which one stated) reported**
 - [ ] **Test-data readiness resolved BEFORE the first run: requirements extracted per TC, probed once
       each (learning file first), predicted skips listed, and the QC asked in ONE message per gap
       (api / ui / db / manual / skip, + keep) — pipeline mode skipped undecided gaps with reason**
 - [ ] **Provisioning only through `prerequest/` fixtures, `00-setup-*.spec.ts` page-object journeys,
       or the DB helper / CLI with a QC-named env var; teardown by default, `keep` registered in
       `## Test Data`; no connection string or credential echoed, logged, or written anywhere**
-- [ ] **`reports/US-{ID}/data-readiness.json` written; every skip guard in the specs traces to a
+- [ ] **`{results_root}/data-readiness.json` written; every skip guard in the specs traces to a
       readiness decision; decisions recorded in the learning file Q&A**
 - [ ] First run: every failure classified; only test-code defects healed (≤2 iterations); Heal Log kept
 - [ ] No assertion lowered, no skip added to hide a failure, no app bug masked
-- [ ] **Results under `reports/US-{ID}/` as `phase-{N}.*` — phase auto-incremented, NO prior phase overwritten or deleted**
-- [ ] **Progress log created at `automation-logs/US-{ID}/run-progress-{stamp}.log`, announced at start, appended across ALL stages (not just execution), historical logs untouched**
+- [ ] **Results under `{results_root}` (`reports/[SPEC-{spec-name}/]US-{ID}/`) as `phase-{N}.*` — phase auto-incremented across the nested AND legacy folders, NO prior phase overwritten or deleted; previous-phase links resolve into whichever folder holds them**
+- [ ] **No `--reporter` passed on any CLI command; every stage / run-group command wrote its own stage JSON at the resolved `{stage_json_path}` (mtime later than that command's start) — checked right after each command, run STOPPED on a missing or stale file**
+- [ ] **`merged-results.json` keeps every variant (project × data variation) and every attempt in order; a TC is `PASS` only when every `required_variants` entry from the run plan passed, otherwise `INCOMPLETE` (never published as Passed — ADO outcome Inconclusive); TC totals count each TC-ID once; a multi-`[TC-ID]` title is credited to every TC; `phase-N.*` built from the merge only**
+- [ ] **Progress log created at `{logs_root}/run-progress-{stamp}.log` (`automation-logs/[SPEC-{spec-name}/]US-{ID}/`), announced at start with the three resolved roots, appended across ALL stages (not just execution), historical logs untouched**
 - [ ] **Test runs executed in background with per-poll chat updates: counts, current TC, elapsed, and a REFRESHED estimated-remaining time**
 - [ ] **Stage order enforced: setup journeys (if any) → smoke → gate → positive → negative; no TC run twice in one phase; a failed setup journey skips its dependent TCs with reason and never counts against the smoke gate**
-- [ ] **Run plan built from the approved TCs and written to `reports/US-{ID}/run-plan.json`; every TC carries one `@run:` tag; serial groups in `mode: 'serial'` describes; inside every stage the parallel group ran ×{workers_parallel} then serial groups ×1; reasons recorded for every serial decision**
+- [ ] **Run plan built from the approved TCs and written to `{results_root}/run-plan.json` with `required_variants` per TC; every TC carries one `@run:` tag; serial groups in `mode: 'serial'` describes; inside every stage the parallel group ran ×{workers_parallel} then serial groups ×1; reasons recorded for every serial decision**
 - [ ] **Browser visible (headed) via the generated `playwright.us-{ID}.config.ts` — or the headless fallback reported in chat AND under Deviations; base `playwright.config.ts` changed only for `testMatch`**
-- [ ] **Every executed TC has `screenshots/{user_story_name}/{TC-ID}.png` captured AT THE ASSERTION POINT (before teardown / cleanup / navigation away — never from `afterEach`); every failed TC also has `{TC-ID}-failed.png`; stale images removed and counted; phase artifacts still immutable**
+- [ ] **Every executed test attempt has `{screenshots_root}/phase-{N}/{TC-ID}/{variant_slug}/attempt-{a}.png` captured AT THE ASSERTION POINT (before teardown / cleanup / navigation away — never from `afterEach`); every failed attempt also has `attempt-{a}-failed.png`; nothing under `screenshots/` overwritten or deleted — earlier attempts and earlier phases byte-identical; every path recorded in the merged and phase JSON**
 - [ ] **Evidence sanity check done: no PASS image shows a cleaned-up screen; every `evidence_failure` healed by moving the call, not by editing the image or the assertion**
 - [ ] **Smoke gate math reported (fail%, majority classification, action); automation/env majority → heal + smoke re-run (≤2 cycles); app_bug majority → run stopped**
 - [ ] **On a gate stop: phase report still produced with SMOKE GATE FAILED banner and every positive/negative TC as NOT_RUN**
 - [ ] **`@smoke` tags derive only from the TC document's `Smoke:` field**
-- [ ] Second run clean; results JSON emitted; HTML report self-contained with embedded screenshots
+- [ ] Second run clean; stage JSONs fresh, merged-results.json + phase JSON emitted; HTML report self-contained with embedded screenshots, INCOMPLETE TCs shown with their missing variants, variant/attempt sub-rows for multi-variant or retried TCs
 - [ ] **Every app_bug titled as a plain sentence (`The system doesn't … when …`) — never an
       assertion string, locator, or TC-ID; raw error text lives under Evidence**
 - [ ] **Every app_bug has numbered reproduce steps starting at login, in the canonical verbs,

@@ -18,21 +18,35 @@ Pick ONE of these five:
   5. Big spec file             — path to the .md file (multiple user stories — it will be
                                  split, one review per story, all under SPEC-{spec-name}/)
 
-DEPENDENCIES ARE FOLLOWED AUTOMATICALLY: if the spec refers to other files (another spec,
-a glossary, data model, permission matrix, API contract, a story ID defined elsewhere…), the
-skill finds them (relative path → repo search → learning file → asks you), reads them, checks
-this spec against them, and gives an unreviewed dependency spec its own full review under
-Testing/Requirements/SPEC-{dep-spec-name}/. Dependency files are never modified.
-Reply "skip" for a dependency you do not want followed — it is then reported as Unresolved.
+REQUIREMENT DEPENDENCIES ARE FOLLOWED AUTOMATICALLY: if the spec explicitly refers to other
+REQUIREMENT files (another spec or story, a glossary, a permission matrix, a story ID defined
+elsewhere…), the skill finds them (relative path → repo search → learning file → asks you once),
+reads them, checks this spec against them, and gives an unreviewed dependency spec its own full
+review under Testing/Requirements/SPEC-{dep-spec-name}/ (up to 2 levels deep). Dependency files
+are never modified. Reply "skip" for a dependency you do not want followed — it is then reported
+as Unresolved and the acceptance criteria that rely on it are rated Risky.
+
+TECHNICAL FILES ARE IGNORED: source code, API files, configuration, database schemas, data
+models, technical design documents, infrastructure and automation code are never read or
+reviewed, even when the spec refers to them. The review uses requirement information only and
+is written in simple QA English.
 
 OPTIONAL:
   - A dimension to limit the review: completeness | clarity | testability |
     consistency | feasibility | risk        (default: all 6)
   - "all" — review every spec under specs/ and every story under test/User stories/
+  - --lang ar|en — language of the review files (US-{id}-review.md, SPEC-REVIEW-SUMMARY.md)
+
+REVIEW LANGUAGE: --lang or a saved project preference is applied without asking (a saved
+Arabic preference applies even to an English source). An Arabic requirement with nothing
+saved → you are asked ONCE (Arabic / English) inside the same intake message, and the answer
+is saved to the learning file. English source, nothing saved → English, no question.
+REQ-*.md is ALWAYS English (skill 3 reads it).
 
 IF YOU GIVE NOTHING: the skill first checks Testing/project-learning.md (recorded spec
-locations, Azure DevOps project, glossary); only what is still missing is asked. It never
-guesses. Your answers are saved to the file's "Requirements Review Model" section.
+locations, Azure DevOps project, glossary, saved review language); only what is still
+missing is asked. It never guesses. Your answers are saved to the file's "Requirements
+Review Model" section.
 
 ============================================================
 OUTPUT — WHAT YOU GET
@@ -40,8 +54,8 @@ OUTPUT — WHAT YOU GET
   Spec FILE input (cases 4 and 5):
   Testing/Requirements/SPEC-{spec-name}/        ← {spec-name} = file stem, kebab-case
     US-{id}-{name}/                             ← one per story found in the spec
-      REQ-{id}-{name}.md    ← structured requirement (input for skill 3)
-      US-{id}-review.md     ← the review (ratings, gaps, questions, verdict)
+      REQ-{id}-{name}.md    ← structured requirement (input for skill 3) — always English
+      US-{id}-review.md     ← the review (ratings, gaps, questions, verdict) — in the chosen language
     SPEC-REVIEW-SUMMARY.md  (only when the spec held several stories; includes the
                              Dependencies block: each file it depends on + status + conflicts)
   Testing/Requirements/SPEC-{dep-spec-name}/    ← a dependency spec that had no review yet

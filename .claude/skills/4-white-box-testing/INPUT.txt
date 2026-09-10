@@ -25,9 +25,15 @@ NOTES:
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
-  Testing/White_Box_Testing/
-    {RequirementID}-{Feature}-analysis.md   ← gaps, bugs, repro scenarios, verdict
-    .project-profile.md                     ← cached repo profile (reused next runs)
+  Testing/White_Box_Testing/                 (root = paths.whiteBox from qa-manifest.json)
+    .project-profile.md                     ← cached repo profile (reused next runs, shared with skill 7)
+    SPEC-{spec-name}/                       ← when the REQ sits under Requirements/SPEC-{spec-name}/
+      US-{id}-{name}/                       ←   (or the requirement came from a spec file)
+        {RequirementID}-{Feature}-analysis.md   ← gaps, bugs, repro scenarios, verdict
+    US-{id}-{name}/                         ← REQ directly under Requirements/, ADO story, free text
+      {RequirementID}-{Feature}-analysis.md
+  The report folder mirrors the story's folder under Testing/Requirements/ exactly (same
+  layout skill 3 uses for TCs). Older flat reports at the root are read as context only.
   Testing/project-learning.md               ← updated: system rules learned, module map, Q&A
 
 WHEN TO RUN: any time you need "is this story actually implemented, and where are the

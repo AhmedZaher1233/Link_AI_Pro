@@ -11,8 +11,9 @@ Story's implementation status. Signals, in order:
 1. The user's answer from the combined ask (implemented / partially / not implemented).
 2. A quick live probe via Playwright MCP: does the feature's entry point (menu item, screen,
    control) exist at all in the app? (One targeted check — not a full walk.)
-3. Optionally, a `4-white-box-testing` report for this requirement, if one exists under
-   `{white_box_reports}`.
+3. Optionally, a `4-white-box-testing` report for this requirement, if one exists — glob
+   `{white_box_reports}/**/{storyID}-*-analysis.md` (skill 4 nests reports under
+   `[SPEC-{spec_name}/]US-{storyID}-{name}/`; older reports may sit flat at the root).
 
 Classify the story (and, where they differ, each acceptance criterion) as exactly one:
 
@@ -34,6 +35,14 @@ Hard rules:
 - Record the implementation status (and the evidence for it) in the deliverable header and in
   the structured return.
 
+### The combined ask — what it contains
+
+ONE message: base URL · username + password per role · implementation status · optional
+spec-source correction · environment notes · and, **only when the source is Arabic and neither
+the task input (`--lang`) nor the learning file settles it**, the review-page language question
+from `entry-cases.md` §1. Never a second message for any of these; never ask what the learning
+file already answers (say what you are reusing instead).
+
 ### No Playwright MCP server attached
 
 The probe for this happens in the combined-ask step, **before** the URL/credentials ask — never ask for
@@ -43,7 +52,10 @@ credentials that cannot be used. When no Playwright MCP server is available for 
 - Every TC keeps `draft — not app-validated`; no TC may be marked `validated`, `enhanced`,
   `inferred` or `discrepancy`.
 - Skip the URL/credentials ask and the whole MCP pass except this gate. The design,
-  self-review and deliverables run in full — the document is still delivered.
+  self-review and deliverables run in full — the document is still delivered. The review-page
+  language question (when still open) is still asked — it does not depend on the MCP server.
+- Every data item (`tc-design.md` "Test-data collection") that the learning file does not
+  confirm stays `UNKNOWN` — never `MISSING`, because nothing was checked.
 - Say so in the document header, in the Open Findings section and in the final message, and
   tell the user to attach the server (`/mcp`) or run `/1-generate-update-testing-structure
   repair`, then re-run this skill to validate.
@@ -64,6 +76,11 @@ Before touching the browser, analyze all draft TCs together and produce a **disc
 3. **Gaps** — missing navigation, missing preconditions, missing test data, missing
    filters/selections, missing async waits or triggers, ambiguous steps. These are the
    discovery targets.
+   **Data items**: for every item on the data-item list not already `READY` from the learning
+   file, plan ONE read-only look at the listing screen that would show it (a targeted text /
+   row lookup, not a snapshot, shared across all TCs that use the item). Seen → `READY`; screen
+   reached and item absent → `MISSING`; screen unreachable or not looked at → `UNKNOWN`. Never
+   create, edit or delete anything to find out.
 4. **Locale-sensitive points** — every element label referenced in any step, plus screens whose
    secondary-locale behaviour must be walked live (see §4).
 

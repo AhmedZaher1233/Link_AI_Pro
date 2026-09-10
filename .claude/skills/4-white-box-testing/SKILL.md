@@ -15,7 +15,12 @@ Nothing about the stack is assumed. Everything about *where code lives* is **der
 in Phase 0 and cached, so the first run pays the discovery cost once and later runs are fast.
 
 **Constraints**
-- Write output ONLY to the analysis output directory (default `Testing/White_Box_Testing/`, see 0.6).
+- Write output ONLY to the analysis output directory (default `Testing/White_Box_Testing/`, see 0.6) —
+  the report itself goes into the per-story `<report-folder>` inside it
+  (`<output-dir>/[SPEC-{spec_name}/]US-{id}-{kebab-name}/`), mirroring the requirements tree.
+- **Once `<output-dir>`, `spec_level` or `<report-folder>` is resolved for a run, it is immutable for
+  that run. All subsequent writes must use the resolved path and must not recompute or fall back to a
+  flat `US-*` path or to the root.** Resolve once (0.6), state the path in the chat, reuse it in Phase 6.
 - Never modify source code, config, or any file outside that directory.
 - Read-only exploration everywhere else.
 
@@ -200,13 +205,43 @@ git ls-files | grep -Ei '(spec|stor(y|ies)|requirement|feature|prd|acceptance)' 
 Record every directory holding requirements (e.g. `specs/*/spec.md`, `test/User stories/*.md`,
 `docs/features/*.md`, `*.feature` Gherkin files) and the ID convention used (e.g. `US-123456`).
 
-**Output directory** — first that applies:
-1. `Testing/White_Box_Testing/` if a `Testing/` folder exists (the project's standard testing structure —
+**Output directory (`<output-dir>`, the ROOT)** — first that applies:
+1. `paths.whiteBox` from `Testing/qa-manifest.json` when the manifest exists.
+2. `Testing/White_Box_Testing/` if a `Testing/` folder exists (the project's standard testing structure —
    see the `generate-testing-structure` skill). Create the `White_Box_Testing/` subfolder if missing.
-2. Otherwise create `Testing/White_Box_Testing/` at the repo root and use it.
+3. Otherwise create `Testing/White_Box_Testing/` at the repo root and use it.
 
-Legacy analysis dirs (`Testing/white-box-testing/`, `test/analysis/`, `docs/analysis/`) are read-only
-history — never write new output there.
+`.project-profile.md` always lives at this ROOT (shared with `7-discover-business-rules`).
+
+**Report folder (`<report-folder>`)** — the analysis report is NOT written flat at the root. It mirrors
+the story's position in the requirements tree (`paths.requirements`, default `Testing/Requirements/`),
+exactly like `3-generate-manual-test-cases` mirrors it for TCs:
+
+```text
+<output-dir>/[SPEC-{spec_name}/]US-{id}-{kebab-name}/{RequirementID}-{FeatureName}-analysis.md
+```
+
+Derive it once, in this order (first rule that applies), and state it in the chat before Phase 1:
+1. Requirement given as a path under the requirements tree (`…/Requirements/[SPEC-{x}/]US-{id}-{name}/REQ-*.md`)
+   → mirror that position: `SPEC-{x}/US-{id}-{name}/` when the path has a `SPEC-{x}` parent, else `US-{id}-{name}/`.
+2. Requirement given as an ID or feature name → glob `{paths.requirements}/**/US-{id}-*/`; mirror the folder
+   found (with its `SPEC-*` parent when present). When several artifacts matched (1.1), mirror the most formal
+   one that lives in the requirements tree. Nothing found → `US-{id}-{kebab-name}/`.
+3. Spec FILE outside the requirements tree (`specs/…/spec.md`, `.docx`) → `SPEC-{stem}/US-{id}-{name}/` —
+   `{stem}` = file stem, lowercase kebab-case, ≤ 6 words; a generic stem (`spec`, `specification`,
+   `requirements`, `prd`, `readme`) → parent folder name (`docs/specs/resource-request/spec.md` →
+   `resource-request`); story name from the requirement title.
+4. Free-text acceptance criteria → `US-{id-or-kebab-feature}/`.
+
+Reuse and legacy:
+- Glob `<output-dir>/**/{RequirementID}-*-analysis.md` before creating the folder. **Reuse an existing nested
+  folder only when its path equals the resolved `<report-folder>`** (same `SPEC-*` parent and `US-*` leaf).
+- A report found under a different `SPEC-*` parent, a different `US-*` name, or flat at the root NEVER
+  overrides the required structure: read it as prior context, list it in the final message as a
+  legacy / mismatched location, and write the new report to the resolved `<report-folder>`. Never write to,
+  move or delete those files.
+- Legacy analysis dirs (`Testing/white-box-testing/`, `test/analysis/`, `docs/analysis/`) are read-only
+  history — never write new output there.
 
 ### 0.7 Write / refresh the profile
 
@@ -276,8 +311,8 @@ or commands here.
 
 | Argument | Action |
 |---|---|
-| Path ending in `.md` / `.feature` / `.txt` | Read directly |
-| ID or feature name | Search every requirement source from profile §Requirement sources, by filename and content. If several match, prefer the most formal artifact (spec > story > ticket dump) and cross-reference the others |
+| Path ending in `.md` / `.feature` / `.txt` | Read directly. Record the resolved path — 0.6 mirrors its `[SPEC-*/]US-*` position for `<report-folder>` |
+| ID or feature name | Search every requirement source from profile §Requirement sources, by filename and content. If several match, prefer the most formal artifact (spec > story > ticket dump) and cross-reference the others. Record the winning path for 0.6 (mirror the one inside the requirements tree) |
 | Blank | First grep `Testing/project-learning.md` (Index + this skill's Q&A) for a recorded default or last-analysed requirement; if nothing, list the requirement sources found and ask which requirement to analyse, then record the answer under White-Box Model Q&A |
 
 If the requirement has sibling artifacts (`plan.md`, `data-model.md`, `contracts/`, `tasks.md`, linked ADRs,
@@ -451,10 +486,12 @@ Where an API-level repro is possible, give the request (method, path, body) as w
 ## Phase 6 — Write Report
 
 ```bash
-mkdir -p <output-dir>
+mkdir -p "<report-folder>"
 ```
 
-Write `<output-dir>/{RequirementID}-{FeatureName}-analysis.md` using this template:
+Write `<report-folder>/{RequirementID}-{FeatureName}-analysis.md` — `<report-folder>` is the value resolved in
+0.6 (`<output-dir>/[SPEC-{spec_name}/]US-{id}-{kebab-name}/`), unchanged since then; never recompute it here and
+never fall back to the root or to a flat `US-*` folder. Use this template:
 
 ```markdown
 # Implementation Analysis — {Requirement Title}
@@ -545,7 +582,8 @@ Report to the user:
   {BUG-001}: {title} — {file:line}
   {G-001}:   {gap}
 
-**Report**: {output-dir}/{ID}-{Feature}-analysis.md
+**Report**: {report-folder}/{ID}-{Feature}-analysis.md   ({output-dir}/[SPEC-{spec_name}/]US-{id}-{name}/)
+**Legacy / mismatched reports found**: {paths read as context but not modified — or "none"}
 **Profile**: {output-dir}/.project-profile.md  (re-run with --reprofile after big structural changes)
 **Learning file**: read {sections/tags} · updated {N added / M updated | "no new knowledge"}
 ```

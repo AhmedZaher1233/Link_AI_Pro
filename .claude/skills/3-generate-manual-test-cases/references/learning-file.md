@@ -23,6 +23,9 @@ exists to progressively eliminate rediscovery and re-asking across stories.
   for the MCP pass, `\[type: trick\]`. Read only the matching lines (0-1 lines of context).
 - Before asking the user anything, grep `#### Questions and Answers` for the question's keywords
   (e.g. `base URL`, `role`, `environment`) and the shared `[type: env]` lines.
+- Review-page language: grep `output language` and `لغة` under `## Project Knowledge` and the
+  skill 2 / skill 3 Q&A. A saved answer settles `review_page_language` without asking — even
+  when the `REQ-*.md` you were given is English (skill 2 always writes REQ files in English).
 - Load a whole section only if it is under ~40 lines and the grep found nothing. A file under
   80 lines may be read whole.
 - Anything already answered is NOT re-asked and NOT re-discovered via MCP. State what you are
@@ -37,6 +40,11 @@ exists to progressively eliminate rediscovery and re-asking across stories.
   `- [module: X] [type: qa] **Q (skill 3, {YYYY-MM-DD}):** … — **A:** …`.
   Project-wide answers (base URL per environment, roles, module names, implementation status)
   are ALSO added to `## Project Knowledge`. **Credentials are NEVER written.**
+- The review-page language answer is project-wide: write it under `## Project Knowledge` AND
+  under this skill's Q&A as
+  `- [module: project] [type: qa] **Q (skill 3, {YYYY-MM-DD}):** Output language for Arabic requirements — **A:** Arabic`
+  (update the existing line if skill 2 already wrote one and the user changed the answer).
+  The learning file itself is always English.
 - Every new fact → one tagged line in the matching shared section (`## Common Flows`,
   `## UI Knowledge`, `## Test Data`, `## Locale Knowledge`, `## Automation Tricks`) or this
   skill's `#### Knowledge`. Grep the same tags first; update or dedupe instead of appending twins.

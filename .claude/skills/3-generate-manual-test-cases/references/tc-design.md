@@ -125,6 +125,52 @@ server-loaded content):
 
 "Data should be visible" or "rows are displayed" are NOT acceptable assertions.
 
+## Test-data collection — build the data-item list while you draft
+
+Every TC states its data needs in `Preconditions`, `Data Oracle` and `Shared data`. While
+drafting, keep ONE running list of **data items** for the story — this list becomes
+`TEST-DATA-{feature}.md` at delivery (`deliverables.md` §2b). For each item record:
+
+- a **plain name** (e.g. `an approved KPI with 12 monthly values`, `a user with the Approver
+  role`, `an empty strategy with no objectives`), never a table, fixture-function or class name;
+- the **exact values** the TCs need (fields, counts, identifiers, states — the Data Oracle values);
+- the **TC-IDs** that use it, and whether several TCs use the **same** item (say "these TCs use
+  the same data item"; mention execution order only when one TC really depends on the result of
+  another, e.g. TC-B needs the record TC-A creates);
+- its **status** — set from evidence only, never assumed:
+
+| Status | Meaning |
+|---|---|
+| `READY` | The data is confirmed to exist — a learning-file `[type: data]` / `[type: env]` line, or seen live on a listing screen during the MCP pass. |
+| `MISSING` | The data is required, WAS checked, and was not found. |
+| `IMPOSSIBLE` | The data cannot be created by any available or allowed way (background job only, external system, a role that exists in no environment, a state the app cannot reach). Decided only after the ways below were considered. |
+| `UNKNOWN` | Not enough information to confirm — not checked, screen unreachable, no Playwright MCP, story not implemented, or the spec does not say the value. |
+
+An item is never `MISSING` only because it was not checked: no check → `UNKNOWN`.
+
+- the **ways to prepare it** when it is not `READY`. Availability is confirmed, never assumed:
+
+| Way | Use it when |
+|---|---|
+| `e2e scenario` | **Preferred.** An existing UI flow creates the data — another TC in this set, or a `## Common Flows` entry in the learning file. Name that TC-ID / flow in words. |
+| `api` | Only when API-based test-data creation/seeding is **already available** in the project (a learning-file `[type: data]` / `[type: env]` line or a recorded skill 6 setup fixture says so) or **explicitly confirmed** by the project / dev team. Otherwise write `api — to be confirmed`, never "available". |
+| `db` | Only when DB-based seeding is already available or explicitly confirmed **and** the QC has the required access. Otherwise `db — to be confirmed`. |
+| `set directly` | Only for settings / configuration values that can be changed directly in the app (admin settings, feature toggles). |
+| `manual` | When no suitable automated way is available — the QC creates the data by hand. |
+
+A `to be confirmed` way is never the recommended way. Recommended order: `e2e scenario` when a
+flow exists → `api` when confirmed → `db` when confirmed and granted → `set directly` for
+settings → `manual`.
+
+A TC with no documented fixture is still BLOCKED (Data oracle rule above) — and its data item
+is recorded as `MISSING` (checked, absent) or `UNKNOWN` (not checkable) with its ways, so the
+reviewer sees how to unblock it.
+
+**Plain English only.** The data-item list — and the file built from it — must stay readable
+for QC/QA and PO: no locator names, API endpoint paths, database table or column names,
+code / class / function names, implementation details, or credentials. Entities, screens,
+roles, values and flows in plain words.
+
 ## Test case format
 
 Field names are a frozen contract — skills 5 and 6 parse them. Never rename or drop one.

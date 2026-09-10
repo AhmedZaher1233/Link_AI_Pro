@@ -33,10 +33,10 @@ project has no conventions yet.
 | `Manual_Test/TestCases/` | one folder per User Story: `TEST-CASES-{feature}.md` (source of truth), `TC-REVIEW-{feature}.html`, `TEST-CASES-{feature}-beautified.md`, `ADO-MAP.md`. Mirrors `Requirements/`: stories from a spec file live under `SPEC-{spec-name}/US-{id}-{kebab-name}/` (with `TC-GENERATION-SUMMARY.md` inside the spec folder); others directly under `TestCases/US-{id}-{kebab-name}/` | skills 3, 5 |
 | `Automation/pages/` | Page Object Model files (`+ pages/components/`) | skill 6 |
 | `Automation/tests/` | Playwright specs in `{Area}_Tests/` folders | skill 6 |
-| `Automation/reports/` | `US-{id}/phase-N.json` + `.html` (immutable history), `run-plan.json`, `data-readiness.json`, `coverage/` | skill 6 |
-| `Automation/screenshots/` | `{UserStoryName}/{TC-ID}.png` (+ `-failed.png`), replaced each run | skill 6 |
-| `Automation/automation-logs/` | `US-{id}/run-progress-{stamp}.log`, never overwritten | skill 6 |
-| `White_Box_Testing/` | `{ID}-{Feature}-analysis.md`, `.project-profile.md` (shared with skill 7) | skills 4, 7 |
+| `Automation/reports/` | `[SPEC-{spec-name}/]US-{id}/phase-N.json` + `.html` (immutable history), `run-plan.json`, `data-readiness.json`, `stages/`, `merged-results.json`, `coverage/`. Mirrors the story's `Manual_Test/TestCases/` position — a `SPEC-*` parent when the TCs have one. Both `SPEC-*/` and `US-*/` children are valid — never flag them as deviations | skill 6 |
+| `Automation/screenshots/` | `[SPEC-{spec-name}/]{UserStoryName}/phase-{N}/{TC-ID}/{variant}/attempt-{a}.png` (+ `attempt-{a}-failed.png`), immutable history — never replaced or deleted. Same `SPEC-*` mirroring; both children valid | skill 6 |
+| `Automation/automation-logs/` | `[SPEC-{spec-name}/]US-{id}/run-progress-{stamp}.log`, never overwritten. Same `SPEC-*` mirroring; both children valid | skill 6 |
+| `White_Box_Testing/` | `.project-profile.md` at the root (shared with skill 7); reports nested per story `[SPEC-{spec-name}/]US-{id}-{kebab-name}/{ID}-{Feature}-analysis.md`, mirroring `Requirements/`. Both `SPEC-*/` and `US-*/` children are valid — never flag them as deviations; older flat reports at the root are legacy, read-only | skills 4, 7 |
 
 ## Existing structure rules
 
