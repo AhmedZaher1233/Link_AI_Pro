@@ -15,9 +15,9 @@ three MCP probe rows, whose results Claude passes in via `--mcp`.
 | Steering Docs | L1 + L2 present, canonical, README present, no duplicates | L3 missing / README missing / non-canonical names / duplicate layers | dir missing or L1/L2 missing |
 | L1/L2 generic | no product-specific tokens detected (heuristic) | possible product content — review per steering-governance.md §3.5 | — (`NOT_RUN` when L1/L2 missing) |
 | Learning File | file present with Index, 6 shared sections, 7 model sections | sections missing or legacy heading present | file missing |
-| .mcp.json | parses; `playwright`, `azure-devops`, `word` present; no inline secret | a required server missing | missing / invalid JSON / inline secret |
+| .mcp.json | parses; `playwright`, `azure-devops`, `docx` present; `docx` args carry `--with "mcp<2"`; no inline secret | a required server missing, or a legacy `word` (office-word-mcp-server) entry still present | missing / invalid JSON / inline secret / `docx` present but the `mcp<2` pin missing (fix hint: add `"--with", "mcp<2"` before the final `docx-mcp-server` arg) |
 | PAT env var | `AZURE_DEVOPS_PAT_B64` exists as a user-level variable (registry hive / shell profile) — existence only, value never read | not set and no azure-devops entry yet | azure-devops entry present but variable not set → user runs `scripts/set-azure-devops-pat.ps1` (masked prompt), reopens the session |
-| Playwright MCP · Azure DevOps MCP · Word MCP | Claude probed the attached server and it responded | configured, reload pending | probe failed | (`NOT_RUN` when not probed) |
+| Playwright MCP · Azure DevOps MCP · Docx MCP | Claude probed the attached server and it responded | configured, reload pending | probe failed | (`NOT_RUN` when not probed) |
 | QA Skills | 7/7 skill folders with valid front-matter | folder is `.claude/Skills` (uppercase) | any missing or invalid |
 | Skills current | `sync --check` report: all CURRENT | some BEHIND / missing | — (`NOT_RUN` without a report) |
 | sync-skills cmd | `.claude/commands/sync-skills.md` present | — | missing |

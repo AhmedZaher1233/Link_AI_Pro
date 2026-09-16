@@ -32,7 +32,7 @@
   },
   "mcp": {
     "configFile": ".mcp.json",
-    "servers": ["playwright", "azure-devops", "word"]
+    "servers": ["playwright", "azure-devops", "docx"]
   },
   "deviations": []
 }

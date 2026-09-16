@@ -2,7 +2,7 @@
 name: generate-update-testing-structure
 description: >
   Audit, repair or restructure the QA foundation of a project — Testing/ layout, docs/steering/
-  (L1/L2/L3), Node/NPM/Playwright, .mcp.json (Playwright, Azure DevOps, Word MCP), the QA skills
+  (L1/L2/L3), Node/NPM/Playwright, .mcp.json (Playwright, Azure DevOps, Docx MCP), the QA skills
   1-7 and the shared learning file — with a read-only preflight first and a deterministic
   PASS/FAIL validation at the end. Use once per project before skills 2-7, and again whenever the
   setup drifts. New project: full setup, no questions. Existing project: asks A audit (zero
@@ -66,7 +66,7 @@ only what the resolved mode permits.
 | 3 | **Skills sync** — Mode A: `sync-qa-skills.mjs --check` (report only). Mode B/C/new: `--apply` (normal permission flow); migrate an uppercase `.claude/Skills` folder; remind the user to reload if any `SKILL.md` changed. | `references/skills-sync.md` |
 | 4 | **Structure** (B/C/new only) — create missing `Testing/` folders; copy `assets/project-learning.template.md` if the learning file is missing, else add missing sections and rename the legacy heading; Mode C first builds and confirms the move plan. | `references/testing-layout.md`, `references/run-modes.md` §4 |
 | 5 | **Steering** (B/C/new only) — normalize names, install missing layers from the source repo, seed `README.md` from `assets/steering-readme.template.md`, check L1/L2 stay generic, check the Project Configuration Contract. | `references/steering-governance.md` |
-| 6 | **Toolchain + MCP** (B/C/new only, and only for rows the preflight shows unhealthy) — Node/NPM/Playwright install or repair; write or merge `.mcp.json` from `assets/mcp.template.json`. When the `azure-devops` entry is written and `pat.persisted` is false, ask the user to run `scripts/set-azure-devops-pat.ps1` in their own terminal and WAIT (mcp-setup.md §2a). | `references/toolchain.md`, `references/mcp-setup.md` |
+| 6 | **Toolchain + MCP** (B/C/new only, and only for rows the preflight shows unhealthy) — Node/NPM/Playwright install or repair; write or merge `.mcp.json` from `assets/mcp.template.json`. When the `azure-devops` entry is written and `pat.persisted` is false, ask the user to run `scripts/set-azure-devops-pat.ps1` in their own terminal and WAIT (mcp-setup.md §2a). Docx MCP: step 3's `sync-qa-skills.mjs --apply` already replaced a legacy `word` entry with `docx`; verify the prerequisites (mcp-setup.md §1a). If a legacy `word` / `office-word-mcp-server` entry is still present (sync ran with `--no-mcp`), tell the user it is superseded and OFFER to remove it — ask, never delete silently. | `references/toolchain.md`, `references/mcp-setup.md` |
 | 7 | **Manifest** (B/C/new only) — write `Testing/qa-manifest.json` from `assets/qa-manifest.template.json` with the real paths, steering files, framework and every recorded deviation. | `references/testing-layout.md` |
 | 8 | **Validate** — probe attached MCP servers with one cheap read each, then run `node ${CLAUDE_SKILL_DIR}/scripts/validate-setup.mjs --root <project> --pretty --mcp <results> --sync-report <check.json>`. | `references/validation-contract.md` |
 | 9 | **Learning file** (B/C/new only) — write what this run learned and every answer under *Setup Model (skill 1)*; Mode A leaves it untouched. | `references/project-learning-protocol.md` |

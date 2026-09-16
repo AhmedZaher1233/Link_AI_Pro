@@ -6,7 +6,7 @@ description: >
   cases from specs + accumulated project learning, THEN uses Playwright MCP as a
   targeted DISCOVERY tool (asks the user for the app URL + credentials first).
   Supports three entry points: (1) existing manual TCs provided — read them via
-  Word MCP / Azure DevOps MCP / direct text and start from the TC
+  docx MCP / Azure DevOps MCP / direct text and start from the TC
   writing/normalization phase (gap, duplicate, and outdated-TC analysis) instead of
   designing from scratch; (2) no TCs and no spec file — retrieve the User Story +
   acceptance criteria from Azure DevOps (Azure DevOps MCP) or a Word document (Word
@@ -36,7 +36,7 @@ description: >
   cases", "generate manual TCs", "update existing test cases", "review manual TCs
   against the story", "create TCs for user story".
 argument-hint: "[<feature-name> | <user-story-id>] [existing TCs path/source] [--revision] [--audit] [--lang ar|en]"
-allowed-tools: Read, Grep, Glob, Write, Edit, mcp__playwright, mcp__azure-devops, mcp__word
+allowed-tools: Read, Grep, Glob, Write, Edit, mcp__playwright, mcp__azure-devops, mcp__docx
 ---
 
 # Manual test cases — design, update, revise

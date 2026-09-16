@@ -11,7 +11,10 @@ INPUT — PROVIDE EXACTLY ONE SOURCE
 
 Pick ONE of these five:
   1. Azure DevOps User Story   — the story ID (e.g. 1031475) or its EXACT title
-  2. Word document             — path to the .docx file
+  2. Word document             — path to the .docx file (read via the docx MCP; the findings are
+                                 ALSO written into the document as Word review comments, one per
+                                 finding — you are asked once: original file or a copy
+                                 {name}-QC-review.docx (recommended: copy))
   3. Direct text               — paste the requirement/PRD text in the chat
   4. Small spec file           — path to the .md file (one user story; output still lands
                                  under SPEC-{spec-name}/)
@@ -30,6 +33,13 @@ TECHNICAL FILES ARE IGNORED: source code, API files, configuration, database sch
 models, technical design documents, infrastructure and automation code are never read or
 reviewed, even when the spec refers to them. The review uses requirement information only and
 is written in simple QA English.
+
+REPLY SYNC (Word sources only): say "read the replies", "check comment replies", "pull reviewer
+answers from the Word file" or "sync Word comments" + the .docx path. The skill reads the replies
+BA / PO / developers left on its comments, classifies them (Answered / Accepted / Rejected /
+Question back), adds a "Reviewer Replies" section to the review, re-rates what an answer closed,
+updates the REQ file and the learning file, and — only after you confirm — resolves answered
+threads and posts the QC's replies.
 
 OPTIONAL:
   - A dimension to limit the review: completeness | clarity | testability |
@@ -64,7 +74,10 @@ OUTPUT — WHAT YOU GET
   ADO / Word / pasted text (cases 1-3):
   Testing/Requirements/US-{id}-{name}/
     REQ-{id}-{name}.md
-    US-{id}-review.md
+    US-{id}-review.md     ← for Word sources also holds "Word comments: N written to …" and,
+                             after a reply sync, the "Reviewer Replies" section
+  {name}-QC-review.docx (or the original .docx, by your choice) — one Word comment per finding
+                             + one summary comment, author "QC Review"   (Word sources only)
   Testing/project-learning.md                   (updated: glossary, business rules, Q&A)
 
 WHEN TO RUN: after skill 1, before skill 3.

@@ -2,19 +2,23 @@
 // The ONE implementation of QA-skill synchronization from the canonical repository.
 // Used by /sync-skills and by 1-generate-update-testing-structure (Mode B/C, new project).
 //
-//   node sync-qa-skills.mjs --check   [--target <projectRoot>] [--branch main] [--only <skill>]... [--pretty]
-//   node sync-qa-skills.mjs --apply   [--target <projectRoot>] [--branch main] [--only <skill>]... [--force] [--pretty]
+//   node sync-qa-skills.mjs --check   [--target <projectRoot>] [--branch main] [--only <skill>]... [--no-mcp] [--pretty]
+//   node sync-qa-skills.mjs --apply   [--target <projectRoot>] [--branch main] [--only <skill>]... [--force] [--no-mcp] [--pretty]
 //
-// --check  : read-only. Reports NEW / UPDATED / CURRENT / LOCAL-ONLY / SKIPPED(local edits) per file. Never writes.
+// --check  : read-only. Reports NEW / UPDATED / CURRENT / LOCAL-ONLY / SKIPPED(local edits) per file, plus the
+//            planned .mcp.json migration (`mcp.actions`). Never writes.
 // --apply  : copies NEW + UPDATED files into <target>/.claude/skills/ and .claude/commands/sync-skills.md.
 //            Files with uncommitted local edits are SKIPPED unless --force.
 //            An uppercase .claude/Skills folder is migrated to .claude/skills (two-step rename, git mv when possible).
+//            .mcp.json migration (skip with --no-mcp): removes every legacy `word` server (office-word-mcp-server,
+//            read-only comments) and adds/pins the `docx` server (docx-mcp-server, `--with mcp<2`, absolute uvx path).
+//            Only the docx entry and legacy word entries are ever touched; other servers are never changed.
 // Exit code is always 0; the JSON payload carries the result (and `error` when the source is unreachable).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { parseArgs, print, run, isDir, isFile, actualName, SKILLS, SOURCE_REPO } from './lib.mjs';
+import { parseArgs, print, run, isDir, isFile, read, actualName, planMcpMigration, resolveUvx, SKILLS, SOURCE_REPO, DOCX_SERVER, DOCX_ARGS, DOCX_MCP_PIN, LEGACY_WORD_PACKAGE } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const mode = args.apply ? 'apply' : 'check';
@@ -22,7 +26,8 @@ const target = path.resolve(args.target || process.cwd());
 const branch = args.branch && args.branch !== true ? args.branch : 'main';
 const only = [].concat(args.only || []).filter((x) => x !== true);
 const wanted = only.length ? SKILLS.filter((s) => only.includes(s)) : SKILLS;
-const OWNED = ['.claude/skills', '.claude/commands/sync-skills.md'];
+const OWNED = ['.claude/skills', '.claude/commands/sync-skills.md', `.mcp.json (${DOCX_SERVER} entry + legacy word entries only)`];
+const migrateMcp = !args['no-mcp'];
 
 function fail(error, extra = {}) { print({ tool: 'sync-qa-skills', mode, target, source: { repo: SOURCE_REPO, branch }, error, ...extra }, args); process.exit(0); }
 
@@ -93,6 +98,38 @@ if (isFile(cmdSrc)) {
 }
 const localOnlySkills = existingName ? fs.readdirSync(path.join(targetClaude, existingName)).filter((e) => isDir(path.join(targetClaude, existingName, e)) && !SKILLS.includes(e)) : [];
 
+// 3b. Plan the .mcp.json migration (legacy word -> docx). Read-only here; applied in step 4.
+const mcp = planMcp();
+function planMcp() {
+  const file = path.join(target, '.mcp.json');
+  const base = { file: '.mcp.json', exists: isFile(file), skipped: !migrateMcp, actions: [], legacyWord: [], docxPresent: false, docxPinned: false, uvxPath: null, uvxFound: null, error: null };
+  if (!migrateMcp) return base;
+  let json = { mcpServers: {} };
+  if (base.exists) {
+    try { json = JSON.parse(read(file)); } catch { return { ...base, error: 'invalid JSON - .mcp.json not touched; fix it by hand or via 1-generate-update-testing-structure' }; }
+    if (json === null || typeof json !== 'object' || Array.isArray(json)) return { ...base, error: 'unexpected shape - .mcp.json not touched' };
+  }
+  const plan = planMcpMigration(json);
+  const uvx = plan.actions.some((a) => a.startsWith('add:') || a.startsWith('pin:')) ? resolveUvx() : { path: null, found: null };
+  return { ...base, json, plan, actions: plan.actions, legacyWord: plan.legacyWord, docxPresent: plan.docxPresent, docxPinned: plan.docxPinned, uvxPath: uvx.path, uvxFound: uvx.found };
+}
+function applyMcp() {
+  if (!migrateMcp || mcp.error || !mcp.actions.length) return [];
+  const out = [];
+  const json = mcp.json; json.mcpServers = json.mcpServers || {};
+  for (const name of mcp.legacyWord) { delete json.mcpServers[name]; out.push({ action: 'mcp-removed', server: name, reason: `${LEGACY_WORD_PACKAGE} is superseded by ${DOCX_SERVER}` }); }
+  const needsDocx = mcp.actions.some((a) => a.startsWith('add:') || a.startsWith('pin:'));
+  if (needsDocx) {
+    const name = mcp.plan.docxName || DOCX_SERVER;
+    const existing = json.mcpServers[name] || {};
+    const keepCommand = typeof existing.command === 'string' && existing.command !== 'uvx' && isFile(existing.command);
+    json.mcpServers[name] = { ...existing, command: keepCommand ? existing.command : mcp.uvxPath, args: [...DOCX_ARGS] };
+    out.push({ action: mcp.docxPresent ? 'mcp-updated' : 'mcp-added', server: name, command: json.mcpServers[name].command, pin: DOCX_MCP_PIN });
+  }
+  fs.writeFileSync(path.join(target, '.mcp.json'), JSON.stringify(json, null, 2) + '\n');
+  return out;
+}
+
 // 4. Apply.
 const applied = [];
 if (mode === 'apply') {
@@ -110,17 +147,27 @@ if (mode === 'apply') {
     fs.copyFileSync(f.src, dst);
     applied.push({ action: f.status === 'NEW' ? 'created' : 'updated', file: f.file });
   }
+  applied.push(...applyMcp());
 }
 cleanup();
 
 const summary = files.reduce((a, f) => ((a[f.status.toLowerCase().replace('-', '_')] = (a[f.status.toLowerCase().replace('-', '_')] || 0) + 1), a), {});
 const skillMdChanged = applied.some((a) => /SKILL\.md$|sync-skills\.md$/.test(a.file || ''));
+const mcpChanged = applied.some((a) => String(a.action).startsWith('mcp-'));
+const { json: _j, plan: _p, ...mcpReport } = mcp;
+const hints = [];
+if (mode === 'check') hints.push('read-only check — nothing copied' + (mcp.actions.length ? `; .mcp.json migration planned: ${mcp.actions.join(', ')} (skip with --no-mcp)` : ''));
+if (mode === 'apply' && files.some((f) => f.status === 'SKIPPED')) hints.push('some files skipped (local edits) — re-run with --force to overwrite');
+if (mcp.error) hints.push(`.mcp.json: ${mcp.error}`);
+if (mcp.uvxFound === false) hints.push('uv not found — the docx entry uses command "uvx"; install uv (powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  or  pip install uv), then re-run so the absolute uvx path is written');
+if (!mcp.exists && migrateMcp && mode === 'apply' && mcpChanged) hints.push('.mcp.json created with the docx entry only — run /1-generate-update-testing-structure for playwright and azure-devops');
+if (mcpChanged) hints.push('.mcp.json changed — reload the Claude Code session and approve the docx server via /mcp');
 print({
   tool: 'sync-qa-skills', mode, target, source, owned: OWNED, skillsChecked: wanted,
   uppercaseDir: uppercaseDir ? `.claude/${existingName}` : null,
-  files: files.map(({ src, ...rest }) => rest), summary, localOnlySkills, applied,
-  reloadRequired: skillMdChanged,
-  hint: mode === 'check' ? 'read-only check — nothing copied' : (files.some((f) => f.status === 'SKIPPED') ? 'some files skipped (local edits) — re-run with --force to overwrite' : null),
+  files: files.map(({ src, ...rest }) => rest), summary, localOnlySkills, mcp: mcpReport, applied,
+  reloadRequired: skillMdChanged || mcpChanged,
+  hint: hints.length ? hints.join(' | ') : null,
 }, args);
 
 /* ---------------- helpers ---------------- */

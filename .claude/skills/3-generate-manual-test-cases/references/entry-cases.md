@@ -52,7 +52,7 @@ which case applies.
 1. **Locate and read the existing TCs** using whichever source the tester names:
    - Markdown/text file in the repo (Read) — including the manual test-cases folder
    - Azure DevOps Test Case work items / test suites (`mcp__azure-devops` testplan + wit tools)
-   - Word document (`mcp__word`). No Word MCP attached → ask the user to export the document
+   - Word document (`mcp__docx`: `open_document` → `export_markdown` / `get_body_text`). No docx MCP attached → ask the user to export the document
      to markdown/text or paste its content; BLOCKED only if they cannot.
    - Text pasted directly in the task input
    If the stated source cannot be read → BLOCKED naming the exact source and error.
@@ -92,7 +92,7 @@ Generate Manual TCs → Review**
    (`/mcp` → azure-devops → reconnect; if the PAT expired they renew it first where the server
    reads it from) — you cannot connect or disconnect MCP servers yourself, so always ask, wait,
    then retry once; 403 → missing scope on the PAT. Never ask for the token in chat. If the
-   source is a Word document, use `mcp__word` instead (same fallback as Case 1 when it is not
+   source is a Word document, use `mcp__docx` (`open_document` → `export_markdown`) instead (same fallback as Case 1 when it is not
    attached). If neither source is reachable → BLOCKED.
 2. Convert the User Story into a **structured requirement/specification file**: title, story ID,
    description, numbered acceptance criteria, derived requirement IDs (`REQ-{storyID}-NN`, one

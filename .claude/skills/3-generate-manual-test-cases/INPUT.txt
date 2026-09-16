@@ -23,7 +23,7 @@ PICK YOUR STARTING POINT (tell the skill which case applies):
   Default — Spec/requirement file exists, no TCs:
       → give the spec path, or let the skill find it
         (Testing/Requirements/**/REQ-*.md, docs/specs/).
-  No Word MCP attached? Export the .docx to markdown/text or paste its content — the skill
+  No docx MCP attached? Export the .docx to markdown/text or paste its content — the skill
   asks for that instead of failing.
 
 OPTIONAL FLAGS:

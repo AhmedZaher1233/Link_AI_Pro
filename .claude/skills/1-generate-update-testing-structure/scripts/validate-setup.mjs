@@ -4,7 +4,7 @@
 // A row is PASS only when its check actually executed and succeeded.
 //
 // Usage: node validate-setup.mjs [--root <path>] [--pretty]
-//          [--mcp playwright=PASS,azure-devops=FAIL,word=NOT_RUN]   ← Claude-side MCP probe results
+//          [--mcp playwright=PASS,azure-devops=FAIL,docx=NOT_RUN]   ← Claude-side MCP probe results
 //          [--sync-report <path-to-json-from-sync-qa-skills --check>]
 import path from 'node:path';
 import { parseArgs, print, read, isFile, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanManifest, scanPat, SKILLS, SYNC_COMMAND, STEERING_CANONICAL } from './lib.mjs';
@@ -34,7 +34,8 @@ const lf = scanLearning(root);
 row('Learning File', !lf.exists ? 'FAIL' : (lf.missingShared.length || lf.missingModel.length || lf.legacyHeadings.length ? 'WARN' : 'PASS'), !lf.exists ? (lf.legacyFile ? 'only legacy .planning/project-learning.md' : 'Testing/project-learning.md missing') : `${lf.lines} lines` + (lf.missingShared.length ? `; missing shared: ${lf.missingShared.join(', ')}` : '') + (lf.missingModel.length ? `; missing model sections: ${lf.missingModel.length}` : '') + (lf.legacyHeadings.length ? `; legacy headings: ${lf.legacyHeadings.join(', ')}` : ''));
 
 const m = scanMcp(root);
-row('.mcp.json', !m.exists ? 'FAIL' : !m.valid ? 'FAIL' : m.inlineSecrets ? 'FAIL' : m.missing.length ? 'WARN' : 'PASS', !m.exists ? 'missing' : !m.valid ? 'invalid JSON' : m.inlineSecrets ? 'inline secret detected — must use ${AZURE_DEVOPS_PAT_B64}' : `servers: ${m.servers.join(', ')}` + (m.missing.length ? `; missing: ${m.missing.join(', ')}` : ''));
+const docxUnpinned = m.valid && m.docx.present && !m.docx.pinned;
+row('.mcp.json', !m.exists ? 'FAIL' : !m.valid ? 'FAIL' : m.inlineSecrets ? 'FAIL' : docxUnpinned ? 'FAIL' : (m.missing.length || m.docx.legacyWord.length) ? 'WARN' : 'PASS', !m.exists ? 'missing' : !m.valid ? 'invalid JSON' : m.inlineSecrets ? 'inline secret detected — must use ${AZURE_DEVOPS_PAT_B64}' : `servers: ${m.servers.join(', ')}` + (m.missing.length ? `; missing: ${m.missing.join(', ')}` : '') + (docxUnpinned ? '; docx args missing `--with mcp<2` — add "--with", "mcp<2" before the final docx-mcp-server arg (unpinned mcp 2.x breaks the server import)' : '') + (m.docx.legacyWord.length ? `; legacy word server superseded by docx: ${m.docx.legacyWord.join(', ')} — run /sync-skills or remove it` : ''));
 
 // PAT: existence only (user-level env var / shell profile). The value is never read, printed or compared.
 const pat = scanPat();
@@ -42,9 +43,10 @@ row('PAT env var', m.servers.includes('azure-devops') ? (pat.persisted ? 'PASS' 
 
 // MCP reachability is probed by Claude through the MCP tools; results are passed in. Absent → NOT_RUN, never PASS.
 const probes = Object.fromEntries(String(args.mcp || '').split(',').filter(Boolean).map((kv) => kv.split('=')));
-for (const [server, label] of [['playwright', 'Playwright MCP'], ['azure-devops', 'Azure DevOps MCP'], ['word', 'Word MCP']]) {
+for (const [server, label] of [['playwright', 'Playwright MCP'], ['azure-devops', 'Azure DevOps MCP'], ['docx', 'Docx MCP']]) {
   const p = (probes[server] || 'NOT_RUN').toUpperCase();
-  row(label, ['PASS', 'FAIL', 'WARN'].includes(p) ? p : 'NOT_RUN', m.servers.includes(server) ? (p === 'NOT_RUN' ? 'configured; reachability not probed this run' : `probe ${p}`) : 'not configured');
+  const configured = server === 'docx' ? m.docx.present : m.servers.includes(server);
+  row(label, ['PASS', 'FAIL', 'WARN'].includes(p) ? p : 'NOT_RUN', configured ? (p === 'NOT_RUN' ? 'configured; reachability not probed this run' : `probe ${p}`) : 'not configured');
 }
 
 const su = scanSuite(root);

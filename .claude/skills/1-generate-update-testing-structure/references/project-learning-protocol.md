@@ -62,7 +62,7 @@ Examples of what this skill records under `### Setup Model (skill 1) → #### Kn
 ```markdown
 - [module: Project] [type: env] The app is an Angular front end with a .NET back end; tests run with Playwright on Chromium.
 - [module: Project] [type: env] Automation code lives under Testing/Automation (new project, no earlier framework found).
-- [module: Project] [type: env] MCP servers configured: Playwright, Azure DevOps (organization Link-Dev, PAT authentication), Word.
+- [module: Project] [type: env] MCP servers configured: Playwright, Azure DevOps (organization Link-Dev, PAT authentication), Docx.
 - [module: Project] [type: env] Node 20 and NPM 10 were found already installed.
 ```
 

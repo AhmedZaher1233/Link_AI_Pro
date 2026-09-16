@@ -23,9 +23,14 @@ What the script does:
    `assets/`, `references/`, `scripts/` included) and `.claude/commands/sync-skills.md`. An
    uppercase `.claude/Skills` folder is migrated to `.claude/skills` first (two-step rename,
    `git mv` when tracked).
-5. Owns nothing else: never touches `docs/`, `Testing/`, `.mcp.json`, settings, tests or app
-   code.
-6. Emits JSON: `files[]`, `summary`, `applied[]`, `localOnlySkills`, `reloadRequired`. Pass the
+5. `.mcp.json` migration (with `--apply`, unless `--no-mcp`): removes every legacy `word` server
+   (`office-word-mcp-server`, read-only comments — superseded) and adds or re-pins the `docx`
+   server (`docx-mcp-server`, absolute `uvx` path, `--with "mcp<2"`). Only those entries are
+   touched; other servers, an unparsable file, and everything else stay as they are. `--check`
+   lists the planned actions under `mcp.actions`.
+6. Owns nothing else: never touches `docs/`, `Testing/`, other `.mcp.json` servers, settings,
+   tests or app code.
+7. Emits JSON: `files[]`, `summary`, `applied[]`, `localOnlySkills`, `mcp`, `reloadRequired`. Pass the
    `--check` output file to `validate-setup.mjs --sync-report` so the `Skills current` row is
    measured, not guessed.
 

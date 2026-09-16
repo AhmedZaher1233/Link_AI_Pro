@@ -15,9 +15,9 @@
       "args": ["-y", "@azure-devops/mcp", "{ORG_NAME}", "--authentication", "pat"],
       "env": { "PERSONAL_ACCESS_TOKEN": "${AZURE_DEVOPS_PAT_B64}" }
     },
-    "word": {
-      "command": "uvx",
-      "args": ["--from", "office-word-mcp-server", "word_mcp_server"]
+    "docx": {
+      "command": "{UVX_PATH}",
+      "args": ["--from", "docx-mcp-server", "--with", "mcp<2", "docx-mcp-server"]
     }
   },
   "_optional_azure_resources_server": {

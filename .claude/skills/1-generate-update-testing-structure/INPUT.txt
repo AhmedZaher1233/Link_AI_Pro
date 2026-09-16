@@ -1,7 +1,7 @@
 SKILL: 1-generate-update-testing-structure
 WHAT IT DOES: Audits, repairs or restructures the project's QA foundation — the Testing/
 layout, docs/steering/ (L1/L2/L3), Node/NPM + Playwright, .mcp.json (Playwright, Azure DevOps,
-Word MCP), the QA skills 1-7 (.claude/skills/), Testing/project-learning.md and
+Docx MCP), the QA skills 1-7 (.claude/skills/), Testing/project-learning.md and
 Testing/qa-manifest.json — with a read-only preflight first and a deterministic PASS/FAIL
 validation at the end. Invoke it explicitly; other skills never run it for you.
 
@@ -49,10 +49,11 @@ OUTPUT — WHAT YOU GET
     L1-testing-foundation.md / L2-testing-qa-standards.md   (copied from the source repo, never authored)
     L3-project-testing.md    (template — you fill the placeholders)
   .claude/skills/1-7 + .claude/commands/sync-skills.md  (synced from the source repo)
-  .mcp.json                  (Playwright / Azure DevOps / Word entries, env-var placeholder for the PAT)
+  .mcp.json                  (Playwright / Azure DevOps / Docx entries, env-var placeholder for the PAT;
+                              a legacy `word` entry is replaced by `docx` during the skills sync)
   playwright.config.ts       (created only if missing)
   Validation table: Node.js · NPM · Playwright · Playwright cfg · Folder layout · Steering Docs ·
-  L1/L2 generic · Learning File · .mcp.json · Playwright MCP · Azure DevOps MCP · Word MCP ·
+  L1/L2 generic · Learning File · .mcp.json · Playwright MCP · Azure DevOps MCP · Docx MCP ·
   QA Skills · Skills current · sync-skills cmd · Manifest — each PASS / WARN / FAIL / NOT_RUN,
   never PASS without the check having run.
   Mode A adds "Would be fixed by B" and "Needs C" lists and changes nothing.

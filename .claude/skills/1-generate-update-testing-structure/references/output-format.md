@@ -28,7 +28,7 @@ Overall: {PASS | PARTIAL | FAIL}
 ### USER ACTION REQUIRED                 ← omit when empty
 1. Run scripts/set-azure-devops-pat.ps1 in your own PowerShell window (masked prompt creates the
    user-level AZURE_DEVOPS_PAT_B64 variable), reopen the session, reconnect the azure-devops MCP server
-2. Reload the Claude Code session (skills / MCP servers changed)
+2. Reload the Claude Code session (skills / MCP servers changed) and approve the new `docx` server via /mcp
 3. Fill L3 placeholders: {keys}
 4. {supply missing L1/L2 document | az login | restart PC}
 

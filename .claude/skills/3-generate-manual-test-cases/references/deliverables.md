@@ -330,7 +330,7 @@ Input is human feedback referencing TC-IDs (or a corrected file).
 - [ ] Pre-write guard run: no approved document overwritten without an explicit instruction; skill 5 `--republish` note given when it was
 - [ ] Writes confined to `{tc_output_folder}`, `{requirements_folder}` and `{learning_file}` — no spec, steering, source, ADO-MAP or automation file touched
 - [ ] Case 1: existing TCs read from their stated source; every original TC accounted for once in the Existing-TC Analysis table; set NOT regenerated from scratch
-- [ ] Case 2: User Story retrieved via Azure DevOps MCP (or Word MCP / exported text); structured requirement file written to `{requirements_folder}` and used as the spec source
+- [ ] Case 2: User Story retrieved via Azure DevOps MCP (or docx MCP / exported text); structured requirement file written to `{requirements_folder}` and used as the spec source
 - [ ] Playwright MCP availability probed BEFORE the credentials ask; absent → whole run `Cannot be validated`, all TCs `draft — not app-validated`, reported
 - [ ] Implementation status determined BEFORE any TC-level validation; evidence recorded
 - [ ] No not-implemented functionality marked validated, enhanced, or as a defect; gaps / defects / pending-implementation kept in separate lists

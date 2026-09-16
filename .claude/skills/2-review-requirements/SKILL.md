@@ -1,9 +1,9 @@
 ---
 name: 2-review-requirements
 model: claude-opus-5
-description: Review requirements, user stories, and acceptance criteria for testability, completeness, clarity, consistency, feasibility, and risk. Accepts EVERY input type — an Azure DevOps User Story (via Azure DevOps MCP), a Word document (via Word MCP), directly pasted text, a small spec file, or a big spec file containing multiple user stories. A multi-story spec is SPLIT: each user story is reviewed separately and its output lands in its own folder — stories that come from a spec FILE are grouped under a parent folder named after that spec, Testing/Requirements/SPEC-{spec-name}/US-{id}-{name}/, while Azure DevOps / Word / pasted-text stories go directly under Testing/Requirements/US-{id}-{name}/ (per the 1-generate-update-testing-structure layout) — holding both the extracted structured requirement file (REQ-*.md) and the review file, plus a SPEC-REVIEW-SUMMARY.md inside the spec folder for cross-story findings. Follows the spec's REQUIREMENT dependencies only: when the spec explicitly refers to other requirement files (another spec or story, a glossary, a permission matrix, story IDs defined elsewhere) it resolves them, reads them, checks the spec against them, and fully reviews any dependency spec that has no review yet in its own SPEC-{dep-name}/ folder. Technical files (source code, API files, configuration, database schemas, data models, technical design documents, infrastructure, automation code) are never read or reviewed — the review stays a requirements review written in simple QA English. Use whenever the user asks to review requirements, review a spec or spec.md, analyze user stories, check acceptance criteria, assess testability, find gaps in specs, or evaluate any PRD/feature document for QA readiness. Trigger on phrases like "review this spec", "review this story", "check requirements", "is this testable", "requirements analysis", "acceptance criteria review", "QA this spec", "QA this story", "review-user-story".
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__azure-devops
-argument-hint: "[<story-id> | <feature-name> | <path/to/spec.md> | <path/to/story.md> | <pasted text> | all] [--lang ar|en]"
+description: Review requirements, user stories, and acceptance criteria for testability, completeness, clarity, consistency, feasibility, and risk. Accepts EVERY input type — an Azure DevOps User Story (via Azure DevOps MCP), a Word document (via the docx MCP — findings are also written back into the .docx as Word review comments, one per finding, and reviewer replies on those comments can be read back into the review), directly pasted text, a small spec file, or a big spec file containing multiple user stories. A multi-story spec is SPLIT: each user story is reviewed separately and its output lands in its own folder — stories that come from a spec FILE are grouped under a parent folder named after that spec, Testing/Requirements/SPEC-{spec-name}/US-{id}-{name}/, while Azure DevOps / Word / pasted-text stories go directly under Testing/Requirements/US-{id}-{name}/ (per the 1-generate-update-testing-structure layout) — holding both the extracted structured requirement file (REQ-*.md) and the review file, plus a SPEC-REVIEW-SUMMARY.md inside the spec folder for cross-story findings. Follows the spec's REQUIREMENT dependencies only: when the spec explicitly refers to other requirement files (another spec or story, a glossary, a permission matrix, story IDs defined elsewhere) it resolves them, reads them, checks the spec against them, and fully reviews any dependency spec that has no review yet in its own SPEC-{dep-name}/ folder. Technical files (source code, API files, configuration, database schemas, data models, technical design documents, infrastructure, automation code) are never read or reviewed — the review stays a requirements review written in simple QA English. Use whenever the user asks to review requirements, review a spec or spec.md, analyze user stories, check acceptance criteria, assess testability, find gaps in specs, or evaluate any PRD/feature document for QA readiness. Trigger on phrases like "review this spec", "review this story", "check requirements", "is this testable", "requirements analysis", "acceptance criteria review", "QA this spec", "QA this story", "review-user-story"; for a Word source also "read the replies", "check comment replies", "pull reviewer answers from the Word file", "sync Word comments".
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__azure-devops, mcp__docx
+argument-hint: "[<story-id> | <feature-name> | <path/to/spec.md> | <path/to/story.md> | <path/to/doc.docx> | <pasted text> | all] [--lang ar|en]"
 ---
 
 # Requirement Review Skill
@@ -11,7 +11,10 @@ argument-hint: "[<story-id> | <feature-name> | <path/to/spec.md> | <path/to/stor
 You are a senior QA engineer reviewing requirements for testability, completeness, and clarity.
 
 **Constraint**: Write output ONLY to `Testing/Requirements/`. Never modify source code, the
-original spec/story files, or anything outside that folder.
+original spec/story files, or anything outside that folder. The single exception is the **Word
+write-back** below: review comments are added to a `.docx` source only after the user explicitly
+chose the target file (a copy by default) — the original `.docx` is never overwritten without
+the user's say-so.
 
 ---
 
@@ -145,6 +148,10 @@ verbatim (state the learned rule + its source instead).
 | "assess risk level", "risk analysis" | Dimension 6 only |
 | No dimension specified | Review all 6 dimensions |
 
+**Reply-sync triggers (docx sources only):** "read the replies", "check comment replies",
+"pull reviewer answers from the Word file", "sync Word comments" → do NOT re-review; run the
+*Reading reviewer replies* flow below on the named `.docx` and update the existing review.
+
 ---
 
 ## Input Resolution — five source types
@@ -154,7 +161,7 @@ The requirement is the source of truth (the oracle) whichever way it arrives:
 | Source | How to read |
 |--------|-------------|
 | **Azure DevOps User Story** (ID like `1031475` / `US-1031475`, or exact title) | Fetch via the Azure DevOps MCP (`wit_work_item` / `search_workitem`): title, description, acceptance criteria, linked items. Title given → resolve to exactly one ID; zero or multiple matches → ask the user (show candidates), never guess. On **401/403** STOP and report: 401 → the Azure DevOps MCP server is holding a rejected or stale token → ask the user to **reconnect the Azure DevOps MCP server** (`/mcp` → azure-devops → reconnect; if the PAT itself expired they renew it first where the server reads it from) — you cannot connect or disconnect MCP servers yourself, so always ask and wait, then retry once; 403 → missing scope on the PAT. Never ask for the token in chat |
-| **Word document** (`.docx` path or reference) | Read via the Word MCP if configured; if no Word MCP is available, ask the user to export to markdown/text or paste the content |
+| **Word document** (`.docx` path or reference) | Read via the docx MCP: `open_document(path, document_handle)` first (one unique handle per document), then `export_markdown` — or `get_body_text` when markdown export fails — as the review material, and `get_document_outline` / `get_headings` to detect story boundaries for Multi-Story Splitting. Then run *Embedded figures* below before rating. The same document later receives the findings as Word comments (*Word write-back* below). If the `docx` MCP is not attached, ask the user to export to markdown/text or paste the content (then no write-back is possible — say so) |
 | **Direct text** (requirement/PRD pasted inline) | Use the provided content directly |
 | **Small spec file** (one user story) | Read the file directly |
 | **Big spec file** (multiple user stories) | Read the file, then SPLIT per story — see Multi-Story Splitting below |
@@ -355,6 +362,111 @@ Rules:
 
 ---
 
+## Embedded figures (docx sources only)
+
+1. `get_images` on the open handle. No images, or only icons/logos (either side < 200 px) → skip
+   and note `figures: none` in the final message.
+2. Otherwise copy the `.docx` to the scratchpad as `.zip`, expand it, and Read the files in
+   `word/media/` that match the listed images (max 10 per document; more → the 10 largest and
+   say so). Never modify the source file.
+3. Compare each figure with the written flow of the story it sits in: step order, missing or
+   extra steps, roles / states / decisions shown but not written (or written but not shown).
+4. Every mismatch is a finding under **Conflicts / Inconsistencies** (Dimension 4) or
+   **Missing Information** (Dimension 1), prefixed `(figure N)`. An unreadable figure gets ONE
+   line: `figure N could not be read`.
+5. Figures are review material only — they are not dependencies and never open the
+   Dependency Check table.
+
+---
+
+## Word write-back (docx sources only)
+
+Applies **only when the reviewed source is a `.docx` file** read through the docx MCP. Never for
+Azure DevOps stories, pasted text or `.md` / `.txt` specs. Everything above (REQ file, review
+file, learning file) is still produced — this section adds the findings INTO the Word document as
+real review comments, one per finding, anchored to the paragraph that contains the finding.
+
+1. **Ask once, before writing anything** (skip when the learning file already holds the answer for
+   this project — grep `Word write-back target` in this skill's Q&A):
+   > "Write the findings as Word comments into the **original** file, or into a **copy**
+   > `{name}-QC-review.docx` next to it? (recommended: copy)"
+   Default recommendation: the copy — create it with `copy_document` or by calling
+   `save_document(output_path)` on the copy path before adding comments. Record the answer as
+   `- [module: project] [type: qa] **Q (skill 2, {date}):** Word write-back target — **A:** copy | original`
+   so it is not asked again. Never write into the original without this explicit choice.
+2. **Open** the target with `open_document(path, document_handle)` — one unique handle per
+   document when several are open; pass that handle to every later call.
+3. **One comment per row of the Issues Found table.** Locate the anchor paragraph with
+   `search_text(query)` using a distinctive phrase quoted from the requirement text (the same text
+   already captured in Description / Ambiguities); take the `paraId` of the matching paragraph and
+   call `add_comment(para_id, text, author="QC Review")` where `text` is exactly:
+   ```text
+   [#{n}] {Issue Type} · {Severity}
+   {Description}
+   Suggestion: {Suggestion}
+   Req: {REQ-id}
+   ```
+   Anchor fallbacks, in order: exact phrase → shorter phrase or `search_text(query, regex=true)` →
+   the heading paragraph of that acceptance criterion → the story title paragraph. If nothing
+   matches at all, anchor to the story title paragraph and prefix the comment with `[unanchored]`.
+   **Never skip a finding silently.**
+4. **One summary comment** on the story title paragraph: the Summary table (dimensions + ratings +
+   Overall Readiness) and the path of `US-{id}-review.md`.
+5. **Save once** at the end with `save_document` (not per comment; an empty `output_path`
+   overwrites the opened file — only ever do that for the copy, or for the original when the user
+   chose it). Then call `get_comments` and verify the count of `QC Review` comments equals
+   findings + 1; report any mismatch to the user instead of hiding it.
+6. Add this line to the review file header: `**Word comments**: {N} written to {docx path}`.
+7. **Idempotency on re-review:** call `list_comment_threads` first. Root comments authored
+   `QC Review` whose `[#{n}]` prefix matches a current finding are updated in place with
+   `update_comment`; stale ones (finding no longer exists) are removed with `delete_comment`;
+   the summary comment is updated, not duplicated. **Never touch comments by other authors**
+   (those are reviewer replies — see the next section).
+8. Comments follow the review language (`output_language`); IDs, paths and the `[#{n}]` prefix
+   stay Latin.
+
+---
+
+## Reading reviewer replies (docx sources only)
+
+Trigger phrases: "read the replies", "check comment replies", "pull reviewer answers from the
+Word file", "sync Word comments" — with the `.docx` path (or the story ID whose review header
+names it). This flow reads what BA / PO / developers answered on the QC comments and folds it into
+the review. It does **not** re-run the review.
+
+1. `open_document(path, handle)` → `list_comment_threads`. Keep:
+   - threads whose **root author is `QC Review`** (ours) AND that have **≥ 1 reply by another
+     author**;
+   - brand-new **root comments by other authors** — these are new requirements or clarifications
+     from the BA/PO; list them separately and treat each as a candidate finding / clarification.
+2. **Map each thread to its finding** by the `[#{n}]` prefix in the root text (summary comment →
+   "general").
+3. **Classify every reply** (quote the reply text, never paraphrase it away):
+   - **Answered** — it clarifies the ambiguity or fills the gap; quote the answer.
+   - **Accepted** — they will change the document; the finding stays open until the text changes.
+   - **Rejected** — they disagree; keep the finding, note the disagreement and their reason.
+   - **Question back** — they need the QC to respond; draft the QC answer for the user to confirm.
+4. **Update `US-{id}-review.md`:** add (or refresh) a `## Reviewer Replies` section:
+   ```markdown
+   | # | Finding | Reply author | Date | Classification | Reply text | Effect on rating |
+   |---|---------|--------------|------|----------------|------------|------------------|
+   ```
+   When an **Answered** reply closes a gap, re-rate the affected dimension and the Overall
+   Readiness, and say in "Effect on rating" what changed (e.g. "Clarity ⚠️ → ✅"). Update the
+   matching `REQ-*.md` acceptance criterion / open questions with the clarified rule (English).
+5. **Learning file:** write each answered business rule under
+   `### Requirements Review Model (skill 2) → #### Questions and Answers` in plain words with
+   the source `(source: US-{id} Word comment reply by {author})`.
+6. **Only after the user confirms** (show the list first, then WAIT): `resolve_comment(root id)`
+   for Answered / Accepted threads, and `reply_to_comment(parent_id, text, author="QC Review")`
+   for Question-back threads with the QC's answer. **Never resolve or reply without asking.**
+7. `save_document` once (same target rule as the write-back: the copy, or the original only by
+   the user's earlier choice). Then report: threads read / answered / accepted / rejected /
+   pending (question back) / new reviewer comments, plus what changed in the review file, the REQ
+   file and the learning file.
+
+---
+
 ## Review Process
 
 For each feature/story, perform a structured review across the requested dimensions:
@@ -371,6 +483,14 @@ Check that the requirement covers:
 - [ ] **Boundary conditions** defined (empty, max length, special characters)
 - [ ] **Non-functional requirements** stated (performance, security, accessibility)
 - [ ] **Permissions** — who can/cannot perform the action
+- [ ] **Entry point & workspace** — how the role reaches the feature (menu, link, trigger,
+      notification), the navigation path, and where the created task / request / record is
+      visible afterwards (list, inbox, dashboard)
+- [ ] **Lookup / configuration-driven fields** — every field whose values come "from lookup /
+      configuration management" has a matching management screen described in this document or
+      a resolved dependency. Check ALL such fields, not only the obvious ones. If the document
+      has no configuration-management section at all, report ONE gap listing all such fields
+      instead of one gap per field
 - [ ] **Concurrent user scenarios** considered
 - [ ] **State transitions** defined
 
@@ -451,6 +571,7 @@ file paths exactly as they are. `SPEC-REVIEW-SUMMARY.md` follows the same langua
 **Source**: {work item URL | docx path | spec path + section | "inline text"}
 **Requirement file**: {REQ-*.md path in this folder, or the referenced repo file} (always English)
 **Depends on**: {comma-separated resolved paths of the files this story relies on | "none"}
+**Word comments**: {N} written to {docx path}   ← docx sources only, omit otherwise
 **Reviewer**: Claude Code QC Agent
 
 ---
@@ -490,7 +611,7 @@ file paths exactly as they are. `SPEC-REVIEW-SUMMARY.md` follows the same langua
 
 | # | Story/Req | Issue Type | Severity | Description | Suggestion |
 |---|-----------|------------|----------|-------------|------------|
-| 1 | {Story ID} | {Type} | High/Med/Low | {Description} | {Suggestion} |
+| 1 | {Story ID} | {Type: Missing / Ambiguous / Testability / Conflict / Entry Point / Risk} | High/Med/Low | {Description} | {Suggestion} |
 
 ---
 
@@ -498,6 +619,10 @@ file paths exactly as they are. `SPEC-REVIEW-SUMMARY.md` follows the same langua
 
 ### Missing Information
 {numbered list of gaps, or "None"}
+
+### Entry Point & Workspace Gaps
+{numbered list — missing menu/link/trigger, undefined navigation path, record not visible
+after creation, lookup field with no management screen — or "None"}
 
 ### Ambiguities
 {numbered list — quote the ambiguous text, explain why, suggest clarification}
@@ -522,6 +647,15 @@ Questions that must be answered before testing can begin:
 
 1. {specific question}
 2. {specific question}
+
+---
+
+## Reviewer Replies
+{docx sources only, omitted otherwise — filled by the *Reading reviewer replies* flow}
+
+| # | Finding | Reply author | Date | Classification | Reply text | Effect on rating |
+|---|---------|--------------|------|----------------|------------|------------------|
+| 1 | [#{n}] {Issue Type} | {author} | {YYYY-MM-DD} | Answered / Accepted / Rejected / Question back | {quoted reply} | {e.g. Clarity ⚠️ → ✅, or none} |
 
 ---
 
@@ -592,7 +726,10 @@ the spec folder `Testing/Requirements/SPEC-{spec-name}/` (spec-file input) ·
 per-story folder paths + verdicts · summary file path (multi-story) · the output language
 used for the review files and how it was resolved (task input / reused from the learning
 file / asked / default) · that the `REQ-*.md` files are English and ready as input for the
-`3-generate-manual-test-cases` skill · and
+`3-generate-manual-test-cases` skill · for a `.docx` source: `figures checked: {N} ({M} mismatches | none)`,
+the number of Word comments written
+and the target path (copy or original) — or, for a reply-sync run, threads read / answered /
+accepted / rejected / pending and which comments were resolved or replied to · and
 `**Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}`.
 
 ---
@@ -623,7 +760,8 @@ testable — not to review the technical implementation.
 
 ## Critical Rules
 
-1. Write output only to `Testing/Requirements/` and `Testing/project-learning.md`.
+1. Write output only to `Testing/Requirements/` and `Testing/project-learning.md` — plus, for a
+   `.docx` source, the user-chosen Word target (copy or original) that receives the comments.
 2. Search the learning file (Index + tag grep) before asking the user anything; never load
    the whole file when a grep answers the question.
 3. Record every user answer and every learned system rule in the learning file, in plain
@@ -639,3 +777,6 @@ testable — not to review the technical implementation.
 8. Write the review in simple QA language (Output Style) — English by default, Arabic when
    chosen: short sentences, direct findings, no implementation details. `REQ-*.md` and the
    learning file are always English.
+9. Word write-back and comment resolution happen only on an explicit user choice; never
+   overwrite the original `.docx` without the user's say-so, never resolve or reply to a comment
+   without asking, and never touch comments written by other authors.

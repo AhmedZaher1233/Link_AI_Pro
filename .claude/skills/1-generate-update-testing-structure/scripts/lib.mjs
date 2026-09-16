@@ -39,7 +39,17 @@ export const LEARNING_MODEL_SECTIONS = [
   '### White-Box Model (skill 4)', '### Publish Model (skill 5)', '### Automation Model (skill 6)', '### Rule Discovery Model (skill 7)',
 ];
 export const LEARNING_LEGACY_HEADINGS = { '### Automation Model (skill 5)': '### Automation Model (skill 6)' };
-export const MCP_REQUIRED = ['playwright', 'azure-devops', 'word'];
+export const MCP_REQUIRED = ['playwright', 'azure-devops', 'docx'];
+// Docx MCP (docx-mcp-server by SecurityRonin) — replaces the legacy read-only `word` server
+// (office-word-mcp-server). The `--with mcp<2` pin is mandatory: the package declares an
+// unpinned `mcp` dependency, uv resolves mcp 2.x and the server crashes on import
+// (ModuleNotFoundError: No module named 'mcp.server.fastmcp').
+export const DOCX_SERVER = 'docx';
+export const DOCX_PACKAGE = 'docx-mcp-server';
+export const DOCX_MCP_PIN = 'mcp<2';
+export const DOCX_ARGS = ['--from', DOCX_PACKAGE, '--with', DOCX_MCP_PIN, DOCX_PACKAGE];
+export const LEGACY_WORD_PACKAGE = 'office-word-mcp-server';
+export const LEGACY_WORD_ENTRYPOINT = 'word_mcp_server';
 export const MANIFEST = 'Testing/qa-manifest.json';
 
 export function parseArgs(argv) {
@@ -165,15 +175,50 @@ export function scanLearning(root) {
   };
 }
 
+/**
+ * Pure analysis of a parsed .mcp.json — no I/O. Tells which legacy `word` servers exist, whether the
+ * `docx` server is present and correctly pinned, and which actions a migration would perform.
+ * actions: 'remove:<server>' for every legacy word server, 'add:docx' when missing, 'pin:docx' when
+ * present but its args are not exactly DOCX_ARGS.
+ */
+export function planMcpMigration(json) {
+  const servers = (json && json.mcpServers) || {};
+  const argsOf = (s) => Array.isArray(s?.args) ? s.args.map(String) : [];
+  const isLegacyWord = (s) => argsOf(s).some((a) => a.includes(LEGACY_WORD_PACKAGE) || a === LEGACY_WORD_ENTRYPOINT) || String(s?.command || '').includes(LEGACY_WORD_ENTRYPOINT);
+  const isDocx = (s) => argsOf(s).includes(DOCX_PACKAGE);
+  const legacyWord = Object.entries(servers).filter(([, s]) => isLegacyWord(s) && !isDocx(s)).map(([n]) => n);
+  const docxEntry = servers[DOCX_SERVER] && isDocx(servers[DOCX_SERVER]) ? servers[DOCX_SERVER] : (Object.values(servers).find(isDocx) || null);
+  const docxName = docxEntry ? (Object.entries(servers).find(([, s]) => s === docxEntry) || [DOCX_SERVER])[0] : null;
+  const docxPresent = Boolean(docxEntry);
+  const a = argsOf(docxEntry);
+  const docxPinned = docxPresent && a.some((x, i) => x === '--with' && a[i + 1] === DOCX_MCP_PIN);
+  const argsCanonical = docxPresent && JSON.stringify(a) === JSON.stringify(DOCX_ARGS);
+  const actions = [...legacyWord.map((n) => `remove:${n}`)];
+  if (!docxPresent) actions.push(`add:${DOCX_SERVER}`);
+  else if (!argsCanonical) actions.push(`pin:${docxName}`);
+  return { legacyWord, docxName, docxPresent, docxPinned, argsCanonical, actions };
+}
+
+/** Absolute path of the uvx launcher, so MCP launches never depend on PATH. Falls back to 'uvx'. */
+export function resolveUvx() {
+  const r = process.platform === 'win32' ? run('where.exe uvx') : run('command -v uvx');
+  const first = r.ok ? r.out.split(/\r?\n/).map((l) => l.trim()).find(Boolean) : null;
+  return first ? { path: first.replace(/\\/g, '/'), found: true } : { path: 'uvx', found: false };
+}
+
 export function scanMcp(root) {
   const p = path.join(root, '.mcp.json');
-  if (!isFile(p)) return { exists: false, valid: false, servers: [], missing: MCP_REQUIRED, inlineSecrets: false };
+  const emptyDocx = { present: false, pinned: false, legacyWord: [], actions: [] };
+  if (!isFile(p)) return { exists: false, valid: false, servers: [], missing: MCP_REQUIRED, inlineSecrets: false, docx: emptyDocx };
   let json = null;
-  try { json = JSON.parse(read(p)); } catch { return { exists: true, valid: false, servers: [], missing: MCP_REQUIRED, inlineSecrets: false }; }
+  try { json = JSON.parse(read(p)); } catch { return { exists: true, valid: false, servers: [], missing: MCP_REQUIRED, inlineSecrets: false, docx: emptyDocx }; }
   const servers = Object.keys(json.mcpServers || {});
   const text = read(p);
   const inlineSecrets = /"PERSONAL_ACCESS_TOKEN"\s*:\s*"(?!\$\{)[^"]{8,}"/.test(text) || /:[A-Za-z0-9+/]{40,}={0,2}/.test(text);
-  return { exists: true, valid: true, servers, missing: MCP_REQUIRED.filter((s) => !servers.includes(s)), inlineSecrets };
+  const plan = planMcpMigration(json);
+  const docx = { present: plan.docxPresent, pinned: plan.docxPinned, legacyWord: plan.legacyWord, actions: plan.actions };
+  const missing = MCP_REQUIRED.filter((s) => (s === DOCX_SERVER ? !plan.docxPresent : !servers.includes(s)));
+  return { exists: true, valid: true, servers, missing, inlineSecrets, docx };
 }
 
 export function scanToolchain(root) {

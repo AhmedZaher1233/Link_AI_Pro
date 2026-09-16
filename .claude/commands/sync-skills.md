@@ -1,13 +1,14 @@
 ---
-description: Pull the latest QA skills (1-7) and this command from the canonical GitHub repo AhmedZaher1233/Link_AI_Pro into the current project's .claude/skills/. Use in ANY project. Args: [skill names…] [--dry-run] [--branch <name>] [--force]
-argument-hint: "[1-generate-update-testing-structure … 7-discover-business-rules] [--dry-run] [--branch main] [--force]"
+description: Pull the latest QA skills (1-7) and this command from the canonical GitHub repo AhmedZaher1233/Link_AI_Pro into the current project's .claude/skills/, and migrate .mcp.json from the legacy `word` MCP (office-word-mcp-server) to the `docx` MCP (docx-mcp-server, pinned `--with mcp<2`). Use in ANY project. Args: [skill names…] [--dry-run] [--branch <name>] [--force] [--no-mcp]
+argument-hint: "[1-generate-update-testing-structure … 7-discover-business-rules] [--dry-run] [--branch main] [--force] [--no-mcp]"
 allowed-tools: Bash(node *sync-qa-skills.mjs*), Bash(curl *), Bash(mkdir *), Read, Glob, Grep
 ---
 
 # /sync-skills — update the QA skills in this project from the source repo
 
 Source of truth: `https://github.com/AhmedZaher1233/Link_AI_Pro` (branch `main` unless
-`--branch` is given). It owns `.claude/skills/1-…7-*/` (all sub-folders) and this command.
+`--branch` is given). It owns `.claude/skills/1-…7-*/` (all sub-folders), this command, and — inside
+`.mcp.json` — only the `docx` MCP entry plus any legacy `word` entry it replaces.
 **The only implementation is** `.claude/skills/1-generate-update-testing-structure/scripts/sync-qa-skills.mjs`
 — this command is a thin wrapper around it. Never re-implement the sync in prose.
 
@@ -17,6 +18,14 @@ Arguments: `$ARGUMENTS`
 - `--dry-run` → run the script with `--check` (read-only, nothing copied).
 - `--force` → overwrite files that have local edits.
 - `--branch <name>` → passed through.
+- `--no-mcp` → leave `.mcp.json` untouched (skills only).
+
+**`.mcp.json` migration (default on `--apply`):** the legacy `word` server (`office-word-mcp-server`,
+read-only comments) is superseded by the `docx` server (`docx-mcp-server` — real Word review comments,
+threads, track changes, used by skills 2/3). The script removes every legacy `word` entry and
+adds or re-pins the `docx` entry with the absolute `uvx` path and the mandatory `--with "mcp<2"`
+(the package declares an unpinned `mcp` dependency; `mcp` 2.x breaks the server on import). No other
+server is ever changed; a `.mcp.json` that does not parse is left alone and reported.
 
 ## Steps
 
@@ -45,12 +54,17 @@ Arguments: `$ARGUMENTS`
    The script refuses to run inside the canonical repo itself (use `git pull` there), migrates a
    legacy uppercase `.claude/Skills` folder to `.claude/skills`, skips files with uncommitted
    local edits unless `--force`, never deletes local-only files, and never touches anything
-   outside `.claude/skills/` and this command.
+   outside `.claude/skills/`, this command and the `docx` / legacy `word` entries of `.mcp.json`
+   (see the migration note above; `--no-mcp` disables it).
 
-3. **Report** the script's `summary`, `applied`, `localOnlySkills` and `hint` fields as a short
-   table (skill · result · files new/updated/current). If `reloadRequired` is true, tell the user
-   to **reload the Claude Code session** so the new versions are picked up. In `--dry-run` mode
-   the header reads `⟳ Dry run — nothing copied`.
+3. **Report** the script's `summary`, `applied`, `localOnlySkills`, `mcp` and `hint` fields as a short
+   table (skill · result · files new/updated/current) followed by one `.mcp.json` line:
+   `mcp: {actions performed | planned | none} · docx pinned {yes/no} · uvx {path | not found}`
+   (`--dry-run` shows the *planned* actions, e.g. `remove:word, add:docx`). If `reloadRequired` is
+   true, tell the user to **reload the Claude Code session** so the new versions are picked up, and
+   — when an `mcp-*` action ran — to approve the new `docx` server via `/mcp`. If `mcp.uvxFound` is
+   false, relay the install hint (`uv` is required for the docx server). In `--dry-run` mode the
+   header reads `⟳ Dry run — nothing copied`.
 
 ## Installing this command in a project that does not have it yet
 

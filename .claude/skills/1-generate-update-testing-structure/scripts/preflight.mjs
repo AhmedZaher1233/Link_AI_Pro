@@ -25,7 +25,7 @@ const markers = {
   M1: { label: 'Testing root exists', present: testing.rootExists || testing.legacyNames.length > 0, evidence: testing.rootExists ? `${testing.rootName}/ present` : (testing.legacyNames[0] || null) },
   M2: { label: 'Automation code exists', present: testing.specFileCount > 0 || testing.pageObjectDirs > 0, evidence: `${testing.specFileCount} spec files, ${testing.pageObjectDirs} pages/ dirs` },
   M3: { label: 'Playwright configured', present: Boolean(toolchain.playwrightConfig) || toolchain.playwrightDependency, evidence: toolchain.playwrightConfig || (toolchain.playwrightDependency ? '@playwright/test in package.json' : null) },
-  M4: { label: 'MCP configured', present: mcp.valid && mcp.servers.some((s) => ['playwright', 'azure-devops', 'word'].includes(s)), evidence: mcp.servers.join(', ') || null },
+  M4: { label: 'MCP configured', present: mcp.valid && (mcp.docx.present || mcp.servers.some((s) => ['playwright', 'azure-devops', 'word'].includes(s))), evidence: mcp.servers.join(', ') || null }, // legacy `word` still counts as evidence of an existing setup
   M5: { label: 'QA skills installed (informational only)', present: suite.present.length > 0, evidence: `${suite.present.length}/${SKILLS.length} present`, usedForClassification: false },
   M6: { label: 'Steering docs exist', present: steering.exists && steering.files.length > 0, evidence: steering.exists ? Object.values(steering.layers).filter(Boolean).join(', ') || 'dir present, no layer files' : null },
   M7: { label: 'Learning file exists', present: learning.exists || learning.legacyFile, evidence: learning.exists ? 'Testing/project-learning.md' : (learning.legacyFile ? '.planning/project-learning.md (legacy)' : null) },
@@ -46,6 +46,8 @@ print({
     steering.duplicates.length ? `duplicate steering layers: ${steering.duplicates.join(', ')}` : null,
     learning.legacyHeadings.length ? `legacy learning-file headings: ${learning.legacyHeadings.join(', ')}` : null,
     mcp.inlineSecrets ? '.mcp.json appears to contain an inline secret' : null,
+    mcp.docx.legacyWord.length ? `legacy word MCP server (office-word-mcp-server) superseded by docx: ${mcp.docx.legacyWord.join(', ')} — /sync-skills --apply migrates it` : null,
+    mcp.docx.present && !mcp.docx.pinned ? 'docx MCP entry is missing the `--with mcp<2` pin — the server will crash on import' : null,
     testing.legacyNames.length ? `legacy testing folder names: ${testing.legacyNames.join(', ')}` : null,
     git.isRepo && git.dirty ? 'git working tree is dirty (Mode C requires clean or explicit acceptance)' : null,
   ].filter(Boolean),
