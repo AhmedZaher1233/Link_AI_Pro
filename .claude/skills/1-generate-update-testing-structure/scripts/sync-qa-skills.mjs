@@ -13,11 +13,12 @@
 //            .mcp.json migration (skip with --no-mcp): removes every legacy `word` server (office-word-mcp-server,
 //            read-only comments) and adds/pins the `docx` server (docx-mcp-server, `--with mcp<2`, absolute uvx path).
 //            Only the docx entry and legacy word entries are ever touched; other servers are never changed.
+//            If the apply updated the sync implementation itself (this script, lib.mjs, the /sync-skills command),
+//            it re-runs ONCE with the new code (internal flag --rerun) and reports both passes — one run is enough.
 // Exit code is always 0; the JSON payload carries the result (and `error` when the source is unreachable).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
 import { parseArgs, print, run, isDir, isFile, read, actualName, planMcpMigration, resolveUvx, SKILLS, SOURCE_REPO, DOCX_SERVER, DOCX_ARGS, DOCX_MCP_PIN, LEGACY_WORD_PACKAGE } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
@@ -151,6 +152,31 @@ if (mode === 'apply') {
 }
 cleanup();
 
+// 5. Self-update: when this pass refreshed the sync implementation itself (this script, lib.mjs or the
+//    /sync-skills command), the NEW code may sync differently — re-run it ONCE (--rerun guards the loop) so the
+//    user never has to run /sync-skills twice. Both passes are reported in one payload.
+const SELF_FILES = ['.claude/skills/1-generate-update-testing-structure/scripts/sync-qa-skills.mjs', '.claude/skills/1-generate-update-testing-structure/scripts/lib.mjs', '.claude/commands/sync-skills.md'];
+const selfUpdated = applied.filter((a) => SELF_FILES.includes(a.file)).map((a) => a.file);
+let rerunFailed = null;
+if (mode === 'apply' && !args.rerun && selfUpdated.length) {
+  const q = (s) => (/[\s"]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s);
+  const argv = process.argv.slice(2).map(q).join(' ');
+  const second = run(`node ${q(path.join(target, SELF_FILES[0]))} ${argv} --rerun`, target, 300000);
+  let pass2 = null;
+  try { pass2 = JSON.parse(second.out); } catch {}
+  if (pass2 && !pass2.error) {
+    print({
+      ...pass2,
+      applied: [...applied, ...(pass2.applied || [])],
+      reloadRequired: true,
+      rerun: { reason: 'sync implementation was updated in pass 1 — re-ran once with the new code', pass1Applied: applied, pass1Updated: selfUpdated },
+      hint: [pass2.hint, 'sync re-ran itself after updating its own implementation — no second /sync-skills needed'].filter(Boolean).join(' | '),
+    }, args);
+    process.exit(0);
+  }
+  rerunFailed = `self re-run failed (${pass2?.error || second.out.slice(0, 200) || 'no output'}) — run /sync-skills once more`;
+}
+
 const summary = files.reduce((a, f) => ((a[f.status.toLowerCase().replace('-', '_')] = (a[f.status.toLowerCase().replace('-', '_')] || 0) + 1), a), {});
 const skillMdChanged = applied.some((a) => /SKILL\.md$|sync-skills\.md$/.test(a.file || ''));
 const mcpChanged = applied.some((a) => String(a.action).startsWith('mcp-'));
@@ -162,6 +188,7 @@ if (mcp.error) hints.push(`.mcp.json: ${mcp.error}`);
 if (mcp.uvxFound === false) hints.push('uv not found — the docx entry uses command "uvx"; install uv (powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  or  pip install uv), then re-run so the absolute uvx path is written');
 if (!mcp.exists && migrateMcp && mode === 'apply' && mcpChanged) hints.push('.mcp.json created with the docx entry only — run /1-generate-update-testing-structure for playwright and azure-devops');
 if (mcpChanged) hints.push('.mcp.json changed — reload the Claude Code session and approve the docx server via /mcp');
+if (rerunFailed) hints.push(rerunFailed);
 print({
   tool: 'sync-qa-skills', mode, target, source, owned: OWNED, skillsChecked: wanted,
   uppercaseDir: uppercaseDir ? `.claude/${existingName}` : null,

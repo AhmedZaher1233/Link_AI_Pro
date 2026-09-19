@@ -1,10 +1,12 @@
 SKILL: 6-test-run-automation
-WHAT IT DOES: Takes the HUMAN-APPROVED TC document that skill 5 has ALREADY published to
-Azure DevOps → generates Playwright automation (POM mandatory) → measures static coverage →
-resolves test-data readiness with you → runs smoke-gated staged execution (smoke → positive →
-negative) with live progress + ETA in the chat → produces the phase HTML report + bug report →
-closes the loop in DevOps (the template's automation flag on the work items skill 5 created).
-It does NOT beautify or publish TCs — that is 5-publish-test-cases-azure.
+WHAT IT DOES: Takes the HUMAN-APPROVED TC document → generates Playwright automation (POM
+mandatory) → measures static coverage → resolves test-data readiness with you → runs
+smoke-gated staged execution (smoke → positive → negative) with live progress + ETA in the
+chat → produces the phase HTML report + bug report → and, ONLY if the story is already
+published to Azure DevOps, closes the loop there (the template's automation flag on the work
+items skill 5 created).
+It does NOT beautify or publish TCs — that is 5-publish-test-cases-azure, a SEPARATE and
+OPTIONAL skill. You are never asked to run it.
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE
@@ -14,11 +16,16 @@ REQUIRED:
   1. Approved TC document path   — Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{Story}/TEST-CASES-*.md
                                    MUST contain "Status: APPROVED" (skill refuses anything
                                    else — it never flips the status itself)
-  2. User Story ID or EXACT title — the Azure DevOps work item the TCs belong to
+  2. User Story ID or name        — derived from the TC document's frontmatter or its folder
+                                   name (US-{id}-{name}) and confirmed with you; no Azure
+                                   lookup needed. It only names the report/log/screenshot
+                                   folders, so a free-text label is fine.
 
-ENTRY GATE (checked, not asked): skill 5 must have run on THIS version of the document —
-  {Story}/ADO-MAP.md and TEST-CASES-*-beautified.md exist and carry the same source hash as
-  the approved document. Missing or stale → BLOCKED with "run 5-publish-test-cases-azure first".
+AZURE DEVOPS IS OPTIONAL (auto-detected, never asked): if skill 5 already published these TCs
+  ({Story}/ADO-MAP.md + TEST-CASES-*-beautified.md matching the approved document's hash), the
+  run closes the loop in DevOps at the end. If not — or the map is stale, or ADO is
+  unreachable — the run is simply LOCAL: everything else happens exactly the same, and you are
+  never asked to publish or upload anything.
 
 OPTIONAL:
   3. Environment                 — target test environment (defaults to the automation
@@ -32,13 +39,25 @@ TCs that create/edit/delete or share the same data run one after another (you ca
 this with the optional "Data effect" / "Shared data" fields from skill 3) — then runs
 smoke → positive → negative with the browser visible.
 
+OPEN QUESTIONS: an APPROVED document that still reads ambiguously in places is NOT dropped and
+  NOT blocked. The skill generates the code for everything else FIRST, then asks you about each
+  ambiguity — a vague expected result ("shows the correct order"), an element the source does
+  not settle, a "Needs human review" note from skill 5, a TBD — one question at a time, with
+  2-4 options it actually found (what the code does, what a sibling TC says) and a
+  recommendation, so you just pick. The parked TCs are then generated from your answers.
+  Anything you do not answer is automated on the best-evidenced reading and clearly marked
+  @unverified-assumption: it is never reported as an application bug and never published as
+  Passed. An ambiguity with no evidence to go on is skipped with the exact question as the
+  reason — never invented.
+
 BEFORE ASKING: the skill searches Testing/project-learning.md (Automation Model + Automation
-Tricks) for the environment, run settings, known elements and past environment fixes. Only
-what is missing is asked, and your answers are saved there. PATs are never written to it.
+Tricks) for the environment, run settings, known elements, past environment fixes and answers
+you already gave to open questions. Only what is missing is asked. Every answer is saved back
+as a GENERIC rule ("the orders list is sorted newest first…") — not tied to one TC — so the
+same question is never asked again in a later phase, a later run, or another story.
+PATs are never written to it.
 
 PREREQUISITES (asked/checked, not guessed):
-  - Azure DevOps MCP connected with a read/write PAT (Work Items + Test Management) — needed
-    for the close-out; on 401/403 the skill asks you to reconnect the MCP server
   - Healthy app environment (URL responding, VPN up) — otherwise the run stops as
     ENVIRONMENT_BLOCKED
   - Test data: BEFORE the run the skill checks every TC's preconditions/data against the
@@ -46,6 +65,11 @@ PREREQUISITES (asked/checked, not guessed):
     handle it — api (an endpoint it found) / ui (an end-to-end setup journey) / db (only if
     you name the env var holding the connection string) / manual (you insert, reply "done")
     / skip. Created data is deleted after the run unless you add "keep".
+
+OPTIONAL (only when the story is already published to Azure DevOps):
+  - Azure DevOps MCP connected with a read/write PAT (Work Items + Test Management) — used
+    ONLY for the close-out. Not connected, or 401/403 → the run continues locally and the
+    close-out is skipped; you are never blocked and never asked to publish.
 
 ============================================================
 OUTPUT — WHAT YOU GET
@@ -71,13 +95,17 @@ OUTPUT — WHAT YOU GET
                                                   failure. NEVER overwritten or deleted — earlier
                                                   attempts and earlier phases stay
   {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/run-plan.json        ← parallel/serial groups + required variants per TC
+  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/open-questions.json  ← ambiguities, the options
+                                                  offered, your decisions, and any unverified assumption
   {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/data-readiness.json  ← test-data gaps + your decisions
   {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/coverage/            ← static coverage dashboard + CSVs
   {automation_root}/playwright.us-{id}.config.ts                       ← per-story config (headed)
-  Azure DevOps: automation flag + automated-test metadata on the TC work items,
-                summary comment on the story; {Story}/ADO-MAP.md updated with the final status
+  Azure DevOps (ONLY when already published): automation flag + automated-test metadata on the
+                TC work items, summary comment on the story; {Story}/ADO-MAP.md updated with
+                the final status. Not published → this output simply does not appear.
   + live progress in the chat (counts, current TC, elapsed, estimated remaining)
   Testing/project-learning.md  ← updated: automation tricks, element identification, env fixes, Q&A
 
-WHEN TO RUN: last — after a human set Status: APPROVED on skill 3's output AND skill 5
-published it to Azure DevOps.
+WHEN TO RUN: after a human set Status: APPROVED on skill 3's output. Publishing to Azure
+DevOps (skill 5) is a separate, optional step — run it before or after this skill, or not
+at all.

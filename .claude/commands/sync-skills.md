@@ -51,6 +51,9 @@ server is ever changed; a `.mcp.json` that does not parse is left alone and repo
    ```
 
    Always run `--check` first and show the result; without `--dry-run`, follow with `--apply`.
+   **Run `--apply` only once.** If that pass updates the sync implementation itself (the script,
+   `lib.mjs` or this command), the script re-runs itself once with the new code and returns both
+   passes in one payload (`rerun` field) — never ask the user to run `/sync-skills` a second time.
    The script refuses to run inside the canonical repo itself (use `git pull` there), migrates a
    legacy uppercase `.claude/Skills` folder to `.claude/skills`, skips files with uncommitted
    local edits unless `--force`, never deletes local-only files, and never touches anything
@@ -58,7 +61,9 @@ server is ever changed; a `.mcp.json` that does not parse is left alone and repo
    (see the migration note above; `--no-mcp` disables it).
 
 3. **Report** the script's `summary`, `applied`, `localOnlySkills`, `mcp` and `hint` fields as a short
-   table (skill · result · files new/updated/current) followed by one `.mcp.json` line:
+   table (skill · result · files new/updated/current). When a `rerun` field is present, add one line
+   `sync updated itself and re-ran: pass 1 {n} files · pass 2 {m} files` — the table reflects pass 2.
+   Then one `.mcp.json` line:
    `mcp: {actions performed | planned | none} · docx pinned {yes/no} · uvx {path | not found}`
    (`--dry-run` shows the *planned* actions, e.g. `remove:word, add:docx`). If `reloadRequired` is
    true, tell the user to **reload the Claude Code session** so the new versions are picked up, and

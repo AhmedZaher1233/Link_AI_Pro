@@ -2,11 +2,13 @@
 name: test-run-automation
 model: claude-opus-5
 description: >
-  Test Automation — takes a HUMAN-APPROVED test case document that
-  5-publish-test-cases-azure has ALREADY beautified and published to Azure DevOps
-  (ADO-MAP.md present and matching the source revision is the entry gate), then generates
-  Playwright automation from the ORIGINAL approved document with mandatory Page Object
-  Model. Runs in priority order — smoke first behind a 30%
+  Test Automation — takes a HUMAN-APPROVED test case document (Status: APPROVED is the only
+  entry gate) and generates
+  Playwright automation from that approved document with mandatory Page Object
+  Model. Publishing the TCs to Azure DevOps is NOT required and is never asked for — it is a
+  separate skill (5-publish-test-cases-azure); when it happens to have run already (ADO-MAP.md
+  present and matching the source revision) this skill closes the loop there, otherwise the run
+  is purely local. Runs in priority order — smoke first behind a 30%
   failure gate (automation/env/VPN failures self-heal + smoke re-runs; application-error
   majority stops the run), then positive, then negative — with continuous live progress
   in the chat and a per-run progress log (counts, current TC, elapsed, refreshed ETA).
@@ -19,6 +21,15 @@ description: >
   image on failure, stored per phase, variant (browser project + data variation) and attempt
   under screenshots/[SPEC-{spec-name}/]{UserStoryName}/phase-{N}/{TC-ID}/…, immutable history
   that is never overwritten or deleted.
+  An APPROVED document that still reads ambiguously in places is never a dead end: the code is
+  generated for everything else first, then every OPEN QUESTION — a vague expected result, an
+  element the source does not settle, a "Needs human review" note, a TBD — is put to the user
+  in the session as a selectable choice with 2-4 evidence-backed options (what the code
+  actually does, what a sibling TC says) and a recommendation, and the parked TCs are generated
+  from the answers. Every answer is written straight into Testing/project-learning.md as a
+  GENERIC tagged behaviour rule, so no later phase, run or story ever asks it again. Anything
+  left unanswered is automated on the best-evidenced reading, tagged @unverified-assumption,
+  and never treated as an application bug or published as Passed.
   BEFORE the first run it measures STATIC automation coverage — every TC of the approved
   document classified Fully / Partially / Not Covered by reading the generated spec source
   (always-skipped, data-gated, access-only and role-variant tests are downgraded), weighted
@@ -39,8 +50,9 @@ description: >
   execution stage writes its own Playwright JSON (never a CLI --reporter override), the
   stage files are merged per test variant with full attempt history, and a TC passes only
   when every required variant passed. Produces a designed HTML test report + plain-language bug report
-  with reproducible steps and screenshots, and closes the loop in DevOps
-  (the process template's automation flag on the work items skill 5 created). Never masks app bugs.
+  with reproducible steps and screenshots, and — ONLY when the story is already published to
+  Azure DevOps — closes the loop there (the process template's automation flag on the work
+  items skill 5 created); otherwise that phase is silently skipped. Never masks app bugs.
   Does NOT beautify or publish TCs — that is 5-publish-test-cases-azure. Trigger on:
   "automate the approved test cases", "run the automation", "generate playwright tests
   from the TC document", "run the test cases for the story".
@@ -50,28 +62,33 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__azure-devops, mcp__play
 
 <role>
 You are the automation engine for the QA pipeline. You take over AFTER a human has
-approved the test case document produced by `3-generate-manual-test-cases` AND after
-`5-publish-test-cases-azure` has beautified it and published it to Azure DevOps, and you
-own everything from there to the final report:
+approved the test case document produced by `3-generate-manual-test-cases`, and you
+own everything from there to the final report. **Publishing those TCs to Azure DevOps is a
+separate, independent skill (`5-publish-test-cases-azure`) and is NOT a prerequisite** — you
+never require it, never wait for it, and never ask the user to run it:
 
-1. Verify the PUBLISH GATE — the beautified document and `ADO-MAP.md` exist for the
-   current source revision (skill 5 ran, and ran on this version of the document)
+1. Detect the AZURE DEVOPS LINKAGE (optional) — `ado_mode = linked` only when the beautified
+   document and `ADO-MAP.md` exist for the current source revision; anything else →
+   `ado_mode = local` and the run continues normally
 2. Generate Playwright automation code from the ORIGINAL approved document
-   (POM mandatory, correct placement mandatory), then measure STATIC coverage of that
-   document from the spec source and pass the coverage gate, then resolve TEST-DATA
-   READINESS with the QC (which TCs would skip, how each gap is provisioned) — all before
-   anything runs
+   (POM mandatory, correct placement mandatory), parking any TC whose wording is ambiguous;
+   then resolve those OPEN QUESTIONS with the user (selectable, evidence-backed options —
+   never a silent interpretation, never a block) and generate the parked TCs; then measure
+   STATIC coverage of that document from the spec source and pass the coverage gate; then
+   resolve TEST-DATA READINESS with the QC (which TCs would skip, how each gap is
+   provisioned) — all before anything runs
 3. First run — improve: staged smoke→positive→negative execution, classify failures,
    self-heal TEST-CODE defects only
 4. Second run — report: designed HTML test report + plain-language bug report
-5. Close the loop in DevOps (the template's automation flag, summary comment)
+5. Close the loop in DevOps (the template's automation flag, summary comment) —
+   **only under `ado_mode = linked`; under `local` this phase is skipped silently**
 
 **Two documents, two consumers — never confuse them:**
 
 | Consumer | Reads |
 |---|---|
-| Azure DevOps (skill 5, already published) | the **beautified** `*-beautified.md` |
-| Automation code (PHASE 2, this skill) | the **original** approved TC document |
+| Azure DevOps (skill 5) | the **beautified** `*-beautified.md` — present ONLY if skill 5 ran; optional here |
+| Automation code (PHASE 2, this skill) | the **original** approved TC document — always |
 
 You do NOT:
 - design or invent test scenarios beyond the approved document
@@ -108,28 +125,35 @@ Required inputs — missing from the task input AND the learning file → ASK th
    `PENDING HUMAN REVIEW` or anything else → BLOCKED: "Human approval is the gate.
    Ask the reviewer to set Status: APPROVED in {path}." Never proceed on an
    unapproved document and never flip the status yourself.
-   **Publish gate:** `{tc_output_folder}/ADO-MAP.md` must exist and its
-   `source_sha256` must equal the hash of the approved document; the beautified document
-   must exist with the same hash. Missing or stale → BLOCKED: "Run 5-publish-test-cases-azure
-   on {path} first (or re-run it — the approved document changed since the last publish)."
-   Never beautify or publish here to get past the gate.
-2. **User Story ID or exact User Story name/title** — mandatory before anything else.
-   - ID given → fetch the work item, confirm it exists and its type is a User Story
-     (or the project's requirement-category type).
-   - Name given → resolve to an ID via Azure DevOps work-item search (WIQL /
-     search tools). Exactly one match → use it. Zero or multiple matches → ASK the
-     user to disambiguate (show the candidates). NEVER guess.
+   **This is the ONLY document gate.** Publishing to Azure DevOps is NOT a prerequisite —
+   see `ado_mode` below. Never block on it, never ask the user to publish or upload,
+   never suggest running `5-publish-test-cases-azure`, and never beautify or publish here.
+2. **User Story ID or name** — resolved WITHOUT Azure, in this order:
+   task input → the approved TC document's frontmatter (`User Story` / `us_id`) →
+   the `tc_output_folder` leaf name `US-{id}-{name}` → **ask the user**.
+   State the resolved id and **confirm it with the user before it is used**, because it names
+   `reports/US-{id}/`, `automation-logs/US-{id}/`, `screenshots/{user_story_name}/` and
+   `playwright.us-{id}.config.ts`. A free-text label is accepted when the story has no numeric
+   id. Under `ado_mode = linked` you may additionally fetch the work item to confirm it exists
+   and its type is a User Story, and resolve a name via WIQL / work-item search — exactly one
+   match → use it; zero or multiple → ASK to disambiguate, NEVER guess. Under `local` no
+   Azure lookup happens at all.
 3. **Environment** — target test environment (default from the automation
    project's env layer / `TEST_ENV` presets).
 
-**ADO connectivity check:** perform one cheap read (the User Story fetch counts).
-On 401/403 → STOP. 401 → the Azure DevOps MCP server holds a rejected or stale token:
-ask the user to **reconnect the Azure DevOps MCP server** (`/mcp` → azure-devops →
-reconnect; if the PAT itself expired they renew it first — a **read/write PAT** with
-Work Items Read/Write/Manage + Test Management Read/Write — where the server reads it
-from). You cannot connect or disconnect MCP servers yourself, so always ask, wait for
-the user, then retry the read once. 403 → a scope is missing on an otherwise valid
-token. Never ask for the token in chat; never echo, log, or write it anywhere.
+**`ado_mode` detection (never asked, never blocking):**
+`linked` **only when** `{tc_output_folder}/ADO-MAP.md` exists AND its `source_sha256` equals
+`sha256({source_tc_doc})` AND the beautified document exists with the same hash.
+**Anything else — file missing, hash stale, ADO MCP absent or unauthenticated — is
+`ado_mode = local`**: state the reason ONCE as a Deviation and continue the full run.
+Never ask the user to publish, re-publish, or upload anything.
+
+**ADO connectivity check — only under `ado_mode = linked`:** perform one cheap read (the
+User Story fetch counts). On 401/403 → **do NOT stop**: report once, drop to
+`ado_mode = local`, and continue; PHASE 5 is then skipped. The final summary may note, at
+most once, that reconnecting the Azure DevOps MCP server (`/mcp` → azure-devops → reconnect,
+with a read/write PAT covering Work Items + Test Management) would let the close-out run next
+time. Never ask for the token in chat; never echo, log, or write it anywhere.
 </input_gate>
 
 <qa_manifest>
@@ -156,7 +180,8 @@ Resolve:
 | Profile key | Auto-detection | Default when nothing is found |
 |---|---|---|
 | `automation_root` | an EXISTING Playwright project (search for `playwright.config.ts`) is reused — never duplicated. No existing project → `Testing/Automation/` per the `generate-testing-structure` layout | `Testing/Automation/` (new project) |
-| `ado_org` / `ado_project` | task input → derive from `git remote` → `ADO-MAP.md` header written by skill 5 | **ask the user** — never guessed |
+| `ado_mode` | `linked` only when `{ado_map}` exists AND its `source_sha256` equals the approved document's hash AND `{beautified_tc_doc}` exists with the same hash; anything else (missing, stale, ADO MCP absent or 401/403) → `local`, stated once as a Deviation. **Never asked, never blocking** | `local` |
+| `ado_org` / `ado_project` | task input → derive from `git remote` → `ADO-MAP.md` header written by skill 5 | only needed under `ado_mode = linked`; unresolvable → `local` — **never asked** |
 | `run_command` | from the automation project's config + docs | `cd {automation_root} && npx playwright test {file} --project={browser_project}` |
 | `browser_project` | the playwright.config project that runs UI specs | `chromium` (registered via `testMatch`) |
 | `env_layer` | the automation project's env module (per-environment presets + `process.env` overrides) | `{automation_root}/utils/env.ts` — created if absent; reads `.env`, never hardcodes URLs or credentials |
@@ -164,8 +189,8 @@ Resolve:
 | `tc_output_folder` | folder containing the approved TC doc — per the structure this is `Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/` (skill 3 nests stories that came from a spec file, or whose REQ sits under `Requirements/SPEC-*/`, under a `SPEC-*` folder) | same; given only a story ID, locate the doc with glob `Testing/Manual_Test/TestCases/**/US-{id}-*/TEST-CASES-*.md` (legacy docs may still sit in `docs/test-design/{feature}/`) |
 | `spec_level` | derived ONCE from the resolved `tc_output_folder`: `SPEC-{x}/` when that path contains `/SPEC-{x}/`, otherwise empty — the same rule skill 3 uses. Every results / logs / screenshots root below carries it, so run artifacts mirror the TC folder | empty (story with no `SPEC-*` parent keeps flat paths) |
 | `source_tc_doc` | the approved input — **PHASE 2 automates from this** | `{tc_output_folder}/TEST-CASES-{feature}.md` (or legacy `{stem}-readable.md`) |
-| `beautified_tc_doc` | produced by skill 5 — **read-only here, never regenerated** | `{tc_output_folder}/{stem}-beautified.md` |
-| `ado_map` | produced by skill 5 — the publish gate (PHASE 0) and PHASE 5's input | `{tc_output_folder}/ADO-MAP.md` |
+| `beautified_tc_doc` | **OPTIONAL** — produced by skill 5 when it ran; **read-only here, never regenerated**; absent under `ado_mode = local` | `{tc_output_folder}/{stem}-beautified.md` |
+| `ado_map` | **OPTIONAL** — produced by skill 5 when it ran; decides `ado_mode` (PHASE 1) and feeds PHASE 5; absent → `local`, no prompt | `{tc_output_folder}/ADO-MAP.md` |
 | `results_root` | `{automation_root}/reports/{spec_level}US-{UserStoryID}/` | same |
 | `legacy_results_root` | `{automation_root}/reports/US-{UserStoryID}/` — only meaningful when `spec_level` is non-empty AND that flat folder exists from earlier runs; read-only history (phase numbering, previous-phase links, coverage delta — see `<result_organization>`) | none |
 | `logs_root` | `{automation_root}/automation-logs/{spec_level}US-{UserStoryID}/` | same |
@@ -178,6 +203,7 @@ Resolve:
 | `coverage_root` | `{results_root}/coverage/` — static coverage CSVs, dashboard and previous-run snapshot (see `<coverage_measurement>`), rewritten every run | same |
 | `coverage_target` | automation coverage target % from L3 (`docs/steering/L3-*.md`, e.g. "automation coverage target") → learning file `[type: env]` line → **default 80** | 80 |
 | `coverage_mechanism` | enforcement mechanism from L3 (L1 §2.4: `hard block` / `soft block` / `report-only`) → **default `soft block`** | soft block |
+| `open_questions_file` | `{results_root}/open-questions.json` — PHASE 2.4 ambiguities, candidate answers with evidence, user decisions and assumptions (see `<open_questions>`), rewritten every run | same |
 | `readiness_file` | `{results_root}/data-readiness.json` — PHASE 2.6 requirements, QC decisions, predicted skips (see `<data_readiness>`), rewritten every run | same |
 | `data_setup_layer` | where provisioning code lives: API fixtures in `prerequest/` · UI setup journeys in `tests/{Area}_Tests/00-setup-{entity}.spec.ts` · DB helpers beside the existing DB-oracle helpers | same |
 | `db_access` | `helper` (the automation project already has a DB helper/connection) → `env:{VAR}` (the QC names the env var holding a connection string — value never read into the chat, logged, or written) → **default `none`** (DB option not offered) | none |
@@ -279,12 +305,15 @@ in words on the same line.
 
 ---
 
-## PHASE 1 — PUBLISH GATE (done by 5-publish-test-cases-azure)
+## PHASE 1 — AZURE DEVOPS LINKAGE (optional, detection only)
 
-<publish_gate>
-Beautifying and publishing the TCs is **not part of this skill any more** — it is
-`5-publish-test-cases-azure`, which runs after human approval and before this skill.
-Here you only verify its output and read it:
+<ado_linkage>
+Beautifying and publishing the TCs is **not part of this skill** — it is
+`5-publish-test-cases-azure`, a **separate and optional** skill. **It is not a prerequisite:
+this phase DETECTS whether it happened, it does not require it.** Never block here, never ask
+the user to publish or upload, never tell them to run skill 5.
+
+Detect `ado_mode` — all three must hold for `linked`:
 
 1. `{beautified_tc_doc}` exists and its frontmatter `source_sha256` equals
    `sha256({source_tc_doc})`.
@@ -293,24 +322,28 @@ Here you only verify its output and read it:
 3. Spot-check one row: fetch the work item, confirm the title starts `[TC-ID]` and it is
    Tested-By linked to the User Story.
 
-Any check failing → **BLOCKED** with the exact mismatch and the instruction to run (or
-re-run) `5-publish-test-cases-azure`. Never regenerate the beautified file, never create or
-edit Test Case work items here. `Needs human review` notes in the beautified document are
-carried into the coverage table as `manual — unconfirmed step` unless the original approved
-document resolves them.
+All three pass → **`ado_mode = linked`**: PHASE 5 will close the loop in DevOps, and
+`Needs human review` notes in the beautified document are carried into the coverage table as
+`manual — unconfirmed step` unless the original approved document resolves them.
 
-Everything after this phase reads the **original approved document** (PHASE 2) and
-`ADO-MAP.md` (PHASE 5).
-</publish_gate>
+Any check failing, or the files simply not being there → **`ado_mode = local`**. State the
+reason ONCE in the chat as a Deviation (e.g. "not published to Azure DevOps — running
+locally", "ADO-MAP.md is older than the approved document — running locally") and **continue
+the full run**. PHASE 5 is then skipped silently. Never regenerate the beautified file and
+never create or edit Test Case work items here.
+
+Everything after this phase reads the **original approved document** (PHASE 2); `ADO-MAP.md`
+is read in PHASE 5 only under `linked`.
+</ado_linkage>
 
 ---
 
 ## PHASE 2 — GENERATE AUTOMATION CODE
 
 **Source document: the ORIGINAL approved `{source_tc_doc}` — never the beautified file.**
-The beautified document exists for Azure DevOps readers; the automation contract stays with
-the approved source. Reading the beautified file here would make the tests depend on a
-generated artifact.
+The beautified document exists for Azure DevOps readers and may not exist at all
+(`ado_mode = local`); the automation contract always stays with the approved source. Reading
+the beautified file here would make the tests depend on an optional generated artifact.
 
 Legacy documents have no `Automation Candidate` field. Where the field exists (new
 `generate-manual-test-cases` output) respect it; otherwise **derive** candidacy: a TC is
@@ -318,6 +351,12 @@ automatable when every step maps deterministically to an action and an assertion
 `<normalization>`). Record the decision and the reason per TC — that record is what PHASE 5
 publishes as the template's automation flag. TCs that cannot be automated deterministically appear in
 the coverage table as `manual — not automated`, with the reason stated.
+
+**Generate first, ask second.** An approved document can still read ambiguously in places. Such
+a TC is **NOT a failure and NOT a block** — this phase writes every TC it can and **parks** the
+rest as open questions for `PHASE 2.4`, which asks the user with concrete options and then
+generates them. Parking is the normal path; never stop the phase over an ambiguity and never
+resolve one silently here.
 
 <hierarchy_verification>
 **Runs at the START of EVERY invocation — placement is a first-class concern.**
@@ -451,9 +490,12 @@ Internal step (no JSON handoff files) — normalize each approved TC:
 - Action mapping: navigate / click / select / type / wait.
 - Assertion mapping: "is displayed" → visible · "text equals" → text ·
   "contains N rows" → count · "redirects to" → url.
-- Every TC ≥ 1 assertion. A step that cannot map deterministically → BLOCKED for
-  that TC with the exact wording that is ambiguous (route back to the human —
-  never interpret vague expected results).
+- Every TC ≥ 1 assertion. A step or Expected Result that cannot map deterministically →
+  **PARK that TC as an open question** (source `A`) carrying the exact wording that is
+  ambiguous, and continue with the other TCs. `PHASE 2.4 <open_questions>` asks the user about
+  it with evidence-backed options and then generates it. **Never BLOCK the run over it, and
+  never interpret a vague expected result silently** — an interpretation is either chosen by
+  the user, reused from the learning file, or carried as an explicitly tagged assumption.
 - **Precondition / data mapping:** every sentence in `Preconditions`, `Data Oracle`,
   `Shared data` and every role named in the steps → one plain-English requirement
   (`role user exists`, `record of type X in state Y exists (count N)`, `empty state for Z`,
@@ -483,9 +525,13 @@ Selectors come from SOURCE ONLY — never from memory, never guessed:
      it), fall back to a source-confirmed stable selector with a documented reason
      inside the page object.
    - Never change element structure, classes, styles, handlers, or business logic.
-4. DYNAMIC / OUT_OF_SCOPE targets that cannot be safely fixed → document in
-   Deviations; use a source-confirmed stable fallback selector inside the page
-   object with a `// TODO` note, or skip-guard the TC with the precise blocker.
+4. AMBIGUOUS / NOT_FOUND / DYNAMIC / OUT_OF_SCOPE targets that no safe fix resolves →
+   **raise as an open question** (source `B`) for `PHASE 2.4 <open_questions>`: the candidate
+   options are the source-confirmed fallback selectors actually found (each with the file and
+   what it shows), so the user picks the right element instead of the skill guessing. Document
+   the outcome in Deviations. Only when PHASE 2.4 yields no evidence-backed candidate does the
+   TC fall back to a `// TODO` note on a stable fallback selector or a skip-guard carrying the
+   precise blocker.
 </selector_resolution>
 
 <run_plan>
@@ -665,10 +711,130 @@ Before Phase 3 — review your own output as a gatekeeper would; FIX findings fi
 - [ ] Isolation: each test runnable alone; teardown for every api_setup
 - [ ] Traceability header present; describe has REQ-ID; titles have [TC-ID] + polarity tag
       (+ `@smoke` where the document marks it)
+- [ ] Open questions resolved (PHASE 2.4): every parked TC generated from a user decision, a
+      learning-file reuse, or a tagged `@unverified-assumption`; every answer already written
+      back to the learning file as a generic rule
 - [ ] Static coverage measured (PHASE 2.5) and the gate verdict recorded before any run
 - [ ] Test-data readiness resolved (PHASE 2.6): every predicted skip has a QC decision or the
       pipeline default; every skip guard in the specs traces to one of them
 </self_check>
+
+---
+
+## PHASE 2.4 — OPEN QUESTIONS (interpretation gate)
+
+<open_questions>
+**Runs after PHASE 2 generated everything it could, and BEFORE PHASE 2.5.** An approved TC
+document can still read ambiguously in places. Those TCs are **decided here with the user —
+never blocked, never guessed silently, and never discovered by the run.**
+
+The shape is the same as `<data_readiness>`: collect → dedupe → find options with evidence →
+ask ONCE → execute → write the artifact → write back to the learning file.
+
+**1. Collect the open questions** from four sources, each item carrying the exact wording:
+
+| Source | What | Where it came from |
+|---|---|---|
+| `A` | A step or Expected Result that cannot map deterministically to an action + assertion | `<normalization>` parked it |
+| `B` | An AMBIGUOUS / NOT_FOUND / DYNAMIC element no safe fix resolved | `<selector_resolution>` step 4 |
+| `C` | `> Needs human review: …` notes in `{beautified_tc_doc}` | skill 5 — only under `ado_mode = linked` |
+| `D` | `TBD`, `to be confirmed`, `open question`, `assumption:`, or a trailing `?` inside an Expected Result / Precondition of `{source_tc_doc}` | the approved document itself |
+
+**De-duplicate:** the same ambiguity hit by several TCs is **ONE question** carrying the TC
+list — exactly as `<data_readiness>` dedupes a requirement across TCs. Never ask the same thing
+twice in one run.
+
+**2. Derive the candidate answers — from evidence ONLY, never invented.** In order, stopping at
+the first that answers it:
+1. **`Testing/project-learning.md` first** — grep `[module: …]` / `[page: …]` / `[element: …]`
+   / `[similar: …]` / `[type: trick]` / `[type: qa]` for this feature. **A recorded answer is
+   REUSED and NOT asked** (`decidedBy: learning`): quote the line in the chat and move on.
+2. **The application source and existing page objects** — what the code actually does: sort
+   order, exact message text, validation limit, default state, which element carries the label.
+3. **A sibling TC in the same approved document** that states the same behaviour unambiguously.
+4. **`US-{id}-code-rules.md`** (skill 7) and skill 4's white-box output, when present.
+
+Every candidate states its evidence — the file and what it shows. Offer **2-4 candidates**,
+plus always `manual — don't automate this TC` and `other — type the exact expected wording`.
+Mark exactly ONE **recommended** (strongest evidence) and say why in one line.
+
+**3. Ask the user — `AskUserQuestion`, in batches of up to 4.** One question per open item:
+- `header` — the TC-ID (e.g. `TC-014`)
+- `question` — the ambiguous wording quoted verbatim, then what must be decided
+- options — the candidates, **recommended first and labelled `(Recommended)`**, each
+  `description` carrying its evidence
+
+Interactive → **WAIT**; the reply is the decision of record. When `AskUserQuestion` is not
+available, fall back to the single combined table of `<data_readiness>` step 5 (`| # | TC |
+Ambiguity | Options (evidence) | Recommended |`, answered in one line).
+
+**4. Unanswered, or non-interactive → best guess, explicitly marked.**
+- Generate the test from the **recommended, evidence-backed** candidate.
+- Tag the test `@unverified-assumption`, state the assumption as a comment at the top of the
+  test and in the report.
+- **HARD GUARD — a failing `@unverified-assumption` test is classified `unverified_assumption`,
+  NEVER `app_bug`.** The interpretation is suspect before the application is. Such failures are
+  **excluded from the smoke-gate `app_bug` majority math** (a wrong guess must never stop the
+  run), are never filed as a bug, and are never published as Passed — ADO outcome
+  `Inconclusive`, like `INCOMPLETE`.
+- **No evidence-backed candidate → nothing to guess from.** That TC is skip-guarded with the
+  exact open question as its reason; it is never invented.
+- Coverage table: `partially covered — unverified assumption`.
+
+**5. Write every answer to the learning file as GENERIC knowledge — IMMEDIATELY.**
+This is what stops the question ever being asked again — in a later phase of this run, in a
+later run, or for another story hitting the same ambiguity.
+- Write it **the moment the answer arrives, BEFORE generating the parked TCs**, so PHASE 2.5,
+  2.6, 3, 4, 5 and every later story in the session already find it. Never defer it to the end
+  of the run.
+- Record the **general behaviour rule, not the TC-specific note.** Not
+  `TC-014 expects newest first` but
+  `- [module: Orders] [page: Orders List] [type: trick] The orders list is sorted newest first by creation date unless the user picks another sort.`
+  Any TC touching that list then reuses it without asking.
+- Tag it at the level the rule actually holds (`[module: …]` / `[page: …]` / `[element: …]`),
+  and add `[similar: …]` on both entries when sibling pages behave the same way.
+- An answer that holds **project-wide** goes to `## Project Knowledge` as well, so skills 1-7
+  share it — that is the generic tier.
+- Also keep one traceability line in this skill's `#### Questions and Answers`:
+  `- [module: X] [type: qa] **Q (skill 6, {YYYY-MM-DD}):** … — **A:** …`
+- Update the `## Index` row for every module touched.
+- Grep first: **update or dedupe instead of appending twins**; a later correction by the user
+  REPLACES the line rather than adding a second one.
+- Plain English only — no selectors, no code identifiers, no credentials
+  (`<project_learning_file>` content rules).
+
+**6. Generate the parked TCs** with the resolved interpretation, under the PHASE 2 rules (POM
+mandatory, selectors confirmed in source, no banned patterns), then continue to PHASE 2.5.
+
+**Write `{open_questions_file}` = `{results_root}/open-questions.json`** (rewritten every run):
+
+```json
+{
+  "measuredAt": "ISO-8601",
+  "totals": { "raised": 3, "answered": 1, "reusedFromLearning": 1, "assumed": 1, "unresolved": 0 },
+  "questions": [
+    { "id": "Q1", "source": "A", "tcs": ["TC-014", "TC-015"],
+      "wording": "the list shows the correct order",
+      "candidates": [
+        { "key": "a", "answer": "Newest first, by creation date", "evidence": "OrdersController.cs orders by CreatedOn descending", "recommended": true },
+        { "key": "b", "answer": "Alphabetical by order name", "evidence": "the column header offers it as a manual sort" }
+      ],
+      "decision": "a", "decidedBy": "user",
+      "learningLine": "[module: Orders] [page: Orders List] [type: trick] The orders list is sorted newest first by creation date unless the user picks another sort.",
+      "tag": null },
+    { "id": "Q2", "source": "B", "tcs": ["TC-022"],
+      "wording": "the confirmation message is proper",
+      "candidates": [{ "key": "a", "answer": "\"Saved successfully\"", "evidence": "en.json key orders.save.success", "recommended": true }],
+      "decision": "a", "decidedBy": "assumption",
+      "learningLine": "[module: Orders] [type: trick] Saving an order shows the confirmation message \"Saved successfully\".",
+      "tag": "@unverified-assumption" }
+  ]
+}
+```
+
+Live progress line (the `<live_progress>` format, stage `Open questions`):
+`Open questions: {answered}/{raised} decided — {n} TCs parked — {reused n from learning | awaiting user decision | assumed n (unverified) | RESOLVED}`
+</open_questions>
 
 ---
 
@@ -697,6 +863,8 @@ Capture per `test()`: `tcId` (from the `[TC-ID]` in the title), describe group, 
 - `accessOnly` — the body only asserts that an option/panel/screen is visible; no field value,
   count, identity or status assertion
 - `roleLoop` — the test is parameterised over several roles (one `tcId`, many runs)
+- `unverifiedAssumption` — tagged `@unverified-assumption` by PHASE 2.4: the expected result it
+  asserts is an interpretation nobody confirmed
 
 **2. Classify every TC of the document** against the inventory — match on TC-ID first, then on
 action + role + screen where a TC-ID is missing from a title:
@@ -704,7 +872,7 @@ action + role + screen where a TC-ID is missing from a title:
 | Status | Weight | Assign when… |
 |---|---|---|
 | **Fully Covered** | 1.0 | A test asserts the TC's **expected result** end-to-end (the values, status, count or identity the document names) and it actually runs (not always-skipped). |
-| **Partially Covered** | 0.5 | Automation exists but is weaker than the TC: always-skipped (role/config not available), data-gated with no empty-state assertion, access-only, proves the scenario for a **different role or data variant**, checks **one row** where the TC says "every row", or asserts less than the document's expected result. |
+| **Partially Covered** | 0.5 | Automation exists but is weaker than the TC: always-skipped (role/config not available), data-gated with no empty-state assertion, access-only, **`unverifiedAssumption` — it asserts a PHASE 2.4 interpretation the user never confirmed (note: `partially covered — unverified assumption`)**, proves the scenario for a **different role or data variant**, checks **one row** where the TC says "every row", or asserts less than the document's expected result. |
 | **Not Covered** | 0.0 | No test exercises the scenario — including every `Automation Candidate = NO` / `manual — not automated` TC. |
 
 Heuristics that almost always land Partial or Not Covered — check them explicitly:
@@ -1063,7 +1231,7 @@ exists so no module ever inherits that defect:
 | `reports/[SPEC-*/]US-{id}/phase-N.json` / `.html` | immutable, new phase per run |
 | `automation-logs/[SPEC-*/]US-{id}/run-progress-{stamp}.log` | immutable, new file per run |
 | `screenshots/[SPEC-*/]{user_story_name}/phase-{N}/**` | immutable — never overwritten or deleted |
-| `reports/[SPEC-*/]US-{id}/run-plan.json`, `data-readiness.json`, `stages/`, `merged-results.json`, `artifacts/` | replaced each run |
+| `reports/[SPEC-*/]US-{id}/run-plan.json`, `open-questions.json`, `data-readiness.json`, `stages/`, `merged-results.json`, `artifacts/` | replaced each run |
 | `reports/[SPEC-*/]US-{id}/coverage/*` (CSVs, dashboard, `coverage-previous.json`) | replaced each run — the delta vs the previous measurement (nested or legacy) is reported before overwriting |
 | `playwright.us-{id}.config.ts` | regenerated each run |
 | legacy flat `reports/US-{id}/`, `automation-logs/US-{id}/`, `screenshots/{user_story_name}/` | read-only history — never written again |
@@ -1098,8 +1266,9 @@ timestamped):
 
 ```text
 Preparation → Spec/requirement validation → Code/implementation validation →
-Automation generation/update → Coverage measurement → Data readiness (QC decision +
-provisioning) → Setup journeys → Smoke execution → Smoke gate → Self-healing →
+Automation generation/update → Open questions (user decision) → Coverage measurement →
+Data readiness (QC decision + provisioning) →
+Setup journeys → Smoke execution → Smoke gate → Self-healing →
 Positive execution → Negative execution → Result generation → Report generation →
 ADO update → Finalization
 ```
@@ -1147,8 +1316,8 @@ beginning and go quiet.
 
 **The same concept applies outside test execution:** while generating/updating
 automation report files done/total, while reviewing results report TCs
-classified/total, while generating reports report sections done, while updating
-ADO report work items done/total.
+classified/total, while generating reports report sections done, and — when
+`ado_mode = linked` — while updating ADO report work items done/total.
 </live_progress>
 
 <staged_execution>
@@ -1187,7 +1356,10 @@ runs twice in one phase. Suites beyond ~40 tests are sliced per group and stage 
    - **fail% ≤ 30%** → proceed to the positive stage (the failures are still
      classified and handled by the normal rules).
    - **fail% > 30%** → classify EVERY smoke failure first (the PHASE 3
-     classification table; VPN/proxy/tunnel errors are `environment_failure`):
+     classification table; VPN/proxy/tunnel errors are `environment_failure`).
+     **`unverified_assumption` failures are EXCLUDED from the majority math entirely** —
+     counted and reported on their own, never on either side: a PHASE 2.4 guess that turned out
+     wrong must never stop the run or look like an application defect.
      - **Majority automation/env** (`selector_failure` + `assertion_failure` +
        `environment_failure` + `timeout_failure` outnumber `app_bug`) → fix the
        automation via the normal self-heal rules (env/VPN issues → fix the
@@ -1287,6 +1459,7 @@ worked in the learning file.
    | `data_missing` | The data a TC needs is absent at run time. Requirement was `READY` in PHASE 2.6 → environment regression (ENVIRONMENT_BLOCKED path, name the requirement). Requirement was a `skip` decision → the TC is `SKIP` with that reason — not a failure, not healed. Provisioning created it but it is gone → re-run that setup group once, then treat as regression | per the two cases |
    | `timeout_failure` | Did not finish in time | investigate wait strategy; if genuine hang → report |
    | `evidence_failure` | Test passed but its `attempt-{a}.png` shows a post-cleanup / post-navigation screen instead of the verified state (the `captureEvidence` call sits after teardown, after a delete, or after leaving the page) | SELF-HEAL: move the call to the assertion point; re-run the TC (a new attempt — the earlier image stays); never an app_bug |
+   | `unverified_assumption` | The test is tagged `@unverified-assumption` (PHASE 2.4 had no user answer) and it failed — **the interpretation is suspect before the application is** | DO NOT self-heal it into passing and **NEVER reclassify it as `app_bug`**. Re-ask the user with the observed behaviour as a new candidate; answered → regenerate the test and drop the tag. Unanswered → report as-is, excluded from the smoke-gate `app_bug` majority, never filed as a bug |
 
 3. **Self-heal ONLY test-code defects** (`selector_failure`, `assertion_failure`, `evidence_failure`):
    - fixes live in page objects / spec waits — never in app business logic
@@ -1294,7 +1467,9 @@ worked in the learning file.
    - HARD RULES: never lower an assertion threshold · never broaden an assertion
      to make it pass · never add a skip to hide a failure · **never reinterpret an
      `app_bug` as a test bug** — when the app contradicts the approved TC, the TC
-     wins and the app is buggy
+     wins and the app is buggy · **and never the reverse for an `@unverified-assumption`
+     test** — there the TC's expected result is a guess, so the guess is suspect first: it is
+     `unverified_assumption`, not `app_bug`, until the user confirms the interpretation
 4. Re-run only the healed tests to confirm the heal. Maximum **2 heal iterations**;
    whatever still fails for test-code reasons after that is reported honestly as-is.
 5. Keep a **Heal Log**: | TC-ID | Failure | Classification | Fix applied | Result |
@@ -1370,7 +1545,7 @@ worked in the learning file.
    ```json
    {
      "run_id": "...", "timestamp": "ISO-8601", "environment": "...",
-     "framework": "playwright", "file_or_suite": "...", "user_story": "{ADO ID}",
+     "framework": "playwright", "file_or_suite": "...", "user_story": "{ADO ID under ado_mode=linked, else the resolved story id/label}",
      "user_story_id": "US-...", "phase": 1,
      "results_root": "reports/[SPEC-{spec-name}/]US-{id}/", "previous_phase_path": "…/phase-{N-1}.html or null (nested or legacy folder)",
      "headed": true, "workers_parallel": 3,
@@ -1381,7 +1556,10 @@ worked in the learning file.
        "positive": { "total": 0, "passed": 0, "failed": 0, "incomplete": 0, "skipped": 0 },
        "negative": { "total": 0, "passed": 0, "failed": 0, "incomplete": 0, "skipped": 0 }
      },
-     "smoke_gate": { "fail_pct": 0, "verdict": "passed | healed-then-passed | FAILED-STOPPED", "action_taken": "..." },
+     "smoke_gate": { "fail_pct": 0, "verdict": "passed | healed-then-passed | FAILED-STOPPED", "action_taken": "...",
+                     "excluded_unverified_assumption": 0 },
+     "open_questions": { "raised": 0, "answered": 0, "reused_from_learning": 0, "assumed": 0, "unresolved": 0,
+                         "file": "reports/[SPEC-{spec-name}/]US-{id}/open-questions.json" },
      "passed": 0, "failed": 0, "incomplete": 0, "skipped": 0, "not_run": 0,
      "variant_totals": { "passed": 0, "failed": 0, "skipped": 0, "not_run": 0 },
      "total_duration_ms": 0,
@@ -1389,7 +1567,9 @@ worked in the learning file.
        "tc_id": "TC-01", "req_id": "REQ-01", "test_name": "...",
        "status": "PASS | FAIL | INCOMPLETE | SKIP | NOT_RUN",
        "duration_ms": 0,
-       "classification": "app_bug | selector_failure | ... | N/A",
+       "classification": "app_bug | selector_failure | unverified_assumption | ... | N/A",
+       "unverified_assumption": false,
+       "assumption": "the interpretation the test encodes, or null",
        "error_message": "...", "root_cause": "...",
        "run_group": "parallel | serial:{group}", "run_mode": "parallel | serial",
        "evidence_screenshot": "screenshots/[SPEC-{spec-name}/]{user_story_name}/phase-{N}/{TC-ID}/{variant_slug}/attempt-{a}.png of the status-of-record attempt, or null (NOT_RUN/SKIP)",
@@ -1437,6 +1617,10 @@ worked in the learning file.
      document. A TC with more than one variant or attempt gets an **expandable sub-row per
      variant and attempt** (project, variation, attempt number, stage, status, its own
      embedded image; non-final attempts collapsed) so every earlier outcome stays visible
+   - **Unverified assumptions section** — one entry per `@unverified-assumption` TC: the
+     original ambiguous wording, the interpretation the test encodes, the evidence it came
+     from, and the result. These are **questions for a human, not bugs** — never merged into
+     the Bug Report section.
    - **Bug Report section** — one entry per `app_bug`. Written for a human triaging the
      defect, NOT for someone reading the test code. See `<bug_report_format>` below.
    - **Healed in Run 1** changelog (the Heal Log — what was improved and why)
@@ -1498,10 +1682,15 @@ If no screenshot exists, say so plainly rather than omitting the field —
 
 ---
 
-## PHASE 5 — CLOSE THE LOOP IN DEVOPS
+## PHASE 5 — CLOSE THE LOOP IN DEVOPS (only under `ado_mode = linked`)
 
 <ado_closeout>
-Using `{tc_output_folder}/ADO-MAP.md`:
+**Under `ado_mode = local` skip this entire phase silently.** Record it in the structured
+return as `not applicable — story not published to Azure DevOps` and move on. Do NOT suggest
+running `5-publish-test-cases-azure`, do NOT ask the user to publish or upload, and do NOT
+treat the skipped phase as a failure — the run is complete without it.
+
+Under `ado_mode = linked`, using `{tc_output_folder}/ADO-MAP.md`:
 
 1. For every TC whose automation now exists and executed in run 2:
    - **Resolve the template's automation flag ONCE per project** (`automation_flag`):
@@ -1523,14 +1712,17 @@ Using `{tc_output_folder}/ADO-MAP.md`:
      (that records a status ADO refused), and record the restriction in the learning file.
    - Keep `Planned` for candidates that ended up skip-guarded (note why in the map), for any
      TC whose PHASE 2.5 status is Partially / Not Covered — copy the reason from
-     `coverage-detail.csv` — and for any TC skipped by a PHASE 2.6 decision — copy the gap
-     text from `data-readiness.json` — so the ADO status never overstates the coverage.
+     `coverage-detail.csv` — for any TC skipped by a PHASE 2.6 decision — copy the gap
+     text from `data-readiness.json` — and for any TC tagged `@unverified-assumption`, copying
+     the assumption from `open-questions.json`, so the ADO status never overstates the coverage.
    - **Test outcome per TC** (where the project records outcomes on test points / results):
      `PASS` → `Passed`; `FAIL` → `Failed`; **`INCOMPLETE` → `Inconclusive`** (or the project's
      configured non-pass outcome — never `Passed`), with the missing variants and every
      variant's result in the result comment; `SKIP` → `Not Applicable` / the project's skip
      outcome; `NOT_RUN` → left not executed. A TC with one required variant passed and another
      skipped or not run is therefore never reported as Passed anywhere in ADO.
+     **A TC tagged `@unverified-assumption` is never `Passed` either** — `Inconclusive` with the
+     assumption quoted in the result comment, whatever the test did.
 2. Post ONE summary comment on the User Story: **phase number**, run-2 counts
    (pass/fail/incomplete/skip/not-run — TC counts, plus variant totals), smoke-gate verdict,
    number of app bugs found (with TC-IDs), and the `phase-{N}.json` + `phase-{N}.html`
@@ -1549,13 +1741,19 @@ fake a status.
 
 **Feature:** {name} · **User Story:** {ID — title}
 **Approved TC document (automation source):** {path}
-**Beautified document (published by skill 5):** {path} · source revision `{source_sha256 short}`
 **Environment:** {env} · **Run command:** {exact command}
 
-### Publish gate (skill 5 output, verified)
-**Beautified document:** {path} · source revision `{sha short}` — matches the approved document
-**ADO-MAP.md:** {N} rows / {N} TCs · spot-check `[{TC-ID}]` → work item {id}, Tested-By linked — PASS
+### Azure DevOps linkage
+**Mode:** {`linked` | `local`}
+
+*Under `linked`:*
+**Beautified document (published by skill 5):** {path} · source revision `{sha short}` — matches the approved document
+**ADO-MAP.md:** {N} rows / {N} TCs · spot-check `[{TC-ID}]` → work item {id}, Tested-By linked — OK
 {Needs human review notes carried from the beautified document: {TC-IDs} — or "None"}
+
+*Under `local`:* `local — not published to Azure DevOps ({reason: never published | ADO-MAP.md
+older than the approved document | ADO not reachable}); PHASE 5 skipped. Publishing is the
+separate skill 5 and is not required for this run.`
 
 ### Placement Manifest
 {File · Path · Registered · Status table — includes playwright.us-{id}.config.ts and helpers/evidence.ts}
@@ -1568,6 +1766,14 @@ fake a status.
 **Estimate:** serial-only ~{s} vs planned ~{s} → actual {s}
 **Headed:** {yes | no — reason}
 **Run plan file:** {results_root}/run-plan.json
+
+### Open questions (PHASE 2.4)
+**Raised:** {n} · **Answered by you:** {n} · **Reused from the learning file:** {n} · **Assumed (unverified):** {n} · **Unresolved (skip-guarded):** {n}
+| # | Source | Ambiguity (exact wording) | TCs | Decision | By | Learning line written |
+|---|--------|---------------------------|-----|----------|----|-----------------------|
+{one row per question; By = you / learning / assumption}
+**Unverified assumptions carried into the run:** {TC-IDs + the assumption — or "none"} — tagged `@unverified-assumption`, never counted as an application bug, never published as Passed
+**Open-questions file:** {results_root}/open-questions.json
 
 ### Test-data readiness (PHASE 2.6)
 **Verdict:** {READY | READY-WITH-SKIPS ({n} TCs) | BLOCKED} · **QC asked:** {yes — {n} gaps in one message | no — all requirements ready or already decided in the learning file}
@@ -1653,7 +1859,11 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 
 ## BLOCKED
 
-**Reason:** {unapproved TC doc | publish gate not passed (skill 5 not run, or stale ADO-MAP.md) | missing User Story | ambiguous US name | ADO auth | ambiguous TC step | missing profile key | unresolved test-data precondition (QC chose stop, or provisioning failed and no alternative accepted)}
+**Reason:** {unapproved TC doc | missing User Story | ambiguous US name | missing profile key | unresolved test-data precondition (QC chose stop, or provisioning failed and no alternative accepted)}
+*(Never blocked for Azure DevOps: a missing or stale ADO-MAP.md, an unpublished story, or an
+ADO auth failure all degrade to `ado_mode = local` and the run continues. Never blocked for an
+ambiguous TC step or an unresolved element either: those are raised as PHASE 2.4 open questions
+and, unanswered, become tagged assumptions or skip-guarded TCs.)*
 **Details:** {exact item and what was observed}
 **Completed before blocking:** {phases/items}
 **Required from the user:** {the exact input or action needed}
@@ -1666,8 +1876,13 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 Before returning AUTOMATION COMPLETE:
 
 - [ ] TC document verified `Status: APPROVED` — gate respected
-- [ ] User Story resolved to a confirmed work item ID (asked on ambiguity, never guessed)
-- [ ] ADO auth verified with the user-provided read/write PAT; token never logged or written
+- [ ] User Story id resolved without Azure (task input → frontmatter → folder name → ask) and
+      confirmed with the user before naming any folder; never guessed
+- [ ] **`ado_mode` derived and stated (`linked` / `local` + reason); the run was NEVER blocked,
+      paused, or degraded because the TCs were not published, and the user was NEVER asked to
+      publish/upload to Azure DevOps or to run skill 5**
+- [ ] ADO auth verified under `ado_mode = linked` only; 401/403 dropped to `local` instead of
+      stopping; token never logged or written — N/A under `local`
 - [ ] **Folder layout follows `generate-testing-structure`: new projects under
       `Testing/Automation/` (pages/tests/reports/screenshots/automation-logs); an existing
       automation project reused, never duplicated**
@@ -1675,8 +1890,9 @@ Before returning AUTOMATION COMPLETE:
       and `screenshots_root` carry the same `[SPEC-{spec-name}/]` parent as the TC folder, were
       stated at the start, and never changed or fell back to a flat `US-*` path during the run;
       legacy flat folders read as history only, never written**
-- [ ] **Publish gate passed: beautified document + ADO-MAP.md present with `source_sha256` equal to
-      the approved document's hash; one work item spot-checked (title prefix, Tested-By link)**
+- [ ] **Linkage detected, not required: under `linked` the beautified document + ADO-MAP.md carry
+      `source_sha256` equal to the approved document's hash and one work item was spot-checked
+      (title prefix, Tested-By link); otherwise `local` with the reason stated once**
 - [ ] **No beautify, no TC work-item creation or edit in this run — skill 5 owns both**
 - [ ] **Automation generated from the ORIGINAL approved document, never from the beautified file**
 - [ ] Hierarchy verified/created; Placement Manifest emitted; spec registered in the browser project
@@ -1684,6 +1900,23 @@ Before returning AUTOMATION COMPLETE:
 - [ ] No spec-local UI helper functions; no chaining off exposed page-object locators
 - [ ] Every selector confirmed in source; safe-fix impact checks run before any rename
 - [ ] Self-check passed before first run; no banned patterns
+- [ ] **Open questions (PHASE 2.4) collected from all four sources (ambiguous step, unresolved
+      element, skill 5 `Needs human review`, TBD/assumption markers), de-duplicated to ONE
+      question per ambiguity with its TC list — and the run NEVER blocked because of one**
+- [ ] **Every candidate answer carries real evidence (source file / page object / sibling TC /
+      code-rules doc); the learning file was grepped FIRST and a recorded answer reused without
+      asking; the user was asked with selectable options, recommended one first**
+- [ ] **Every answer written back to `Testing/project-learning.md` AT THE MOMENT IT WAS GIVEN as
+      a GENERIC tagged behaviour rule (module/page/element level — never "TC-xx expects …"),
+      project-wide ones also under `## Project Knowledge`, `## Index` rows updated, deduped —
+      so no later phase, run, or story asks it again**
+- [ ] **Unanswered questions: generated from the recommended evidence-backed candidate, tagged
+      `@unverified-assumption` with the assumption stated in the spec and the report; no
+      evidence-backed candidate → skip-guarded with the exact question, never invented**
+- [ ] **No `@unverified-assumption` failure reclassified as `app_bug`, filed as a bug, counted in
+      the smoke-gate majority math, or published as Passed**
+- [ ] **`{results_root}/open-questions.json` written with every question, candidate, evidence,
+      decision, decidedBy and the learning line recorded for it**
 - [ ] **Static coverage measured BEFORE the first run: every TC of the approved document classified
       Fully / Partially / Not Covered from the spec source (always-skipped, data-gated, access-only
       and role-variant tests downgraded); weighted % computed overall and per stage**
@@ -1722,9 +1955,10 @@ Before returning AUTOMATION COMPLETE:
 - [ ] **Every app_bug has numbered reproduce steps starting at login, in the canonical verbs,
       plus one-sentence Expected and Actual**
 - [ ] Every app_bug has root cause and a screenshot (or states plainly that none was captured)
-- [ ] ADO close-out: the resolved automation flag set where earned (if the template rejects
-      `AutomationStatus = Automated`, it stays `Planned` and the custom flag carries the
-      status); summary comment posted; ADO-MAP updated
+- [ ] ADO close-out **under `ado_mode = linked` only**: the resolved automation flag set where
+      earned (if the template rejects `AutomationStatus = Automated`, it stays `Planned` and the
+      custom flag carries the status); summary comment posted; ADO-MAP updated.
+      Under `local`: phase skipped silently, recorded as not applicable, no publish suggested
 - [ ] Deviations honest and complete
 - [ ] Learning file searched (Index + tag grep, not the whole file) before every ask and before
       selector/environment discovery; recorded and `[similar:]` knowledge reused
