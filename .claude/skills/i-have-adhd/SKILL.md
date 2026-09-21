@@ -1,6 +1,6 @@
 ---
 name: i-have-adhd
-description: 'Shape CHAT output for a reader with ADHD: lead with the next action, number multi-step work, restate state across turns, suppress tangents, give specific time estimates, make wins visible. Enhanced for the Link_AI_Pro QA pipeline (skills 1-7): restates pipeline position, turns every human gate (Status: APPROVED, ADO-MAP.md, PO decision, QC readiness) into ONE next action, reshapes BLOCKED returns as cause -> fix, and NEVER reshapes files the skills write (REQ, TC docs, HTML review pages, ADO-MAP, learning file, reports). Invoke with /i-have-adhd; stays on until "stop adhd mode".'
+description: 'Shape CHAT output for a reader with ADHD: lead with the next action, number multi-step work, restate state across turns, suppress tangents, give specific time estimates, make wins visible. Enhanced for the Link_AI_Pro QA pipeline (skills 1-7): restates pipeline position, turns every human gate (Status: APPROVED, PO decision, QC readiness, an unresolved compliance item) into ONE next action, reshapes BLOCKED returns as cause -> fix, and NEVER reshapes files the skills write (REQ, TC docs, HTML review pages, ADO-MAP, learning file, reports). Invoke with /i-have-adhd; stays on until "stop adhd mode".'
 disable-model-invocation: true
 license: MIT
 metadata:
@@ -150,8 +150,9 @@ the exact thing the reader must do, with the path, and nothing before it:
 
 - Skill 2 intake gate -> the one question still open after `project-learning.md` was consulted.
 - Skill 3 review page -> `Open {path}.html, review, then set "Status: APPROVED" in {path}.md.`
-- Skill 5 / 6 entry gate -> `Set Status: APPROVED in {path}` or `Run 5-publish-test-cases-azure first (ADO-MAP.md missing / stale).`
+- Skill 5 / 6 entry gate -> `Set Status: APPROVED in {path}` (the only document gate for both; publishing to Azure DevOps is optional and never a prerequisite).
 - Skill 6 PHASE 2.6 test-data readiness -> the missing data item and where to add it.
+- Skill 6 Checkpoint A / B -> the one compliance item still unresolved and what would close it (the skill repairs its own code defects; it only surfaces what needs a human).
 - Skill 6 30% smoke failure gate -> the majority failure class and the one decision (continue / stop).
 - Skill 7 PO decision block -> `Open {export path}, fill the decision block, re-run with --apply-approved.`
 
@@ -160,7 +161,7 @@ Never ask "want me to continue?" in place of the gate line. Never flip a status 
 ### D. BLOCKED / ENVIRONMENT_BLOCKED read as cause -> fix
 
 Keep the skill's BLOCKED block intact (it is a contract). Above it, one line: what is missing and
-the single fix. `BLOCKED: ADO-MAP.md is for revision a1b2c3, document is now d4e5f6. Fix: re-run skill 5.`
+the single fix. `BLOCKED: Status is still PENDING HUMAN REVIEW. Fix: set Status: APPROVED in TEST-CASES-US-1234.md.`
 Environment failures (VPN, unreachable app, expired credentials) are never phrased as product bugs.
 
 ### E. Long runs: progress lines, not prose

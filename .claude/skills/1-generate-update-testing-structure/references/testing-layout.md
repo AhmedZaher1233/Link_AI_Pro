@@ -52,10 +52,21 @@ project has no conventions yet.
 
 * TypeScript; tests under the `tests` path and page objects under the `pages` path recorded in
   the manifest.
-* HTML reporter to `reports/`; screenshots on failure to `screenshots/`; trace on first retry;
-  video only if the project wants it.
-* Base config free of story-specific settings (`headless`, `workers`, reporters) — skill 6
-  generates `playwright.us-{id}.config.ts` per story that extends it.
+* Screenshots on failure to `screenshots/`; trace on first retry; video only if the project
+  wants it.
+* **Reporters are additive.** Whatever the project configures — Playwright's own `html`
+  reporter into `reports/`, a JUnit reporter for CI, a custom one — is kept. Skill 6 *adds*
+  the `line` and `json` reporters it needs (the `json` one writes the per-stage results file
+  it builds its own `phase-N.html` from) to that list and never replaces it. The one hard
+  rule: nothing may override or discard that stage JSON — in particular, never pass
+  `--reporter` on the CLI, because Playwright's `--reporter` replaces the whole configured
+  list.
+* Base config free of story-specific settings (`headless`, `workers`) — skill 6 generates
+  `playwright.us-{id}.config.ts` per story that extends it and overrides only what that story
+  needs.
+* Optional `automation.layers` block in the manifest (`pages`, `fixtures`, `helpers`, `utils`,
+  `specGlob`) when the project's layer names differ from the defaults — skill 6's validator
+  reads it so Page Object Model checks follow the project's real architecture.
 * No application URLs or credentials in the config — environment variables or the project's
   env layer only.
 * Before modifying an existing `playwright.config.ts`, read it and preserve every valid

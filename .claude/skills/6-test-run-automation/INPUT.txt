@@ -1,8 +1,10 @@
 SKILL: 6-test-run-automation
 WHAT IT DOES: Takes the HUMAN-APPROVED TC document → generates Playwright automation (POM
-mandatory) → measures static coverage → resolves test-data readiness with you → runs
+mandatory) → passes a pre-run COMPLIANCE CHECKPOINT → measures static coverage → resolves
+test-data readiness with you → runs
 smoke-gated staged execution (smoke → positive → negative) with live progress + ETA in the
-chat → produces the phase HTML report + bug report → and, ONLY if the story is already
+chat → produces the phase HTML report + bug report → passes a post-run COMPLIANCE CHECKPOINT
+on the final code → and, ONLY if the story is already
 published to Azure DevOps, closes the loop there (the template's automation flag on the work
 items skill 5 created).
 It does NOT beautify or publish TCs — that is 5-publish-test-cases-azure, a SEPARATE and
@@ -33,6 +35,27 @@ OPTIONAL:
   4. --workers N                 — browser windows for the parallel group (default 3;
                                    serial groups always run with 1)
   5. --headless                  — hide the browser (default: VISIBLE, you watch the run)
+
+COMPLIANCE GATES: the run passes through TWO mandatory compliance checkpoints, and BOTH must
+  pass before the skill claims the automation is compliant.
+    - Checkpoint A, before anything executes: a read-only static validator
+      (scripts/validate-automation.mjs) plus a semantic review of every test in scope and the
+      page objects, fixtures, helpers and config it touches. Confirmed automation-code defects
+      are FIXED THERE AND THEN — you are never asked to approve a routine repair. Only the
+      compliant scope runs; anything still blocked is isolated and reported against the
+      original scope, never quietly dropped.
+    - Checkpoint B, after the final run and all debugging: the same review repeated on the
+      FINAL code, plus proof that the screenshots, reports and logs were actually produced and
+      match it. If a defect is found it is repaired, the affected tests are rerun, and the
+      review is repeated.
+  Each gate is recorded PASS / FAIL / BLOCKED against a content hash of the tested files, so a
+  result from before a later code change is never reported as complete. A check that applies but
+  could not be completed is reported UNRESOLVED and keeps its gate BLOCKED — never as passed, and
+  never as "not applicable"; N/A is only for a rule that has nothing to act on in this scope, with
+  the reason saying why. AUTOMATION COMPLETE is not returned while either gate is unresolved.
+  Compliance status is kept
+  separate from execution status: compliant tests can still find real application bugs, and a
+  green suite can still break the automation rules.
 
 HOW IT RUNS: the skill builds a run plan from your TCs — read-only TCs run in parallel,
 TCs that create/edit/delete or share the same data run one after another (you can steer
@@ -103,6 +126,9 @@ OUTPUT — WHAT YOU GET
   Azure DevOps (ONLY when already published): automation flag + automated-test metadata on the
                 TC work items, summary comment on the story; {Story}/ADO-MAP.md updated with
                 the final status. Not published → this output simply does not appear.
+  Compliance gate record (in the final report): Checkpoint A + Checkpoint B, each with its
+                scope, the code hash it was taken against, the checks run, findings with file
+                and line, repairs and their verification, and PASS / FAIL / BLOCKED
   + live progress in the chat (counts, current TC, elapsed, estimated remaining)
   Testing/project-learning.md  ← updated: automation tricks, element identification, env fixes, Q&A
 

@@ -14,7 +14,7 @@ changes only how the CHAT around the skill reads.
 | 3 | `3-generate-manual-test-cases` | `Testing/Manual_Test/TestCases/[SPEC-*/]US-*/TEST-CASES*.md`, `TEST-DATA*.md`, HTML review page | Reviewer opens the HTML page, then sets `Status: APPROVED` in the .md |
 | 4 | `4-white-box-testing` | project profile, Implementation Analysis report | none — report only |
 | 5 | `5-publish-test-cases-azure` | beautified upload doc, `ADO-MAP.md`, ADO Test Case work items | Entry: `Status: APPROVED` present |
-| 6 | `6-test-run-automation` | Playwright specs + POM, run plan, progress log, screenshots, bug drafts, AUTOMATION COMPLETE report | Entry: `ADO-MAP.md` matches source revision · PHASE 2.6 test-data readiness · 30% smoke failure gate |
+| 6 | `6-test-run-automation` | Playwright specs + POM, run plan, progress log, screenshots, bug drafts, AUTOMATION COMPLETE report | Entry: `Status: APPROVED` (ADO publishing optional) · Checkpoint A compliance gate · PHASE 2.6 test-data readiness · 30% smoke failure gate · Checkpoint B compliance gate |
 
 Rule: the gate is the message's first line, with the path. The skill's own report follows,
 complete.
@@ -52,24 +52,28 @@ Full list is in the .md; the 3 pending ones: TC-YLVL-021, -022, -026 (carry-over
 Next after approval: /5-publish-test-cases-azure on that document (about 10 minutes for 27 TCs).
 ```
 
-### Skill 6 entry gate fails
+### Skill 6 stops on an unresolved compliance item
 
 Before:
-> Uh oh, it looks like the ADO-MAP.md file doesn't match the current document, so I cannot start
-> the automation. This can happen when the test case document was regenerated after publishing...
+> Uh oh, the pre-run compliance review found some issues in the generated tests, and there are
+> also a couple of things I could not verify statically, so I have listed them below for you...
 
 After:
 ```
-Run /5-publish-test-cases-azure on TEST-CASES-US-1234.md first — ADO-MAP.md is for revision
-a1b2c3, the document is now d4e5f6.
+Two tests need a decision from you — everything else is fixed and ready to run.
 
-## BLOCKED
-**Reason:** ADO-MAP.md source_sha256 mismatch
-**Details:** ADO-MAP.md a1b2c3… · TEST-CASES-US-1234.md d4e5f6…
-**Partial output:** none
-**Required from the user:** re-run 5-publish-test-cases-azure, then re-invoke 6-test-run-automation
+TC-014, TC-019: the document says "the total updates", the code rounds to 2 decimals.
+Which is right?
+
+## Compliance gates
+**Checkpoint A:** BLOCKED — 2 open items (above) · 6 code defects found and repaired
+**Checkpoint B:** scheduled after the run
 ```
-(The BLOCKED block is the skill's contract — keep it whole, below the one-line fix.)
+(Confirmed automation-code defects are repaired by the skill, never handed back as a to-do list.
+Only an unresolved business decision reaches the user. Keep the gate record whole below the ask.)
+
+Note: a missing or stale `ADO-MAP.md` is **not** a blocker — skill 6 simply runs locally and
+skips the DevOps close-out. Never tell the user to run skill 5 first.
 
 ### Skill 6 30% smoke failure gate
 

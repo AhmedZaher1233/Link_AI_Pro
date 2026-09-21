@@ -9,10 +9,11 @@ description: >
   source / Playwright MCP as a last resort, meaning-preservation gate), then publishes THAT
   document to Azure DevOps as Test Case work items linked to the User Story with Tested-By,
   idempotently (re-runs update, never duplicate), AutomationStatus = Planned, and writes
-  ADO-MAP.md (TC-ID → work item ID) that 6-test-run-automation reads as its entry gate.
+  ADO-MAP.md (TC-ID → work item ID), which 6-test-run-automation uses to detect that this story
+  is already published and to close the loop in DevOps — it is NOT that skill's entry gate.
   Never edits the approved source document, never changes the meaning of a TC, never writes
   credentials into the published steps. Runs AFTER human approval of skill 3's document and
-  BEFORE 6-test-run-automation. Trigger on: "publish TCs to Azure DevOps", "upload test
+  before or after 6-test-run-automation, or not at all. Trigger on: "publish TCs to Azure DevOps", "upload test
   cases to ADO", "beautify the test cases", "create test case work items", "link TCs to the
   user story", "sync approved TCs to DevOps".
 argument-hint: "[<approved TC document path>] [<User Story ID or title>] [--beautify-only] [--republish]"
@@ -28,9 +29,11 @@ things:
 2. **Publish** that document to Azure DevOps as Test Case work items linked to the User
    Story, and persist the TC-ID → work-item map (`ADO-MAP.md`)
 
-`6-test-run-automation` starts where you stop: it refuses to run until `ADO-MAP.md` and the
-beautified document exist for the same source revision. Automation code, coverage, runs and
-the DevOps close-out (`Custom.TestAutomated`) are **not** your job.
+`6-test-run-automation` is INDEPENDENT of this skill and does not wait for it. Its only document
+gate is `Status: APPROVED`. When `ADO-MAP.md` and the beautified document happen to exist for the
+same source revision it detects that (`ado_mode = linked`) and closes the loop in DevOps;
+otherwise it runs purely locally and skips that phase. Automation code, coverage, runs and the
+DevOps close-out (`Custom.TestAutomated`) are **not** your job.
 
 **Two documents, two consumers — never confuse them:**
 
@@ -121,7 +124,7 @@ run skips detection. Resolve:
 | `tc_output_folder` | folder containing the approved TC doc — per the structure `Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/` (skill 3 nests stories that came from a spec file under a `SPEC-*` folder) | same; given only a story ID, locate the doc with glob `Testing/Manual_Test/TestCases/**/US-{id}-*/TEST-CASES-*.md` (legacy docs may sit in `docs/test-design/{feature}/`) |
 | `source_tc_doc` | the approved input — **read-only** | `{tc_output_folder}/TEST-CASES-{feature}.md` |
 | `beautified_tc_doc` | PHASE 1 output — **ADO publishes this** | `{tc_output_folder}/{stem}-beautified.md` |
-| `ado_map` | PHASE 2 output — **skill 6's entry gate** | `{tc_output_folder}/ADO-MAP.md` |
+| `ado_map` | PHASE 2 output — what skill 6 reads to detect `ado_mode = linked` (not a gate) | `{tc_output_folder}/ADO-MAP.md` |
 | `automation_root` | an EXISTING Playwright project (search for `playwright.config.ts`); else `Testing/Automation/` — used ONLY to read page objects for step confirmation | `Testing/Automation/` |
 | `login_page_object` | scan `{automation_root}/pages/` for the auth page object | none |
 | `app_source_roots` | UI templates, `data-testid` attributes, i18n files (`en.json` / `ar.json`) per the repo layout | auto |
@@ -386,7 +389,8 @@ For EVERY test case in it (all of them — not only automation candidates):
    |-------|------------------|----------------------|------------------|
    ```
 
-   Skill 6 reads this file as its entry gate and later fills the last two columns. If it
+   Skill 6 reads this file to detect that the story is already published, and later fills the
+   last two columns. It is not skill 6's entry gate — that is `Status: APPROVED`. If it
    already exists from a previous run, reconcile against it first (never drop a row for a
    TC that still exists in the document; mark rows for TCs removed from the document as
    `removed from document — work item left in place`).
@@ -433,12 +437,13 @@ requirements, Data Oracle, type, smoke and locale unchanged — PASS
 |---|---|---|---|
 {rows}
 {failures, or "All items published"} · Tested-By links verified on the story: {n}/{N}
-**Map:** {ado_map path} — ready for `6-test-run-automation`
+**Map:** {ado_map path} — `6-test-run-automation` will detect this publish and close the loop
 
 ### Next
-Run `6-test-run-automation` with the same approved document and User Story. It will refuse
-to start if `ADO-MAP.md` does not match the current source revision — re-run this skill
-after any change to the approved document.
+Run `6-test-run-automation` with the same approved document and User Story — it can also be run
+before this skill, or without it. If `ADO-MAP.md` does not match the current source revision it
+simply runs locally and skips the DevOps close-out; re-run this skill after any change to the
+approved document to keep the loop closed.
 
 **Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}
 

@@ -53,11 +53,20 @@ description: >
   with reproducible steps and screenshots, and — ONLY when the story is already published to
   Azure DevOps — closes the loop there (the process template's automation flag on the work
   items skill 5 created); otherwise that phase is silently skipped. Never masks app bugs.
+  Enforces TWO MANDATORY COMPLIANCE CHECKPOINTS — one before execution, one on the final code
+  after all debugging — each pairing a read-only static validator
+  (scripts/validate-automation.mjs: focused modifiers, placeholder assertions, POM boundaries,
+  evidence capture found through the methods a test actually calls, traceability) with semantic
+  review of everything a text scan cannot decide. Confirmed automation-code defects are repaired
+  immediately rather than reported as suggestions, affected tests are rerun, and each gate is
+  recorded PASS / FAIL / BLOCKED against a content hash of the tested files so a stale result can
+  never be claimed as complete. Both gates must pass before automation compliance is claimed, and
+  compliance status is always reported separately from execution status.
   Does NOT beautify or publish TCs — that is 5-publish-test-cases-azure. Trigger on:
   "automate the approved test cases", "run the automation", "generate playwright tests
   from the TC document", "run the test cases for the story".
 argument-hint: "[<approved TC document path>] [<User Story ID or title>] [<environment>] [--workers N] [--headless]"
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__azure-devops, mcp__playwright
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Bash(node *validate-automation.mjs*), Bash(node *selftest.mjs*), mcp__azure-devops, mcp__playwright
 ---
 
 <role>
@@ -77,11 +86,23 @@ never require it, never wait for it, and never ask the user to run it:
    STATIC coverage of that document from the spec source and pass the coverage gate; then
    resolve TEST-DATA READINESS with the QC (which TCs would skip, how each gap is
    provisioned) — all before anything runs
-3. First run — improve: staged smoke→positive→negative execution, classify failures,
+3. **CHECKPOINT A** — the mandatory pre-run compliance gate: static validator + semantic review
+   over every in-scope test and the page objects, fixtures, helpers and config it touches;
+   confirmed automation-code defects fixed immediately; only the compliant scope executes
+4. First run — improve: staged smoke→positive→negative execution, classify failures,
    self-heal TEST-CODE defects only
-4. Second run — report: designed HTML test report + plain-language bug report
-5. Close the loop in DevOps (the template's automation flag, summary comment) —
+5. Second run — report: designed HTML test report + plain-language bug report
+6. **CHECKPOINT B** — the mandatory post-run compliance gate: the full review repeated on the
+   FINAL code, plus verification that the required evidence and reports were actually produced
+   and match it. **Both gates must PASS before automation compliance is claimed.**
+7. Close the loop in DevOps (the template's automation flag, summary comment) —
    **only under `ado_mode = linked`; under `local` this phase is skipped silently**
+
+**References** — loaded per step, not up front:
+`references/compliance-checkpoints.md` (the two gates + the full derived checklist) ·
+`references/automation-rules.md` (expected results, assertions, modifiers, waits, repairs,
+coverage) · `references/validator.md` (the static validator's contract, rules, exceptions and
+documented limits).
 
 **Two documents, two consumers — never confuse them:**
 
@@ -101,6 +122,13 @@ You do NOT:
 - lower assertions, add timeouts-as-fixes, or skip tests to hide failures
 - modify a test to mask an application bug — app bugs are REPORTED, never absorbed
 - touch application business logic (only safe `data-testid` additions are allowed)
+- **modify product code as part of an automation repair**, or change an application setting,
+  environment flag or configuration value in order to obtain a pass
+- **drop a blocked test from the reported scope** — a test that cannot run is isolated and
+  reported against the original scope with its reason, never quietly removed and never counted
+  as passing
+- **claim completion from stale results** — any later code change invalidates the checks and
+  results it affects (see `<checkpoint_b>`)
 
 If any required input is missing → BLOCKED. If the environment is unhealthy →
 ENVIRONMENT_BLOCKED (never blamed on the code under test).
@@ -358,6 +386,30 @@ rest as open questions for `PHASE 2.4`, which asks the user with concrete option
 generates them. Parking is the normal path; never stop the phase over an ambiguity and never
 resolve one silently here.
 
+<source_of_truth>
+**Only an approved requirement or an explicitly approved clarification may define an expected
+result.** Everything else is evidence about the implementation, not authority over it.
+
+- **Application code and observed behaviour describe what the app does today.** They never, on
+  their own, make that behaviour correct. Use them to *form* a question or to confirm a selector —
+  never to settle what a test should expect.
+- **`Testing/project-learning.md` entries are weighed, not ranked.** Judge each by its source (a
+  user answer? an observation? a guess?), its approval, and its relevance to this module/page/
+  locale. A line that merely records what the app did **never outranks an approved requirement**;
+  where they conflict, the requirement wins and the conflict is reported.
+- **Skill 7's discovered business rules are proposals** until the PO decision block is filled and
+  skill 7 has been re-run with `--apply-approved`. Before that they may inform a PHASE 2.4
+  question; they may never become an assertion.
+- **Report conflicts, never resolve them silently.** Where an approved TC and its requirement
+  disagree, state both wordings under `### Deviations` and park the TC as an open question.
+- **An unanswered question never turns current behaviour into an approved expectation.**
+  Exploratory checks may still be generated on the best-evidenced reading — tagged
+  `@unverified-assumption` with the assumption stated — but they are **excluded from confirmed
+  requirement coverage** and counted as *Assumed*.
+
+Full rules, including assertion quality: `references/automation-rules.md` §1-§2.
+</source_of_truth>
+
 <hierarchy_verification>
 **Runs at the START of EVERY invocation — placement is a first-class concern.**
 
@@ -472,6 +524,19 @@ Any hit from (1) outside a `beforeEach`/`afterEach` evidence hook (the `captureE
 itself is not a hit — it takes `page`, not a locator), and any hit from (2) that
 is not a single-line delegation to a `prerequest` fixture, must be moved to its owning layer
 before you execute anything. Report both as `POM self-check: clean` or list what you moved.
+
+**The greps are a starting point, not the verdict.** `scripts/validate-automation.mjs` runs the
+same checks over comment- and string-stripped source (so nothing inside a comment or a string can
+trigger them) and adds the chained-locator and spec-helper rules. **A clean grep does not prove
+compliance** — Checkpoint A pairs both with semantic review, because no text scan can tell whether
+a composite flow ended up in the layer this project actually owns it in. Moving a helper into an
+arbitrary file purely to silence a grep is itself the violation.
+
+**Layer ownership follows THIS project's architecture.** The routing table above is the default
+when the project has no convention of its own. Where it does — a different fixtures folder, a
+`components/` layer, an existing helpers module — match it, and record it under
+`automation.layers` in `Testing/qa-manifest.json` so the validator checks the same boundaries
+instead of assuming these names.
 
 **Verify your typecheck actually runs.** Some automation projects' `tsconfig.json` makes
 `npx tsc --noEmit -p tsconfig.json` report **zero errors even for a deliberate type error**
@@ -626,17 +691,25 @@ every run. It imports the project's base `playwright.config.ts` and overrides ON
   run plan, never by the file setting.
 - `use.screenshot: 'only-on-failure'` (Playwright's own failure attachment stays available) and
   `outputDir: '{results_root}/artifacts'` (traces/attachments; replaced each run).
-- `reporter: [['line'], ['json', { outputFile: process.env.PW_STAGE_JSON ?? '{results_root}/stages/unnamed.json' }]]`
-  — `line` feeds the live progress; `json` writes ONE file PER STAGE COMMAND because every
-  stage / run-group command sets `PW_STAGE_JSON={results_root}/stages/{stage}-{group}[-attempt{n}].json`
-  (e.g. `smoke-parallel.json`, `smoke-parallel-attempt2.json` after a heal re-run,
-  `positive-serial-orders.json`). Separate commands therefore never overwrite each other's
-  results. **The JSON reporter is the only source of run results and must never be overridden
-  from the CLI** — `npx playwright test --reporter=…` REPLACES the config reporters and
-  silently drops the JSON file. If the base config already declares its own JSON reporter,
-  `{stage_json_path}` is THAT file: copy it to the stage file right after each command.
-- No `html` reporter: `phase-N.html` is this skill's own designed report built from
-  `merged-results.json`; Playwright's built-in HTML reporter is added only if the user asks.
+- **Reporters: ADD what this skill requires, never replace what the project configures.**
+  Start from the base config's `reporter` list and ensure it contains `['line']` (it feeds the
+  live progress) and
+  `['json', { outputFile: process.env.PW_STAGE_JSON ?? '{results_root}/stages/unnamed.json' }]`.
+  The `json` reporter writes ONE file PER STAGE COMMAND because every stage / run-group command
+  sets `PW_STAGE_JSON={results_root}/stages/{stage}-{group}[-attempt{n}].json` (e.g.
+  `smoke-parallel.json`, `smoke-parallel-attempt2.json` after a heal re-run,
+  `positive-serial-orders.json`), so separate commands never overwrite each other's results.
+  **Every other reporter the project already configures is preserved and runs alongside** —
+  including Playwright's built-in `html` reporter, a JUnit reporter for CI, or a custom one.
+  Never delete or disable one to "clean up" the config.
+  If the base config already declares its own JSON reporter, `{stage_json_path}` is THAT file:
+  copy it to the stage file right after each command rather than adding a second one.
+- **Nothing may override or discard the required stage JSON.** Do not pass `--reporter=…` on the
+  CLI: Playwright's `--reporter` **replaces** the whole configured list and silently drops the
+  stage file (the per-stage freshness gate in `<live_progress>` catches this, and stops the run).
+  The same applies to a base-config change that removes the JSON reporter.
+- `phase-N.html` is this skill's own designed report, built from `merged-results.json`. It is
+  additional to, not a replacement for, whatever HTML report the project already produces.
 - `testMatch` / `projects` / `baseURL` / env handling are **inherited**, never copied.
 
 Rules: the base `playwright.config.ts` is touched only for `testMatch` registration and the
@@ -682,9 +755,10 @@ Write the spec against `{automation_root}` following the project conventions:
   evidence image is on disk, so a cleaned-up screen can never be what the image shows. Data a spec needs but the environment
   lacks is NOT the spec author's problem to guess — it is a PHASE 2.6 requirement the QC
   decides on (`<data_readiness>`).
-- **Banned:** `page.waitForTimeout()` · `test.only` · CSS/class/nth-child/text
+- **Banned:** `test.only` (see `<test_modifiers>`) · CSS/class/nth-child/text
   selectors when a data-testid exists · shared mutable state between tests ·
-  commented-out test bodies. Waits are always web-first assertions
+  commented-out test bodies · a placeholder assertion that cannot fail for any state of the
+  application. Waits follow `<wait_policy>` — prefer web-first assertions
   (`expect(locator).toBeVisible()`, `page.waitForURL()`, …).
 - **Skip guards** are written ONLY from a PHASE 2.6 outcome — a QC `skip` decision, the
   pipeline default for an undecided gap, or an `IMPOSSIBLE` requirement — with the gap's
@@ -692,8 +766,87 @@ Write the spec against `{automation_root}` following the project conventions:
   real failure, never `test.skip(!data)` "just in case".
 </spec_writing>
 
-<self_check>
-Before Phase 3 — review your own output as a gatekeeper would; FIX findings first:
+<test_modifiers>
+**`only` · `skip` · `fixme` · `fail` · `slow` — every form: bare, conditional
+(`test.skip(cond, 'reason')`) and suite-level (`test.describe.skip(…)`).**
+
+| Modifier | Policy |
+|---|---|
+| `only` (also `fit`, `describe.only`) | **Never committed.** It silences every other test, so a green run would mean nothing. Not exemptible. |
+| `skip` | Allowed **with a reason** tracing to a PHASE 2.6 readiness decision, an approved requirement, or an honoured exception. Counts `SKIP`, never a pass. |
+| `fixme` | Allowed with a reason — a known-broken test that must not read as a pass. |
+| `fail` | Allowed with a reason — an **expected failure**: its own row in the report, never merged into the pass count, and a failure of the run if it unexpectedly passes. |
+| `slow` | Allowed with a reason — it **extends the timeout**, it does not skip. Never reported as a skip, never used to paper over an unexplained slowdown. |
+
+**Targeted runs stay possible without editing files.** Use the runner's own filters —
+`--grep` / `--grep-invert`, `--project`, `--last-failed`, `--repeat-each` — and the per-story
+config. That is the supported way to run a subset; a focused modifier is not.
+
+**A missing prerequisite must stay visible** in the phase JSON, the HTML report and the chat
+summary, against the original scope, with its reason. Never removed from the totals.
+
+Detail: `references/automation-rules.md` §3.
+</test_modifiers>
+
+<wait_policy>
+**Applies to specs, page objects, fixtures and helpers alike** — a fixed wait moved out of a spec
+into a page object is the same fixed wait.
+
+- Prefer an **observable condition**: a web-first assertion, `waitForURL`, `waitForResponse`, or a
+  state the page object exposes. Bounded polling (`expect.poll`, `toPass({ timeout })`) is fine.
+- **Timers are not banned.** A justified retry backoff, a real debounce, or an explicit timing
+  requirement from the spec is legitimate — state the reason on the line above or in a `qa-allow`
+  so it appears in the report instead of reading as a lazy sleep.
+- **Never raise a timeout to conceal an unexplained failure.** Either the reason is known (say it)
+  or it is unknown (investigate it).
+
+Detail: `references/automation-rules.md` §4.
+</wait_policy>
+
+<checkpoint_a>
+**CHECKPOINT A — MANDATORY PRE-RUN COMPLIANCE GATE.** Runs after generation and BEFORE anything
+executes; it is the first gate in `<environment_gate>`. Load
+`references/compliance-checkpoints.md` and work its checklist — it is derived from every rule in
+this file, not only the items repeated below.
+
+**Scope:** every test created, modified or selected for this run, **plus** the page objects,
+fixtures, helpers, configuration and evidence/reporting code they touch.
+
+**Procedure:**
+
+1. **Mechanical checks.** Run the project's own tooling first where it exists (ESLint with
+   `eslint-plugin-playwright`, `tsc`, an existing lint script), then:
+   ```bash
+   node .claude/skills/6-test-run-automation/scripts/validate-automation.mjs \
+     --root . --pretty --files <in-scope specs> --tc-ids <approved TC doc> --req-ids <REQ file>
+   ```
+   Report `gate`, `counts`, `review[]`, `notRun[]` and `exceptions[]` together — never just
+   "clean". A `gate: PASS` means no banned pattern was found and **nothing more**. If the script
+   cannot run, report it **unavailable**, never passed.
+2. **Semantic review** of every judgement the scanner cannot make: correct layer ownership,
+   whether each assertion verifies its required outcome, whether evidence sits at the assertion
+   point, and whether each honoured exception's cited source actually justifies it.
+   **A clean grep does not prove compliance.**
+3. **Fix confirmed automation-code violations immediately.** They are repairs, not
+   recommendations — never defer them, never list them for the user to approve, never ask anyone
+   to say "fix 1". Only an unresolved **business** decision (one that changes what the expected
+   behaviour is) goes to the user.
+4. **Repeat the affected checks after every repair** — a repair invalidates what it touched.
+5. **Proceed with the compliant scope only.** Tests still blocked are isolated and reported
+   against the original scope; the run continues for everything independent of them.
+6. **Record the gate** (`PASS` / `FAIL` / `BLOCKED`) per `compliance-checkpoints.md` §5, with the
+   `scopeDigest` from the validator's `fingerprint`.
+
+**Gate result.** `PASS` only when there are no confirmed violations in scope **and** every
+`review[]` / `notRun[]` item is closed — by the scanner, by other project tooling, or by
+documented semantic review against the same `scopeDigest`. Anything still unresolved →
+**BLOCKED for those items**, named one by one, while independent work continues.
+
+**At this checkpoint you verify evidence and reporting IMPLEMENTATION AND CONFIGURATION ONLY.**
+The actual images, phase JSON and HTML do not exist yet: record them `scheduled for Checkpoint B`.
+Claiming they exist, or marking their runtime verification passed, is a false claim.
+
+Checklist (all of these, plus `references/compliance-checkpoints.md` §2):
 
 - [ ] Placement Manifest complete; spec + page objects at correct paths; spec registered
 - [ ] Zero inline locators in specs — all interaction through page objects
@@ -704,10 +857,16 @@ Before Phase 3 — review your own output as a gatekeeper would; FIX findings fi
 - [ ] Coverage table matches the approved document exactly (no invented scenarios)
 - [ ] No banned patterns (waitForTimeout / test.only / hardcoded creds or URLs)
 - [ ] AAA identifiable in every test; every test has ≥1 assertion
-- [ ] **Evidence at the assertion point: every test body has exactly one
-      `captureEvidence(page, testInfo)` call, located at its Assert step and BEFORE any
-      teardown / cleanup / delete call — `grep -n "captureEvidence" <spec-file>` count equals
-      the test count, and no `afterEach` contains it** (see `<result_organization>`)
+- [ ] **Evidence at the assertion point: every test captures evidence exactly once, at its Assert
+      step and BEFORE any teardown / cleanup / delete call, and no `afterEach` contains it**
+      (see `<result_organization>`). **The capture may be DIRECT in the spec or INDIRECT inside a
+      page-object / helper method the test calls** — both are compliant. A direct-call search
+      (`grep -n "captureEvidence" <spec-file>`) is a starting point, never the verdict: never
+      report evidence missing on a direct-call search alone. `validate-automation.mjs` follows the
+      methods each test actually invokes and reports `evidence-call-found` (found on a
+      straight-line path), `evidence-conditional` / `evidence-unresolved` (undetermined → review),
+      or `evidence-missing` (every hop followed, genuinely absent). Placement relative to teardown
+      is **always** a semantic-review item — a call site is not proof of when it runs.
 - [ ] Isolation: each test runnable alone; teardown for every api_setup
 - [ ] Traceability header present; describe has REQ-ID; titles have [TC-ID] + polarity tag
       (+ `@smoke` where the document marks it)
@@ -717,7 +876,22 @@ Before Phase 3 — review your own output as a gatekeeper would; FIX findings fi
 - [ ] Static coverage measured (PHASE 2.5) and the gate verdict recorded before any run
 - [ ] Test-data readiness resolved (PHASE 2.6): every predicted skip has a QC decision or the
       pipeline default; every skip guard in the specs traces to one of them
-</self_check>
+- [ ] **Every assertion verifies the outcome its TC requires** — a visibility check only where
+      visibility or access IS the requirement; values, calculations, permissions and state changes
+      assert those outcomes (`references/automation-rules.md` §2)
+- [ ] **Every expected value traces to an approved requirement or an approved clarification** —
+      never to observed behaviour alone (`<source_of_truth>`)
+- [ ] **Modifier policy honoured** (`<test_modifiers>`): no focused execution anywhere; every
+      `skip`/`fixme`/`fail`/`slow` carries a traceable reason and stays visible in the status model
+- [ ] **Wait policy honoured across specs, page objects, fixtures and helpers** (`<wait_policy>`)
+- [ ] **Validator run and its full result reported** — `gate`, `counts`, `review[]`, `notRun[]`,
+      `exceptions[]`; every open item closed by documented semantic review, or the gate is BLOCKED
+      for those items
+- [ ] **Every honoured exception's cited source opened and its substance recorded** (justified /
+      rejected) — a well-formed `qa-allow` is not yet a justified one
+- [ ] **Gate recorded with the `scopeDigest`**, and no applicable check recorded as PASS without
+      having run; evidence/report runtime artifacts recorded `scheduled for Checkpoint B`
+</checkpoint_a>
 
 ---
 
@@ -841,7 +1015,7 @@ Live progress line (the `<live_progress>` format, stage `Open questions`):
 ## PHASE 2.5 — STATIC COVERAGE MEASUREMENT (pre-run gate)
 
 <coverage_measurement>
-**Runs after `<self_check>` and BEFORE PHASE 3 — nothing executes until this verdict exists.**
+**Runs after `<checkpoint_a>` and BEFORE PHASE 3 — nothing executes until this verdict exists.**
 This is a static read of the spec source, not a pass/fail result: it answers "how much of
 the approved document does the generated code *really* cover?" — and it is deliberately
 skeptical, because a `test()` that exists is not a TC that is covered.
@@ -849,6 +1023,41 @@ skeptical, because a `test()` that exists is not a TC that is covered.
 **Denominator = every TC in `{source_tc_doc}`** (the ORIGINAL approved document — never the
 beautified file). Locale variants (`TC-01`, `TC-01b`) are separate TCs, as in the document.
 `manual — not automated` TCs stay in the denominator; the number must be honest.
+
+**THREE DIFFERENT NUMBERS — report them separately, never let one stand in for another**
+(`references/automation-rules.md` §6):
+
+| Figure | Answers | Where |
+|---|---|---|
+| **Requirement outcome coverage** | Are each requirement's required outcomes actually asserted? `Full` / `Partial` / `Missing` / `Assumed` | the requirement table in `### Coverage`, one row per REQ/AC |
+| **TC automation coverage** | How much of the approved TC document is automated? The weighted % measured below | **this phase's gate** — target, source, repair pass and user-override path all unchanged |
+| **Execution pass rate** | Of what ran, how much passed? | PHASE 4 only — never mixed into either number above |
+
+**Traceability is not coverage.** A requirement linked to a test is *traceable*; whether that test
+asserts the requirement's outcomes is a separate judgement. A calculation requirement covered only
+by a visibility assertion is `Partial`, never `Full`. `@unverified-assumption` tests are
+**`Assumed`** — never `Full`, and excluded from confirmed requirement coverage.
+
+**Requirement IDs are validated, never invented.** Resolve every REQ/AC id against the resolved
+sources (the story's `REQ-*.md`, the approved TC document, `ADO-MAP.md` when present). Report an id
+you cannot resolve; **never derive, renumber or invent one here** — skill 2 owns REQ IDs and
+skill 3 owns TC IDs. `validate-automation.mjs --req-ids <REQ file>` flags titles referencing an
+unknown id; without the list that check is `notRun`, never a pass.
+
+**Carry forward skill 3's TC validation states — and treat them as possibly stale.** The approved
+document marks each TC `validated` / `enhanced` / `inferred` / `discrepancy` / `not-implemented` /
+`draft`. Those labels were true when written:
+
+- **Re-verify readiness where you can.** An `inferred` or `draft` TC whose screen is now reachable
+  is worth re-checking before its label is trusted.
+- **Genuinely unavailable implementation** → the TC is `pending — not covered for this run`. Not a
+  failure, not an application defect, and it stays visible in the denominator.
+- **Investigate a `draft` or unvalidated TC before classifying its failure.** A draft TC failing is
+  not by itself proof of an application defect — the TC may simply be wrong. It may still reveal a
+  real defect once verified. Verify first, classify second.
+
+Keep missing, partial, blocked and unexecuted coverage visible in their own counts, and **extend**
+the existing reports rather than replacing them.
 
 **1. Inventory the generated tests** — per spec file of this story, without reading every
 line of logic:
@@ -923,14 +1132,14 @@ Quote any CSV field containing a comma; use these exact headers.
 
 - `coverage-summary.csv`
   ```
-  User Story,Stage,Total TCs,Fully Covered,Partially Covered,Not Covered,Weighted Coverage %,Distinct Automated TC-IDs
+  User Story,Requirement ID(s),Stage,Total TCs,Fully Covered,Partially Covered,Not Covered,Weighted Coverage %,Distinct Automated TC-IDs
   ```
   One row per stage (Smoke / Positive / Negative), then a `TOTAL` row; a blank line; a `Legend`
   of the three statuses + weights; numbered `Notes` (weighting formula; target + source +
   mechanism; role-loop / data-gate caveat; the manual-gap categories present).
 - `coverage-detail.csv`
   ```
-  User Story,TC-ID,Test Case Title,Type,Smoke,Automation Candidate,Coverage Status,Mapped Test(s),Manual Testing Recommended,Notes / Recommendation
+  User Story,Requirement ID(s),TC-ID,Test Case Title,Type,Smoke,Automation Candidate,Coverage Status,Requirement Outcome Coverage,Mapped Test(s),Manual Testing Recommended,Notes / Recommendation
   ```
   One row per TC of the approved document, in document order.
 - `manual-scenarios.csv`
@@ -959,9 +1168,15 @@ Quote any CSV field containing a comma; use these exact headers.
      inline `width:{share}%` (shares of that stage's total, summing to 100) and the count in `<b>`.
   3. **Where the manual effort goes** (`.cats`): one `.cat` per category present, sorted by count
      desc; `.cat-fill` width = `count / maxCount × 100`%; `.sec-head .note` = total manual scenarios.
-  4. **Delta** (when a previous snapshot exists): improved / regressed TC-IDs and the % change.
-  5. **Source reports** (`.files`): one `.file` per CSV written.
-  6. `<footer>`: 1–2 sentence quick wins (e.g. configure the missing role user; seed an
+  4. **Requirement outcome coverage** (`section` + `.sec-head`): one `.story` per requirement —
+     `.story-id` = the requirement ID, `.story-name` = the requirement in a few words,
+     `.story-count` = the TCs covering it, and `.story-pct` replaced by a `.chip` reading
+     `Full` (`.full`) / `Partial` (`.partial`) / `Missing` (`.none`) / `Assumed` (`.tag`).
+     `.sec-head .note` states plainly that **linkage is not coverage** and that `Assumed` rows
+     rest on `@unverified-assumption` tests. No new CSS — reuse the existing classes.
+  5. **Delta** (when a previous snapshot exists): improved / regressed TC-IDs and the % change.
+  6. **Source reports** (`.files`): one `.file` per CSV written.
+  7. `<footer>`: 1–2 sentence quick wins (e.g. configure the missing role user; seed an
      empty-history record) + a provenance line (approved doc revision, spec files, TC counts).
   Semantic colours (green/amber/red) are for coverage only; the indigo `--accent` for structure.
   No chart libraries — bars are divs, the gauge is a CSS `conic-gradient`.
@@ -1266,11 +1481,11 @@ timestamped):
 
 ```text
 Preparation → Spec/requirement validation → Code/implementation validation →
-Automation generation/update → Open questions (user decision) → Coverage measurement →
-Data readiness (QC decision + provisioning) →
+Automation generation/update → Open questions (user decision) → Checkpoint A (compliance gate) →
+Coverage measurement → Data readiness (QC decision + provisioning) →
 Setup journeys → Smoke execution → Smoke gate → Self-healing →
 Positive execution → Negative execution → Result generation → Report generation →
-ADO update → Finalization
+Checkpoint B (compliance gate) → ADO update → Finalization
 ```
 
 **Every log entry carries:** current stage · current run group (`parallel` /
@@ -1389,7 +1604,10 @@ runs twice in one phase. Suites beyond ~40 tests are sliced per group and stage 
 ## PHASE 3 — FIRST RUN (IMPROVE)
 
 <environment_gate>
-**Coverage gate first:** the PHASE 2.5 verdict must be `PASS`, `report-only`, or a recorded
+**Checkpoint A gate first:** `<checkpoint_a>` must be recorded for this scope, and only the
+scope whose applicable pre-run checks passed may execute. Tests left BLOCKED are isolated and
+reported against the original scope — the run continues for everything independent of them.
+**Coverage gate second:** the PHASE 2.5 verdict must be `PASS`, `report-only`, or a recorded
 user override — otherwise do not execute (see `<coverage_measurement>`).
 **Readiness gate second:** the PHASE 2.6 verdict must be `READY` or `READY-WITH-SKIPS` — every
 predicted skip carries a QC decision or the pipeline default (see `<data_readiness>`). Test
@@ -1464,15 +1682,32 @@ worked in the learning file.
 3. **Self-heal ONLY test-code defects** (`selector_failure`, `assertion_failure`, `evidence_failure`):
    - fixes live in page objects / spec waits — never in app business logic
    - re-verify the selector against source before changing it
+   - a **locator repair must preserve the intended element and behaviour** — a selector that
+     matches a *different* element is a new defect, not a fix
+   - an **assertion or expected-value change needs approved-requirement evidence** (a REQ/AC/TC
+     id or an approved clarification). No evidence → record the issue **unresolved**; never
+     invent a repair, and never let observed behaviour supply the new expected value
+   - a **genuine requirement change is an explicit test update**, described as such — not a heal
    - HARD RULES: never lower an assertion threshold · never broaden an assertion
-     to make it pass · never add a skip to hide a failure · **never reinterpret an
+     to make it pass · never add a skip to hide a failure · never suppress or swallow an error ·
+     never change an application setting, environment flag or configuration value to obtain a
+     pass · never edit product code · **never reinterpret an
      `app_bug` as a test bug** — when the app contradicts the approved TC, the TC
      wins and the app is buggy · **and never the reverse for an `@unverified-assumption`
      test** — there the TC's expected result is a guess, so the guess is suspect first: it is
      `unverified_assumption`, not `app_bug`, until the user confirms the interpretation
 4. Re-run only the healed tests to confirm the heal. Maximum **2 heal iterations**;
    whatever still fails for test-code reasons after that is reported honestly as-is.
-5. Keep a **Heal Log**: | TC-ID | Failure | Classification | Fix applied | Result |
+5. Keep a **Heal Log** — one row per repair, all nine columns, `n/a` with a reason is a value
+   but a blank is not (`references/automation-rules.md` §5):
+
+   | TC-ID | Affected test / files changed (`file:line`) | Defect category | Previous value (old locator / assertion / expected value) | Updated value | Reason the new value is correct | Approved-requirement reference | Verification performed | Rerun result |
+   |---|---|---|---|---|---|---|---|---|
+
+   The **approved-requirement reference is required** for any assertion or expected-value change
+   and is `n/a` only for a pure locator repair. **Verification performed** names the checks
+   re-run (validator rules, project lint, semantic re-review); **Rerun result** names the tests
+   re-executed and their outcome, or `not re-run — reason`.
 6. Every `automation_failure` or `environment_failure` heal that would help the next run
    (a wait that works, an element identified differently, an environment quirk) becomes one
    plain-English tagged line under `## Automation Tricks` in `Testing/project-learning.md`.
@@ -1628,6 +1863,60 @@ worked in the learning file.
    - Wide content scrolls in its own container; page never scrolls horizontally.
 </second_run>
 
+<checkpoint_b>
+**CHECKPOINT B — MANDATORY POST-RUN COMPLIANCE GATE.** Runs after execution and after ALL
+debugging, before `AUTOMATION COMPLETE`. Load `references/compliance-checkpoints.md` and work the
+same checklist again.
+
+1. **Repeat the FULL review on the FINAL code — including every file that passed Checkpoint A.**
+   Debugging changes code; A's results describe the code as it was then, not as it is now.
+   **Both halves again, not just the fast one:**
+   - *mechanical* — re-run `validate-automation.mjs` and the project's own tooling over the final
+     files, and record the new `scopeDigest`;
+   - *semantic* — re-review every `S` item of `references/compliance-checkpoints.md` §2 against
+     the final code: layer ownership, whether each assertion still verifies its required outcome,
+     evidence placement, and each honoured exception's substance. A clean re-scan is not a
+     repeated review.
+2. **Confirm debugging introduced no shortcuts:** no weakened assertion, no broken POM boundary,
+   no removed or relocated evidence, no suppressed error, no new unjustified skip or raised
+   timeout, no changed application setting, no product-code edit.
+3. **Verify the artifacts were ACTUALLY produced** — this is the half Checkpoint A could not do:
+   - every executed attempt has its assertion-point image at the path the merged and phase JSON
+     record, and every failed attempt its failure image;
+   - each image is associated with the right TC-ID and variant, and the **evidence sanity check**
+     passes (no PASS image showing a cleaned-up screen);
+   - `merged-results.json`, `phase-{N}.json`, `phase-{N}.html` and the progress log exist, are
+     internally consistent, and **correspond to the final tested code** — compare the
+     `scopeDigest` recorded for the run against the current one;
+   - expected failures (`fail`), extended timeouts (`slow`) and skips appear as themselves in the
+     report, never folded into the pass count;
+   - Requirement → TC → automated test → execution result is mappable end to end, and the three
+     coverage figures are reported separately (`<coverage_measurement>`).
+
+**If an automation defect is found here:** repair it immediately → re-run the relevant static
+checks → **rerun the affected tests** → if a shared component changed (page object, fixture,
+helper, config) include every consumer → if the blast radius cannot be bounded reliably, run the
+full in-scope suite → then **repeat the full Checkpoint B review** on the result.
+
+**Any later code change invalidates the checks and results it affects.** Refresh Checkpoint A's
+applicable checks before rerunning and repeat B afterwards. A recorded gate is valid only for the
+`scopeDigest` it names — **never claim completion from stale results.**
+
+**Do not rerun to make a failure disappear.** An unchanged application defect or an environment
+failure is not fixed by repetition: preserve the evidence, classify it (`app_bug`,
+`environment_failure`, `unverified_assumption`), and report it as an unresolved blocker.
+
+**Gate result.** `PASS` only when there are no confirmed violations in the final delivered scope
+**and** every `review[]` / `notRun[]` item is closed — by the scanner, by other project tooling,
+or by documented semantic review against the same `scopeDigest`. Otherwise `FAIL` or `BLOCKED`,
+named item by item. Record it per `compliance-checkpoints.md` §5.
+
+**Both gates must PASS for the final delivered scope before claiming automation compliance**, and
+compliance status is reported separately from execution status: compliant tests can expose
+application defects, passing tests can still violate these rules, and an environment blocker can
+leave a gate BLOCKED with nothing wrong in the code.
+</checkpoint_b>
+
 <bug_report_format>
 Every `app_bug` entry — in the HTML report and in anything filed to DevOps — uses this shape.
 
@@ -1739,6 +2028,12 @@ fake a status.
 
 ## AUTOMATION COMPLETE
 
+**Precondition — not negotiable.** Return this ONLY when `<checkpoint_a>` and `<checkpoint_b>` are
+both recorded **PASS for the final delivered scope**, at the current `scopeDigest`. If either gate
+is `FAIL` or `BLOCKED`, if any applicable check is `unresolved`, or if any recorded result predates
+the last code change, return **`## BLOCKED`** instead with the gate record attached — however green
+the test run was. A passing suite is not a passed gate.
+
 **Feature:** {name} · **User Story:** {ID — title}
 **Approved TC document (automation source):** {path}
 **Environment:** {env} · **Run command:** {exact command}
@@ -1793,9 +2088,21 @@ separate skill 5 and is not required for this run.`
 {Legacy flat `screenshots/{user_story_name}/` present: yes (left untouched) | no}
 
 ### Coverage
-| TC-ID | Smoke | Automation candidate | Implementation | Static coverage | Run 2 status |
-|-------|-------|----------------------|----------------|-----------------|--------------|
-{— includes `manual — not automated` rows; Static coverage = Fully / Partially / Not Covered from PHASE 2.5}
+*Three separate figures — never merged:* **(1)** requirement outcome coverage · **(2)** TC
+automation coverage (the gate) · **(3)** execution pass rate (in *Second Run — Results*).
+
+**(1) Requirement outcome coverage** — does each requirement's required outcome get asserted?
+| Requirement ID | Requirement (short) | Outcome coverage | Asserted by | Note |
+|---|---|---|---|---|
+{Full / Partial / Missing / **Assumed**; `Assumed` = covered only by an `@unverified-assumption` test.
+Linked-but-not-asserted is `Partial`, never `Full`. IDs validated against {REQ file / approved doc /
+ADO-MAP}; unresolvable IDs listed here, never invented.}
+**Totals:** Full {n} · Partial {n} · Missing {n} · Assumed {n} of {N} requirements
+
+**(2) TC automation coverage**
+| TC-ID | Requirement ID(s) | Smoke | Automation candidate | Implementation | Static coverage | Run 2 status |
+|-------|-------------------|-------|----------------------|----------------|-----------------|--------------|
+{— includes `manual — not automated` and `pending — not covered for this run` rows; Static coverage = Fully / Partially / Not Covered from PHASE 2.5}
 
 **Weighted static coverage (pre-run):** {x}% — target {t}% ({L3 | default}, {mechanism}) — **{PASS | user override | report-only}**
 Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None {n} of {N}
@@ -1841,6 +2148,33 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 ### DevOps close-out
 {AutomationStatus updates + US comment link — or what failed}
 
+### Compliance gates
+**Checkpoint A (pre-run):** {PASS | FAIL | BLOCKED} · **Checkpoint B (final code):** {PASS | FAIL | BLOCKED}
+*Both must be PASS for the final delivered scope before automation compliance is claimed.*
+
+| | Checkpoint A | Checkpoint B |
+|---|---|---|
+| Scope | {N tests · M page objects/fixtures/helpers/config} | {same, or the final scope after reruns} |
+| Code state | `scopeDigest {sha}` · {N} files hashed · git {HEAD short} {clean \| +K uncommitted} *(git is context only)* | `scopeDigest {sha}` |
+| Mechanical checks | validator `{gate}` — {v} violations · {w} warnings · {r} review · {n} notRun · {e} exceptions; {project tooling + result \| none configured} | {same, re-run on the final code} |
+| Semantic review | {items reviewed} | {items reviewed, including files that passed A} |
+| Findings | {ruleId} {file}:{line} — {one line}, or "None" | {…} |
+| Repairs | {what changed} → {re-check run} → {result} | {…} |
+| Open items | {item} — {verified-semantic: reasoning} | {…} |
+| **Unresolved** | {check} — {why it could not be verified} — **each one keeps this gate BLOCKED** | {…} |
+| N/A | {check} — {why this rule has NO SUBJECT in this scope} | {check} — {why} |
+
+*`N/A` means the rule has nothing to act on here (no ADO linkage, no modifier in scope, no API
+fixtures). A check that applies but did not run is **`Unresolved`**, never `N/A` and never PASS —
+that includes anything the validator reported in `notRun[]` or left open in `review[]`.*
+
+**Runtime artifacts** (images, phase JSON/HTML, logs) are verified at Checkpoint B only — at A they
+were recorded `scheduled for Checkpoint B`, never PASS.
+**Compliance vs execution:** {one line — e.g. "both gates PASS; 3 TCs failed on real application
+defects" or "suite green; Checkpoint B BLOCKED on 2 unresolved review items"}.
+{When code changed after a recorded run: which checks were refreshed and which results were
+discarded as stale.}
+
 ### Deviations
 {everything that differs from the approved document, with reasons — or "None"}
 
@@ -1859,14 +2193,22 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 
 ## BLOCKED
 
-**Reason:** {unapproved TC doc | missing User Story | ambiguous US name | missing profile key | unresolved test-data precondition (QC chose stop, or provisioning failed and no alternative accepted)}
+**Reason:** {unapproved TC doc | missing User Story | ambiguous US name | missing profile key | unresolved test-data precondition (QC chose stop, or provisioning failed and no alternative accepted) | **compliance gate not PASS** (Checkpoint A or B `FAIL`/`BLOCKED`, an applicable check still `unresolved`, or the recorded results are stale)}
 *(Never blocked for Azure DevOps: a missing or stale ADO-MAP.md, an unpublished story, or an
 ADO auth failure all degrade to `ado_mode = local` and the run continues. Never blocked for an
 ambiguous TC step or an unresolved element either: those are raised as PHASE 2.4 open questions
-and, unanswered, become tagged assumptions or skip-guarded TCs.)*
+and, unanswered, become tagged assumptions or skip-guarded TCs. **An unresolved compliance item IS
+a block for the affected scope** — but only for that scope: independent work still completes and is
+reported.)*
 **Details:** {exact item and what was observed}
+**Compliance gates:** {the `### Compliance gates` table — which gate, which items are unresolved,
+what would close each one}
+**Execution status (kept separate):** {what actually ran and its result — a green suite here does
+not lift the gate, and failing tests here may be genuine application defects rather than a
+compliance problem}
 **Completed before blocking:** {phases/items}
-**Required from the user:** {the exact input or action needed}
+**Required from the user:** {the exact input or action needed — or "nothing: the open items are
+mine to verify" when no user input is needed}
 
 </structured_returns>
 
@@ -1874,6 +2216,32 @@ and, unanswered, become tagged assumptions or skip-guarded TCs.)*
 
 <quality_checklist>
 Before returning AUTOMATION COMPLETE:
+
+- [ ] **Checkpoint A recorded PASS for the executed scope** — validator + project tooling +
+      semantic review; confirmed violations fixed immediately, affected checks re-run
+- [ ] **Checkpoint B recorded PASS for the FINAL delivered scope** — full review repeated on the
+      final code including files that passed A; debugging introduced no shortcut
+- [ ] **Validator result reported in full** — `gate`, `counts`, `review[]`, `notRun[]`,
+      `exceptions[]`; a `PASS` never presented as proof that the tests are correct; a scanner
+      `BLOCKED`/`NOT_RUN` recorded verbatim and its checks closed another way against the same
+      `scopeDigest`, or left BLOCKED
+- [ ] **No applicable check recorded as PASS or as `N/A` without having run** — an applicable
+      check that did not complete is `unresolved` and **keeps its gate BLOCKED**; `N/A` is only
+      for a rule with no subject in this scope, with the reason naming why it has none. Every
+      validator `notRun[]` and open `review[]` item is an applicable check, never an `N/A`.
+      Runtime artifacts are never claimed at Checkpoint A
+- [ ] **Every honoured exception's source opened and its substance recorded** (justified /
+      rejected); no `qa-allow` on a non-exemptible rule
+- [ ] **Both gates' records carry the `scopeDigest`**, and no result from an earlier digest was
+      reused after a code change
+- [ ] **Blocked tests reported against the ORIGINAL scope** with reasons — isolated, never
+      silently dropped, never counted as passing
+- [ ] **Compliance status reported separately from execution status**
+- [ ] **Requirement outcome coverage, TC automation coverage and execution pass rate reported as
+      three separate figures**, each requirement ID validated against the resolved sources and
+      none invented here
+- [ ] **No product code modified, no application setting changed, no error suppressed to obtain
+      a pass**
 
 - [ ] TC document verified `Status: APPROVED` — gate respected
 - [ ] User Story id resolved without Azure (task input → frontmatter → folder name → ask) and

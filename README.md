@@ -17,7 +17,8 @@ This repository is the **canonical source**. Any project pulls the skills from h
     3-generate-manual-test-cases/          design manual TCs (EN + AR), HTML review page, human approval gate
     4-white-box-testing/                   audit the code against the requirement: gaps, bugs, repro scenarios
     5-publish-test-cases-azure/            beautify the approved TCs and publish them to Azure DevOps (ADO-MAP.md)
-    6-test-run-automation/                 generate + run Playwright (POM), coverage, reports, DevOps close-out
+    6-test-run-automation/                 generate + run Playwright (POM), two compliance gates, coverage, reports
+      SKILL.md INPUT.txt references/ (3) scripts/ (4 + fixtures) assets/ (1)
     7-discover-business-rules/             find rules the code enforces that the spec never states (PO approval gate)
     find-skills/                           helper: discover and install skills from skills.sh
   commands/
@@ -73,12 +74,12 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
 └─────────┘ └──────────────┘                          │ 5 publish-test-cases-    │──► *-beautified.md,
      │              │  PO approves → --apply-approved  │   azure (beautify + ADO) │    ADO Test Cases,
      └──────────────┴──────────► REQ delta → 2 → 3    └──────────────────────────┘    ADO-MAP.md
-                                                                     │ gate: ADO-MAP.md matches source
+                                                                     ┆ optional — ADO-MAP.md only closes the loop
                                                                      ▼
                                                       ┌──────────────────────────┐
                                                       │ 6 test-run-automation    │──► Playwright suite,
-                                                      │  (Playwright, POM, smoke │    coverage, reports,
-                                                      │   gate, live progress)   │    screenshots, close-out
+                                                      │  Checkpoint A → run →    │    coverage, reports,
+                                                      │  Checkpoint B (both PASS)│    screenshots, gate record
                                                       └──────────────────────────┘
 ```
 
@@ -136,15 +137,32 @@ with Tested-By, idempotently, `AutomationStatus = Planned`, and writes `ADO-MAP.
 TC-ID → work item map and the source hash. The approved source document is never modified.
 
 ### 6 — test-run-automation
-Starts only when skill 5 has published **this** version of the approved document
-(`ADO-MAP.md` and the beautified file carry the same source hash). Generates Playwright
+Its only document gate is `Status: APPROVED`; publishing to Azure DevOps (skill 5) is optional
+and never asked for. Generates Playwright
 automation with a mandatory Page Object Model from the original approved document, builds a
 per-story run plan (parallel vs serial groups), measures static coverage against the L3
 target, resolves test-data readiness with the QC, then runs headed in priority order (smoke
-behind a 30 % failure gate, then positive, then negative) with live progress and ETA, takes
-a final-state screenshot per TC, and closes the loop in DevOps: `Custom.TestAutomated` and
-automated-test metadata on the work items skill 5 created, plus a summary comment, a phase
-report and a bug report.
+behind a 30 % failure gate, then positive, then negative) with live progress and ETA, and takes
+an **assertion-point screenshot** per TC — captured while the verified state is still on screen,
+before any teardown or cleanup runs, kept as immutable per-attempt history.
+
+**Two mandatory compliance checkpoints** bracket the run, and both must PASS before the skill
+claims the automation is compliant:
+
+* **Checkpoint A**, before anything executes — `scripts/validate-automation.mjs` (a read-only,
+  zero-dependency static screen: focused modifiers, placeholder assertions, POM boundaries,
+  evidence capture traced through the methods each test actually calls, traceability) **plus**
+  semantic review of everything a text scan cannot decide. Confirmed automation-code defects are
+  repaired there and then, never handed back as suggestions; only the compliant scope runs.
+* **Checkpoint B**, on the final code after all debugging — the same review repeated, plus proof
+  that the screenshots, reports and logs were actually produced and match that code.
+
+Each gate is recorded PASS / FAIL / BLOCKED against a content hash of the tested files, so a
+result from before a later change can never be reported as complete, and a check that did not run
+is never recorded as PASS. Compliance status stays separate from execution status. When the story
+*happens* to be published already, it also closes the loop in DevOps (`Custom.TestAutomated` and
+automated-test metadata on the work items skill 5 created, plus a summary comment); otherwise that
+phase is skipped silently. Produces a phase report and a bug report either way.
 
 ### 7 — discover-business-rules
 The reverse direction of skill 4: starting from a story it reads the code and writes every rule
@@ -188,16 +206,27 @@ approved exemption; specs govern business truth, steering governs quality policy
 file overrides neither. L1 and L2 are copied from this repo and never authored by a skill; L3
 is a template you fill in.
 
-**Requirement folders** — one folder per User Story: `Testing/Requirements/US-{id}-{kebab-name}/`
-holding the REQ file and review (skill 2) and the code-rules export (skill 7).
+**Requirement folders** — one folder per User Story:
+`Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{kebab-name}/` holding the REQ file and review
+(skill 2) and the code-rules export (skill 7). The `SPEC-{spec-name}/` parent appears whenever the
+story came from a spec FILE; stories from Azure DevOps, Word or pasted text sit directly under
+`Testing/Requirements/`.
 
-**Test-case folders** — `Testing/Manual_Test/TestCases/{UserStoryName}/` holding the approved
-TC document (skill 3), the beautified upload document and `ADO-MAP.md` (skill 5).
+**Test-case folders** — `Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/`
+holding the approved TC document (skill 3), the beautified upload document and `ADO-MAP.md`
+(skill 5) — mirroring the requirement folder, `SPEC-*` parent included. Skill 6's reports, logs
+and screenshots mirror it again.
 
 **Human gates** — skill 3's TC document must be approved by a human before skills 5 and 6
-run; skill 6 refuses to start until skill 5 has published the current document; skill 7's
-findings must be approved by the Product Owner before they become knowledge; skill 1's
-restructure needs a confirmed move plan.
+run; skill 7's findings must be approved by the Product Owner before they become knowledge;
+skill 1's restructure needs a confirmed move plan. Publishing to Azure DevOps is **not** a gate:
+skill 6 runs locally when skill 5 has not run.
+
+**Machine gates** — distinct from the human ones, and enforced by the skill itself: skill 6's
+two compliance checkpoints (before execution and on the final code) must both PASS for the
+delivered scope, skill 1's validator never reports PASS for a check that did not run, and neither
+does skill 6 — an applicable check that could not be completed is `unresolved` or `N/A` with a
+reason, and leaves its gate BLOCKED.
 
 **Credentials** — never in files or logs. Azure DevOps uses `AZURE_DEVOPS_PAT_B64`; the app
 URL and test users are asked for at run time and stored only as non-secret facts.
@@ -210,7 +239,7 @@ URL and test users are asked for at run time and stored only as non-secret facts
 |---|---|---|
 | Playwright MCP | 3, 5 (gap-filler only), 6 | live application discovery and automation |
 | Azure DevOps MCP | 2, 3, 5, 6, 7 | read User Stories, publish Test Cases, update automation fields, comment results |
-| Word MCP | 2, 3 | read requirement and test-case documents |
+| Docx MCP | 2, 3 | read requirement and test-case documents, and write review comments back into them |
 
 Skill 1 writes `.mcp.json` from `assets/mcp.template.json` and validates each server.
 
@@ -245,3 +274,12 @@ or renamed. Skill front-matter needs `name`, `description` (this is what trigger
 keep the trigger phrases) and, where useful, `argument-hint`. Skills with side effects set
 `disable-model-invocation: true`. Commit, push to `main`, and every project picks the change
 up on its next `/sync-skills`.
+
+Scripts are zero-dependency ESM, Node ≥ 18, read-only, and return their result as a JSON
+payload. The reporting scripts always exit 0 (`--strict` on skill 6's validator is the one
+opt-in exception, for CI); `selftest.mjs` is a test harness and exits non-zero on mismatch by
+design. After changing skill 6's validator, run its self-test:
+
+```bash
+node .claude/skills/6-test-run-automation/scripts/selftest.mjs --pretty
+```
