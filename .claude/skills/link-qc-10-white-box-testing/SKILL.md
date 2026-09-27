@@ -1,5 +1,5 @@
 ---
-name: white-box-testing
+name: link-qc-10-white-box-testing
 model: claude-opus-5
 description: Stack-agnostic implementation audit. Analyse any codebase against a requirement (spec.md, user story, ticket, or free-text acceptance criteria) to verify implementation correctness. On the first run in a new project it auto-profiles the repository — detecting language, frameworks, monorepo layout, architectural layers, requirement sources and test locations — and derives its own code-discovery and search strategy, caching it as a reusable project profile. Then identifies gaps, potential bugs, and concrete reproduction scenarios. Use when the user asks to verify implementation, find bugs for a story, check if a spec is implemented, audit an implementation, or trace a requirement in code — especially in a project this skill has not seen before. Trigger on phrases like "generic implementation analysis", "analyse implementation", "audit implementation", "check if implemented", "find bugs for", "implementation gaps", "trace spec in code", "trace story in code", "verify the code for".
 argument-hint: "[<story-id> | <feature-name> | <path/to/spec.md> | <path/to/story.md>] [--reprofile]"
@@ -39,15 +39,15 @@ Phase 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6. Do not skip phases. Phase 0 runs in full 
 The shared learning file is the team's plain-English knowledge base. Search it BEFORE
 profiling and BEFORE asking the user anything: recorded requirement sources, which business
 area a feature belongs to, rules the system is known to enforce, earlier white-box findings
-and answers under `### White-Box Model (skill 4)`. Reuse what it knows and say so.
+and answers under `### White-Box Model (skill 10)`. Reuse what it knows and say so.
 
 <qa_manifest>
 **Structure contract — read `Testing/qa-manifest.json` first.** Written by
-`1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
+`link-qc-1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
 requirements, manual test cases, automation root, pages, tests, reports, screenshots, logs,
 white-box folder, learning file), the steering file paths, the framework config and every
 documented deviation. Use its paths before any auto-detection; fall back to detection only when
-the manifest is absent, and then tell the user to run `/1-generate-update-testing-structure`
+the manifest is absent, and then tell the user to run `/link-qc-1-generate-update-testing-structure`
 (audit first, then repair) — never invoke that skill yourself. Steering conflicts resolve per
 the rules in `docs/steering/README.md` (L1 baseline, L2 refines, L3 values + stricter +
 approved exemptions; specs govern business truth, steering governs quality policy, the learning
@@ -55,11 +55,11 @@ file overrides neither). Behaviour knowledge stays in `Testing/project-learning.
 </qa_manifest>
 
 <project_learning_file>
-**Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
+**Project Learning File protocol — shared by skills 1-11, 3b and 3c (read first, ask second, write back).**
 
 `Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
-(created by `1-generate-update-testing-structure`). This skill's section is
-`### White-Box Model (skill 4)`. If `Testing/` exists but the file does not, create it with
+(created by `link-qc-1-generate-update-testing-structure`). This skill's section is
+`### White-Box Model (skill 10)`. If `Testing/` exists but the file does not, create it with
 the skeleton defined in skill 1, section 2. The technical repository profile stays in
 `.project-profile.md` (0.7); the learning file holds only what a QC can read.
 
@@ -82,7 +82,7 @@ written to the file.
 
 *Write back (mandatory before delivering):*
 - Every answered question → one tagged line under this skill's `#### Questions and Answers`:
-  `- [module: X] [type: qa] **Q (skill 4, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
+  `- [module: X] [type: qa] **Q (skill 10, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
   answers are ALSO added to `## Project Knowledge`.
 - Every new fact about the system → one tagged line in the matching shared section or this
   skill's `#### Knowledge`. Grep the same tags first; update or dedupe instead of appending twins.
@@ -211,11 +211,11 @@ Record every directory holding requirements (e.g. `specs/*/spec.md`, `test/User 
    see the `generate-testing-structure` skill). Create the `White_Box_Testing/` subfolder if missing.
 3. Otherwise create `Testing/White_Box_Testing/` at the repo root and use it.
 
-`.project-profile.md` always lives at this ROOT (shared with `7-discover-business-rules`).
+`.project-profile.md` always lives at this ROOT (shared with `link-qc-11-discover-business-rules`).
 
 **Report folder (`<report-folder>`)** — the analysis report is NOT written flat at the root. It mirrors
 the story's position in the requirements tree (`paths.requirements`, default `Testing/Requirements/`),
-exactly like `3-generate-manual-test-cases` mirrors it for TCs:
+exactly like `link-qc-3-generate-manual-test-cases` mirrors it for TCs:
 
 ```text
 <output-dir>/[SPEC-{spec_name}/]US-{id}-{kebab-name}/{RequirementID}-{FeatureName}-analysis.md
@@ -292,7 +292,7 @@ Tell the user in one line whether you built a new profile or reused a cached one
 ### 0.8 Write what the profile means to `Testing/project-learning.md`
 
 After building or refreshing the profile, add (or update) 2-5 tagged lines under
-`### White-Box Model (skill 4) → #### Knowledge`, in words a QC understands — for example:
+`### White-Box Model (skill 10) → #### Knowledge`, in words a QC understands — for example:
 
 ```markdown
 - [module: Project] [type: env] The app has a browser front end, a server API, and a database; business rules are enforced on the server.
@@ -371,7 +371,7 @@ Translate what Phase 2 (and later Phases 3-4) revealed into tagged, plain-Englis
 `Testing/project-learning.md` — this is how white-box findings reach the manual and
 automation skills:
 
-- `### White-Box Model (skill 4) → #### Knowledge`: which business area the feature belongs
+- `### White-Box Model (skill 10) → #### Knowledge`: which business area the feature belongs
   to; every rule or validation the code enforces, stated as behaviour with the story as
   source (`- [module: KPI] [page: KPI Details] [type: rule] The server rejects a yearly value above the KPI target, even if the screen allows typing it. (source: US-1031475)`);
   where each check happens (browser only / server / both, in words); recurring bug patterns;

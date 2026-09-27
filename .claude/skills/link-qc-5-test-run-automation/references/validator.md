@@ -7,15 +7,21 @@ comment/string-stripped source can establish, and routes everything else to sema
 ## Running it
 
 ```bash
-node .claude/skills/6-test-run-automation/scripts/validate-automation.mjs \
+node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs \
   --root <project> --pretty \
   [--files a.spec.ts,b.spec.ts] [--tests-path <dir>] [--pages-path <dir>] \
   [--tc-ids <csv|file>] [--req-ids <csv|file>] [--allow-file <path>] \
-  [--evidence-fn captureEvidence] [--treat-as-spec] [--strict]
+  [--evidence-fn captureEvidence] [--treat-as-spec] [--require-steps] [--strict]
 
-node .claude/skills/6-test-run-automation/scripts/selftest.mjs      # exits 1 on mismatch
-node .claude/skills/6-test-run-automation/scripts/validate-automation.mjs --help
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest.mjs      # exits 1 on mismatch
+node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --help
 ```
+
+`--files` should carry the page objects, components, fixtures and helpers the specs touch as well
+as the specs: the wait, `networkidle` and positional-selector rules apply in every layer, and a
+file the scanner never sees is never checked (support files reached by call resolution are only
+searched for assertions and evidence). `--require-steps` turns on `step-missing` — pass it for the
+specs this run generated or updated, not for legacy specs.
 
 Paths resolve CLI flag → `Testing/qa-manifest.json` (`paths.tests`, `paths.pages`,
 `paths.automationRoot`) → canonical `Testing/Automation/*`. Scope is `--files`, else every spec
@@ -93,9 +99,18 @@ emitted as `gate: BLOCKED`; a stack trace never reaches stdout.
 
 ### Warnings
 
-`wait-for-timeout`, `bare-set-timeout` (both suppressed by an adjacent justification),
-`hardcoded-credential`, `absolute-url`, `trace-describe-missing-reqid`, `trace-unknown-reqid`,
-`trace-title-dynamic`, `manifest-unreadable`, `exception-malformed`, `exception-expired`.
+`wait-for-timeout`, `bare-set-timeout`, `wait-network-idle` (all three suppressed by an adjacent
+justification containing a timing word — retry, backoff, debounce, deliberate, a REQ/TC id …),
+`positional-unscoped` (`first()` / `last()` / `nth()` on a receiver chain with no `filter()` segment
+and no named-container root narrowed by a further `getBy*`; suppressed by ANY comment of 15+
+characters on the line above, or a `qa-allow`; skipped on a line that already produced
+`pom-chained-locator`), `step-missing` (only with `--require-steps`: a test with no `test.step()`
+nested in it and no call to a `step` wrapper the file IMPORTS), `hardcoded-credential`,
+`absolute-url`, `trace-describe-missing-reqid`, `trace-unknown-reqid`, `trace-title-dynamic`,
+`manifest-unreadable`, `exception-malformed`, `exception-expired`.
+
+Warnings never move the gate. The three new ones run in every layer the scan is pointed at — pass
+page objects and helpers in `--files` or they are never checked.
 
 ### `review` — undetermined, never guessed
 
@@ -206,12 +221,30 @@ These ship in the payload's `limits[]` too, so no one can consume a `PASS` witho
 11. Credential detection is keyword-based: a secret in a neutrally named variable is missed, and a
     harmless literal beside a key named `token` is a false positive.
 12. Only files in the resolved scope are examined.
+13. Steps are recognised only in the scanned file: `test.step()` and a step wrapper IMPORTED into
+    the spec. A step inside a page-object method does not count for the spec that calls it, and
+    `step-missing` runs only behind `--require-steps`.
+14. Positional scoping (`first` / `last` / `nth`) is judged on the receiver chain of that call: a
+    `filter()` segment, or a named `getByRole` / `getByTestId` root narrowed by a further `getBy*`,
+    counts as scoped. An array `.filter` on a different receiver in the same statement does not; a
+    locator scoped by an earlier assignment is a false positive to justify with a comment.
+15. `networkidle` detection reads string literals next to `waitForLoadState(` or `waitUntil:` only;
+    a readiness helper that hides the literal behind a constant is invisible.
+
+The fingerprint (`scopeDigest`) hashes every `playwright*.config.*` in the root and the automation
+root **and one hop of each config's relative imports** (`timeouts.ts`, an env module), so editing
+the shared timeout policy invalidates a recorded gate exactly as editing the config does.
 
 ## Self-test
 
-`selftest.mjs` runs twelve fixture cases, including the false-PASS guards: evidence in an uncalled
-method, an unfollowable hop, a conditional call path, an exception aimed at a non-exemptible rule, a
-linked-but-partially-asserted requirement, unscannable valid code, and a post-run code change.
+`selftest.mjs` runs seventeen fixture cases, including the false-PASS guards: evidence in an
+uncalled method, an unfollowable hop, a conditional call path, an exception aimed at a
+non-exemptible rule, a linked-but-partially-asserted requirement, unscannable valid code, a post-run
+code change, and — for the timing rules — true positives at known lines (`timing.fixture.ts`),
+false-positive guards (`timing-clean.fixture.ts`: filter-scoped and justified positionals, a
+`networkidle` string constant, a comment, an imported step wrapper), false-negative guards
+(`timing-negative.fixture.ts`: an unrelated `.filter` in the same statement, a local `step`
+function, a step inside the page object) and the config-import fingerprint.
 
 It **exits non-zero on mismatch** — deliberately. It is a harness, not a reporting script. A failing
 self-test means the validator's verdicts cannot be trusted: record the compliance gate **BLOCKED**

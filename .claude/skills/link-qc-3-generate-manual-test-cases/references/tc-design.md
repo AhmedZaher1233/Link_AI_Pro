@@ -1,9 +1,13 @@
 # TC design rules and format — load at the design phase (workflow step 7)
 
-Draft the complete test case set FIRST: coverage from the specs, journey detail (navigation,
+Draft the complete test case set: coverage from the specs, journey detail (navigation,
 preconditions, known flows, test data) from the learning file where it already has answers.
 This draft is complete in scope (coverage) but any step wording not backed by learning-file
-knowledge is NOT yet trusted — the MCP pass validates it against the real application.
+knowledge is NOT yet trusted — every TC leaves this skill `draft — not app-validated`, and the
+optional `link-qc-3b-validate-manual-test-cases` confirms or corrects the wording against the real
+application later. A journey detail neither the specs nor the learning file can supply is a named
+GAP in the step (e.g. "open the {panel — exact label to be captured live}") and, when the answer
+would change the design, an open question (`open-questions.md`) — never a guess.
 
 Coverage (WHAT to verify) comes from the requirements and specs — never from implementation
 files (no reading components, templates, or services to decide coverage). The learning file
@@ -99,19 +103,82 @@ justification):
 
 Any category with no coverage → flag in the output. Never silently omit.
 
+## Test-design techniques — how edge and negative values are derived
+
+The minimums above say how many edge / negative TCs a feature needs; these techniques say
+**which values and combinations** those TCs use. A minimum satisfied by one arbitrary value is
+not satisfied. Pick the technique from what the spec shows:
+
+| Technique | Use when the spec shows… | What it yields |
+|---|---|---|
+| **Equivalence Partitioning (EP)** | an input with valid / invalid classes — type, format, allowed set, required / optional | one TC per partition, valid and invalid (one representative value each) |
+| **Boundary Value Analysis (BVA)** | a numeric range, a length limit, a date window, a count or size limit | below / at / above **each stated boundary** wherever the input domain permits — including a maximum-only constraint (a documented max of 50 → 49, 50, 51) and a minimum-only one (a documented min of 1 → 0, 1, 2). Only when a neighbour cannot exist (a length of −1, a date before the epoch the app accepts) is that side omitted, with the reason |
+| **Decision table** | ≥ 2 conditions that together decide one action — role × record state, flag × amount, plan × quota | one TC per rule column; don't-care rows collapsed; impossible combinations listed as N/A with the reason |
+| **State transition** | a status / lifecycle — draft → submitted → approved → …, active / suspended, open / closed | every valid transition once (0-switch) + one invalid transition attempt per guarded state (e.g. "approve" from draft) |
+| **Use-case / scenario** | end-to-end journeys | already the "full user journey" rule above — no additional TCs |
+
+Rules:
+
+- **Source-defined boundaries, derived test values.** The *boundary* itself must come from the
+  spec, the steering minimums or a learning-file line (a stated max of 50, a stated range 18–65).
+  The *test values* around it (49 / 50 / 51; 17 / 18 / 19 / 64 / 65 / 66) are legitimately
+  derived by BVA and are not "invented". A limit the spec implies but never states → a `Q-{n}`
+  with the recommended value (`open-questions.md`), never an invented boundary (SKILL.md
+  invariant 1, "deterministically").
+- **No new TC field.** The technique is visible through the TC `Description` wording ("… at the
+  maximum of 50 characters", "… with 51 characters", "… approve from draft is rejected") and
+  through the existing Negative Coverage rows — the frozen shape below is unchanged.
+- **Map to the L1 §4 categories** so the Negative Coverage table stays the evidence: EP →
+  Invalid inputs; BVA → Boundary conditions; decision table → Unauthorized access and business
+  rule violations; state transition → Error recovery and guarded actions.
+
+## Error-guessing checklist — apply where the flow has the trigger
+
+Experience says these scenarios fail most often in commit / async flows. Walk the list for every
+flow **that has the trigger named in the "Applies when" column**; the last column lists what a
+spec *may* define — it is a prompt for what to look up, never a default assertion.
+
+| # | Scenario | Applies when the flow has… | Possible expected behaviours (only if the requirement states one) |
+|---|---|---|---|
+| **E1** | Double-submit / double-click on the trigger | a P3 explicit trigger that creates or modifies | the **business outcome** is verified: one record / one order / one message visible afterwards. Never assume "exactly one request" or a disabled button — those are implementation choices |
+| **E2** | Concurrent edit / stale data | an edit flow on a record another user or TC can change | second save rejected, merged, or last-writer-wins — whichever the spec says |
+| **E3** | Session expiry mid-flow | a multi-step flow with a save at the end | redirect to login, inline re-authentication, or an error — and whether the input survives — per spec |
+| **E4** | Network / server failure during the trigger | any P3 trigger | error message text, whether form data is preserved, whether retry is offered — per spec |
+| **E5** | Refresh / browser back after submit | P4 state-persistence flows | no duplicate submission; state after refresh — per spec |
+| **E6** | Navigate away with unsaved changes | forms with a dirty state | warning / silent discard — per spec |
+
+Rules:
+
+- **Requirement-dependent, never mandatory.** An applicable item becomes a TC **only** when the
+  spec or steering states the expected behaviour for it. Button disabling, login redirects, data
+  preservation, retry availability and "one request" are *not* assumed; when the requirement is
+  silent, the item becomes a `Q-{n}` with a recommended behaviour (a recommendation is never an
+  expected result) and stays out of the TC set until answered — invariant 1.
+- **An applicable item is never skipped.** It is a requirement-backed TC or a `Q-{n}`. "Skipped"
+  is reserved for items that are **not applicable** (the flow has no such trigger) or
+  **explicitly excluded from scope** by the user or the spec — each named with its reason in the
+  existing `**Patterns applied / skipped:**` header line, the same line P1–P5 use (its key is
+  unchanged; the renderer does not parse it).
+- E1–E6 TCs use the existing types and stages: `negative` / `@negative` for a rejection or a
+  guard, `edge-case` / `@positive` where the outcome is a success path (E5 with no duplicate).
+  No new enum value.
+
 ## Locale coverage
 
 MANDATORY for every test case — one separate entry per locale in `required_locales`, each with
 a distinct ID (secondary locale appends "b" to the ID). Each variant MUST:
 1. Confirm the page language and text direction BEFORE any interaction
 2. Reference element labels by their display text in that locale — never assume labels are
-   direct translations
+   direct translations. A secondary-locale label the learning file (`## Locale Knowledge`) does
+   not record is written as the English label plus "(Arabic label: to be captured live)" —
+   never a guessed translation; 3b captures it live and replaces the note.
 3. RTL variants: confirm right-to-left layout (panels open from the opposite side, content
    alignment, tree indentation direction)
 4. Confirm locale-appropriate date and number formats where applicable
 
-(How much of the secondary locale is walked live via MCP is governed by `mcp-pass.md` §4 —
-the TC documents still carry full per-locale coverage.)
+(The TC documents carry full per-locale coverage from design; how much of the secondary locale
+is walked live is the validator's decision — `link-qc-3b-validate-manual-test-cases/references/mcp-pass.md` §4,
+or `link-qc-3c-validate-manual-test-cases-cli/references/walk-rules.md` §4.)
 
 ## Data oracle requirement
 
@@ -141,10 +208,10 @@ drafting, keep ONE running list of **data items** for the story — this list be
 
 | Status | Meaning |
 |---|---|
-| `READY` | The data is confirmed to exist — a learning-file `[type: data]` / `[type: env]` line, or seen live on a listing screen during the MCP pass. |
-| `MISSING` | The data is required, WAS checked, and was not found. |
+| `READY` | The data is confirmed to exist — a learning-file `[type: data]` / `[type: env]` line (3b may also confirm it live on a listing screen). |
+| `MISSING` | The data is required, WAS checked live, and was not found. **Never written by this skill** — only 3b (one read-only look) or skill 5 can establish it. |
 | `IMPOSSIBLE` | The data cannot be created by any available or allowed way (background job only, external system, a role that exists in no environment, a state the app cannot reach). Decided only after the ways below were considered. |
-| `UNKNOWN` | Not enough information to confirm — not checked, screen unreachable, no Playwright MCP, story not implemented, or the spec does not say the value. |
+| `UNKNOWN` | Not enough information to confirm — not checked (this skill checks nothing live), story not implemented, or the spec does not say the value. |
 
 An item is never `MISSING` only because it was not checked: no check → `UNKNOWN`.
 
@@ -153,7 +220,7 @@ An item is never `MISSING` only because it was not checked: no check → `UNKNOW
 | Way | Use it when |
 |---|---|
 | `e2e scenario` | **Preferred.** An existing UI flow creates the data — another TC in this set, or a `## Common Flows` entry in the learning file. Name that TC-ID / flow in words. |
-| `api` | Only when API-based test-data creation/seeding is **already available** in the project (a learning-file `[type: data]` / `[type: env]` line or a recorded skill 6 setup fixture says so) or **explicitly confirmed** by the project / dev team. Otherwise write `api — to be confirmed`, never "available". |
+| `api` | Only when API-based test-data creation/seeding is **already available** in the project (a learning-file `[type: data]` / `[type: env]` line or a recorded skill 5 setup fixture says so) or **explicitly confirmed** by the project / dev team. Otherwise write `api — to be confirmed`, never "available". |
 | `db` | Only when DB-based seeding is already available or explicitly confirmed **and** the QC has the required access. Otherwise `db — to be confirmed`. |
 | `set directly` | Only for settings / configuration values that can be changed directly in the app (admin settings, feature toggles). |
 | `manual` | When no suitable automated way is available — the QC creates the data by hand. |
@@ -173,7 +240,33 @@ roles, values and flows in plain words.
 
 ## Test case format
 
-Field names are a frozen contract — skills 5 and 6 parse them. Never rename or drop one.
+Field names are a frozen contract — skills 4, 5 and 3b and the renderer parse them. Never rename
+or drop one. The **shape** is frozen too (the renderer parses by it, legacy documents excepted):
+
+```markdown
+### {TC-ID} — {Description}
+- **Type:** happy-path | edge-case | negative
+- **Locale:** en | ar | …
+- **Requirement:** REQ-…, REQ-…
+- **Stage:** @positive | @negative
+- **Preconditions:**
+  1. {…}
+  2. {…}
+- **Steps:**
+  1. {action + element label + value + inline assertion}
+  2. {…}
+- **Expected Result:** {…}
+- **Data Oracle:** {… | —}
+- **Smoke:** YES | NO
+- **Automation Candidate:** YES | NO
+- **Data effect:** {read-only | creates | modifies | deletes | —}
+- **Shared data:** {plain words | —}
+- **Validation:** draft — not app-validated
+```
+
+One bullet per field in this order; `Preconditions` and `Steps` as 2-space-indented ordered
+sub-lists; an empty optional value is `—`, never blank and never omitted. A `<!-- tc-evidence -->`
+comment after the block belongs to 3b / 3c — never write or edit one here.
 
 | Field | Description |
 |-------|-------------|
@@ -181,25 +274,27 @@ Field names are a frozen contract — skills 5 and 6 parse them. Never rename or
 | Type | happy-path / edge-case / negative |
 | Locale | one entry per required locale |
 | Requirement | Verified requirement IDs from the requirements source |
+| Stage | `@positive` for happy-path and edge-case; `@negative` for a TC that asserts a rejection, a guard, a validation error or a blocked role (whatever its Type). Written per TC so skill 5 never derives it |
 | Description | One-sentence summary |
-| Preconditions | Page-load state, language, user role (exact username from the combined ask), data state |
+| Preconditions | Page-load state, language, user role (exact username from the learning file; "username: to be confirmed" when unknown — an open question), data state |
 | Steps | Numbered — action + element label + value + inline assertion |
 | Expected Result | Final outcome — specific, assertable, labels in every required locale |
 | Data Oracle | MANDATORY if the TC asserts on data values |
-| Smoke | YES / NO — YES only for the critical happy-path journeys that prove the feature is alive (login works, screen reachable, core flow functions). Keep the smoke set small: roughly 10–20% of TCs, at least 1 per screen. Skill 6 runs `Smoke: YES` TCs FIRST behind a failure gate. Mark deliberately — never default everything to YES. |
+| Smoke | YES / NO — YES only for the critical happy-path journeys that prove the feature is alive (login works, screen reachable, core flow functions). Keep the smoke set small: roughly 10–20% of TCs, at least 1 per screen. Skill 5 runs `Smoke: YES` TCs FIRST behind a failure gate. Mark deliberately — never default everything to YES. |
 | Automation Candidate | YES / NO — see automation suitability below |
-| Data effect | OPTIONAL — `read-only` / `creates` / `modifies` / `deletes`. Tells skill 6 whether this TC may run in parallel with others (read-only) or must run one after another (it changes data). Leave blank to let skill 6 infer it from the steps. |
+| Data effect | OPTIONAL — `read-only` / `creates` / `modifies` / `deletes`. Tells skill 5 whether this TC may run in parallel with others (read-only) or must run one after another (it changes data). Leave blank to let skill 5 infer it from the steps. |
 | Shared data | OPTIONAL — the fixture, record, or account this TC shares with other TCs, in plain words (e.g. `KPI "Revenue" yearly values`, `single-session admin account`). TCs naming the same shared data run one after another. |
-| Validation | draft (set at design time; updated by the MCP pass — see the six states there) |
+| Validation | Always `draft — not app-validated` at design time (or `not-implemented — pending implementation` per `entry-cases.md` §4). The other states are set only by 3b — `validation-states.md`. |
 
 Do NOT include: selectors, code, attribute names, framework-specific assertions, or any
 password. `Data effect` / `Shared data` are plain words only — never table names, fixture
 function names, or identifiers from the code.
 
-**Type → run-stage mapping (contract with skill 6):** `happy-path` and `edge-case` TCs run in
-skill 6's `@positive` stage; a TC that asserts a rejection, a guard, a validation error or a
+**Type → run-stage mapping (contract with skill 5):** `happy-path` and `edge-case` TCs run in
+skill 5's `@positive` stage; a TC that asserts a rejection, a guard, a validation error or a
 blocked role runs in `@negative` — whether it is typed `edge-case` or `negative`. State this
-mapping in the document header so skill 6 never has to guess.
+mapping in the document header AND write the result per TC in the `Stage` field / summary column
+so skill 5 never has to guess.
 
 ## Automation suitability (proposal only — the human decides)
 
@@ -213,7 +308,7 @@ Mark each TC as an Automation Candidate using these heuristics:
 | Depends on real-time external data with no fixture | NO — environment risk |
 | One-time scenario with no regression value | NO — overhead exceeds value |
 | Exploratory / discovery-oriented scenario | NO — manual preferred |
-| Requirement not implemented yet (`mcp-pass.md` §1) | Defer — mark YES/NO on merit, but note "pending implementation" |
+| Requirement not implemented yet (`entry-cases.md` §4 — tester's answer or skill-4 report) | Defer — mark YES/NO on merit, but note "pending implementation" |
 
 The human reviewer can flip any marking during review.
 
@@ -236,5 +331,7 @@ locale coverage, data oracles, format, automation suitability).
    - Unchanged, still-correct TCs → keep.
 3. **Log every disposition** in the Existing-TC Analysis table (kept / updated / merged /
    removed / new, with reason) — included in the deliverable and in the HTML review page.
-4. Then **continue automatically** to the MCP pass (gated by its §1) and the self-review — the flow does not
-   pause between the writing phase and the review phase.
+4. Then **continue automatically** to the self-review and the deliverables — the flow does not
+   pause between the writing phase and the review phase. Existing TCs kept unchanged keep the
+   validation state (and evidence stamp) they carried; updated ones are reset to
+   `draft — not app-validated (stale — revised)`; new ones are `draft — not app-validated`.

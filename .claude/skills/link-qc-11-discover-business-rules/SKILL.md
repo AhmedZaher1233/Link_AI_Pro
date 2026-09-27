@@ -1,7 +1,7 @@
 ---
-name: discover-business-rules
+name: link-qc-11-discover-business-rules
 model: claude-opus-5
-description: Discover the business rules the CODE actually enforces for a User Story and export the ones the spec never mentions. Starting from a story ID, a REQ-*.md, a spec file, or pasted acceptance criteria, it locates the story's code (reusing the repository profile that 4-white-box-testing builds), reads validators, entities, migrations, services, guards and UI forms, and writes every observed rule as an EARS statement with code evidence — field lengths and formats, required/optional, uniqueness of names/IDs/codes, defaults, ranges and thresholds, allowed state transitions, permissions, duplicate handling, soft-delete/archival rules, calculated values, locale differences. It then compares that catalogue against the spec, classifies each rule as In spec / Partially in spec / Not in spec / Contradicts spec, and exports the "in code, not in spec" list as a review-ready document under Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/ — the same story folder 2-review-requirements uses, nested under a SPEC-* folder when the story came from a spec file (one folder per story — multi-story input is split; if the requirements folder does not exist it asks where to write) marked PENDING PO APPROVAL. Findings stay out of the learning file and the REQ until the Product Owner's decisions are recorded in the decision block and the skill is re-run with --apply-approved, which then records approved rules and hands bugs to skill 4 and a REQ delta plus suggested test cases to skills 2 and 3 (from there the normal pipeline continues: skill 3 designs the TCs, a human approves them, skill 5 publishes them if the project uses Azure DevOps — optional, skipped for a local-only run — and skill 6 automates them; this skill never hands an artifact straight to skill 6). Never edits source code or the spec itself. Use when the user asks to "discover the code for this story", "what rules does the code enforce", "find hidden business rules", "compare code with spec", "export business rules from code", "what validations exist that are not in the spec", "field limits / uniqueness not documented", "reverse-engineer the story", "code vs spec".
+description: Discover the business rules the CODE actually enforces for a User Story and export the ones the spec never mentions. Starting from a story ID, a REQ-*.md, a spec file, or pasted acceptance criteria, it locates the story's code (reusing the repository profile that link-qc-10-white-box-testing builds), reads validators, entities, migrations, services, guards and UI forms, and writes every observed rule as an EARS statement with code evidence — field lengths and formats, required/optional, uniqueness of names/IDs/codes, defaults, ranges and thresholds, allowed state transitions, permissions, duplicate handling, soft-delete/archival rules, calculated values, locale differences. It then compares that catalogue against the spec, classifies each rule as In spec / Partially in spec / Not in spec / Contradicts spec, and exports the "in code, not in spec" list as a review-ready document under Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/ — the same story folder link-qc-2-review-requirements uses, nested under a SPEC-* folder when the story came from a spec file (one folder per story — multi-story input is split; if the requirements folder does not exist it asks where to write) marked PENDING PO APPROVAL. Findings stay out of the learning file and the REQ until the Product Owner's decisions are recorded in the decision block and the skill is re-run with --apply-approved, which then records approved rules and hands bugs to skill 10 and a REQ delta plus suggested test cases to skills 2 and 3 (from there the normal pipeline continues: skill 3 designs the TCs, a human approves them, skill 4 publishes them if the project uses Azure DevOps — optional, skipped for a local-only run — and skill 5 automates them; this skill never hands an artifact straight to skill 5). Never edits source code or the spec itself. Use when the user asks to "discover the code for this story", "what rules does the code enforce", "find hidden business rules", "compare code with spec", "export business rules from code", "what validations exist that are not in the spec", "field limits / uniqueness not documented", "reverse-engineer the story", "code vs spec".
 argument-hint: "[<story-id>… | <feature-name> | <path/to/REQ-*.md> | <path/to/spec.md>] [--no-compare] [--reprofile] | --apply-approved <story-id>…"
 license: Adapted from jeffallan/claude-skills@spec-miner (MIT, https://github.com/Jeffallan/claude-skills) for the Link_AI_Pro QA skill set.
 ---
@@ -24,7 +24,7 @@ behaviour a QC can test.
   several stories except the summary described in 5.4.
 - **Findings are proposals until the Product Owner approves them.** The export file is marked
   `PENDING PO APPROVAL`. Nothing discovered by this skill is written to
-  `Testing/project-learning.md`, to a REQ-*.md, or handed to skills 3/6 as fact until the
+  `Testing/project-learning.md`, to a REQ-*.md, or handed to skills 3/5 as fact until the
   decision block has been filled and the skill is re-run with `--apply-approved` (Phase 7).
   The only learning-file writes during discovery are answers the user gave to this skill's
   questions (0.0, *Ask second*) and one pointer line saying an export is awaiting approval.
@@ -52,11 +52,11 @@ story (1.3).
 
 <qa_manifest>
 **Structure contract — read `Testing/qa-manifest.json` first.** Written by
-`1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
+`link-qc-1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
 requirements, manual test cases, automation root, pages, tests, reports, screenshots, logs,
 white-box folder, learning file), the steering file paths, the framework config and every
 documented deviation. Use its paths before any auto-detection; fall back to detection only when
-the manifest is absent, and then tell the user to run `/1-generate-update-testing-structure`
+the manifest is absent, and then tell the user to run `/link-qc-1-generate-update-testing-structure`
 (audit first, then repair) — never invoke that skill yourself. Steering conflicts resolve per
 the rules in `docs/steering/README.md` (L1 baseline, L2 refines, L3 values + stricter +
 approved exemptions; specs govern business truth, steering governs quality policy, the learning
@@ -64,11 +64,11 @@ file overrides neither). Behaviour knowledge stays in `Testing/project-learning.
 </qa_manifest>
 
 <project_learning_file>
-**Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
+**Project Learning File protocol — shared by skills 1-11, 3b and 3c (read first, ask second, write back).**
 
 `Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
-(created by `1-generate-update-testing-structure`). This skill's section is
-`### Rule Discovery Model (skill 7)`. If `Testing/` exists but the file does not, create it
+(created by `link-qc-1-generate-update-testing-structure`). This skill's section is
+`### Rule Discovery Model (skill 11)`. If `Testing/` exists but the file does not, create it
 with the skeleton defined in skill 1, section 2. If the file exists but this skill's section
 is missing, add the section (`#### Knowledge`, `#### Questions and Answers`) without touching
 anything else.
@@ -78,8 +78,8 @@ anything else.
 2. From the story (title, feature, page names) pick the module / page / element names to look
    for; add the `Similar to` modules the Index lists for them.
 3. Grep for those tags — `\[module: X\]`, `\[page: Y\]`, `\[similar: .*X` — plus
-   `\[type: rule\]` in `## Project Knowledge`, in `### White-Box Model (skill 4)` and in this
-   skill's section. Rules skill 4 already recorded are a head start, not a substitute for
+   `\[type: rule\]` in `## Project Knowledge`, in `### White-Box Model (skill 10)` and in this
+   skill's section. Rules skill 10 already recorded are a head start, not a substitute for
    reading the code.
 4. Before asking the user anything, grep this skill's `#### Questions and Answers` for the
    question's keywords.
@@ -95,13 +95,13 @@ written to the file.
 
 **During a discovery run (Phases 0-6) write ONLY:**
 - Every answered question → one tagged line under this skill's `#### Questions and Answers`:
-  `- [module: X] [type: qa] **Q (skill 7, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
+  `- [module: X] [type: qa] **Q (skill 11, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
   answers (e.g. where output files live) are ALSO added to `## Project Knowledge`.
 - One pointer line per story under this skill's `#### Knowledge`:
   `- [module: X] [type: status] US-{id}: {N} undocumented rules exported {YYYY-MM-DD}, awaiting PO approval (see the story's requirement folder).`
 - **Nothing else.** No rule, limit, message, default or permission discovered in the code goes
   into the learning file, however certain it looks — unapproved findings would otherwise be
-  treated as facts by skills 3 and 6.
+  treated as facts by skills 3 and 5.
 
 **After the PO decides (`--apply-approved`, Phase 7) write:**
 - Every rule marked *Intended* in the decision block → one tagged line, plain English, in
@@ -110,7 +110,7 @@ written to the file.
   same tags first; update or dedupe instead of appending twins.
 - Limits, formats and messages the user will see → `## UI Knowledge`; boundary values worth
   testing → `## Test Data`; EN/AR differences → `## Locale Knowledge` — approved rules only.
-- Rules marked *Bug* → one line `[type: bug]` pointing to skill 4; rules marked *Ignore* are
+- Rules marked *Bug* → one line `[type: bug]` pointing to skill 10; rules marked *Ignore* are
   not written at all.
 - Modules that share the same rules → add `[similar: …]` on both entries instead of copying
   text. Update the `## Index` row for every module touched. Replace the pending pointer line
@@ -133,7 +133,7 @@ for: the project's requirement sources, ID formats (`US-`, `REQ-`), the module l
 rule-documentation standard the team already follows. L1/L2 define how findings are graded;
 do not restate them. Steering always wins over this skill's defaults.
 
-### 0.2 Repository profile (reuse skill 4's)
+### 0.2 Repository profile (reuse skill 10's)
 
 ```bash
 cat "Testing/White_Box_Testing/.project-profile.md" 2>/dev/null || echo "NO_PROFILE"
@@ -142,7 +142,7 @@ cat "Testing/White_Box_Testing/.project-profile.md" 2>/dev/null || echo "NO_PROF
 - Profile found and `--reprofile` not passed → read it. Use its **layer map**, **search
   strategy**, **requirement sources** and **test suites** for every search below. Never
   hardcode paths that the profile can answer.
-- `NO_PROFILE` or `--reprofile` → run Phase 0 of `4-white-box-testing` (sections 0.2–0.7)
+- `NO_PROFILE` or `--reprofile` → run Phase 0 of `link-qc-10-white-box-testing` (sections 0.2–0.7)
   exactly as that skill describes it and write the profile to the same location, so both
   skills share one profile. Then continue here.
 
@@ -171,7 +171,7 @@ Word or pasted text sit directly under `Testing/Requirements/`.
    I could not find Testing/Requirements/ in this project. Where should the code-rules
    export for US-{id} be written?
      A) Create the standard layout now: Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/
-        (recommended — or run 1-generate-update-testing-structure first for the full setup)
+        (recommended — or run link-qc-1-generate-update-testing-structure first for the full setup)
      B) An existing folder you name: <path>
    ```
 
@@ -311,8 +311,8 @@ Match every RULE-NN against the Spec Rule List:
 | **In spec** | spec states it, code matches | Coverage table only |
 | **Partially in spec** | spec mentions the rule but not the value / scope / message (e.g. "name is required" vs code also caps at 100 chars) | Export, section A |
 | **Not in spec** | code enforces it, spec silent | Export, section B — **the main deliverable** |
-| **Contradicts spec** | code and spec disagree on value, scope or behaviour | Export, section C, flagged as a probable bug for skill 4 |
-| **In spec, not in code** | spec states it, nothing enforces it | Export, section D — hand-off to skill 4 (gap) |
+| **Contradicts spec** | code and spec disagree on value, scope or behaviour | Export, section C, flagged as a probable bug for skill 10 |
+| **In spec, not in code** | spec states it, nothing enforces it | Export, section D — hand-off to skill 10 (gap) |
 
 Rate each exported rule:
 - **Impact** — High (data integrity, security, money, blocking the user) / Medium (usability,
@@ -337,8 +337,8 @@ folder located in 0.3) using
    for: rule (EARS), category, enforced at, message, evidence, impact, confidence,
    **proposed requirement text** ready to paste into the REQ file, **suggested test cases**
    (title only, positive + boundary + negative)
-5. **C. Contradictions** — spec vs code side by side, which one is probably wrong, hand-off to skill 4
-6. **D. In spec, not in code** — hand-off list for skill 4
+5. **C. Contradictions** — spec vs code side by side, which one is probably wrong, hand-off to skill 10
+6. **D. In spec, not in code** — hand-off list for skill 10
 7. **Enforcement matrix** — RULE × (UI / server / DB) with UI-only and DB-only rules highlighted
 8. **Coverage table** — every spec rule with its verdict and the RULE-NN that covers it
 9. **Discovery map** — layers → files read, layers with no hits
@@ -400,9 +400,9 @@ shared UI-only / DB-only warnings. It never repeats a rule's detail — the stor
 **Next**: QC reviews with the Product Owner and fills the decision block (Intended / Bug /
 Ignore) → re-run this skill with `--apply-approved US-{id}` → approved rules reach the
 learning file and the REQ delta → skill 2 folds them into the REQ → skill 3 adds the
-suggested test cases → a human approves that document → skill 5 publishes it to Azure DevOps
-(**optional** — skipped entirely for a local-only run) → skill 6 automates it. Contradictions
-(C) and gaps (D) go to skill 4. **Nothing here is handed straight to skill 6**: a discovered
+suggested test cases → a human approves that document → skill 4 publishes it to Azure DevOps
+(**optional** — skipped entirely for a local-only run) → skill 5 automates it. Contradictions
+(C) and gaps (D) go to skill 10. **Nothing here is handed straight to skill 5**: a discovered
 rule becomes automatable only after PO approval and a skill 3 test case.
 **Learning file**: read {sections/tags} · updated {N Q&A added + 1 pending pointer — no findings recorded until PO approval}
 ```
@@ -425,9 +425,9 @@ the PO directly). Input: the story ID(s) or the export path(s).
    user to run skill 2 to fold it in.
 4. Now, and only now, teach the learning file (0.0, second stage): approved rules with
    `(source: US-{id}, approved by PO {date})`, UI limits and messages, boundary test data,
-   `[similar: …]` links, Index rows; *Bug* rules as `[type: bug]` hand-offs to skill 4; the
+   `[similar: …]` links, Index rows; *Bug* rules as `[type: bug]` hand-offs to skill 10; the
    pending pointer line replaced by the approved summary.
-5. Report: rules recorded / bugs handed to skill 4 / ignored, and the next steps (skill 2
+5. Report: rules recorded / bugs handed to skill 10 / ignored, and the next steps (skill 2
    re-review with the approved delta → skill 3 test cases).
 
 ---
@@ -450,7 +450,7 @@ the PO directly). Input: the story ID(s) or the export path(s).
   restatements of what the spec already says.
 - **This skill does not judge correctness.** Whether an undocumented rule is intended is the
   Product Owner's call, recorded by the QC in the decision block. Contradictions are handed to
-  skill 4, which owns bug analysis.
+  skill 10, which owns bug analysis.
 - **No finding becomes knowledge before approval.** A discovery run leaves the learning file
   untouched except for Q&A and the pending pointer; only `--apply-approved` records rules.
 - **One story, one folder, one export.** Multi-story input is split (1.3); a summary file

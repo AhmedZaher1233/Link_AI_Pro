@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import {
   parseArgs, print, isDir, isFile, read, rel, sha256, digestOf,
   loadStripped, matchDelim, testIdentifiers, findBlocks,
-  importMap, findMemberBody, isStraightLine, walk, isSpecFile, isCodeFile,
+  importMap, findMemberBody, isStraightLine, walk, isSpecFile, isCodeFile, ancestorOfKind,
 } from './scan-lib.mjs';
 
 export const SCHEMA_VERSION = 1;
@@ -50,6 +50,9 @@ export const RULES = {
   'wait-for-timeout':            { severity: 'warning',   exemptible: true,  title: 'Fixed wait — prefer an observable condition' },
   'bare-set-timeout':            { severity: 'warning',   exemptible: true,  title: 'Bare timer — prefer an observable condition' },
   'absolute-url':                { severity: 'warning',   exemptible: true,  title: 'Absolute URL in automation code' },
+  'wait-network-idle':           { severity: 'warning',   exemptible: true,  title: 'networkidle used as a readiness condition — prefer an explicit application-ready signal' },
+  'positional-unscoped':         { severity: 'warning',   exemptible: true,  title: 'first()/last()/nth() on an unscoped locator chain with no justification' },
+  'step-missing':                { severity: 'warning',   exemptible: true,  title: 'Test body has no named step (test.step or an imported step wrapper) — only reported with --require-steps' },
   'trace-describe-missing-reqid':{ severity: 'warning',   exemptible: true,  title: 'Suite title carries no requirement ID' },
   'trace-unknown-reqid':         { severity: 'warning',   exemptible: true,  title: 'Suite title references a requirement ID that is not in the resolved sources' },
   'trace-title-dynamic':         { severity: 'warning',   exemptible: false, title: 'Title is built at runtime — its IDs cannot be read statically' },
@@ -86,6 +89,9 @@ export const LIMITS = [
   'Exceptions are checked for form and for a resolving source, never for substance. Whether the cited source justifies the exception is a review item.',
   'Credential detection is keyword-based: a secret in a neutrally named variable is missed, and a harmless literal beside a key named token is a false positive.',
   'Only files in the resolved scope are examined. Specs living elsewhere are invisible unless pointed at with --files.',
+  'Steps are recognised only in the scanned file: test.step() and a step wrapper IMPORTED into the spec. A step inside a page-object method does not count for the spec that calls it, and step-missing runs only behind --require-steps.',
+  'Positional scoping (first/last/nth) is judged on the receiver chain of that call: a filter() segment, or a named getByRole / getByTestId root narrowed by a further getBy*, counts as scoped. An array .filter on a different receiver in the same statement does not; a locator scoped by an earlier assignment is a false positive to justify with a comment.',
+  'networkidle detection reads string literals next to waitForLoadState( or waitUntil: only; a readiness helper that hides the literal behind a constant is invisible.',
 ];
 
 const NON_RECEIVERS = new Set(['page', 'this', 'expect', 'test', 'Promise', 'Object', 'JSON', 'Math', 'console', 'process', 'Array', 'String', 'Number', 'Date', 'await']);
@@ -430,6 +436,7 @@ export function analyze(opts) {
   if (!reqIds) addNotRun('trace-unknown-reqid', 'no --req-ids supplied; this script never invents IDs');
   if (!reqIds) addNotRun('outcome-coverage-unassessed', 'no --req-ids supplied; requirement outcome coverage was not assessed here');
 
+  const requireSteps = !!(opts.requireSteps || (opts.args || {})['require-steps']);
   const evidenceFn = opts.evidenceFn || str((opts.args || {})['evidence-fn']) || 'captureEvidence';
   const evidenceRe = new RegExp('\\b' + evidenceFn + '\\s*\\(');
   const evidenceReG = new RegExp('\\b' + evidenceFn + '\\s*\\(', 'g');
@@ -529,6 +536,26 @@ export function analyze(opts) {
       if (just) add('bare-set-timeout', line, 'timer, justified: ' + just, { justification: just });
       else add('bare-set-timeout', line, 'Bare timer with no stated reason — prefer an observable condition or bounded polling.');
     }
+    /* --- rule 9: networkidle as readiness (all layers) --- */
+    for (const lit of s.strings) {
+      if (lit.value !== 'networkidle') continue;
+      const before = s.code.slice(Math.max(0, lit.start - 64), lit.start);
+      if (!/waitForLoadState\s*\(\s*$/.test(before) && !/waitUntil\s*:\s*$/.test(before)) continue;
+      const just = adjacentJustification(s, lit.line, 15, JUSTIFY_WORDS);
+      if (just) add('wait-network-idle', lit.line, 'networkidle wait, justified: ' + just, { justification: just });
+      else add('wait-network-idle', lit.line, 'networkidle is not an application-ready signal: it never settles on pages that poll or stream, and it settles too early on pages that load lazily. Wait for the loader to hide, for the response that carries the data, or for a web-first assertion on the element the step needs.');
+    }
+    /* --- rule 10: positional selectors on an unscoped chain (all layers) --- */
+    for (const m of s.code.matchAll(/\.\s*(first|last)\s*\(\s*\)|\.\s*nth\s*\(/g)) {
+      const line = s.lineOf(m.index);
+      if (fileFindings.some((f) => f.ruleId === 'pom-chained-locator' && f.line === line)) continue;
+      const chain = receiverChain(s.code, m.index);
+      if (isScopedChain(chain)) continue;
+      const just = adjacentJustification(s, line, 15, null);
+      const which = m[1] || 'nth';
+      if (just) add('positional-unscoped', line, which + '() on an unscoped chain, justified: ' + just, { justification: just, chain: chain.segments });
+      else add('positional-unscoped', line, which + '() picks an element by position on a chain with no filter({ has | hasText }) or named-container scope (' + (chain.segments.join('.') || 'root') + '). Scope the locator, or state on the line above why the position is the requirement.', { chain: chain.segments });
+    }
     for (const lit of s.strings) {
       const before = s.code.slice(Math.max(0, lit.start - 48), lit.start);
       if (/(password|passwd|pwd|secret|token|api_?key|apikey|credential|clientSecret|auth)\s*[:=]\s*$/i.test(before)
@@ -550,6 +577,16 @@ export function analyze(opts) {
       if (!bodyCode.replace(/[\s;]/g, '').length) {
         add('empty-test-body', b.line, 'Test body is empty — it verifies nothing.');
         continue;
+      }
+
+      // steps (opt-in): a named step is test.step() nested in this test, or a call to a step
+      // wrapper the spec IMPORTS. A local function named step, or a step inside a page-object
+      // method, does not count (limit 13).
+      if (requireSteps) {
+        const nested = blocks.some((x) => x.kind === 'step' && ancestorOfKind(x, 'test') === b);
+        const imp = imports.get('step');
+        const wrapped = !!imp && /(^|[^\w$.])step\s*\(/.test(bodyCode);
+        if (!nested && !wrapped) add('step-missing', b.line, 'No named step in this test. Wrap each manual step in step(title, body) so the report, the trace and the timeout record name the step that ran or timed out.');
       }
 
       // assertions
@@ -681,7 +718,7 @@ export function analyze(opts) {
     const r = rel(root, f);
     if (!fileHashes[r]) { const src = read(f); if (src !== null) fileHashes[r] = sha256(src); }
   }
-  for (const cfg of configFiles(root, automationDir, allow.file, paths.manifestFile)) {
+  for (const cfg of configFiles(root, automationDir, allow.file, paths.manifestFile, cache)) {
     const src = read(cfg.abs);
     if (src !== null) fileHashes[cfg.rel] = sha256(src);
   }
@@ -723,7 +760,7 @@ export function analyze(opts) {
     config: {
       manifest: paths.manifestFile, manifestState: paths.manifestState,
       paths: { tests: paths.tests, pages: paths.pages, automationRoot: paths.automationRoot },
-      layersDeclared: !!paths.layers, scopeMode, evidenceFn,
+      layersDeclared: !!paths.layers, scopeMode, evidenceFn, requireSteps,
       allowFile: allow.file,
       idSources: { tcIds: tcIdSource, tcIdCount: tcIds ? tcIds.size : 0, reqIds: reqIdSource, reqIdCount: reqIds ? reqIds.size : 0 },
     },
@@ -811,30 +848,92 @@ function titleTokens(title, re) {
   return out;
 }
 
-function configFiles(root, automationDir, allowFile, manifestFile) {
+function configFiles(root, automationDir, allowFile, manifestFile, cache) {
   const out = [];
   const seen = new Set();
-  const addIf = (abs) => { const r = rel(root, abs); if (isFile(abs) && !seen.has(r)) { seen.add(r); out.push({ abs, rel: r }); } };
+  const addIf = (abs) => { const r = rel(root, abs); if (isFile(abs) && !seen.has(r)) { seen.add(r); out.push({ abs, rel: r }); return true; } return false; };
+  const configs = [];
   for (const dir of [root, automationDir]) {
     if (!isDir(dir)) continue;
     let entries = [];
     try { entries = fs.readdirSync(dir); } catch { continue; }
-    for (const e of entries) if (/^playwright.*\.config\.(ts|js|mjs|cjs)$/i.test(e)) addIf(path.join(dir, e));
+    for (const e of entries) if (/^playwright.*\.config\.(ts|js|mjs|cjs)$/i.test(e) && addIf(path.join(dir, e))) configs.push(path.join(dir, e));
+  }
+  // One hop of RELATIVE imports from each config (the shared timeout policy, an env module):
+  // editing them must invalidate a recorded gate exactly as editing the config does. Bare
+  // packages and unresolvable specifiers are skipped; a config that cannot be stripped still
+  // hashes on its own.
+  for (const cfg of configs) {
+    const s = cache ? loadStripped(cfg, cache) : null;
+    if (!s || s.parseError) continue;
+    for (const [, imp] of importMap(s, cfg)) if (imp.file && isCodeFile(imp.file)) addIf(imp.file);
   }
   if (allowFile) addIf(path.resolve(root, allowFile));
   if (manifestFile) addIf(path.resolve(root, manifestFile));
   return out;
 }
 
+/* ---------------- receiver-chain analysis for positional selectors ---------------- */
+
+/**
+ * Walk backwards from the `.` of a `.first()/.last()/.nth()` call over the member chain that
+ * feeds it: `root.seg(args).seg(args)…`. Returns the segment names (root first) and, per
+ * segment, whether its argument list mentions a `name:` key. A SHAPE walk over stripped
+ * code, not a parser: anything it cannot follow ends the chain, which counts as unscoped.
+ */
+function receiverChain(code, dotAt) {
+  const segments = [];
+  const named = [];
+  let pos = dotAt;
+  const skipWs = () => { while (pos > 0 && /\s/.test(code[pos - 1])) pos--; };
+  let guard = 0;
+  while (guard++ < 40) {
+    skipWs();
+    if (pos > 0 && code[pos - 1] === ')') {
+      let depth = 0; let i = pos - 1;
+      for (; i >= 0; i--) {
+        const c = code[i];
+        if (c === ')' || c === '}' || c === ']') depth++;
+        else if (c === '(' || c === '{' || c === '[') { depth--; if (depth === 0) break; }
+      }
+      if (i < 0) break;
+      const args = code.slice(i + 1, pos - 1);
+      pos = i;
+      skipWs();
+      const idm = /([A-Za-z_$][\w$]*)$/.exec(code.slice(Math.max(0, pos - 64), pos));
+      if (!idm) break;
+      segments.unshift(idm[1]);
+      named.unshift(/\bname\s*:/.test(args));
+      pos -= idm[1].length;
+      skipWs();
+      if (pos > 0 && code[pos - 1] === '.') { pos--; if (pos > 0 && code[pos - 1] === '?') pos--; continue; }
+      break;
+    }
+    const idm = /([A-Za-z_$][\w$]*)$/.exec(code.slice(Math.max(0, pos - 64), pos));
+    if (idm) { segments.unshift(idm[1]); named.unshift(false); }
+    break;
+  }
+  return { segments, named };
+}
+
+function isScopedChain(chain) {
+  const { segments, named } = chain;
+  if (segments.includes('filter')) return true;
+  const rootIdx = segments.findIndex((x, i) => (x === 'getByRole' && named[i]) || x === 'getByTestId');
+  if (rootIdx >= 0 && segments.slice(rootIdx + 1).some((x) => /^getBy[A-Z]/.test(x) || x === 'locator')) return true;
+  return false;
+}
+
 /* ---------------- CLI ---------------- */
 
 const HELP = {
   tool: 'validate-automation',
-  usage: 'node validate-automation.mjs [--root <dir>] [--pretty] [--files a,b] [--tests-path <dir>] [--pages-path <dir>] [--tc-ids <csv|file>] [--req-ids <csv|file>] [--allow-file <path>] [--evidence-fn <name>] [--strict]',
+  usage: 'node validate-automation.mjs [--root <dir>] [--pretty] [--files a,b] [--tests-path <dir>] [--pages-path <dir>] [--tc-ids <csv|file>] [--req-ids <csv|file>] [--allow-file <path>] [--evidence-fn <name>] [--require-steps] [--strict]',
   notes: [
     'Read-only. Default exit code is 0; the verdict lives in the JSON payload.',
     '--strict exits 1 on FAIL, 2 on BLOCKED, 3 on NOT_RUN.',
     'The scanner gate is not the compliance gate: review[] and notRun[] items must be closed separately.',
+    '--require-steps also reports step-missing (warning) for every test with no test.step() / imported step() — pass it for specs this run generated or updated.',
   ],
   rules: Object.fromEntries(Object.entries(RULES).map(([k, v]) => [k, { severity: v.severity, exemptible: v.exemptible, title: v.title }])),
   limits: LIMITS,

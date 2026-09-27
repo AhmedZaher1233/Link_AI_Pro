@@ -23,9 +23,10 @@ const paths = () => ({
   automationRoot: 'fixtures', tests: 'fixtures', pages: 'fixtures/pages', layers: null,
 });
 
-function run(fixture, { req = false, root = here } = {}) {
+function run(fixture, { req = false, root = here, args = {} } = {}) {
   return analyze({
     root,
+    args,
     paths: paths(),
     files: [path.join('fixtures', fixture)],
     treatAsSpec: true,
@@ -237,6 +238,91 @@ function check(name, problems, detail) {
   if (!/notRun\[\] entry is an APPLICABLE check/.test(r.complianceNote)) p.push('complianceNote does not state that notRun items are applicable checks');
   if (!/"N\/A" is invalid|as "N\/A", is invalid|or as "N\/A"/.test(r.complianceNote)) p.push('complianceNote does not rule out recording an open item as N/A');
   check('13 unexecuted applicable checks are reported, not silently dropped or marked N/A', p, { notRun: r.notRun.map((n) => n.ruleId) });
+}
+
+/* 14 — timing rules: every true positive at its line; step-missing only behind --require-steps. */
+{
+  const plain = run('timing.fixture.ts', { req: true });
+  const stepped = run('timing.fixture.ts', { req: true, args: { 'require-steps': true } });
+  const p = [];
+  if (plain.gate !== 'PASS') p.push('gate ' + plain.gate + ' != PASS — warnings must never move the gate');
+  if (!at(plain, 'positional-unscoped', 10)) p.push('missing positional-unscoped@10 (rows.first() on a bare locator)');
+  if (!at(plain, 'wait-network-idle', 11)) p.push('missing wait-network-idle@11 (waitForLoadState)');
+  if (!at(plain, 'wait-network-idle', 12)) p.push('missing wait-network-idle@12 (waitUntil option)');
+  if (has(plain, 'step-missing')) p.push('step-missing reported without --require-steps');
+  if (plain.counts.warning !== 3) p.push('warnings ' + plain.counts.warning + ' != 3 (' + sev(plain, 'warning') + ')');
+  if (plain.config.requireSteps !== false) p.push('payload does not record requireSteps=false');
+  if (!at(stepped, 'step-missing', 7)) p.push('missing step-missing@7 under --require-steps');
+  if (stepped.counts.warning !== 4) p.push('warnings under --require-steps ' + stepped.counts.warning + ' != 4 (' + sev(stepped, 'warning') + ')');
+  if (stepped.gate !== 'PASS') p.push('gate under --require-steps ' + stepped.gate + ' != PASS');
+  check('14 timing / positional / step true positives at known lines', p, { warnings: sev(stepped, 'warning') });
+}
+
+/* 15 — FALSE-POSITIVE GUARD: scoped, justified, excepted, commented and string-only forms are clean. */
+{
+  const r = run('timing-clean.fixture.ts', { req: true, args: { 'require-steps': true } });
+  const p = [];
+  if (r.gate !== 'PASS') p.push('gate ' + r.gate + ' != PASS');
+  if (r.counts.violation !== 0) p.push('violations ' + r.counts.violation + ' != 0 (' + sev(r, 'violation') + ')');
+  if (r.counts.warning !== 0) p.push('warnings ' + r.counts.warning + ' != 0 (' + sev(r, 'warning') + ')');
+  if (has(r, 'wait-network-idle')) p.push('networkidle flagged from a plain string constant, a comment, or a waitForLoadState("load")');
+  if (has(r, 'step-missing')) p.push('step-missing despite an imported step wrapper and a nested test.step');
+  if (r.findings.some((f) => f.ruleId === 'positional-unscoped' && [15, 16].includes(f.line))) p.push('a filter()-scoped chain was flagged as unscoped');
+  const excepted = r.findings.filter((f) => f.ruleId === 'positional-unscoped' && f.severity === 'info').map((f) => f.line).sort();
+  if (excepted.join(',') !== '18,20') p.push('justified (18) and qa-allow (20) positionals expected as info exceptions, got ' + excepted.join(','));
+  if (r.exceptions.length !== 2) p.push('exceptions ' + r.exceptions.length + ' != 2');
+  const unverified = r.findings.filter((f) => f.ruleId === 'exception-unverified').length;
+  if (unverified !== 2) p.push('exception-unverified ' + unverified + ' != 2 — an excepted positional still needs substantive review');
+  check('15 timing rules do not fire on scoped, justified, excepted, commented or string-only forms', p, { excepted });
+}
+
+/* 16 — FALSE-NEGATIVE GUARD: an unrelated filter, a local step function and a page-object step never satisfy the rules. */
+{
+  const r = run('timing-negative.fixture.ts', { req: true, args: { 'require-steps': true } });
+  const p = [];
+  if (r.gate !== 'FAIL') p.push('gate ' + r.gate + ' != FAIL');
+  if (!at(r, 'pom-spec-helper', 7)) p.push('missing pom-spec-helper@7 — a local step() is still a spec helper');
+  if (!at(r, 'positional-unscoped', 16)) p.push('missing positional-unscoped@16 — an array .filter on another receiver in the same statement must not scope');
+  if (!at(r, 'positional-unscoped', 17)) p.push('missing positional-unscoped@17 — a filter on an unrelated receiver joined by && must not scope');
+  if (!at(r, 'step-missing', 12)) p.push('missing step-missing@12 — a LOCAL function named step must not count as a step');
+  if (!at(r, 'step-missing', 26)) p.push('missing step-missing@26 — a test.step inside the page object must not count for the spec');
+  if (r.counts.warning !== 4) p.push('warnings ' + r.counts.warning + ' != 4 (' + sev(r, 'warning') + ')');
+  check('16 look-alike scoping and stepping are not credited', p, { warnings: sev(r, 'warning') });
+}
+
+/* 17 — FALSE PASS GUARD: the shared config's own relative imports are part of the fingerprint. */
+{
+  const p = [];
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-validate-cfg-'));
+  try {
+    fs.cpSync(path.join(here, 'fixtures'), path.join(tmp, 'fixtures'), { recursive: true });
+    const cfgDir = path.join(tmp, 'fixtures');   // paths().automationRoot
+    fs.writeFileSync(path.join(cfgDir, 'playwright.config.ts'),
+      "import { defineConfig } from '@playwright/test';\nimport { TIMEOUTS } from './timeouts';\nexport default defineConfig({ timeout: TIMEOUTS.test });\n");
+    fs.writeFileSync(path.join(cfgDir, 'timeouts.ts'), 'export const TIMEOUTS = { test: 90_000 };\n');
+    fs.writeFileSync(path.join(cfgDir, 'notes.md'), '# notes\n');
+    const base = run('valid.fixture.ts', { root: tmp }).fingerprint;
+    if (!Object.keys(base.files).some((f) => /playwright\.config\.ts$/.test(f))) p.push('the config itself was not hashed');
+    if (!Object.keys(base.files).some((f) => /\btimeouts\.ts$/.test(f))) p.push('the config\'s relative import (timeouts.ts) was not hashed — editing the timeout policy would not invalidate a recorded gate');
+    if (Object.keys(base.files).some((f) => /node_modules|@playwright/.test(f))) p.push('a bare package import was hashed');
+
+    fs.writeFileSync(path.join(cfgDir, 'timeouts.ts'), 'export const TIMEOUTS = { test: 120_000 };\n');
+    const edited = run('valid.fixture.ts', { root: tmp }).fingerprint;
+    if (edited.scopeDigest === base.scopeDigest) p.push('scopeDigest did not change after editing timeouts.ts');
+
+    fs.writeFileSync(path.join(cfgDir, 'notes.md'), '# notes\nchanged\n');
+    const notes = run('valid.fixture.ts', { root: tmp }).fingerprint;
+    if (notes.scopeDigest !== edited.scopeDigest) p.push('an unrelated markdown file changed the fingerprint');
+
+    fs.writeFileSync(path.join(cfgDir, 'playwright.broken.config.ts'),
+      "import { x } from './missing-module';\nexport default { use: { headless: false } };\n");
+    const broken = run('valid.fixture.ts', { root: tmp });
+    if (!Object.keys(broken.fingerprint.files).some((f) => /playwright\.broken\.config\.ts$/.test(f))) p.push('a config with an unresolvable import was not hashed');
+    if (broken.gate !== 'PASS') p.push('an unresolvable config import changed the gate to ' + broken.gate);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  check('17 fingerprint follows one hop of the config\'s relative imports', p, {});
 }
 
 const out = {

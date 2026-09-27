@@ -1,0 +1,379 @@
+{
+  "feature": "kpi-filter",
+  "lang": "ar",
+  "schemaVersion": "1.0",
+  "keys": {
+    "header.scope": {
+      "en": "Filtering the KPI details grid by display type and year.",
+      "ar": "تصفية شبكة تفاصيل المؤشر حسب نوع العرض والسنة."
+    },
+    "header.entry": {
+      "en": "fresh design",
+      "ar": "تصميم جديد"
+    },
+    "header.impl": {
+      "en": "Partially implemented — entry point seen live on staging; AC-3 (export) absent",
+      "ar": "منفَّذ جزئيًا — نقطة الدخول شوهدت حيًا على بيئة staging؛ معيار القبول AC-3 (التصدير) غير موجود"
+    },
+    "tc.TC-KPI-01.description": {
+      "en": "Filter the KPI grid by year",
+      "ar": "تصفية شبكة المؤشر حسب السنة"
+    },
+    "tc.TC-KPI-01.precondition.1": {
+      "en": "Logged in as Strategy Super Admin (username strategy.admin); page language English.",
+      "ar": "تسجيل الدخول بدور Strategy Super Admin (اسم المستخدم strategy.admin)؛ لغة الصفحة الإنجليزية."
+    },
+    "tc.TC-KPI-01.precondition.2": {
+      "en": "Strategy \"Growth 2026\" exists with KPI \"Revenue\" holding 12 monthly values.",
+      "ar": "الاستراتيجية \"Growth 2026\" موجودة ومؤشرها \"Revenue\" يحمل 12 قيمة شهرية."
+    },
+    "tc.TC-KPI-01.step.1": {
+      "en": "Open Strategies — the Strategies list is visible.",
+      "ar": "افتح الاستراتيجيات — تظهر قائمة الاستراتيجيات."
+    },
+    "tc.TC-KPI-01.step.2": {
+      "en": "Open the strategy \"Growth 2026\" — the strategy header shows its name.",
+      "ar": "افتح الاستراتيجية \"Growth 2026\" — يعرض رأس الاستراتيجية اسمها."
+    },
+    "tc.TC-KPI-01.step.3": {
+      "en": "Open KPI Details for \"Revenue\" — the KPI grid loads; loading indicator on the grid appears then clears.",
+      "ar": "افتح تفاصيل المؤشر \"Revenue\" — تُحمَّل شبكة المؤشر؛ يظهر مؤشر التحميل على الشبكة ثم يختفي."
+    },
+    "tc.TC-KPI-01.step.4": {
+      "en": "Open the Filter panel — the panel expands and shows \"Display Type\" and \"Year\".",
+      "ar": "افتح لوحة التصفية — تتمدد اللوحة وتعرض \"Display Type\" و\"Year\"."
+    },
+    "tc.TC-KPI-01.step.5": {
+      "en": "Set Display Type to \"Year\" and select 2026.",
+      "ar": "اضبط Display Type على \"Year\" واختر 2026."
+    },
+    "tc.TC-KPI-01.step.6": {
+      "en": "Click Apply — loading appears on the grid, then clears.",
+      "ar": "انقر Apply — يظهر التحميل على الشبكة ثم يختفي."
+    },
+    "tc.TC-KPI-01.expected": {
+      "en": "The grid shows exactly 12 rows for 2026 and the Year chip reads \"2026\".",
+      "ar": "تعرض الشبكة 12 صفًا بالضبط لسنة 2026 وتقرأ شارة السنة \"2026\"."
+    },
+    "tc.TC-KPI-01.oracle": {
+      "en": "KPI \"Revenue\" 2026 — expected count: 12, identifiers: Jan…Dec",
+      "ar": "المؤشر \"Revenue\" 2026 — العدد المتوقع: 12، المعرّفات: يناير…ديسمبر"
+    },
+    "tc.TC-KPI-01.effect": {
+      "en": "read-only",
+      "ar": "قراءة فقط"
+    },
+    "tc.TC-KPI-01b.description": {
+      "en": "Filter the KPI grid by year (Arabic)",
+      "ar": "تصفية شبكة المؤشر حسب السنة (العربية)"
+    },
+    "tc.TC-KPI-01b.precondition.1": {
+      "en": "Logged in as Strategy Super Admin (username strategy.admin); page language Arabic, direction right-to-left.",
+      "ar": "تسجيل الدخول بدور Strategy Super Admin (اسم المستخدم strategy.admin)؛ لغة الصفحة العربية، الاتجاه من اليمين إلى اليسار."
+    },
+    "tc.TC-KPI-01b.step.1": {
+      "en": "Confirm the page is Arabic and right-to-left.",
+      "ar": "تأكد أن الصفحة عربية واتجاهها من اليمين إلى اليسار."
+    },
+    "tc.TC-KPI-01b.step.2": {
+      "en": "Open الاستراتيجيات — the list is visible.",
+      "ar": "افتح الاستراتيجيات — تظهر القائمة."
+    },
+    "tc.TC-KPI-01b.step.3": {
+      "en": "Open the strategy \"Growth 2026\" and then تفاصيل المؤشر for \"Revenue\".",
+      "ar": "افتح الاستراتيجية \"Growth 2026\" ثم تفاصيل المؤشر \"Revenue\"."
+    },
+    "tc.TC-KPI-01b.step.4": {
+      "en": "Open the filter panel (تصفية) — it opens from the opposite side.",
+      "ar": "افتح لوحة التصفية (تصفية) — تنفتح من الجهة المقابلة."
+    },
+    "tc.TC-KPI-01b.step.5": {
+      "en": "Set نوع العرض to \"سنة\" and select 2026, then click تطبيق.",
+      "ar": "اضبط نوع العرض على \"سنة\" واختر 2026 ثم انقر تطبيق."
+    },
+    "tc.TC-KPI-01b.expected": {
+      "en": "The grid shows 12 rows for 2026 with Arabic month names.",
+      "ar": "تعرض الشبكة 12 صفًا لسنة 2026 بأسماء الأشهر العربية."
+    },
+    "tc.TC-KPI-01b.oracle": {
+      "en": "KPI \"Revenue\" 2026 — expected count: 12",
+      "ar": "المؤشر \"Revenue\" 2026 — العدد المتوقع: 12"
+    },
+    "tc.TC-KPI-01b.effect": {
+      "en": "read-only",
+      "ar": "قراءة فقط"
+    },
+    "tc.TC-KPI-02.description": {
+      "en": "Clear the filter restores all rows",
+      "ar": "مسح التصفية يعيد كل الصفوف"
+    },
+    "tc.TC-KPI-02.precondition.1": {
+      "en": "TC-KPI-01 state: the grid is filtered to 2026.",
+      "ar": "حالة TC-KPI-01: الشبكة مصفّاة على 2026."
+    },
+    "tc.TC-KPI-02.step.1": {
+      "en": "Click Clear in the Filter panel — the Year chip disappears.",
+      "ar": "انقر Clear في لوحة التصفية — تختفي شارة السنة."
+    },
+    "tc.TC-KPI-02.step.2": {
+      "en": "Click Apply — loading appears on the grid, then clears.",
+      "ar": "انقر Apply — يظهر التحميل على الشبكة ثم يختفي."
+    },
+    "tc.TC-KPI-02.expected": {
+      "en": "The grid shows all 36 rows across 2024-2026.",
+      "ar": "تعرض الشبكة كل الصفوف الـ 36 عبر 2024-2026."
+    },
+    "tc.TC-KPI-02.oracle": {
+      "en": "KPI \"Revenue\" all years — expected count: 36",
+      "ar": "المؤشر \"Revenue\" كل السنوات — العدد المتوقع: 36"
+    },
+    "tc.TC-KPI-02.effect": {
+      "en": "read-only",
+      "ar": "قراءة فقط"
+    },
+    "tc.TC-KPI-03.description": {
+      "en": "Apply without a selected year is blocked",
+      "ar": "يُمنع التطبيق دون اختيار سنة"
+    },
+    "tc.TC-KPI-03.precondition.1": {
+      "en": "Logged in as Strategy Super Admin (username strategy.admin); KPI Details open for \"Revenue\".",
+      "ar": "تسجيل الدخول بدور Strategy Super Admin (اسم المستخدم strategy.admin)؛ تفاصيل المؤشر \"Revenue\" مفتوحة."
+    },
+    "tc.TC-KPI-03.step.1": {
+      "en": "Open the Filter panel and set Display Type to \"Year\" without selecting a year.",
+      "ar": "افتح لوحة التصفية واضبط Display Type على \"Year\" دون اختيار سنة."
+    },
+    "tc.TC-KPI-03.step.2": {
+      "en": "Click Apply.",
+      "ar": "انقر Apply."
+    },
+    "tc.TC-KPI-03.expected": {
+      "en": "A validation message \"Select a year\" appears under the Year field and the grid does not reload.",
+      "ar": "تظهر رسالة التحقق \"Select a year\" تحت حقل السنة ولا تُعاد تحميل الشبكة."
+    },
+    "tc.TC-KPI-03.effect": {
+      "en": "read-only",
+      "ar": "قراءة فقط"
+    },
+    "tc.TC-KPI-04.description": {
+      "en": "Export the filtered grid",
+      "ar": "تصدير الشبكة المصفّاة"
+    },
+    "tc.TC-KPI-04.precondition.1": {
+      "en": "TC-KPI-01 state: the grid is filtered to 2026.",
+      "ar": "حالة TC-KPI-01: الشبكة مصفّاة على 2026."
+    },
+    "tc.TC-KPI-04.step.1": {
+      "en": "Click Export — a file download starts.",
+      "ar": "انقر Export — يبدأ تنزيل ملف."
+    },
+    "tc.TC-KPI-04.expected": {
+      "en": "An Excel file with 12 rows is downloaded.",
+      "ar": "يُنزَّل ملف Excel يحوي 12 صفًا."
+    },
+    "tc.TC-KPI-04.oracle": {
+      "en": "KPI \"Revenue\" 2026 — expected count: 12",
+      "ar": "المؤشر \"Revenue\" 2026 — العدد المتوقع: 12"
+    },
+    "tc.TC-KPI-04.effect": {
+      "en": "creates",
+      "ar": "ينشئ"
+    },
+    "tc.TC-KPI-04.shared": {
+      "en": "KPI export file",
+      "ar": "ملف تصدير المؤشر"
+    },
+    "coverage.1.ac": {
+      "en": "AC-1 Filter by year",
+      "ar": "AC-1 التصفية حسب السنة"
+    },
+    "coverage.2.ac": {
+      "en": "AC-2 Clear and guard",
+      "ar": "AC-2 المسح والحماية"
+    },
+    "coverage.2.missing": {
+      "en": "Arabic variant",
+      "ar": "النسخة العربية"
+    },
+    "coverage.3.ac": {
+      "en": "AC-3 Export",
+      "ar": "AC-3 التصدير"
+    },
+    "coverage.3.missing": {
+      "en": "negative case, Arabic variant",
+      "ar": "حالة سلبية، النسخة العربية"
+    },
+    "trace.1.ac": {
+      "en": "AC-1 Filter by year",
+      "ar": "AC-1 التصفية حسب السنة"
+    },
+    "trace.2.ac": {
+      "en": "AC-2 Clear and guard",
+      "ar": "AC-2 المسح والحماية"
+    },
+    "trace.2.missing": {
+      "en": "Arabic variant",
+      "ar": "النسخة العربية"
+    },
+    "trace.3.ac": {
+      "en": "AC-3 Export",
+      "ar": "AC-3 التصدير"
+    },
+    "trace.3.missing": {
+      "en": "negative case, Arabic variant",
+      "ar": "حالة سلبية، النسخة العربية"
+    },
+    "manual.1.category": {
+      "en": "Pending implementation",
+      "ar": "بانتظار التنفيذ"
+    },
+    "manual.1.scenario": {
+      "en": "Export the filtered grid",
+      "ar": "تصدير الشبكة المصفّاة"
+    },
+    "manual.1.why": {
+      "en": "Feature not built yet",
+      "ar": "الميزة غير مبنية بعد"
+    },
+    "data.D1.name": {
+      "en": "KPI \"Revenue\" with 12 monthly values for 2026",
+      "ar": "المؤشر \"Revenue\" بـ 12 قيمة شهرية لسنة 2026"
+    },
+    "data.D1.look": {
+      "en": "12 rows, Jan…Dec, strategy \"Growth 2026\"",
+      "ar": "12 صفًا، يناير…ديسمبر، الاستراتيجية \"Growth 2026\""
+    },
+    "data.D2.name": {
+      "en": "KPI \"Revenue\" values for 2024-2026",
+      "ar": "قيم المؤشر \"Revenue\" للسنوات 2024-2026"
+    },
+    "data.D2.look": {
+      "en": "36 rows",
+      "ar": "36 صفًا"
+    },
+    "data.D3.name": {
+      "en": "An exported KPI file",
+      "ar": "ملف مؤشر مُصدَّر"
+    },
+    "data.D3.look": {
+      "en": "Excel, 12 rows",
+      "ar": "Excel، 12 صفًا"
+    },
+    "data.D3.way": {
+      "en": "to check — pending implementation",
+      "ar": "للفحص — بانتظار التنفيذ"
+    },
+    "problem.1.problem": {
+      "en": "Export is not built yet",
+      "ar": "التصدير غير مبني بعد"
+    },
+    "problem.1.why": {
+      "en": "AC-3 pending implementation",
+      "ar": "AC-3 بانتظار التنفيذ"
+    },
+    "problem.1.decision": {
+      "en": "accept UNKNOWN until the story ships",
+      "ar": "قبول UNKNOWN حتى تُسلَّم القصة"
+    },
+    "log.1.2": {
+      "en": "Step 4 label \"Filters\" → \"Filter panel\"",
+      "ar": "تسمية الخطوة 4 \"Filters\" → \"Filter panel\""
+    },
+    "log.1.3": {
+      "en": "The panel header reads \"Filter panel\"",
+      "ar": "رأس اللوحة يقرأ \"Filter panel\""
+    },
+    "log.2.2": {
+      "en": "none — finding recorded as PB-1",
+      "ar": "لا شيء — سُجِّلت الملاحظة كـ PB-1"
+    },
+    "log.2.3": {
+      "en": "Clear left the Year chip in place",
+      "ar": "المسح أبقى شارة السنة في مكانها"
+    },
+    "negative.1.0": {
+      "en": "Missing required inputs",
+      "ar": "مدخلات مطلوبة مفقودة"
+    },
+    "negative.2.0": {
+      "en": "Unauthorized access",
+      "ar": "وصول غير مصرَّح"
+    },
+    "negative.2.2": {
+      "en": "N/A — no role guard on this screen",
+      "ar": "لا ينطبق — لا حماية أدوار على هذه الشاشة"
+    },
+    "standards.1.0": {
+      "en": "Loading indicator asserted in two steps",
+      "ar": "تأكيد مؤشر التحميل في خطوتين"
+    },
+    "pb.PB-1.title": {
+      "en": "Clear does not remove the Year chip",
+      "ar": "المسح لا يزيل شارة السنة"
+    },
+    "pb.PB-1.step.1": {
+      "en": "Filter the KPI grid to 2026 (TC-KPI-01).",
+      "ar": "صفِّ شبكة المؤشر على 2026 (TC-KPI-01)."
+    },
+    "pb.PB-1.step.2": {
+      "en": "Click Clear in the Filter panel.",
+      "ar": "انقر Clear في لوحة التصفية."
+    },
+    "pb.PB-1.step.3": {
+      "en": "Click Apply.",
+      "ar": "انقر Apply."
+    },
+    "pb.PB-1.expected": {
+      "en": "The grid shows all 36 rows across 2024-2026.",
+      "ar": "تعرض الشبكة كل الصفوف الـ 36 عبر 2024-2026."
+    },
+    "pb.PB-1.actual": {
+      "en": "The Year chip \"2026\" stays and the grid still shows 12 rows.",
+      "ar": "تبقى شارة السنة \"2026\" وما تزال الشبكة تعرض 12 صفًا."
+    },
+    "q.Q-1.title": {
+      "en": "Which roles may export?",
+      "ar": "أي الأدوار يمكنها التصدير؟"
+    },
+    "q.Q-1.gap": {
+      "en": "The requirement does not say which roles see the Export button.",
+      "ar": "لا يذكر المتطلب أي الأدوار ترى زر Export."
+    },
+    "q.Q-1.why": {
+      "en": "Decides whether a permission negative case is needed.",
+      "ar": "يحدد ما إذا كانت هناك حاجة لحالة سلبية للصلاحيات."
+    },
+    "q.Q-1.evidence": {
+      "en": "REQ-1234-03 names no role; learning file has no entry for export permissions.",
+      "ar": "REQ-1234-03 لا يسمّي دورًا؛ ملف التعلّم لا يحوي مدخلًا لصلاحيات التصدير."
+    },
+    "q.Q-1.recommended": {
+      "en": "Strategy Super Admin only — matches the other KPI actions (similar module: Objectives export).",
+      "ar": "Strategy Super Admin فقط — يطابق بقية إجراءات المؤشر (وحدة مشابهة: تصدير الأهداف)."
+    },
+    "q.Q-1.alternatives": {
+      "en": "All roles with read access.",
+      "ar": "كل الأدوار ذات صلاحية القراءة."
+    },
+    "q.Q-1.pending": {
+      "en": "TC-KPI-04 stays not-implemented; no permission TC designed until answered.",
+      "ar": "تبقى TC-KPI-04 غير منفَّذة؛ لا تُصمَّم حالة صلاحيات حتى الإجابة."
+    },
+    "finding.gaps.1": {
+      "en": "AC-2 has no Arabic variant — add TC-KPI-02b / TC-KPI-03b via skill 3 --revision.",
+      "ar": "AC-2 بلا نسخة عربية — أضف TC-KPI-02b / TC-KPI-03b عبر المهارة 3 ‎--revision."
+    },
+    "finding.defects.1": {
+      "en": "TC-KPI-02 — see PB-1.",
+      "ar": "TC-KPI-02 — انظر PB-1."
+    },
+    "finding.pending.1": {
+      "en": "TC-KPI-04 — Export is not built yet on staging (AC-3).",
+      "ar": "TC-KPI-04 — التصدير غير مبني بعد على staging (AC-3)."
+    },
+    "finding.unclear.1": {
+      "en": "Q-1 — export permissions.",
+      "ar": "Q-1 — صلاحيات التصدير."
+    }
+  }
+}

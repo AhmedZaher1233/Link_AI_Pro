@@ -56,13 +56,13 @@ organisation (case-insensitive, trimmed), the system shall reject the save with
 
 | Rule | Spec says | Code does | Probably wrong | Evidence | Hand-off |
 |---|---|---|---|---|---|
-| RULE-011 | target range 0–100 | accepts up to 999 | code | `…:120` | skill 4 (bug) |
+| RULE-011 | target range 0–100 | accepts up to 999 | code | `…:120` | skill 10 (bug) |
 
 ## D. In spec, not in code
 
 | Spec rule | Statement | Searched layers | Hand-off |
 |---|---|---|---|
-| REQ-{id}-07 | Description max 500 chars | validation, persistence, UI — no hit | skill 4 (gap) |
+| REQ-{id}-07 | Description max 500 chars | validation, persistence, UI — no hit | skill 10 (gap) |
 
 ---
 
@@ -101,7 +101,7 @@ Filled by the QC together with the Product Owner. Every B and C rule needs exact
 decision and a name/date before `--apply-approved` will record anything. Until then every rule
 above is a proposal, not a fact.
 
-| Rule | ☐ Intended → add to REQ | ☐ Bug → raise (skill 4) | ☐ Ignore (reason) | Decided by / date |
+| Rule | ☐ Intended → add to REQ | ☐ Bug → raise (skill 10) | ☐ Ignore (reason) | Decided by / date |
 |---|---|---|---|---|
 | RULE-004 | | | | |
 | RULE-007 | | | | |

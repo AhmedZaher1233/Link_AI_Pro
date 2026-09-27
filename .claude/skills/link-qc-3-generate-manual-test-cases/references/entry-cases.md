@@ -15,7 +15,7 @@ call — check what the task input already provides:
   preference (applies to an English `REQ-*.md` too) → **asked only when the spec/story is
   written in Arabic** (requirement body / ACs mainly in Arabic script; IDs, paths and code
   tokens ignored) → English. Detection needs the spec read, so when the question is still open
-  at intake it joins the step-6 combined ask — never a separate message. Question wording:
+  at intake it joins the step-6 ask (the only question that step may add) — never a separate message. Question wording:
   > "The requirement is written in Arabic. Which language do you want the review output in —
   > Arabic or English? (Requirement files / TC markdown always stay English for the next skills.)"
 
@@ -32,8 +32,12 @@ chat before designing anything — for single-story runs as well as for the mult
 so the user can override the location before a file is written. Once stated, the path is
 immutable for the run (SKILL.md invariant 9b).
 
-(The URL/credentials ask happens later, after the specs are read and the
-Playwright MCP probe has run — this gate covers only the information needed to START the flow.)
+(This skill never asks for an application URL or credentials — it opens no browser. Those
+belong to the optional `link-qc-3b-validate-manual-test-cases`.)
+
+Every question follows `open-questions.md`: search the learning file and previous answers first,
+then ask with the gap, affected TC-IDs, evidence, a recommendation and its reason, alternatives,
+and what stays pending — and never act on an unanswered recommendation.
 
 ## 2. Resolve the entry case
 
@@ -42,16 +46,20 @@ which case applies.
 
 | Entry case | Trigger | Route |
 |---|---|---|
-| **Case 1 — Existing manual TCs** | The tester states the User Story already has manual TCs (file path, Azure DevOps test cases, Word document, or pasted text) | Ingest existing TCs → start from the TC writing/normalization phase (`tc-design.md` — existing-TC update) → then continue automatically to validation + review |
+| **Case 1 — Existing manual TCs** | The tester states the User Story already has manual TCs (file path, Azure DevOps test cases, Word document, or pasted text) | Ingest existing TCs → start from the TC writing/normalization phase (`tc-design.md` — existing-TC update) → then continue automatically to the self-review and delivery |
 | **Case 2 — No TCs and no spec file** | No existing TCs AND no spec/requirement file exists for the story | Retrieve the User Story from Azure DevOps / Word → generate a requirement file into the requirements folder → FRESH DESIGN from that file |
-| **Case 3 — Story not implemented (cross-cutting)** | Detected by the implementation-status gate, regardless of Case 1/2 | Keep requirement-based TCs, but do NOT treat them as executable validation — see `mcp-pass.md` §1 |
+| **Case 3 — Story not implemented (cross-cutting)** | Stated by the tester at intake, or shown by an existing `link-qc-10-white-box-testing` report — never detected live here (§4) | Keep requirement-based TCs, mark them `not-implemented — pending implementation`, list them under Pending implementation; 3b re-checks the status live when it runs |
 | **Default** | Spec exists, no existing TCs | FRESH DESIGN (design phase) |
 
 ### Case 1 — Existing manual TCs as the starting point
 
 1. **Locate and read the existing TCs** using whichever source the tester names:
    - Markdown/text file in the repo (Read) — including the manual test-cases folder
-   - Azure DevOps Test Case work items / test suites (`mcp__azure-devops` testplan + wit tools)
+   - Azure DevOps Test Case work items / test suites — cloud server: `testplan_*` + `wit_*`
+     tools; self-hosted Azure DevOps Server (`@tiberriver256/mcp-server-azure-devops`): no test
+     plan / suite tools, so list them with `search_work_items` / `list_work_items` (WIQL on work
+     item type `Test Case`, linked to the story) and read each with `get_work_item` — suite
+     membership cannot be read there; say so instead of guessing it
    - Word document (`mcp__docx`: `open_document` → `export_markdown` / `get_body_text`). No docx MCP attached → ask the user to export the document
      to markdown/text or paste its content; BLOCKED only if they cannot.
    - Text pasted directly in the task input
@@ -69,29 +77,33 @@ which case applies.
    - TCs still correct → keep unchanged (marked `kept`).
 4. Produce an **Existing-TC Analysis table** (included in the deliverable):
    | Original TC | Disposition (kept / updated / merged / removed / new) | Reason |
-5. After completing the TC writing phase, **continue automatically** to the MCP validation
-   pass (gated by its §1) and the self-review — do not stop and wait between
-   phases.
+5. After completing the TC writing phase, **continue automatically** to the self-review and the
+   deliverables — do not stop and wait between phases.
 
-Implementation-status handling inside Case 1:
-- **Story implemented** → validate normally via the MCP pass.
-- **Story NOT implemented** → do NOT treat the TCs as executable validation of the current
-  application. Keep the requirement-based TCs, mark them
-  `not-implemented — pending implementation`, and keep requirement/coverage gaps strictly
-  separate from application defects (a missing screen is NOT a bug finding when the story was
-  never implemented).
+Implementation-status handling inside Case 1 (§4):
+- **Story implemented / status unknown** → every TC leaves `draft — not app-validated`; nothing
+  changes. Existing TCs that carry a 3b validation state and were kept unchanged keep it; ones
+  you update are reset to `draft — not app-validated (stale — revised)`.
+- **Story NOT implemented** (stated by the tester or a skill-4 report) → keep the
+  requirement-based TCs, mark them `not-implemented — pending implementation`, and keep
+  requirement/coverage gaps strictly separate from pending implementation (a missing screen is
+  NOT a bug finding when the story was never implemented; this skill records no defects).
 
 ### Case 2 — No manual TCs and no specification file
 
 Flow: **User Story → Retrieve from Azure DevOps / Word → Generate Requirement File →
 Generate Manual TCs → Review**
 
-1. Retrieve the User Story + acceptance criteria from Azure DevOps using the Azure DevOps MCP
-   (`wit_work_item` / `search_workitem`). On 401/403 STOP: 401 → the Azure DevOps MCP server
-   holds a rejected or stale token → ask the user to **reconnect the Azure DevOps MCP server**
-   (`/mcp` → azure-devops → reconnect; if the PAT expired they renew it first where the server
-   reads it from) — you cannot connect or disconnect MCP servers yourself, so always ask, wait,
-   then retry once; 403 → missing scope on the PAT. Never ask for the token in chat. If the
+1. Retrieve the User Story + acceptance criteria from Azure DevOps using the Azure DevOps MCP —
+   read the work item by ID or search by exact title with whichever tools the attached server
+   exposes (cloud: `wit_get_work_item` / `search_workitem`; self-hosted Azure DevOps Server:
+   `get_work_item` / `search_work_items`). On 401/403 STOP: **401 or "anonymous access"
+   (`TF400813`)** → the PAT variable is empty in the MCP server's process → ask the user to
+   **fully quit VS Code (all windows) and relaunch** (a window reload or an `/mcp` reconnect does
+   not help; still 401 after that → the token expired or was revoked → they re-run skill 1's
+   `set-azure-devops-pat.ps1` / `.sh` and relaunch again) — you cannot connect or disconnect MCP
+   servers yourself, so always ask, wait, then retry once; 403 → missing scope on the PAT. Never
+   ask for the token in chat. If the
    source is a Word document, use `mcp__docx` (`open_document` → `export_markdown`) instead (same fallback as Case 1 when it is not
    attached). If neither source is reachable → BLOCKED.
 2. Convert the User Story into a **structured requirement/specification file**: title, story ID,
@@ -99,10 +111,10 @@ Generate Manual TCs → Review**
    per testable statement), roles, out-of-scope notes, and open questions.
 3. Store it in the story's own folder inside the requirements tree —
    `{requirements_folder}/REQ-{storyID}-{feature}.md` (`{requirements_folder}` already ends in
-   `US-{storyID}-{kebab-name}/`; the same per-story layout `2-review-requirements` writes).
+   `US-{storyID}-{kebab-name}/`; the same per-story layout `link-qc-2-review-requirements` writes).
    When the story came from a spec FILE (a `.md`/`.txt`/`.docx` given as the source), the
    folder sits under `SPEC-{spec_name}/` — see the profile table. Check that folder FIRST
-   (glob `{paths.requirements}/**/US-{storyID}-*/`): if `2-review-requirements` already
+   (glob `{paths.requirements}/**/US-{storyID}-*/`): if `link-qc-2-review-requirements` already
    produced a `REQ-*.md` there, reuse it — and its folder location — instead of regenerating.
 4. Use that requirement file as `spec_sources` for TC generation — the normal FRESH DESIGN flow
    (the design phase onward) then applies unchanged.
@@ -110,7 +122,7 @@ Generate Manual TCs → Review**
 ### Multi-story input — split, never merge
 
 When the input names more than one User Story (several IDs, or a spec file holding multiple
-stories), split it the way `2-review-requirements` and `7-discover-business-rules` do:
+stories), split it the way `link-qc-2-review-requirements` and `link-qc-11-discover-business-rules` do:
 
 1. List the stories you detected and state the split in one message before designing anything.
    When the input is a spec FILE, also state the derived `{spec_name}` and the spec folder
@@ -148,10 +160,9 @@ user.** Never invent a URL, a credential, or a spec path.
 | `qa_standards` | `steering.readme`, `steering.L1`, `steering.L2`, `steering.L3` | glob `docs/steering/*` |
 | `required_locales` | — | `qa_standards` / CLAUDE.md i18n rules; ask when neither states them |
 | `review_page_language` | — | language of `TC-REVIEW-{feature}.html` only (the markdown deliverables are always English). Resolution: task input `--lang ar|en` / explicit sentence → learning file (grep `output language`, `لغة` under `## Project Knowledge` and the skill Q&A; a saved Arabic preference applies even when the REQ is English) → **ask only when the source is Arabic** (in the combined ask) → default `English`. This is the *document* language for the human reviewer — distinct from `required_locales`, which are the application locales the TCs must cover |
-| `app_base_url` | — | **NEVER auto-detected — learning file (`[type: env]`) or ask the user** |
-| `credentials_per_role` | — | **NEVER auto-detected, NEVER stored — always ask (unless given in the task input)** |
+| `implementation_status` | — | tester's intake answer → newest `{white_box_reports}/**/US-{storyID}-*/{storyID}-*-analysis.md` (or a legacy flat report) → else `Cannot be validated — not yet checked live` (§4). Never probed live here |
 | `spec_name` | — | **First rule — path wins:** when the resolved `spec_sources` path contains `/SPEC-{x}/` (a `REQ-*.md` under `Testing/Requirements/SPEC-{x}/…`), `spec_name` = `{x}` — always; a REQ under a SPEC folder counts as spec-file origin. **Else**, when the source is a spec FILE: file stem, extension stripped, lowercase kebab-case, ≤ 6 words (`Resource Request Hours v2.docx` → `resource-request-hours-v2`); a generic stem (`spec`, `specification`, `requirements`, `prd`, `readme`) → use the parent folder name (`docs/specs/resource-request/spec.md` → `resource-request`). **Else** empty (ADO / Word / pasted stories, REQ directly under `Testing/Requirements/US-…/`) |
-| `spec_level` | — | `SPEC-{spec_name}/` when `spec_name` is set, otherwise empty. The same rule `2-review-requirements` uses. **Immutable once resolved for the run** |
+| `spec_level` | — | `SPEC-{spec_name}/` when `spec_name` is set, otherwise empty. The same rule `link-qc-2-review-requirements` uses. **Immutable once resolved for the run** |
 | `UserStoryName` | — | `US-{storyID}-{kebab-name}` — identical to the requirement folder name skill 2 used |
 | `tc_output_folder` | `paths.manualTestCases` + `/{spec_level}{UserStoryName}/` | `Testing/Manual_Test/TestCases/[SPEC-{spec_name}/]US-{storyID}-{kebab-name}/` — MUST contain `SPEC-{spec_name}/` whenever the REQ path does; never a flat `US-*` folder for a story whose REQ sits under a `SPEC-*` parent |
 | `requirements_folder` | `paths.requirements` + `/{spec_level}US-{storyID}-{kebab-name}/` | `Testing/Requirements/[SPEC-{spec_name}/]US-{storyID}-{kebab-name}/` |
@@ -161,7 +172,7 @@ user.** Never invent a URL, a credential, or a spec path.
 If a key cannot be resolved and the user does not answer → BLOCKED naming the exact missing key.
 
 **Directory structure rule:** deliverables ALWAYS follow the
-`1-generate-update-testing-structure` layout — every User Story's TCs live in their own folder
+`link-qc-1-generate-update-testing-structure` layout — every User Story's TCs live in their own folder
 `{tc_output_folder}` (both the markdown and the HTML review page). The TC folder MIRRORS the
 requirement folder's position relative to the requirements root: a story whose `REQ-*.md` sits at
 `Testing/Requirements/SPEC-{spec_name}/US-{id}-{name}/` gets its TCs at
@@ -178,5 +189,31 @@ approved document) — tell the user and stop. Create the subtree if it is
 missing; never fall back to `docs/test-design/` or any other location. Once resolved, the
 path is immutable for the run (invariant 9b). When the manifest is
 absent, use the detection fallbacks and tell the user to run
-`/1-generate-update-testing-structure` (audit first, then repair) — never invoke that skill
+`/link-qc-1-generate-update-testing-structure` (audit first, then repair) — never invoke that skill
 yourself.
+
+## 4. Implementation status — static, never probed live (workflow step 6)
+
+This skill records the User Story's implementation status from what it is told, so the TCs are
+honest about being executable or not — it never opens the application to find out. Signals, in
+order; the first that answers wins and is named as the evidence in the header line:
+
+1. The tester's answer at intake (implemented / partially / not implemented / not sure).
+2. An existing `link-qc-10-white-box-testing` report for this requirement — glob
+   `{white_box_reports}/**/US-{storyID}-*/{storyID}-*-analysis.md` (skill 10 nests reports under
+   `[SPEC-{spec_name}/]US-{storyID}-{name}/`; older reports may sit flat at the root). Read only
+   its implementation-status verdict.
+3. Neither → `Cannot be validated — not yet checked live`.
+
+| Status | Header line | Effect on this run |
+|---|---|---|
+| **Implemented** | `Implemented — {tester's answer {date} \| skill-4 report {path}}` | Every TC `draft — not app-validated` |
+| **Partially implemented** | `Partially implemented — {evidence}; {which ACs are absent}` | TCs of the absent ACs `not-implemented — pending implementation`; the rest `draft` |
+| **Not implemented** | `Not implemented — {evidence}` | Every TC `not-implemented — pending implementation`; requirement coverage is still scored from the design |
+| **Cannot be validated** | `Cannot be validated — not yet checked live` | Every TC `draft — not app-validated`; the final message says 3b will establish the status live |
+
+Hard rules: a missing screen on a NOT-implemented story is **pending implementation**, never a
+defect; keep requirement/coverage gaps (spec has no TC) strictly separate from pending
+implementation in every table and finding; record the status **and its source** in the header
+and in the structured return. When the tester's answer and a skill-4 report disagree, ask
+(`open-questions.md`) — the tester's answer is the recommendation, the report is the evidence.

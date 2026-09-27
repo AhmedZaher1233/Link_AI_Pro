@@ -16,7 +16,7 @@ gate is the human.
    | Status | Weight | The AC is… |
    |---|---|---|
    | **Fully Covered** | 1.0 | ≥1 happy-path TC **and** every L1 §4 negative category that applies to it **and** every `required_locales` variant present — all with observable expected results and, where data is asserted, a Data Oracle |
-   | **Partially Covered** | 0.5 | Has TCs, but misses one of: a negative category that applies, a locale variant, a required Data Oracle — or its only TCs are `not-implemented — pending implementation` / `draft — not app-validated` |
+   | **Partially Covered** | 0.5 | Has TCs, but misses one of: a negative category that applies, a locale variant, a required Data Oracle |
    | **Not Covered** | 0.0 | No TC cites the AC (item 1 already forces a fix before delivering; the score only makes a reviewer-waived gap visible) |
 
    `weighted % = (full × 1.0 + partial × 0.5) / total ACs × 100` (one decimal). Report a per-AC
@@ -24,14 +24,21 @@ gate is the human.
    Partial / None counts. The score never replaces item 1 — every AC at 0.0 is still fixed
    first; Partial rows are fixed where you can and otherwise listed under Open Findings with the
    missing piece named.
+
+   **Coverage is requirement-based.** Validation states never affect this score: a `draft — not
+   app-validated` or `not-implemented — pending implementation` TC counts exactly like any other
+   designed TC. Rule, verbatim in both skills: *"Validation alone does not change design coverage;
+   discovering a genuine coverage gap or updating cases may change it."* Live observation is
+   reported separately as **App validation progress** (`0/N` from this skill).
 5. **Manual-only scenarios** — every TC with `Automation Candidate = NO` (plus `not-implemented`
-   TCs the reviewer will run by hand once the story ships) gets one row:
+   TCs the reviewer will run by hand once the story ships) gets one row (this table belongs to
+   the design; 3b never rewrites it):
    `Category · TC-ID · Scenario · Why manual · Priority`. Categories: `Permission /
    Unauthorized`, `Empty State`, `System / Background-Job Triggered`, `Display / Field
    Presence`, `Cross-Role Specific`, `Per-Row Enumeration & Identity`, `Visual / UX judgement`,
    `Data setup not reproducible`, `Pending implementation`. Priority: **High** = security /
    permission, empty state, pending implementation; **Medium** = background jobs, field display,
-   cross-role; **Low** = redundant per-row enumeration. This is the list skill 6 later confirms
+   cross-role; **Low** = redundant per-row enumeration. This is the list skill 5 later confirms
    against the real specs — keep the wording plain English.
 6. **Independence** — every TC runnable in isolation; all preconditions explicit; no TC assumes
    state from another TC.
@@ -41,12 +48,14 @@ gate is the human.
 9. **Step quality** — every step carries the 4 handoff fields; loading-indicator assertions are
    two steps; no generic steps; every TC reads as a complete user journey (no "apply the required
    filter"-style vagueness).
-10. **Validation honesty** — no TC marked `validated` whose unique tail was not observed; every
-    `inferred` TC names what prior knowledge it relied on; no not-implemented functionality
-    marked as validated or as a defect.
+10. **Validation honesty** — every TC this skill wrote or changed carries exactly
+    `draft — not app-validated` (or `not-implemented — pending implementation` per
+    `entry-cases.md` §4, or `draft — not app-validated (stale — revised)` on a revised TC); no
+    other state was written here; on `--revision` the TCs not touched keep the state and
+    evidence stamp 3b gave them.
 11. **Gap-vs-defect separation** — requirement/coverage gaps, application defects
-    (discrepancies), and pending-implementation items appear in three distinct lists — never
-    mixed.
+    (discrepancies — "none — not app-validated" from this skill), pending-implementation items,
+    environment blockers and unclear requirements appear in five distinct buckets — never mixed.
 12. **Secrets and code** — no password, token, selector, attribute name, code snippet or file
     identifier anywhere in any deliverable (TC document, test-data file, HTML page). Usernames
     and role names only.
@@ -61,6 +70,28 @@ gate is the human.
     "shared" means the TCs use the same data item, with execution order stated only for a real
     dependency; no locator, endpoint path, table / column name, code identifier or secret
     anywhere in the file.
+15. **Open questions** (`open-questions.md`) — every unresolved gap has a `Q-{n}` entry in the
+    required shape (affected TCs, gap, why, evidence, recommendation + reason, alternatives,
+    pending, status); no recommendation was acted on before its answer; the TCs that depend on an
+    open question are listed under Unclear requirements against the `Q-{n}`; the same questions
+    appear in the final message.
+16. **Technique coverage** (`tc-design.md` "Test-design techniques") — every spec-stated input
+    with valid / invalid classes has one TC per relevant Equivalence Partition (valid and
+    invalid); every spec-stated numeric / length / date / count limit has its BVA set (below / at
+    / above each stated boundary, including maximum-only and minimum-only limits, a side omitted
+    only with the reason) or a `Q-{n}`; every multi-condition rule has one TC per decision-table
+    rule or a justified N/A; every status lifecycle has all valid transitions and ≥ 1 invalid
+    attempt per guarded state; every boundary used is traceable to the spec, steering or the
+    learning file — derived neighbour values are fine, a boundary nobody stated is not.
+17. **Error guessing** (`tc-design.md` "Error-guessing checklist") — every E1–E6 item that
+    **applies** to a flow is either a requirement-backed TC or a `Q-{n}` — never skipped.
+    "Skipped" in `Patterns applied / skipped` is reserved for items that are not applicable (the
+    flow has no such trigger) or explicitly excluded from scope by the user / spec, each with its
+    reason; a missing expected behaviour produces a question, not a skip. No E-item TC asserts a
+    behaviour (disabled button, redirect, preserved data, retry, request count) the requirement
+    does not state; E1 TCs assert the business outcome, not a request count.
 
-Anything you cannot fix yourself (spec ambiguity, missing fixture, discrepancy) is listed under
-**Open Findings for the Human Reviewer** — never silently resolved.
+Anything you cannot fix yourself (spec ambiguity, missing fixture, unclear requirement) is listed
+under **Open Findings for the Human Reviewer** — never silently resolved. Header counts you
+write must equal the tables: the renderer (`html-page.md`) recomputes them and reports a
+`MISMATCH` otherwise.

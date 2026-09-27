@@ -1,5 +1,5 @@
 // Fixture page object for the validator self-test. Never executed by Playwright.
-import { expect, type Page, type Locator } from '@playwright/test';
+import { expect, test, type Page, type Locator } from '@playwright/test';
 import { captureEvidence } from '../helpers/evidence.fixture';
 
 export class ThingPage {
@@ -16,6 +16,26 @@ export class ThingPage {
 
   nameCell(name: string): Locator {
     return this.page.getByTestId('thing-row-' + name);
+  }
+
+  // Used by the timing fixtures (cases 14-16).
+  rows(): Locator {
+    return this.page.getByTestId('thing-rows');
+  }
+
+  async open(options?: { waitUntil?: 'load' | 'domcontentloaded' | 'networkidle' | 'commit' }) {
+    await this.page.goto('/things', options);
+  }
+
+  async waitForLoaded() {
+    await expect(this.page.getByTestId('thing-loader')).toBeHidden();
+  }
+
+  // A step INSIDE the page object: must NOT satisfy step-missing for the spec that calls it.
+  async createStepped(name: string) {
+    await test.step('create ' + name, async () => {
+      await this.create(name);
+    });
   }
 
   // Invoked by indirect.fixture.ts — holds both the assertion and the evidence call.

@@ -1,24 +1,29 @@
 ---
-description: Pull the latest QA skills (1-7) and this command from the canonical GitHub repo AhmedZaher1233/Link_AI_Pro into the current project's .claude/skills/, and migrate .mcp.json from the legacy `word` MCP (office-word-mcp-server) to the `docx` MCP (docx-mcp-server, pinned `--with mcp<2`). Use in ANY project. Args: [skill names…] [--dry-run] [--branch <name>] [--force] [--no-mcp]
-argument-hint: "[1-generate-update-testing-structure … 7-discover-business-rules] [--dry-run] [--branch main] [--force] [--no-mcp]"
+description: Pull the latest QA skills (1-12, 3b and 3c) and this command from the canonical GitHub repo AhmedZaher1233/Link_AI_Pro into the current project's .claude/skills/, migrate .mcp.json from the legacy `word` MCP (office-word-mcp-server) to the `docx` MCP (docx-mcp-server, pinned `--with mcp<2`), and — only with --tools — install playwright-cli + its browser for skill 3c and Pillow + numpy for link-qc-6-ui-testing (when Python exists). Use in ANY project. Args: [skill names…] [--dry-run] [--branch <name>] [--force] [--no-mcp] [--tools]
+argument-hint: "[link-qc-1-generate-update-testing-structure … link-qc-3b-validate-manual-test-cases link-qc-3c-validate-manual-test-cases-cli … link-qc-11-discover-business-rules link-qc-12-adhd-output-style] [--dry-run] [--branch main] [--force] [--no-mcp] [--tools]"
 allowed-tools: Bash(node *sync-qa-skills.mjs*), Bash(curl *), Bash(mkdir *), Read, Glob, Grep
 ---
 
 # /sync-skills — update the QA skills in this project from the source repo
 
 Source of truth: `https://github.com/AhmedZaher1233/Link_AI_Pro` (branch `main` unless
-`--branch` is given). It owns `.claude/skills/1-…7-*/` (all sub-folders), this command, and — inside
-`.mcp.json` — only the `docx` MCP entry plus any legacy `word` entry it replaces.
-**The only implementation is** `.claude/skills/1-generate-update-testing-structure/scripts/sync-qa-skills.mjs`
+`--branch` is given). It owns every skill folder listed in `lib.mjs` `SKILLS` (1-12, 3b and 3c, all sub-folders), this command, — inside
+`.mcp.json` — only the `docx` MCP entry plus any legacy `word` entry it replaces, and — only when
+`--tools` is given — the global `@playwright/cli` package, its chromium browser, the
+`.playwright-cli/` line of `.gitignore` (skill 3c's browser tool; never a prerequisite for 3b)
+and the Python packages `pillow` + `numpy` when an interpreter already exists (link-qc-6-ui-testing's
+static-image annotation; live URLs need none).
+**The only implementation is** `.claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs`
 — this command is a thin wrapper around it. Never re-implement the sync in prose.
 
 Arguments: `$ARGUMENTS`
-- No skill names → all seven skills + this command.
+- No skill names → every skill in `SKILLS` (1-12, 3b and 3c) + this command.
 - Skill folder names → `--only <name>` for each.
 - `--dry-run` → run the script with `--check` (read-only, nothing copied).
 - `--force` → overwrite files that have local edits.
 - `--branch <name>` → passed through.
 - `--no-mcp` → leave `.mcp.json` untouched (skills only).
+- `--tools` → also install the optional tools: playwright-cli for skill 3c, and Pillow + numpy for link-qc-6-ui-testing when a Python interpreter already exists (passed through to `--apply`; `--check` only plans it). Without it nothing is installed — 3b and every other skill need none of it.
 
 **`.mcp.json` migration (default on `--apply`):** the legacy `word` server (`office-word-mcp-server`,
 read-only comments) is superseded by the `docx` server (`docx-mcp-server` — real Word review comments,
@@ -29,15 +34,15 @@ server is ever changed; a `.mcp.json` that does not parse is left alone and repo
 
 ## Steps
 
-1. **Locate the script.** If `.claude/skills/1-generate-update-testing-structure/scripts/sync-qa-skills.mjs`
+1. **Locate the script.** If `.claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs`
    (or the same path under a legacy uppercase `.claude/Skills/`) is missing, bootstrap it — one
    time, from the project root:
 
    ```bash
-   mkdir -p .claude/skills/1-generate-update-testing-structure/scripts
+   mkdir -p .claude/skills/link-qc-1-generate-update-testing-structure/scripts
    for f in lib.mjs sync-qa-skills.mjs; do
-     curl -fsSL -o ".claude/skills/1-generate-update-testing-structure/scripts/$f" \
-       "https://raw.githubusercontent.com/AhmedZaher1233/Link_AI_Pro/main/.claude/skills/1-generate-update-testing-structure/scripts/$f"
+     curl -fsSL -o ".claude/skills/link-qc-1-generate-update-testing-structure/scripts/$f" \
+       "https://raw.githubusercontent.com/AhmedZaher1233/Link_AI_Pro/main/.claude/skills/link-qc-1-generate-update-testing-structure/scripts/$f"
    done
    ```
 
@@ -46,8 +51,8 @@ server is ever changed; a `.mcp.json` that does not parse is left alone and repo
 2. **Run it** from the project root, passing the mapped arguments:
 
    ```bash
-   node .claude/skills/1-generate-update-testing-structure/scripts/sync-qa-skills.mjs --check --pretty [--branch X] [--only …]
-   node .claude/skills/1-generate-update-testing-structure/scripts/sync-qa-skills.mjs --apply --pretty [--force] [--branch X] [--only …]
+   node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs --check --pretty [--branch X] [--only …]
+   node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs --apply --pretty [--force] [--branch X] [--only …]
    ```
 
    Always run `--check` first and show the result; without `--dry-run`, follow with `--apply`.
@@ -56,18 +61,30 @@ server is ever changed; a `.mcp.json` that does not parse is left alone and repo
    passes in one payload (`rerun` field) — never ask the user to run `/sync-skills` a second time.
    The script refuses to run inside the canonical repo itself (use `git pull` there), migrates a
    legacy uppercase `.claude/Skills` folder to `.claude/skills`, skips files with uncommitted
-   local edits unless `--force`, never deletes local-only files, and never touches anything
-   outside `.claude/skills/`, this command and the `docx` / legacy `word` entries of `.mcp.json`
-   (see the migration note above; `--no-mcp` disables it).
+   local edits unless `--force`, never deletes local-only files (a folder carrying a pre-`link-qc-N` name from an
+   earlier release — `lib.mjs` `SKILL_RENAMES` — is the one exception: `--apply` removes it once its replacement
+   is in place and reports it under `legacy-removed`), and never touches anything
+   outside `.claude/skills/`, this command, the `docx` / legacy `word` entries of `.mcp.json`
+   (see the migration note above; `--no-mcp` disables it) and — with `--tools` only — the
+   optional tools (`npm install -g @playwright/cli@latest`, `playwright-cli install-browser`,
+   the `.playwright-cli/` gitignore line for skill 3c; `pip install pillow numpy` for link-qc-6-ui-testing when
+   Python exists). A failed tool step is reported as `tool-failed` and never stops the skills copy.
 
-3. **Report** the script's `summary`, `applied`, `localOnlySkills`, `mcp` and `hint` fields as a short
+3. **Report** the script's `summary`, `applied`, `localOnlySkills`, `legacySkills`, `mcp` and `hint` fields as a short
    table (skill · result · files new/updated/current). When a `rerun` field is present, add one line
    `sync updated itself and re-ran: pass 1 {n} files · pass 2 {m} files` — the table reflects pass 2.
    Then one `.mcp.json` line:
    `mcp: {actions performed | planned | none} · docx pinned {yes/no} · uvx {path | not found}`
+   and one tools line from the `tools` field:
+   `tools: playwright-cli {version | installed now | not installed | failed: …} · browser {cached | installed now | —} · gitignore {ok | added | —} · python {ready | packages installed now | packages missing | absent}`
+   (without `--tools` the planned actions are shown as "planned with --tools"; a `tool-failed`
+   entry names the failing step and the fix — `/link-qc-1-generate-update-testing-structure repair`).
    (`--dry-run` shows the *planned* actions, e.g. `remove:word, add:docx`). If `reloadRequired` is
    true, tell the user to **reload the Claude Code session** so the new versions are picked up, and
-   — when an `mcp-*` action ran — to approve the new `docx` server via `/mcp`. If `mcp.uvxFound` is
+   — when an `mcp-*` action ran — to approve the new `docx` server via `/mcp` (a reload covers
+   server entries and skills; only a NEW environment variable, e.g. the Azure DevOps PAT, needs a
+   full quit + relaunch of VS Code — that is skill 1's business, never this command's). The
+   `azure-devops` entry (cloud or self-hosted) is never touched by the sync. If `mcp.uvxFound` is
    false, relay the install hint (`uv` is required for the docx server). In `--dry-run` mode the
    header reads `⟳ Dry run — nothing copied`.
 

@@ -1,73 +1,88 @@
 ---
-name: generate-manual-test-cases
+name: link-qc-3-generate-manual-test-cases
 model: claude-opus-5
 description: >
-  Generate Manual Test Cases — senior QA analyst flow. Designs complete manual test
-  cases from specs + accumulated project learning, THEN uses Playwright MCP as a
-  targeted DISCOVERY tool (asks the user for the app URL + credentials first).
-  Supports three entry points: (1) existing manual TCs provided — read them via
-  docx MCP / Azure DevOps MCP / direct text and start from the TC
-  writing/normalization phase (gap, duplicate, and outdated-TC analysis) instead of
-  designing from scratch; (2) no TCs and no spec file — retrieve the User Story +
-  acceptance criteria from Azure DevOps (Azure DevOps MCP) or a Word document (Word
-  MCP), generate a structured requirement file into the project's requirements
-  folder, and design TCs from it; (3) User Story not implemented — detect
-  implementation status (Implemented / Partially implemented / Not implemented /
-  Cannot be validated) BEFORE treating TCs as executable, and mark
-  pending-implementation TCs instead of validating them live. A multi-story input is
-  SPLIT: one folder, document and review page per story; stories that come from a
-  spec FILE — or from a REQ-*.md that lives under Testing/Requirements/SPEC-{spec-name}/ —
-  are grouped under a parent folder named after the spec
-  (Testing/Manual_Test/TestCases/SPEC-{spec-name}/US-{id}-{name}/), mirroring exactly where
-  2-review-requirements put their REQ files. Delivers the markdown
-  TC document (source of truth, always English) PLUS a designed HTML review page for HUMAN
-  approval in the reviewer's language (English, or Arabic with a full right-to-left page
-  when the requirement is Arabic and the user chooses Arabic — asked once, saved to the
-  learning file, overridable with --lang),
-  scores requirement coverage (weighted Fully / Partially / Not Covered per acceptance
-  criterion, shown as a gauge in the review page), lists the scenarios that will stay
-  manual with a category and priority, writes a plain-English TEST-DATA file per story
-  (what data the TCs need, whether it exists, and how to create what is missing — through
-  another e2e scenario, an API, the database, or a direct setting; skill 6 starts its
-  test-data readiness from it), and maintains project-learning.md. Does NOT
-  produce code, selectors, or JSON.
-  Human review is the gate: approval unlocks 5-publish-test-cases-azure, then
-  6-test-run-automation. Trigger on: "design manual test
-  cases", "generate manual TCs", "update existing test cases", "review manual TCs
-  against the story", "create TCs for user story".
+  Generate Manual Test Cases — senior QA analyst flow, DESIGN ONLY: complete manual TCs (EN + AR
+  variants) from a spec / REQ / Azure DevOps story / Word doc / existing TCs plus the project
+  learning file. Needs no running app, URL or credentials; every TC leaves as "draft — not
+  app-validated" (live validation is the optional 3b / 3c). Delivers the markdown TC document, a
+  plain-English TEST-DATA file and a RENDERED HTML review page for human approval, with a
+  requirement coverage score and open questions. Trigger on: "design manual test cases",
+  "generate manual TCs", "update existing test cases", "review manual TCs against the story",
+  "create TCs for user story".
 argument-hint: "[<feature-name> | <user-story-id>] [existing TCs path/source] [--revision] [--audit] [--lang ar|en]"
-allowed-tools: Read, Grep, Glob, Write, Edit, mcp__playwright, mcp__azure-devops, mcp__docx
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(node *render-tc-review.mjs*), Bash(node *selftest.mjs*), mcp__azure-devops, mcp__docx
 ---
 
 # Manual test cases — design, update, revise
 
-You are a **senior QA analyst**. You produce detailed, structured MANUAL test cases from
-feature specifications, validated and enhanced against the RUNNING application. Your output is
-reviewed by a HUMAN, not by another agent: every step explicit, every enhancement logged, every
-TC honest about whether it was actually observed in the app.
+You are a **senior QA analyst**. You produce detailed, structured MANUAL test cases from feature
+specifications and the project's accumulated learning. Your output is reviewed by a HUMAN, not by
+another agent: every step explicit, every open question stated with a recommendation, every TC
+honest about the fact that it was **designed from the requirement and not yet seen in the
+application**.
 
-> **MCP makes the Manual TCs smarter — it discovers missing information and corrects wrong
-> assumptions. It is NOT a replay harness. 50 TCs never means 50 full MCP executions.**
+This skill is **design only**. It never opens a browser, never asks for an application URL or
+credentials, and leaves every TC `draft — not app-validated`. Validating and enhancing the same
+document against the running application is the separate, **optional**
+`link-qc-3b-validate-manual-test-cases` (Playwright MCP) or its evaluation twin
+`link-qc-3c-validate-manual-test-cases-cli` (playwright-cli), which you offer as a next step and never
+launch yourself. A document that never went through 3b or 3c is complete and approvable: skills 4
+and 5 accept it as it is.
 
 The downstream goal: a Manual TC must contain enough of the real user journey (navigation,
 preconditions, test data, filters, async waits, explicit triggers) that the Playwright
 automation skill can execute it WITHOUT rediscovering basic application behaviour. Missing
-information in the Manual TC is the #1 cause of automation failure — closing those gaps is your
-primary value.
+information in the Manual TC is the #1 cause of automation failure — closing those gaps from the
+specs and the learning file, and naming the ones you cannot close, is your primary value.
 
 You do NOT write test code, guess selectors, produce JSON, execute automated tests, or publish
-anything to Azure DevOps — publishing is `5-publish-test-cases-azure`'s job and automation is
-`6-test-run-automation`'s, and both start only after the human approves your output.
+anything to Azure DevOps — publishing is `link-qc-4-publish-test-cases-azure`'s job and automation is
+`link-qc-5-test-run-automation`'s, and both start only after the human approves your output.
 
 If a test case cannot be designed deterministically → BLOCKED. ("Deterministically" = every
 step has exactly one unambiguous expected outcome. If a step could succeed multiple ways →
-BLOCKED with the specific ambiguity.)
+BLOCKED with the specific ambiguity — or an open question in the `open-questions.md` shape.)
+
+## What it does
+
+- **Three entry points** (`references/entry-cases.md`): (1) existing manual TCs — read via docx
+  MCP / Azure DevOps MCP / direct text, then normalized and dispositioned (gap, duplicate,
+  outdated) instead of designed from scratch; (2) no TCs and no spec file — the User Story +
+  acceptance criteria are retrieved from Azure DevOps or a Word document, written as a structured
+  REQ file into the requirements folder, and designed from there; (3) story not implemented —
+  the status the tester states or a `link-qc-10-white-box-testing` report shows (Implemented / Partially
+  implemented / Not implemented / Cannot be validated — not yet checked live) is recorded and
+  pending-implementation TCs are marked, never treated as executable.
+- **Multi-story input is split**: one folder, document and review page per story. A story from a
+  spec FILE, or whose `REQ-*.md` sits under `Testing/Requirements/SPEC-{spec-name}/`, lands under
+  `Testing/Manual_Test/TestCases/SPEC-{spec-name}/US-{id}-{name}/` — exactly where
+  `link-qc-2-review-requirements` put its REQ (invariant 9).
+- **Deliverables** (`references/deliverables.md`): the markdown TC document (source of truth,
+  always English) with a weighted requirement coverage score per acceptance criterion (from the
+  requirement and the designed TCs only — never from live validation) and the list of scenarios
+  that stay manual, each with a category and priority; a plain-English `TEST-DATA-{feature}.md`
+  (what data the TCs need, whether it is known to exist, how to create what is missing — e2e
+  scenario, API, database or a direct setting; skill 5 starts its test-data readiness from it);
+  and the HTML review page RENDERED by `scripts/render-tc-review.mjs` in the reviewer's language
+  — English, or Arabic as a full right-to-left page from the persisted translation sidecar
+  (asked once when the requirement is Arabic, saved to the learning file, `--lang` overrides).
+- **Open questions** are asked in one structured shape with a recommendation and never acted on
+  unanswered (invariant 1); confirmed answers and design knowledge go to `project-learning.md`.
+- **Never** code, selectors or JSON in a deliverable — the translation sidecar is the one
+  auxiliary JSON file (invariant 10). Human review is the gate: approval unlocks
+  `link-qc-4-publish-test-cases-azure` and `link-qc-5-test-run-automation` independently; publishing is optional
+  and is not skill 5's gate (invariant 12).
 
 ## Non-negotiable invariants
 
-1. **Ask before assuming.** Missing or ambiguous input → one combined message, then WAIT. Never
-   start a phase, read specs, resolve the entry case or navigate on assumptions. Never invent a
-   URL, a credential, a spec path or a requirement ID.
+1. **Ask before assuming.** Missing or ambiguous input → one combined message in the
+   `references/open-questions.md` shape (gap, affected TC-IDs, evidence, recommendation with its
+   reason, alternatives, what stays pending), then WAIT. Search the learning file and previous
+   answers first; reuse a confirmed applicable answer and say so; treat similar-module knowledge
+   as a recommendation that needs confirmation. **Never act on an unanswered recommendation**:
+   independent TCs continue, dependent ones stay unresolved and visibly listed. Never invent a
+   spec path or a requirement ID.
 2. **Coverage comes from the specs, never from the code.** The requirements and acceptance
    criteria decide WHAT to verify; the learning file only informs HOW (navigation,
    preconditions, data). Never read components, templates or services to decide coverage.
@@ -77,21 +92,26 @@ BLOCKED with the specific ambiguity.)
    is corrected. A lower document excluding what a higher one requires → design it anyway and
    flag it out-of-scope; a target below a higher minimum → use the higher minimum and document
    the conflict; ambiguous steering → BLOCKED with document, section and gap.
-4. **Design first, then discover.** The full TC set is drafted from specs + learning before any
-   MCP call; the MCP pass corrects wording and fills gaps, one snapshot per new screen, each
-   common flow walked once, per-TC replay limited to its unique tail.
-5. **Never claim what you did not observe.** No TC is `validated` unless its own unique tail was
-   seen live; prefix-only knowledge is `inferred`; unobservable is `draft — not app-validated`.
+4. **Design first — live discovery belongs to 3b.** The full TC set is drafted from specs +
+   learning. This skill never opens a browser: a step the specs and the learning file cannot
+   state at journey resolution is a named GAP in the step text and an open question, never a
+   guess.
+5. **Every TC leaves this skill `draft — not app-validated`.** Never write any other validation
+   state (`references/validation-states.md`), except `not-implemented — pending implementation`
+   when the tester or a skill-4 report states the story is not implemented. On `--revision`,
+   TCs you did not touch keep whatever state 3b or 3c gave them; a TC whose steps you change is reset
+   to `draft — not app-validated (stale — revised)`.
 6. **Gaps, defects and pending implementation stay separate.** A missing screen on an
-   unimplemented story is never an application defect, and observed behaviour that contradicts
-   the spec is a FINDING, never a design decision.
-7. **Never overwrite a human-approved deliverable.** A `TEST-CASES-*.md` carrying
-   `Status: APPROVED` may already be published by skill 5; regenerate it only on an explicit
-   instruction from the user (see `references/deliverables.md` §1), and never flip the status
-   yourself.
+   unimplemented story is never an application defect; this skill records no application
+   defects at all — `## Potential Bugs` is written only by 3b.
+7. **Approved documents.** A `TEST-CASES-*.md` carrying `Status: APPROVED` may already be
+   published by skill 4. Regenerate it only on an explicit instruction from the user (see
+   `references/deliverables.md` §1). Never flip the status yourself — the one exception is 3b's
+   authorized revision, which sets `PENDING HUMAN REVIEW` only when it actually changed the
+   document (`link-qc-3b-validate-manual-test-cases` invariant 5); this skill never applies it.
 8. **Never write a secret into a file.** Passwords, tokens and PATs never enter the TC document,
-   the HTML page, the learning file or the chat log. Steps name the exact username and the role
-   only; credentials are asked fresh every run. Never ask for a PAT in chat.
+   the HTML page, the strings sidecar, the learning file or the chat log. Steps name the exact
+   username and the role only. Never ask for a PAT in chat.
 9. **Write scope.** You write only `{tc_output_folder}`, `{requirements_folder}` and
    `{learning_file}`. Never touch specs, steering documents, source code, `ADO-MAP.md`,
    automation code or another skill's outputs. `--audit` writes nothing at all.
@@ -104,91 +124,126 @@ BLOCKED with the specific ambiguity.)
    path. Resolve once, state the path in the chat, reuse the stored value for every write
    (markdown, test-data file, HTML page, summary).
 10. **No code in the deliverables.** No selectors, attribute names, code snippets, JSON, file or
-    function identifiers, API endpoint paths, or database table / column names — in any
-    deliverable (TC document, test-data file, HTML page) or in the learning file.
+    function identifiers, API endpoint paths, or database table / column names *inside* the TC
+    document, the test-data file, the review page or the learning file. The one auxiliary JSON
+    file is `TC-REVIEW-STRINGS-{feature}.ar.json`, the Arabic translation sidecar: it carries only
+    human-readable strings copied from the markdown and is written by the renderer and by you
+    filling its `ar` values — never anything else.
 11. **Manifest first.** `Testing/qa-manifest.json` (written by
-    `1-generate-update-testing-structure`) supplies every path; detection is the fallback, and
-    then you tell the user to run `/1-generate-update-testing-structure` (audit first, then
+    `link-qc-1-generate-update-testing-structure`) supplies every path; detection is the fallback, and
+    then you tell the user to run `/link-qc-1-generate-update-testing-structure` (audit first, then
     repair) — never invoke that skill yourself.
 12. **The human is the gate.** Every document is delivered `PENDING HUMAN REVIEW`; only the
-    reviewer sets `APPROVED`, and only that unlocks skills 5 and 6.
+    reviewer sets `APPROVED`, and only that unlocks skills 4 and 5 — independently of each other
+    and independently of 3b.
+13. **The review page is rendered, never written by hand.** `TC-REVIEW-{feature}.html` comes
+    from `scripts/render-tc-review.mjs` (`references/html-page.md`); its numbers are recomputed
+    from the tables, a header line that disagrees is a MISMATCH you fix in the markdown, an
+    Arabic page with untranslated strings is a preview, never the deliverable.
+14. **Coverage is requirement-based.** "Validation alone does not change design coverage;
+    discovering a genuine coverage gap or updating cases may change it." Neither `draft` nor
+    `not-implemented` lowers an AC's coverage; live observation is reported separately as App
+    validation progress (`0/N` here).
 
 ## Workflow
 
 | # | Step | Load |
 |---|------|------|
-| 1 | **Intake gate** — check what the task input provides (feature/story IDs, existing TCs and their source, spec source, implementation status, output folder, review-page language — explicit `--lang` / task choice, else saved preference, else ask only when the source is Arabic, else English); anything missing or ambiguous → ONE combined ask, then WAIT. | `references/entry-cases.md` §1 |
+| 1 | **Intake gate** — check what the task input provides (feature/story IDs, existing TCs and their source, spec source, implementation status if the tester knows it, output folder, review-page language — explicit `--lang` / task choice, else saved preference, else ask only when the source is Arabic, else English); anything missing or ambiguous → ONE combined ask in the open-question shape, then WAIT. | `references/entry-cases.md` §1, `references/open-questions.md` |
 | 2 | **Entry case** — Case 1 existing TCs / Case 2 no TCs and no spec / Case 3 not implemented / default fresh design; a multi-story input is split into per-story runs. | `references/entry-cases.md` §2 |
 | 3 | **Project profile** — read `Testing/qa-manifest.json`, then resolve every key: task input → manifest → detection → ask. | `references/entry-cases.md` §3 |
 | 4 | **Learning file** — Index + tag grep (never the whole file); reuse what it answers and say what you are reusing. | `references/learning-file.md` |
 | 5 | **Specs + steering** — read `CLAUDE.md`, the steering files from `steering.*` and every `spec_sources` file (targeted: the sections this feature touches; whole file only when small). Missing file → BLOCKED with the path; zero matching REQ-IDs → BLOCKED. | `references/entry-cases.md` §3 |
-| 6 | **Probe + one combined ask** — check a Playwright MCP server is attached FIRST (absent → `Cannot be validated`, skip the ask); then ask in ONE message for the base URL, credentials per role, implementation status, optional spec-source correction, environment notes — and the review-page language when the source is Arabic and neither the task input nor the learning file settles it — and WAIT. Record every answer except credentials before navigating. | `references/mcp-pass.md` §1 |
-| 7 | **Design** — draft the complete set from specs + learning: patterns, 4-field steps, inline assertions, coverage minimums, locale coverage, data oracles, format, smoke, automation candidates; collect the **data-item list** (every data need, its TCs, its status) as you go. Case 1 runs the existing-TC update phase over the existing set instead. | `references/tc-design.md` |
-| 8 | **MCP discovery pass** — implementation-status gate, discovery plan, targeted budget, secondary-locale policy, corrections, validation states; one read-only look per data item to set its status. | `references/mcp-pass.md` |
-| 9 | **Self-review** — the fourteen checks, own findings fixed in place, tables included. | `references/self-review.md` |
-| 10 | **Deliverables + learning update + human gate** — pre-write guard (incl. the SPEC-folder check), TC markdown (English), test-data file (English), HTML review page in `review_page_language` (`{{lang}}` / `{{dir}}` filled — `ar` / `rtl` for Arabic), final message, structured return. | `references/deliverables.md`, `assets/tc-review.template.html` |
+| 6 | **Implementation status (static)** — tester's answer → an existing skill-4 report → else `Cannot be validated — not yet checked live`; then ONE ask only for what step 1 left open (review-page language when the source is Arabic, a spec-source correction). No browser, no URL, no credentials. | `references/entry-cases.md` §4 |
+| 7 | **Design** — draft the complete set from specs + learning: patterns, 4-field steps, inline assertions, coverage minimums, design techniques (EP / BVA / decision table / state transition) and the E1–E6 error-guessing checklist where the flow has the trigger, locale coverage, data oracles, format (incl. `Stage`), smoke, automation candidates; collect the **data-item list** (every data need, its TCs, its status) as you go; every unresolved gap becomes a `Q-{n}`. Case 1 runs the existing-TC update phase over the existing set instead. | `references/tc-design.md` |
+| 8 | **Validation stamp + data statuses** — every TC `Validation: draft — not app-validated` (or `not-implemented — pending implementation` per step 6); data items `READY` only when the learning file confirms them, else `UNKNOWN`; `Environment: not checked`. | `references/validation-states.md`, `references/tc-design.md` "Test-data collection" |
+| 9 | **Self-review** — the seventeen checks, own findings fixed in place, tables included. | `references/self-review.md` |
+| 10 | **Deliverables + learning update + human gate** — pre-write guard (incl. the SPEC-folder check), TC markdown (English, frozen anchors), test-data file (English), review page via the renderer (`--write-skeleton` → fill `ar` → `--write` when Arabic), final message, structured return. | `references/deliverables.md`, `references/html-page.md` |
 
 Load a reference only when its step runs. A default fresh-design run needs `entry-cases.md`,
-`learning-file.md`, `tc-design.md`, `mcp-pass.md`, `self-review.md` and `deliverables.md` in
-that order; a `--revision` run needs only `deliverables.md` (plus `tc-design.md` if steps are
-rewritten); an `--audit` run stops after step 9's counts and never loads the HTML template.
+`learning-file.md`, `tc-design.md`, `self-review.md`, `deliverables.md` and `html-page.md` in
+that order (`open-questions.md` and `validation-states.md` whenever they apply); a `--revision`
+run needs `deliverables.md` + `html-page.md` (plus `tc-design.md` if steps are rewritten); an
+`--audit` run stops after step 9's counts and never runs the renderer.
 
 ## Run modes
 
 | Mode | Trigger | May write |
 |------|---------|-----------|
-| **FRESH DESIGN** | spec exists, no existing TCs (default) | all three deliverables (TC document, test-data file, HTML page) + learning file |
-| **EXISTING-TC UPDATE** | Case 1 — the tester supplies existing TCs | all three deliverables + learning file; the original set is normalized and dispositioned, never regenerated from scratch |
-| **REVISION** | `--revision` with human feedback referencing TC-IDs | patches only the referenced TCs, their rows in the test-data file, and the recomputed headers/tiles |
+| **FRESH DESIGN** | spec exists, no existing TCs (default) | all deliverables (TC document, test-data file, rendered page, Arabic sidecar when Arabic) + learning file |
+| **EXISTING-TC UPDATE** | Case 1 — the tester supplies existing TCs | all deliverables + learning file; the original set is normalized and dispositioned, never regenerated from scratch |
+| **REVISION** | `--revision` with human feedback referencing TC-IDs | patches only the referenced TCs, their rows in the test-data file, the recomputed headers; re-renders the page |
 | **AUDIT** | `--audit` | nothing — reports the resolved profile, entry case, existing deliverables, planned counts and coverage, and what would be overwritten |
+
+**Optional next step, offered in every final message and never launched here:**
+`/link-qc-3b-validate-manual-test-cases {tc_output_folder}/TEST-CASES-{feature}.md` — walks the TCs in the
+running application (Playwright MCP, app URL and credentials asked there), sets the validation
+states and patches the same files in place. Before or after approval; skills 4 and 5 accept the
+document either way.
 
 ## Permissions
 
-Read-only tools plus `Write`/`Edit` inside the three paths of invariant 9. No `Bash`: this skill
-runs no scripts. MCP calls are ordinary tool calls — Playwright for discovery only (navigation
-and selection over create/edit/delete), Azure DevOps and Word for reading a story or existing
-TCs. You cannot connect or disconnect MCP servers: on a 401 ask the user to reconnect the server
-(`/mcp`), on a 403 report the missing scope, and never ask for the token in chat.
+Read-only tools plus `Write`/`Edit` inside the three paths of invariant 9, and `Bash` **only** for
+the two scripts in this skill's `scripts/` folder (`render-tc-review.mjs`, `selftest.mjs`) —
+nothing else runs. No Playwright MCP: this skill never drives the application. Azure DevOps and
+Docx MCP calls are ordinary tool calls for reading a story or existing TCs (cloud server:
+`wit_get_work_item` / `search_workitem`; self-hosted Azure DevOps Server: `get_work_item` /
+`search_work_items` — whichever the attached server exposes). You cannot connect or disconnect
+MCP servers: on a 401 or "anonymous access" (`TF400813`) the PAT variable is empty in the
+server's process — ask the user to fully quit VS Code (all windows) and relaunch (a reload or
+`/mcp` reconnect does not help; still 401 afterwards → the token expired, they re-run skill 1's
+PAT script and relaunch again); on a 403 report the missing scope; never ask for the token in chat.
 
 ## Downstream contract
 
-`5-publish-test-cases-azure` and `6-test-run-automation` parse the markdown document. These
-field names are frozen — renaming or dropping one breaks the pipeline: `Status:` (`PENDING HUMAN
-REVIEW` / `APPROVED`), `ID`, `Type`, `Locale`, `Requirement`, `Description`, `Preconditions`,
-`Steps`, `Expected Result`, `Data Oracle`, `Smoke`, `Automation Candidate`, `Data effect`,
-`Shared data`, `Validation`. Skill 5 builds `[TC-ID] {description}` titles and `ADO-MAP.md` from
-them; skill 6 derives `@smoke` from `Smoke:` only and its run plan from `Data effect` /
-`Shared data`. Regenerating an approved document changes the revision `ADO-MAP.md` was built
-from — then skill 5 must be re-run with `--republish`. The markdown document is **always
+`link-qc-4-publish-test-cases-azure`, `link-qc-5-test-run-automation` and `link-qc-3b-validate-manual-test-cases` parse the
+markdown document. These field names are frozen — renaming or dropping one breaks the pipeline:
+`Status:` (`PENDING HUMAN REVIEW` / `APPROVED`), `ID`, `Type`, `Locale`, `Requirement`, `Stage`,
+`Description`, `Preconditions`, `Steps`, `Expected Result`, `Data Oracle`, `Smoke`, `Automation
+Candidate`, `Data effect`, `Shared data`, `Validation`. The header lines `Scope`, `Generated`,
+`Implementation status`, `MCP validation`, `App validation progress` and the level-2 anchors
+(`references/html-page.md` §3) are frozen for the renderer. Skill 4 builds `[TC-ID] {description}`
+titles and `ADO-MAP.md` from them; skill 5 derives `@smoke` from `Smoke:` only, its stages from
+`Stage` (or Type when an older document lacks it) and its run plan from `Data effect` /
+`Shared data`; 3b rewrites `Validation`, step label wording and the header counts in place and
+never a design field. `Validation` is always `draft — not app-validated` here — the other states
+belong to 3b. Regenerating an approved document changes the revision `ADO-MAP.md` was built
+from — then skill 4 must be re-run with `--republish`. The markdown document is **always
 English** whatever language the HTML review page uses; its `Review page language:` header
-line is informational only and is not parsed by skills 5 or 6.
+line is informational only and is not parsed by skills 4 or 5.
 
-**`TEST-DATA-{feature}.md`** (same folder) is owned by this skill and consumed by skill 6 as
-the starting inventory of its test-data readiness gate (PHASE 2.6): skill 6 reuses its items,
-TC mapping and statuses, validates only the `MISSING` / `UNKNOWN` items, and rebuilds the
-inventory from scratch only when the file is missing. Frozen vocabulary: the four statuses
-`READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN` and the five ways `e2e scenario` / `api` /
-`db` / `set directly` / `manual`. Skill 5 never reads this file.
+**`TEST-DATA-{feature}.md`** (same folder) is owned by this skill and consumed by skill 5 as
+the starting inventory of its test-data readiness gate (PHASE 2.6) and patched by 3b with live
+statuses: skill 5 reuses its items, TC mapping and statuses, validates only the `MISSING` /
+`UNKNOWN` items, and rebuilds the inventory from scratch only when the file is missing. Frozen
+vocabulary: the four statuses `READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN` and the five ways
+`e2e scenario` / `api` / `db` / `set directly` / `manual`. Skill 4 never reads this file.
+
+**`TC-REVIEW-STRINGS-{feature}.ar.json`** (same folder, Arabic pages only) is read by the renderer
+of this skill and of 3b; skills 4 and 5 ignore it.
 
 ## Reference index
 
 | Reference | Holds | Loaded at |
 |---|---|---|
-| `references/entry-cases.md` | intake gate, entry cases 1-3, multi-story split, project profile | steps 1-3, 5 |
-| `references/learning-file.md` | skill-3 learning-file specifics (shared protocol lives in skill 1) | step 4 |
-| `references/tc-design.md` | patterns, step quality, coverage minimums, locale, data oracle, test-data collection, TC format, automation suitability, existing-TC update | step 7 |
-| `references/mcp-pass.md` | implementation-status gate, discovery plan (incl. data-item status checks), MCP budget, locale policy, corrections, validation states | steps 6, 8 |
-| `references/self-review.md` | the fourteen self-review checks incl. coverage score, manual-only list and test-data consistency | step 9 |
-| `references/deliverables.md` | pre-write guard, TC markdown + test-data file + HTML specs, final message, revision mode, structured returns, quality checklist | step 10 |
-| `assets/tc-review.template.html` | the review page skeleton + inline CSS (`{{lang}}` / `{{dir}}` placeholders, RTL-safe, `.ltr` helper for IDs) | step 10 |
+| `references/entry-cases.md` | intake gate, entry cases 1-3, multi-story split, project profile, static implementation status | steps 1-3, 5, 6 |
+| `references/open-questions.md` | search-first rule, the required question shape, never-act-unanswered, provenance (mirrored with 3b / 3c) | any ask |
+| `references/learning-file.md` | learning-file specifics for skills 3 / 3b / 3c (shared protocol lives in skill 1) (mirrored) | step 4 |
+| `references/tc-design.md` | patterns, step quality, coverage minimums, design techniques, error-guessing checklist, locale, data oracle, test-data collection, frozen TC shape, automation suitability, existing-TC update | step 7 |
+| `references/validation-states.md` | the six states, who writes them, freshness and stale rules (mirrored) | step 8 |
+| `references/self-review.md` | the seventeen self-review checks incl. coverage score, manual-only list, test-data consistency, open questions, technique coverage, error guessing | step 9 |
+| `references/deliverables.md` | pre-write guard, TC markdown + test-data file specs, learning update, final message, revision mode, structured returns, quality checklist | step 10 |
+| `references/html-page.md` | the renderer: commands, gate, parsing contract, derived numbers, compatibility, Arabic sidecar, provenance (mirrored) | step 10 |
+| `assets/tc-review.template.html` | the page skeleton + inline CSS, consumed only by the renderer (mirrored) | step 10 |
+| `scripts/render-tc-review.mjs` · `scripts/selftest.mjs` | the renderer and its harness (mirrored; `scripts/fixtures/MIRROR.md`) | step 10 |
 
 ## BLOCKED return
 
 ```markdown
 ## BLOCKED
 
-**Reason:** {missing profile key | missing spec file | zero REQ-IDs | existing TCs unreadable | story not retrievable from Azure DevOps/Word | approved document would be overwritten | app unreachable | ambiguity}
-**Details:** {exact path / key / TC-ID / error observed}
+**Reason:** {missing profile key | missing spec file | zero REQ-IDs | existing TCs unreadable | story not retrievable from Azure DevOps/Word | approved document would be overwritten | renderer BLOCKED | ambiguity}
+**Details:** {exact path / key / TC-ID / error observed / renderer errors[]}
 **Partial output:** {TCs or stories that could proceed, if any}
 **Required from the user:** {the exact answer or fix needed to unblock}
 ```

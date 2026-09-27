@@ -1,7 +1,8 @@
-SKILL: 1-generate-update-testing-structure
+SKILL: link-qc-1-generate-update-testing-structure
 WHAT IT DOES: Audits, repairs or restructures the project's QA foundation — the Testing/
 layout, docs/steering/ (L1/L2/L3), Node/NPM + Playwright, .mcp.json (Playwright, Azure DevOps,
-Docx MCP), the QA skills 1-7 (.claude/skills/), Testing/project-learning.md and
+Docx MCP; optional Figma MCP), the optional playwright-cli for skill 3c and Python + Pillow for
+link-qc-6-ui-testing, the QA skills 1-12, 3b and 3c (.claude/skills/), Testing/project-learning.md and
 Testing/qa-manifest.json — with a read-only preflight first and a deterministic PASS/FAIL
 validation at the end. Invoke it explicitly; other skills never run it for you.
 
@@ -15,7 +16,7 @@ REQUIRED:
 OPTIONAL ARGUMENT (existing projects; skips the mode question):
   audit        — Mode A: health-check only. Writes NOTHING (no downloads, installs, renames,
                  learning-file or manifest updates). Lists what B would fix.
-  repair       — Mode B: sync skills 1-7 + sync-skills command, add missing folders / steering
+  repair       — Mode B: sync skills 1-12, 3b and 3c + sync-skills command, add missing folders / steering
                  layers / MCP entries / learning-file sections, normalize names (steering files,
                  .claude/Skills → .claude/skills, legacy learning heading), write the manifest.
                  Never moves or rewrites existing valid content.
@@ -25,37 +26,60 @@ OPTIONAL ARGUMENT (existing projects; skips the mode question):
 
 ASKED DURING THE RUN (only if it cannot detect them and the learning file has no answer):
   1. Which mode (A/B/C) — existing projects without an argument
-  2. Azure DevOps organization name — for the azure-devops MCP entry (git remote first)
+  2. Azure DevOps hosting + organization — for the azure-devops MCP entry. Detected from the git
+     remote first: dev.azure.com / *.visualstudio.com → cloud (Microsoft's @azure-devops/mcp,
+     organization name); any other host (a self-hosted Azure DevOps Server) → self-hosted
+     (@tiberriver256/mcp-server-azure-devops, org URL https://host/Collection + project).
+     No Azure DevOps remote → you are asked for a User Story URL, never for a guess.
   3. Confirmation of the move plan — Mode C only
   4. A source path for a missing L1/L2 steering document when the source repo has none —
      the skill NEVER writes L1 or L2 itself
   5. The Azure DevOps PAT — when the azure-devops MCP entry is written and the user-level
-     variable AZURE_DEVOPS_PAT_B64 does not exist on this PC, the skill asks you to run
-     scripts/set-azure-devops-pat.ps1 (or .sh) in YOUR OWN terminal. The script prompts for the
-     token with hidden input, stores base64(":" + PAT) as a user environment variable, and
-     verifies it. The token never passes through the chat; the skill only checks that the
-     variable exists. Reopen the terminal / Claude Code afterwards.
+     variable it references (AZURE_DEVOPS_PAT_B64 for cloud, AZURE_DEVOPS_PAT for self-hosted)
+     does not exist on this PC, the skill asks you to run scripts/set-azure-devops-pat.ps1 (or
+     .sh) in YOUR OWN terminal. One hidden prompt stores the token in both forms (base64 for the
+     cloud server, raw for the self-hosted one) as user environment variables and verifies them.
+     The token never passes through the chat; the skill only checks that the variable exists.
+     Afterwards FULLY QUIT VS Code (all windows) and relaunch it — a window reload or an /mcp
+     reconnect keeps the old environment, and the validator will say "saved on this machine but
+     missing from this session" until you do.
+  6. Install the optional tools? (yes/no) — Mode B/C/new only, when something is missing:
+     playwright-cli for skill 3c, and Pillow + numpy for link-qc-6-ui-testing's static-image annotation
+     (only when a Python interpreter already exists — Python itself is never installed).
+     Yes → the skills sync runs with --tools (global @playwright/cli, its chromium browser, the
+     .playwright-cli/ line in .gitignore, pip install pillow numpy). No → nothing installed;
+     3b and every other skill work as before, 3c will BLOCK until /sync-skills --tools runs,
+     link-qc-6-ui-testing annotates live pages in the DOM without Python. Recorded, never re-asked.
+     Optional afterwards, for unattended 3c logins only: run scripts/set-playwright-secrets.ps1
+     (or .sh) in YOUR OWN terminal — the skill only checks that the file exists.
+  7. Add the Figma MCP for link-qc-6-ui-testing? — only when you compare against Figma designs. It is Figma's
+     remote server (https://mcp.figma.com/mcp); you log in once through /mcp — no token is ever
+     written to a file. Without it, Figma links fall back to exported screenshots.
 
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
   Testing/
     project-learning.md      (shared knowledge base — created from the template if missing)
-    qa-manifest.json         (paths, steering files, framework, deviations — read by skills 2-7)
+    qa-manifest.json         (paths, steering files, framework, deviations — read by skills 2-11)
     Requirements/  Manual_Test/TestCases/  Automation/{pages,tests,reports,screenshots,automation-logs}
-    White_Box_Testing/
+    White_Box_Testing/  UI-Testing/ (link-qc-6-ui-testing: Expected-UI, Actual-UI, Reports, Learning-UI.md, Coverage-Index.md)
   docs/steering/
     README.md                (index + the single set of resolution rules — authored by this skill)
     L1-testing-foundation.md / L2-testing-qa-standards.md   (copied from the source repo, never authored)
     L3-project-testing.md    (template — you fill the placeholders)
-  .claude/skills/1-7 + .claude/commands/sync-skills.md  (synced from the source repo)
+  .claude/skills/1-12, 3b and 3c + .claude/commands/sync-skills.md  (synced from the source repo)
   .mcp.json                  (Playwright / Azure DevOps / Docx entries, env-var placeholder for the PAT;
-                              a legacy `word` entry is replaced by `docx` during the skills sync)
+                              the Azure DevOps entry is the cloud or the self-hosted server per the
+                              detected hosting; a legacy `word` entry is replaced by `docx` during
+                              the skills sync; optional `figma` entry for link-qc-6-ui-testing on request)
   playwright.config.ts       (created only if missing)
-  Validation table: Node.js · NPM · Playwright · Playwright cfg · Folder layout · Steering Docs ·
-  L1/L2 generic · Learning File · .mcp.json · Playwright MCP · Azure DevOps MCP · Docx MCP ·
-  QA Skills · Skills current · sync-skills cmd · Manifest — each PASS / WARN / FAIL / NOT_RUN,
-  never PASS without the check having run.
+  Validation table: Node.js · NPM · Playwright · Playwright cfg · Playwright CLI · Playwright CLI
+  browser · Python + Pillow · .gitignore · Folder layout · Steering Docs · L1/L2 generic ·
+  Learning File · .mcp.json · Azure DevOps hosting · PAT env var · Browser secrets file · Playwright MCP · Azure DevOps
+  MCP · Docx MCP · Figma MCP · QA Skills · Skills current · sync-skills cmd · Manifest — each
+  PASS / WARN / FAIL / NOT_RUN, never PASS without the check having run (the playwright-cli,
+  Python + Pillow and Figma MCP rows are WARN at worst: 3c and link-qc-6-ui-testing's extras are optional).
   Mode A adds "Would be fixed by B" and "Needs C" lists and changes nothing.
 
-WHEN TO RUN: once per project BEFORE skills 2-7; again (audit first) whenever the setup drifts.
+WHEN TO RUN: once per project BEFORE skills 2-11; again (audit first) whenever the setup drifts.

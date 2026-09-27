@@ -1,88 +1,60 @@
-# MCP discovery & validation pass — load at the MCP pass (workflow steps 6 and 8)
+# MCP validation pass — load at workflow steps 5 and 8
 
 > **MCP makes the Manual TCs smarter — it discovers missing information and corrects wrong
 > assumptions. It is NOT a replay harness. 50 TCs never means 50 full MCP executions.**
+
+The combined ask (base URL, credentials per role, implementation status, environment notes) has
+already happened in `intake.md` §3, and the Playwright MCP probe before it — a run without a
+server is BLOCKED there. The set analysis (common flows, unique tails, risk) and the scope
+decision live in `scope-gate.md`; the test-data look and the write-back live in
+`patch-rules.md`. This file holds what happens in the browser.
 
 ## 1. Implementation-status gate — run BEFORE any TC-level validation
 
 Before treating ANY test case as executable validation of the application, determine the User
 Story's implementation status. Signals, in order:
 
-1. The user's answer from the combined ask (implemented / partially / not implemented).
+1. The document header (`Implementation status:` with its source) and the user's answer from the
+   combined ask (implemented / partially / not implemented).
 2. A quick live probe via Playwright MCP: does the feature's entry point (menu item, screen,
    control) exist at all in the app? (One targeted check — not a full walk.)
-3. Optionally, a `4-white-box-testing` report for this requirement, if one exists — glob
-   `{white_box_reports}/**/{storyID}-*-analysis.md` (skill 4 nests reports under
-   `[SPEC-{spec_name}/]US-{storyID}-{name}/`; older reports may sit flat at the root).
+3. Optionally, a `link-qc-10-white-box-testing` report for this requirement, if one exists — glob
+   `{white_box_reports}/**/US-{storyID}-*/{storyID}-*-analysis.md` (older reports may sit flat at
+   the root).
 
 Classify the story (and, where they differ, each acceptance criterion) as exactly one:
 
 | Status | Meaning | Effect on this run |
 |---|---|---|
-| **Implemented** | Feature reachable and behaving | Full validation pass (§2-§6) |
+| **Implemented** | Feature reachable and behaving | Full pass (§2-§6) within the chosen scope |
 | **Partially implemented** | Some ACs live, some absent | Validate the live parts normally; mark TCs for absent parts `not-implemented — pending implementation` |
-| **Not implemented** | Feature/entry point absent | SKIP the MCP validation pass for these TCs entirely. Keep the requirement-based TCs; mark every one `not-implemented — pending implementation` |
-| **Cannot be validated** | Environment blocks verification (app down, no credentials, screen unreachable for environmental reasons, **no Playwright MCP server attached**) | TCs keep `draft — not app-validated`; report exactly what blocked validation |
+| **Not implemented** | Feature/entry point absent | SKIP the validation pass for these TCs entirely. Keep the requirement-based TCs; mark every one `not-implemented — pending implementation` |
+| **Cannot be validated** | Environment blocks verification (app down, login fails, screen unreachable for environmental reasons) | TCs keep `draft — not app-validated`; report exactly what blocked validation under Environment blockers |
 
 Hard rules:
 
 - A missing screen/control on a NOT-implemented story is **pending implementation**, never an
-  application defect. Keep **requirement/coverage gaps** (spec has no TC) strictly separate
-  from **application defects** (implemented behaviour contradicts the spec) in every table and
+  application defect. Keep **requirement/coverage gaps** (spec has no TC) strictly separate from
+  **application defects** (implemented behaviour contradicts the spec) in every table and
   finding.
 - Never mark a TC `validated`, `enhanced`, or `discrepancy` for functionality that is not
   implemented.
-- Record the implementation status (and the evidence for it) in the deliverable header and in
-  the structured return.
+- Record the implementation status (and the evidence for it: probe result, answer, report path)
+  in the document header and in the structured return. When the document said "not yet checked
+  live", this run establishes it.
+- The build / version: read it wherever the app already shows it (footer, about screen, a
+  health page reached during the walk). Never guess — `unknown` when it is not visible. It goes
+  into every evidence stamp and the header stamp.
 
-### The combined ask — what it contains
+## 2. Analyze before touching the browser
 
-ONE message: base URL · username + password per role · implementation status · optional
-spec-source correction · environment notes · and, **only when the source is Arabic and neither
-the task input (`--lang`) nor the learning file settles it**, the review-page language question
-from `entry-cases.md` §1. Never a second message for any of these; never ask what the learning
-file already answers (say what you are reusing instead).
-
-### No Playwright MCP server attached
-
-The probe for this happens in the combined-ask step, **before** the URL/credentials ask — never ask for
-credentials that cannot be used. When no Playwright MCP server is available for the session:
-
-- The run resolves to `Cannot be validated — no Playwright MCP server attached`.
-- Every TC keeps `draft — not app-validated`; no TC may be marked `validated`, `enhanced`,
-  `inferred` or `discrepancy`.
-- Skip the URL/credentials ask and the whole MCP pass except this gate. The design,
-  self-review and deliverables run in full — the document is still delivered. The review-page
-  language question (when still open) is still asked — it does not depend on the MCP server.
-- Every data item (`tc-design.md` "Test-data collection") that the learning file does not
-  confirm stays `UNKNOWN` — never `MISSING`, because nothing was checked.
-- Say so in the document header, in the Open Findings section and in the final message, and
-  tell the user to attach the server (`/mcp`) or run `/1-generate-update-testing-structure
-  repair`, then re-run this skill to validate.
-- A story already classified **Not implemented** needs no Playwright MCP at all — that is
-  §1's `not-implemented` outcome, not this one.
-
-## 2. Analyze the whole TC set FIRST — no MCP yet
-
-Use the URL and credentials from the combined ask. This pass turns spec-derived wording into app-verified
-ground truth — by discovering the UNKNOWN, not by replaying the known.
-
-Before touching the browser, analyze all draft TCs together and produce a **discovery plan**:
-
-1. **Common flows** — shared step prefixes across TCs (login → navigate → open panel → ...).
-   Each distinct common flow is validated ONCE, not per TC.
-2. **Known knowledge** — steps already confirmed by the learning file or by a flow validated
-   earlier in this run. These are NOT rediscovered.
-3. **Gaps** — missing navigation, missing preconditions, missing test data, missing
-   filters/selections, missing async waits or triggers, ambiguous steps. These are the
-   discovery targets.
-   **Data items**: for every item on the data-item list not already `READY` from the learning
-   file, plan ONE read-only look at the listing screen that would show it (a targeted text /
-   row lookup, not a snapshot, shared across all TCs that use the item). Seen → `READY`; screen
-   reached and item absent → `MISSING`; screen unreachable or not looked at → `UNKNOWN`. Never
-   create, edit or delete anything to find out.
-4. **Locale-sensitive points** — every element label referenced in any step, plus screens whose
-   secondary-locale behaviour must be walked live (see §4).
+The **discovery plan** comes from `scope-gate.md` §1: common flows (shared step prefixes,
+validated ONCE), known knowledge (confirmed by the learning file or by a flow validated earlier
+this run — NOT rediscovered), gaps (missing navigation, preconditions, data, filters, async waits,
+triggers, ambiguous steps — the discovery targets), and locale-sensitive points (every element
+label referenced in any step, plus screens whose secondary-locale behaviour must be walked live,
+§4). Data items are checked with one read-only look each during the walk — `patch-rules.md` §3.
+Apply the plan within the chosen scope (FULL / SHARED / CUSTOM — `scope-gate.md` §4).
 
 ## 3. Targeted MCP budget rules
 
@@ -95,15 +67,17 @@ Before touching the browser, analyze all draft TCs together and produce a **disc
   flow's wording in every TC that shares it — the TC keeps its full steps written out (never
   replaced by a bare reference), but the flow is not re-walked.
 - **Per TC, replay only its UNIQUE TAIL** — the steps after its common-flow prefix — in the
-  primary locale. The unique tail is where spec-vs-app discrepancies hide; do not skip it. A
-  unique tail may be skipped ONLY when the learning file or an earlier observation this run
-  confirms those exact steps on that exact screen — then the TC is marked `inferred`, never
-  `validated`.
+  primary locale (FULL scope, or the TCs named in CUSTOM scope). The unique tail is where
+  spec-vs-app discrepancies hide; do not skip it inside the scope. A unique tail is left
+  unwalked ONLY when the scope excludes it (SHARED-FLOWS-ONLY) or when the learning file or an
+  earlier observation this run confirms those exact steps on that exact screen — then the TC is
+  marked `inferred`, never `validated`.
 - **Observing only.** Do not write code, selectors, or JSON. You may read element identifiers
   incidentally and record them in the learning file's `## Automation Tricks` section — but
   NEVER in the TC deliverables.
 - **Read-only in spirit**: prefer navigation and selection over creating, editing, or deleting
   records. If a case genuinely requires mutated state, use seeded fixture data.
+- **One progress line per screen** in the chat (`scope-gate.md` §6) — no narration of clicks.
 
 ## 4. Secondary-locale policy — verify where localization matters
 
@@ -113,7 +87,8 @@ accessible names, ordinals, and column ordering have all differed non-obviously 
 locales.
 
 - **ALWAYS capture live** (targeted lookup — cheap) the secondary-locale display label of EVERY
-  element referenced in any step, and every banner/heading/empty-state text asserted on. No
+  element referenced in any step within scope, and every banner/heading/empty-state text asserted
+  on. Replace skill 3's "(Arabic label: to be captured live)" notes with the captured label. No
   secondary-locale label in a TC may be a guessed translation.
 - **FULL secondary-locale walk required** (once per screen, reused across that screen's TCs)
   when the screen involves any of: report content, rendered numbers/dates/counts, RTL layout
@@ -126,7 +101,7 @@ locales.
 
 1. **Correct verbatim** every control label, option list (in rendered order), banner / heading /
    warning / empty-state text to exactly what the app shows — in every required locale
-   (per §4).
+   (per §4). In SHARED scope, a prefix correction is applied to every TC that shares the flow.
 2. **Insert missing steps** the app actually requires: reveal a collapsed panel first (P1), wait
    for async population (P2), explicit apply/save trigger (P3), plus any navigation hop,
    precondition, or selection the draft skipped.
@@ -134,35 +109,39 @@ locales.
    *emptied*, *hidden* versus *disabled* — these need different assertions. Record the precise
    read-only surface where relevant.
 4. **Observed behaviour that contradicts the spec is a FINDING, not a design decision.** Record
-   both the documented and the observed behaviour on the TC, mark it `discrepancy`, and surface
-   it in the output. Never quietly design around it, and never rewrite the requirement as if the
-   observed behaviour were intended — the spec may be right and the code wrong. (Applies only to
-   IMPLEMENTED functionality — see §1.)
+   both the documented and the observed behaviour: the TC becomes `discrepancy`, its
+   requirement-based Expected Result stays exactly as designed, and a Potential Bug entry
+   (`patch-rules.md` §2) holds the concise reproduction. Never quietly design around it, and
+   never rewrite the requirement as if the observed behaviour were intended — the spec may be
+   right and the code wrong. (Applies only to IMPLEMENTED functionality — see §1.)
+5. **A scenario the design missed** (an unanticipated negative case, a locale difference, a
+   state the requirement implies but no TC covers) is a **requirement / coverage gap** for skill 3
+   `--revision` — recorded under Open Findings, never added as a TC here (SKILL.md invariant 2).
+6. **Design fields are never touched**: `ID`, `Type`, `Locale`, `Requirement`, `Stage`, `Smoke`,
+   `Automation Candidate`, `Data effect`, `Shared data`, `Description`, the coverage tables.
 
 ## 6. Validation states — every TC gets exactly one
 
-| State | Meaning |
-|-------|---------|
-| `validated` | The TC's own steps — including its unique tail — were observed live and matched the draft |
-| `enhanced` | Steps corrected/extended from live observation (log what changed) |
-| `inferred` | Only its common-flow prefix was observed live; the unique tail was confirmed from the learning file or a prior observation, NOT replayed. The human reviewer must treat these as not directly witnessed. |
-| `discrepancy` | The app contradicts the spec — finding recorded (implemented functionality only) |
-| `not-implemented — pending implementation` | Requirement-based TC for functionality the app does not have yet (§1). Not an application defect. |
-| `draft — not app-validated` | Could not be observed (app/screen unreachable, or no Playwright MCP — "cannot be validated") |
-
-Never mark a TC `validated` on the strength of its prefix alone — that is `inferred`.
+`validation-states.md` holds the table and the rules. In short: `validated` (own tail seen,
+matched) · `enhanced` (corrected / extended from observation — log what changed) · `inferred`
+(prefix seen, tail confirmed from prior knowledge or SHARED scope — not witnessed) ·
+`discrepancy` (app contradicts spec — PB recorded) · `not-implemented — pending implementation`
+(§1) · `draft — not app-validated` (not walked: scope excluded, app unreachable, or stale —
+reason in parentheses). Never mark a TC `validated` on the strength of its prefix alone — that
+is `inferred`. Every observed TC gets its evidence stamp (`patch-rules.md` §2).
 
 ## 7. Failure rule
 
-**App unreachable, login fails, or a screen cannot be driven** → STOP and report back to the
-user exactly what failed (URL tried, role, error seen) and re-ask. Affected TCs keep
-`draft — not app-validated`. NEVER fill the gap by guessing — silently-inferred steps are
-exactly the ambiguity this pass removes.
-(An entry point absent because the story is not implemented is NOT this failure — that is
-§1's `not-implemented` outcome. No Playwright MCP server at all is §1's
-`Cannot be validated` outcome.)
+**App unreachable, login fails, or a screen cannot be driven** → STOP and report to the user
+exactly what failed (URL tried, role, error seen) and re-ask ONCE. Still failing → write back
+what was validated so far (every state honest — the walked TCs keep their new states, the
+rest stay `draft — not app-validated`), list the unwalked TC-IDs under Environment blockers, and
+return BLOCKED. NEVER fill the gap by guessing — silently-inferred steps are exactly the ambiguity
+this pass removes.
+(An entry point absent because the story is not implemented is NOT this failure — that is §1's
+`not-implemented` outcome. No Playwright MCP server at all is `intake.md` §3's BLOCKED.)
 
-**Enhancement log** — maintain a table (included in the deliverable):
+**Enhancement log** — maintain the table in the document (`## Enhancement Log`, append-only):
 
-| TC-ID | Validation | What changed | Why (what the app showed) |
-|-------|-----------|--------------|---------------------------|
+| TC-ID | Validation | What changed | Why (what the app showed) | Run |
+|-------|-----------|--------------|---------------------------|-----|

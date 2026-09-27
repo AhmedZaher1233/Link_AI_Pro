@@ -1,16 +1,19 @@
 <!DOCTYPE html>
-<!-- TC review page template for 3-generate-manual-test-cases.
-     Fill every {{placeholder}} from TEST-CASES-{feature}.md — the markdown is the source of
-     truth; this page never adds, rewords or reorders content. Keep the CSS as it is: the tokens,
-     the gauge and the chip/bar grammar match 6-test-run-automation/assets/coverage-dashboard.css
-     so both stages read the same way. Self-contained: no external requests, ever.
-     Never render a password, token, selector or code identifier on this page.
-     Repeatable blocks are marked REPEAT; delete a whole section when it does not apply.
-     LANGUAGE: fill {{lang}} / {{dir}} from review_page_language — "en" / "ltr" for English,
-     "ar" / "rtl" for Arabic. An Arabic page is a faithful translation of the English markdown
-     (same meaning, same order). The CSS uses logical properties, so the layout mirrors by
-     itself. Keep every ID, path, username, URL, date and Status keyword Latin, wrapped in
-     <span class="ltr">…</span> (already placed on the ID placeholders below). -->
+<!-- MIRROR — byte-identical copies live in the sibling skill folders
+     (link-qc-3-generate-manual-test-cases ↔ link-qc-3b-validate-manual-test-cases ↔ link-qc-3c-validate-manual-test-cases-cli, each under assets/). Edit all three;
+     scripts/selftest.mjs case 0 sha256-compares every mirrored file.
+     TC review page template. RENDERED ONLY BY scripts/render-tc-review.mjs — never filled by hand.
+     The renderer inserts its provenance comment as line 2 of the output (source / data / strings
+     sha256 + a self-hash) and recomputes every number from the markdown tables; the markdown is
+     the source of truth and this page never adds, rewords or reorders content.
+     Placeholders: double-brace snake_case keys only (HTML-escaped). Blocks are HTML comments
+     carrying #each / #if / #unless openers and the matching closers (see references/html-page.md).
+     Keep the CSS as it is: the tokens, the gauge and the chip/bar grammar match
+     link-qc-5-test-run-automation/assets/coverage-dashboard.css so both stages read the same way.
+     Self-contained: no external requests, ever. Never render a password, token, selector or code
+     identifier on this page. LANGUAGE: the html lang / dir attributes come from the renderer
+     ("en"/"ltr" or "ar"/"rtl"); the CSS uses logical properties so the layout mirrors by itself. IDs, paths,
+     usernames, URLs, dates and the Status keyword stay Latin inside <span class="ltr">. -->
 <html lang="{{lang}}" dir="{{dir}}">
 <head>
 <meta charset="utf-8">
@@ -57,7 +60,7 @@ h1 { font-weight: 800; font-size: clamp(26px, 5vw, 42px); letter-spacing: -0.02e
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
 .tile b { display: block; font-family: var(--mono); font-size: 26px; font-weight: 700; line-height: 1; }
 .tile span { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-/* ---- Coverage hero (same grammar as skill 6's dashboard) ---- */
+/* ---- Coverage hero (same grammar as skill 5's dashboard) ---- */
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: clamp(20px, 4vw, 44px); align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: clamp(24px, 4vw, 40px); margin-bottom: 28px; }
 .gauge-wrap { display: flex; justify-content: center; }
 /* --p = Fully Covered share of ACs, --q = Fully + Partially share */
@@ -109,7 +112,7 @@ tr.prio-low td:first-child { border-inline-start: 4px solid var(--muted); }
 .badge.v-notimpl { border-color: var(--orange); color: var(--orange); }
 .badge.v-draft { border-color: var(--muted); }
 .badge.run { border-style: dashed; }
-/* test-data statuses — same four words as TEST-DATA-{feature}.md and skill 6 */
+/* test-data statuses — same four words as TEST-DATA-{feature}.md and skill 5 */
 .badge.d-ready { border-color: var(--green); color: var(--green); }
 .badge.d-missing { border-color: var(--amber); color: var(--amber); }
 .badge.d-impossible { border-color: var(--red); color: var(--red); }
@@ -135,6 +138,8 @@ details.tc > summary::-webkit-details-marker { display: none; }
 .findings h3:first-child { margin-top: 0; }
 .findings.gaps { border-inline-start-color: var(--amber); }
 .findings.pending { border-inline-start-color: var(--orange); }
+.findings.env { border-inline-start-color: var(--blue); }
+.findings.unclear { border-inline-start-color: var(--purple); }
 /* ---- Direction: the page direction comes from <html dir="{{dir}}">; logical properties above mirror the layout.
    Latin tokens (IDs, paths, usernames, URLs, dates, Status) always sit in .ltr so they read correctly inside Arabic text. ---- */
 .ltr, code { direction: ltr; unicode-bidi: isolate; }
@@ -147,167 +152,451 @@ details.tc > summary::-webkit-details-marker { display: none; }
 footer { margin-top: 44px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 footer code { font-family: var(--mono); color: var(--text); }
 @media (max-width: 760px) { .hero { grid-template-columns: 1fr; } .legend { grid-template-columns: 1fr; } }
+/* ---- Renderer additions: consistency warning, Arabic preview, stale evidence, potential bugs, open questions ---- */
+.warn-strip { border: 1px solid var(--red); background: color-mix(in srgb, var(--red) 10%, var(--panel)); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 13px; }
+.preview-banner { border: 2px dashed var(--amber); background: color-mix(in srgb, var(--amber) 12%, var(--panel)); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-weight: 600; }
+.untranslated { outline: 1px dashed var(--amber); outline-offset: 2px; direction: ltr; unicode-bidi: isolate; display: inline-block; }
+.badge.stale { border-color: var(--red); color: var(--red); border-style: dashed; }
+.badge.orphan { border-color: var(--red); color: var(--red); }
+.caption.stale { border-inline-start-color: var(--red); }
+.caption.draft { border-inline-start-color: var(--muted); }
+.caption.orphan { border-inline-start-color: var(--red); }
+.evidence { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+.gauge-caption { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; grid-column: 1 / -1; }
+.pb-card, .q-card { background: var(--panel); border: 1px solid var(--line); border-inline-start: 4px solid var(--amber); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; }
+.pb-card.resolved { border-inline-start-color: var(--green); opacity: 0.8; }
+.pb-card.not-checked { border-inline-start-color: var(--muted); }
+.q-card { border-inline-start-color: var(--purple); }
+.pb-head, .q-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; margin-bottom: 8px; }
+.pb-head h3, .q-head h3 { font-size: 15px; margin: 0; }
+.pb-card dl, .q-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 13.5px; }
+.pb-card dt, .q-card dt { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.pb-card dd, .q-card dd { margin: 0; }
+.pb-card ol { margin: 0; padding-inline-start: 20px; }
+.pb-meta { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+[dir="rtl"] .pb-card dt, [dir="rtl"] .q-card dt { letter-spacing: 0; text-transform: none; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <p class="eyebrow">Manual test cases · human review</p>
+  <p class="eyebrow">{{eyebrow}}</p>
   <h1>{{feature}}</h1>
-  <p class="sub">{{one-line scope of this story}}</p>
+<!-- {{#if has_scope}} -->
+  <p class="sub">{{{scope}}}</p>
+<!-- {{/if}} -->
   <div class="meta">
-    <span><b>Status</b> <span class="ltr">{{PENDING HUMAN REVIEW}}</span></span>
-    <span><b>Date</b> <span class="ltr">{{YYYY-MM-DD}}</span></span>
-    <span><b>Language</b> {{English | Arabic}}</span>
-    <span><b>Entry case</b> {{fresh design | existing-TC update | retrieved from ADO/Word}}</span>
-    <span><b>REQ-IDs</b> <span class="ltr">{{list}}</span></span>
-    <span><b>Source of truth</b> <span class="ltr">TEST-CASES-{{feature}}.md</span> (English)</span>
+    <span><b>{{l_status}}</b> <span class="ltr">{{status}}</span></span>
+    <span><b>{{l_generated}}</b> <span class="ltr">{{generated}}</span></span>
+    <span><b>{{l_language}}</b> {{lang_word}}</span>
+    <span><b>{{l_entry}}</b> {{{entry}}}</span>
+    <span><b>{{l_reqids}}</b> <span class="ltr">{{req_ids}}</span></span>
+    <span><b>{{l_source}}</b> <span class="ltr">TEST-CASES-{{feature}}.md</span> {{l_source_note}}</span>
+<!-- {{#if has_stamp}} -->
+    <span><b>{{l_validation}}</b> {{val_by}} <span class="ltr">{{stamp_date}}</span> · {{val_scope}} <span class="ltr">{{stamp_scope}}</span></span>
+<!-- {{/if}} -->
+<!-- {{#unless has_stamp}} -->
+    <span><b>{{l_validation}}</b> {{val_none}}</span>
+<!-- {{/unless}} -->
   </div>
 
-  <div class="banner"><b>Pending human review</b> — {{what the reviewer must do: adjust Automation Candidate / Smoke / Data effect, then set Status: APPROVED in the markdown. Approval unlocks skill 5 (publish to Azure DevOps), then skill 6 (automation).}}</div>
-  <!-- REPEAT/DELETE: keep only when the story is not fully implemented or could not be validated -->
-  <div class="banner impl"><b>Implementation status — {{status}}</b> {{evidence, and what it means for these TCs}}</div>
+<!-- {{#if arabic_incomplete}} -->
+  <div class="preview-banner">{{preview_banner}} (<span class="ltr">{{outstanding_count}}</span>)</div>
+<!-- {{/if}} -->
+<!-- {{#if has_mismatch}} -->
+  <div class="warn-strip"><b>!</b> {{warn_strip}} (<span class="ltr">{{mismatch_count}}</span>)</div>
+<!-- {{/if}} -->
+
+<!-- {{#if pending}} -->
+  <div class="banner"><b>{{banner_pending_title}}</b> — {{banner_pending_text}}</div>
+<!-- {{/if}} -->
+<!-- {{#if approved}} -->
+  <div class="banner"><b>{{banner_approved_title}}</b> — {{banner_approved_text}}</div>
+<!-- {{/if}} -->
+<!-- {{#if show_impl}} -->
+  <div class="banner impl"><b>{{banner_impl_title}}</b> — {{{impl_text}}}</div>
+<!-- {{/if}} -->
 
   <div class="tiles">
-    <div class="tile"><b>{{N}}</b><span>Test cases</span></div>
-    <div class="tile"><b>{{happy}}/{{edge}}/{{negative}}</b><span>Happy / edge / negative</span></div>
-    <div class="tile"><b>{{N}}</b><span>Per locale ({{locales}})</span></div>
-    <div class="tile"><b>{{N}}</b><span>Smoke</span></div>
-    <div class="tile"><b>{{N}}</b><span>Automation candidates</span></div>
-    <div class="tile"><b>{{v}}/{{e}}/{{i}}/{{d}}/{{ni}}/{{dr}}</b><span>Validated / enhanced / inferred / discrepancy / not-impl / draft</span></div>
-    <div class="tile"><b>{{N}} · {{r}}/{{m}}/{{imp}}/{{u}}</b><span>Test data items · ready / missing / impossible / unknown</span></div>
+    <div class="tile"><b>{{n_total}}</b><span>{{t_tcs}}</span></div>
+    <div class="tile"><b>{{n_happy}}/{{n_edge}}/{{n_negative}}</b><span>{{t_types}}</span></div>
+    <div class="tile"><b>{{n_per_locale}}</b><span>{{t_locale}} (<span class="ltr">{{locales}}</span>)</span></div>
+    <div class="tile"><b>{{n_smoke}}</b><span>{{t_smoke}}</span></div>
+    <div class="tile"><b>{{n_auto}}</b><span>{{t_auto}}</span></div>
+    <div class="tile"><b>{{v_breakdown}}</b><span>{{t_validation}}</span></div>
+    <div class="tile"><b>{{progress_tile}}</b><span>{{t_progress}} ({{progress_pct}})</span></div>
+    <div class="tile"><b>{{data_tile}}</b><span>{{t_data}}</span></div>
+    <div class="tile"><b>{{bugs_tile}}</b><span>{{t_bugs}}</span></div>
   </div>
 
   <div class="hero">
     <div class="gauge-wrap">
-      <div class="gauge"><div class="gauge-num"><b>{{weighted_pct}}%</b><span>Requirement coverage</span></div></div>
+      <div class="gauge"><div class="gauge-num"><b>{{weighted_pct}}</b><span>{{gauge_label}}</span></div></div>
     </div>
     <div class="legend">
-      <div class="chip full"><b>{{n}}</b><span>Fully covered</span></div>
-      <div class="chip partial"><b>{{n}}</b><span>Partially covered</span></div>
-      <div class="chip none"><b>{{n}}</b><span>Not covered</span></div>
+      <div class="chip full"><b>{{n_full}}</b><span>{{chip_full}}</span></div>
+      <div class="chip partial"><b>{{n_partial}}</b><span>{{chip_partial}}</span></div>
+      <div class="chip none"><b>{{n_none}}</b><span>{{chip_none}}</span></div>
     </div>
+    <p class="gauge-caption">{{gauge_caption}}</p>
   </div>
 
+<!-- {{#if has_coverage}} -->
   <section>
-    <div class="sec-head"><h2>Coverage depth per acceptance criterion</h2><span class="note">segment widths = share of that AC's checks present</span></div>
-    <!-- REPEAT per AC -->
+    <div class="sec-head"><h2>{{s_depth}}</h2><span class="note">{{s_depth_note}}</span></div>
+<!-- {{#each acs}} -->
     <div class="story">
-      <div class="story-top"><span class="story-id ltr">{{AC-n}}</span><span class="story-name">{{AC summary}}</span><span class="story-pct">{{status}}</span></div>
+      <div class="story-top"><span class="story-id ltr">{{req}}</span><span class="story-name">{{{ac}}}</span><span class="story-pct">{{status_word}}</span></div>
       <div class="bar">
-        <div class="seg happy" style="flex: {{w1}}"><b>happy {{n}}</b></div>
-        <div class="seg neg" style="flex: {{w2}}"><b>negative {{n}}</b></div>
-        <div class="seg loc" style="flex: {{w3}}"><b>locales {{n}}</b></div>
-        <div class="seg missing" style="flex: {{w4}}"><b>{{what is missing}}</b></div>
+        <div class="seg happy" style="flex: {{w1}}"><b>{{seg_happy}} {{happy}}</b></div>
+        <div class="seg neg" style="flex: {{w2}}"><b>{{seg_neg}} {{neg}}</b></div>
+        <div class="seg loc" style="flex: {{w3}}"><b>{{seg_loc}} {{loc}}</b></div>
+<!-- {{#if has_missing}} -->
+        <div class="seg missing" style="flex: {{w4}}"><b>{{seg_missing}}: {{{missing}}}</b></div>
+<!-- {{/if}} -->
       </div>
     </div>
+<!-- {{/each}} -->
   </section>
+<!-- {{/if}} -->
+
+<!-- {{#if has_trace}} -->
+  <section>
+    <div class="sec-head"><h2>{{s_trace}}</h2><span class="note">{{s_trace_note}}</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>{{h_ac}}</th><th>{{h_req}}</th><th>{{h_tcs}}</th><th>{{h_status}}</th><th>{{h_missing}}</th></tr></thead>
+      <tbody>
+<!-- {{#each trace}} -->
+<!-- {{#if gap}} -->
+        <tr class="gap"><td>{{{ac}}}</td><td><span class="ltr">{{req}}</span></td><td><span class="ltr">{{tcs}}</span></td><td>{{status}}</td><td>{{{missing}}}</td></tr>
+<!-- {{/if}} -->
+<!-- {{#unless gap}} -->
+        <tr><td>{{{ac}}}</td><td><span class="ltr">{{req}}</span></td><td><span class="ltr">{{tcs}}</span></td><td>{{status}}</td><td>{{{missing}}}</td></tr>
+<!-- {{/unless}} -->
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+  </section>
+<!-- {{/if}} -->
 
   <section>
-    <div class="sec-head"><h2>Traceability matrix</h2><span class="note">gaps highlighted</span></div>
+    <div class="sec-head"><h2>{{s_manual}}</h2><span class="note"><span class="ltr">{{n_manual}}</span> · High <span class="ltr">{{n_manual_high}}</span> · Medium <span class="ltr">{{n_manual_medium}}</span> · Low <span class="ltr">{{n_manual_low}}</span></span></div>
     <div class="tablewrap"><table>
-      <thead><tr><th>Acceptance criterion</th><th>REQ-ID</th><th>Test cases</th><th>Status</th><th>Missing</th></tr></thead>
+      <thead><tr><th>{{h_category}}</th><th>{{h_tcid}}</th><th>{{h_scenario}}</th><th>{{h_why_manual}}</th><th>{{h_priority}}</th></tr></thead>
       <tbody>
-        <tr><td>{{AC}}</td><td><span class="ltr">{{REQ-ID}}</span></td><td><span class="ltr">{{TC-IDs}}</span></td><td>{{Fully | Partially | Not covered}}</td><td>{{what is missing}}</td></tr>
+<!-- {{#each manual}} -->
+        <tr class="{{prio_class}}"><td>{{{category}}}</td><td><span class="ltr">{{tc}}</span></td><td>{{{scenario}}}</td><td>{{{why}}}</td><td>{{priority}}</td></tr>
+<!-- {{/each}} -->
       </tbody>
     </table></div>
   </section>
 
+<!-- {{#if has_data}} -->
   <section>
-    <div class="sec-head"><h2>What stays manual</h2><span class="note">{{N}} scenarios · High {{h}} · Medium {{m}} · Low {{l}}</span></div>
+    <div class="sec-head"><h2>{{s_data}}</h2><span class="note"><span class="ltr">{{n_data}}</span> · <span class="ltr">{{n_ready}}</span> / <span class="ltr">{{n_missing}}</span> / <span class="ltr">{{n_impossible}}</span> / <span class="ltr">{{n_unknown}}</span> — {{s_data_note}} <span class="ltr">TEST-DATA-{{feature}}.md</span></span></div>
     <div class="tablewrap"><table>
-      <thead><tr><th>Category</th><th>TC-ID</th><th>Scenario</th><th>Why manual</th><th>Priority</th></tr></thead>
+      <thead><tr><th>{{h_num}}</th><th>{{h_item}}</th><th>{{h_look}}</th><th>{{h_used}}</th><th>{{h_status}}</th><th>{{h_way}}</th></tr></thead>
       <tbody>
-        <tr class="prio-high"><td>{{category}}</td><td><span class="ltr">{{TC-ID}}</span></td><td>{{scenario}}</td><td>{{why}}</td><td>High</td></tr>
+<!-- {{#each data_items}} -->
+        <tr><td><span class="ltr">{{num}}</span></td><td>{{{name}}}</td><td>{{{look}}}</td><td><span class="ltr">{{used}}</span></td><td><span class="badge {{d_class}}">{{status}}</span></td><td>{{{way}}}</td></tr>
+<!-- {{/each}} -->
       </tbody>
     </table></div>
-  </section>
-
-  <section>
-    <div class="sec-head"><h2>Test data</h2><span class="note">{{N}} items · ready {{r}} · missing {{m}} · impossible {{imp}} · unknown {{u}} — details in TEST-DATA-{{feature}}.md</span></div>
-    <div class="tablewrap"><table>
-      <thead><tr><th>#</th><th>Data item</th><th>Must look like</th><th>Used by TCs</th><th>Status</th><th>Best way to get it</th></tr></thead>
-      <tbody>
-        <!-- REPEAT per data item; status badge class: d-ready | d-missing | d-impossible | d-unknown -->
-        <tr><td><span class="ltr">{{D1}}</span></td><td>{{plain name}}</td><td>{{state, count, key values}}</td><td><span class="ltr">{{TC-IDs}}</span></td><td><span class="badge d-ready">{{READY | MISSING | IMPOSSIBLE | UNKNOWN}}</span></td><td>{{— | e2e scenario (TC-…) | api | db | set directly | manual | see Problems #n | to check}}</td></tr>
-      </tbody>
-    </table></div>
-    <!-- REPEAT/DELETE: keep only when the Problems table has rows -->
+<!-- {{#if problems}} -->
     <div class="tablewrap" style="margin-top:14px"><table>
-      <thead><tr><th>#</th><th>Data item</th><th>Problem</th><th>Why</th><th>What the QC / PO must decide</th></tr></thead>
+      <thead><tr><th>{{h_num}}</th><th>{{h_item}}</th><th>{{h_problem}}</th><th>{{h_why}}</th><th>{{h_decision}}</th></tr></thead>
       <tbody>
-        <tr class="prio-high"><td>{{1}}</td><td>{{Dn}}</td><td>{{problem}}</td><td>{{why}}</td><td>{{decision needed}}</td></tr>
+<!-- {{#each problems}} -->
+        <tr class="prio-high"><td><span class="ltr">{{num}}</span></td><td><span class="ltr">{{item}}</span></td><td>{{{problem}}}</td><td>{{{why}}}</td><td>{{{decision}}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+  </section>
+<!-- {{/if}} -->
+
+<!-- {{#if has_existing}} -->
+  <section>
+    <div class="sec-head"><h2>{{s_existing}}</h2></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>{{h_original}}</th><th>{{h_disposition}}</th><th>{{h_reason}}</th></tr></thead>
+      <tbody>
+<!-- {{#each existing}} -->
+        <tr><td><span class="ltr">{{original}}</span></td><td>{{{disposition}}}</td><td>{{{reason}}}</td></tr>
+<!-- {{/each}} -->
       </tbody>
     </table></div>
   </section>
-
-  <!-- REPEAT/DELETE: Case 1 only -->
-  <section>
-    <div class="sec-head"><h2>Existing-TC analysis</h2><span class="note">kept {{n}} · updated {{n}} · merged {{n}} · removed {{n}} · new {{n}}</span></div>
-    <div class="tablewrap"><table>
-      <thead><tr><th>Original TC</th><th>Disposition</th><th>Reason</th></tr></thead>
-      <tbody><tr><td>{{original}}</td><td>{{kept | updated | merged | removed | new}}</td><td>{{reason}}</td></tr></tbody>
-    </table></div>
-  </section>
+<!-- {{/if}} -->
 
   <section>
-    <div class="sec-head"><h2>Test cases</h2><span class="note">tile numbers above match these cards</span></div>
-    <!-- REPEAT per TC -->
-    <details class="tc">
+    <div class="sec-head"><h2>{{s_tcs}}</h2><span class="note">{{s_tcs_note}}</span></div>
+<!-- {{#each tcs}} -->
+    <details class="tc" id="{{id}}">
       <summary>
-        <span class="tc-id ltr">{{TC-ID}}</span>
-        <span class="tc-desc">{{description}}</span>
-        <span class="badge type">{{happy-path | edge-case | negative}}</span>
-        <span class="badge">{{locale}}</span>
-        <span class="badge smoke">Smoke</span>
-        <span class="badge auto-yes">Auto: yes</span>
-        <span class="badge v-validated">validated</span>
-        <span class="badge run">{{Data effect}} · {{Shared data}}</span>
+        <span class="tc-id ltr">{{id}}</span>
+        <span class="tc-desc">{{{description}}}</span>
+        <span class="badge type">{{type}}</span>
+        <span class="badge"><span class="ltr">{{locale}}</span></span>
+        <span class="badge"><span class="ltr">{{stage}}</span></span>
+<!-- {{#if smoke}} -->
+        <span class="badge smoke">{{b_smoke}}</span>
+<!-- {{/if}} -->
+<!-- {{#if auto_yes}} -->
+        <span class="badge auto-yes">{{b_auto_yes}}</span>
+<!-- {{/if}} -->
+<!-- {{#if auto_no}} -->
+        <span class="badge auto-no">{{b_auto_no}}</span>
+<!-- {{/if}} -->
+        <span class="badge {{v_class}}">{{v_word}}</span>
+<!-- {{#if stale}} -->
+        <span class="badge stale">{{b_stale}}</span>
+<!-- {{/if}} -->
+<!-- {{#if orphan}} -->
+        <span class="badge orphan">{{b_orphan}}</span>
+<!-- {{/if}} -->
+<!-- {{#if has_run}} -->
+        <span class="badge run">{{{run}}}</span>
+<!-- {{/if}} -->
       </summary>
       <div class="tc-body">
-        <p class="caption">{{inferred: confirmed from prior knowledge, not directly observed — review with extra care}}</p>
-        <h4>Requirement</h4><p><span class="ltr">{{REQ-IDs}}</span></p>
-        <h4>Preconditions</h4><ul><li>{{page-load state, language, role + exact username, data state}}</li></ul>
-        <h4>Steps</h4><ol><li>{{action + element label per locale + value + inline assertion}}</li></ol>
-        <h4>Expected result</h4><p>{{specific, assertable, labels per locale}}</p>
-        <h4>Data oracle</h4><p class="oracle">{{fixture — expected count, identifiers}}</p>
-        <h4>Run behaviour</h4><p>{{Data effect / Shared data, or "let automation infer"}}</p>
-        <p class="notes">Reviewer notes: ______________________________________________</p>
+<!-- {{#if is_inferred}} -->
+        <p class="caption">{{cap_inferred}}</p>
+<!-- {{/if}} -->
+<!-- {{#if is_discrepancy}} -->
+        <p class="caption discrepancy">{{cap_discrepancy}}</p>
+<!-- {{/if}} -->
+<!-- {{#if is_notimpl}} -->
+        <p class="caption notimpl">{{cap_notimpl}}</p>
+<!-- {{/if}} -->
+<!-- {{#if is_draft}} -->
+        <p class="caption draft">{{cap_draft}}</p>
+<!-- {{/if}} -->
+<!-- {{#if stale}} -->
+        <p class="caption stale">{{cap_stale}}</p>
+<!-- {{/if}} -->
+<!-- {{#if orphan_summary}} -->
+        <p class="caption orphan">{{cap_orphan_summary}}</p>
+<!-- {{/if}} -->
+<!-- {{#if orphan_section}} -->
+        <p class="caption orphan">{{cap_orphan_section}}</p>
+<!-- {{/if}} -->
+        <h4>{{tc_requirement}}</h4><p><span class="ltr">{{requirement}}</span></p>
+        <h4>{{tc_pre}}</h4><ul>
+<!-- {{#each preconditions}} -->
+          <li>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ul>
+        <h4>{{tc_steps}}</h4><ol>
+<!-- {{#each steps}} -->
+          <li>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ol>
+        <h4>{{tc_expected}}</h4><p>{{{expected}}}</p>
+<!-- {{#if has_oracle}} -->
+        <h4>{{tc_oracle}}</h4><p class="oracle">{{{oracle}}}</p>
+<!-- {{/if}} -->
+        <h4>{{tc_run}}</h4>
+<!-- {{#if has_run}} -->
+        <p>{{{run}}}</p>
+<!-- {{/if}} -->
+<!-- {{#unless has_run}} -->
+        <p>{{tc_infer}}</p>
+<!-- {{/unless}} -->
+<!-- {{#if has_evidence}} -->
+        <p class="evidence">{{tc_evidence}}: {{ev_on}} <span class="ltr">{{evidence_on}}</span> · {{ev_env}} <span class="ltr">{{evidence_env}}</span> · {{ev_build}} <span class="ltr">{{evidence_build}}</span> · {{ev_scope}} <span class="ltr">{{evidence_scope}}</span></p>
+<!-- {{/if}} -->
+        <p class="notes">{{tc_notes}} ______________________________________________</p>
       </div>
     </details>
+<!-- {{/each}} -->
   </section>
 
   <section>
-    <div class="sec-head"><h2>Enhancement log</h2><span class="note">what the live app changed</span></div>
+    <div class="sec-head"><h2>{{s_log}}</h2><span class="note">{{s_log_note}}</span></div>
+<!-- {{#if has_log}} -->
     <div class="tablewrap"><table>
-      <thead><tr><th>TC-ID</th><th>Validation</th><th>What changed</th><th>Why (what the app showed)</th></tr></thead>
-      <tbody><tr><td><span class="ltr">{{TC-ID}}</span></td><td>{{state}}</td><td>{{change}}</td><td>{{observation}}</td></tr></tbody>
+      <thead><tr>
+<!-- {{#each log_header}} -->
+        <th>{{{text}}}</th>
+<!-- {{/each}} -->
+      </tr></thead>
+      <tbody>
+<!-- {{#each log_rows}} -->
+        <tr>
+<!-- {{#each cells}} -->
+          <td>{{{text}}}</td>
+<!-- {{/each}} -->
+        </tr>
+<!-- {{/each}} -->
+      </tbody>
     </table></div>
+<!-- {{/if}} -->
+<!-- {{#unless has_log}} -->
+    <p class="sub">{{none}}</p>
+<!-- {{/unless}} -->
   </section>
 
   <section>
-    <div class="sec-head"><h2>Open findings for the human reviewer</h2><span class="note">never collapsed</span></div>
+    <div class="sec-head"><h2>{{s_bugs}}</h2><span class="note">{{s_bugs_note}}</span></div>
+<!-- {{#each bugs}} -->
+    <div class="pb-card {{status}}">
+      <div class="pb-head"><span class="tc-id ltr">{{id}}</span><h3>{{{title}}}</h3><span class="badge">{{status_word}}</span></div>
+      <dl>
+        <dt>{{pb_tc}}</dt><dd><span class="ltr">{{tc}}</span></dd>
+        <dt>{{pb_steps}}</dt><dd><ol>
+<!-- {{#each steps}} -->
+          <li>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ol></dd>
+        <dt>{{pb_expected}}</dt><dd>{{{expected}}}</dd>
+        <dt>{{pb_actual}}</dt><dd>{{{actual}}}</dd>
+      </dl>
+      <p class="pb-meta">{{pb_first}} <span class="ltr">{{first}}</span> · {{pb_last}} <span class="ltr">{{last}}</span></p>
+    </div>
+<!-- {{/each}} -->
+<!-- {{#unless has_bugs}} -->
+    <p class="sub">{{none}}</p>
+<!-- {{/unless}} -->
+  </section>
+
+<!-- {{#if has_questions}} -->
+  <section>
+    <div class="sec-head"><h2>{{s_questions}}</h2><span class="note">{{s_questions_note}}</span></div>
+<!-- {{#each questions}} -->
+    <div class="q-card">
+      <div class="q-head"><span class="tc-id ltr">{{id}}</span><h3>{{{title}}}</h3><span class="badge"><span class="ltr">{{status}}</span></span></div>
+      <dl>
+        <dt>{{q_tcs}}</dt><dd><span class="ltr">{{tcs}}</span></dd>
+        <dt>{{q_gap}}</dt><dd>{{{gap}}}</dd>
+        <dt>{{q_why}}</dt><dd>{{{why}}}</dd>
+        <dt>{{q_evidence}}</dt><dd>{{{evidence}}}</dd>
+        <dt>{{q_recommended}}</dt><dd>{{{recommended}}}</dd>
+        <dt>{{q_alternatives}}</dt><dd>{{{alternatives}}}</dd>
+        <dt>{{q_pending}}</dt><dd>{{{pending}}}</dd>
+      </dl>
+    </div>
+<!-- {{/each}} -->
+  </section>
+<!-- {{/if}} -->
+
+<!-- {{#if has_selfreview}} -->
+  <section>
+    <div class="sec-head"><h2>{{s_selfreview}}</h2></div>
+<!-- {{#if negative}} -->
+    <h4 class="sub">{{s_negative}}</h4>
+    <div class="tablewrap"><table>
+      <thead><tr>
+<!-- {{#each negative.header}} -->
+        <th>{{{text}}}</th>
+<!-- {{/each}} -->
+      </tr></thead>
+      <tbody>
+<!-- {{#each negative.rows}} -->
+        <tr>
+<!-- {{#each cells}} -->
+          <td>{{{text}}}</td>
+<!-- {{/each}} -->
+        </tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+<!-- {{#if standards}} -->
+    <h4 class="sub" style="margin-top:18px">{{s_standards}}</h4>
+    <div class="tablewrap"><table>
+      <thead><tr>
+<!-- {{#each standards.header}} -->
+        <th>{{{text}}}</th>
+<!-- {{/each}} -->
+      </tr></thead>
+      <tbody>
+<!-- {{#each standards.rows}} -->
+        <tr>
+<!-- {{#each cells}} -->
+          <td>{{{text}}}</td>
+<!-- {{/each}} -->
+        </tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+  </section>
+<!-- {{/if}} -->
+
+  <section>
+    <div class="sec-head"><h2>{{s_findings}}</h2><span class="note">{{s_findings_note}}</span></div>
     <div class="findings gaps">
-      <h3>Requirement / coverage gaps</h3>
-      <ul><li>{{gap — what the spec asks for and why no TC covers it}}</li></ul>
+      <h3>{{f_gaps}}</h3>
+      <ul>
+<!-- {{#each f_gaps_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_gaps_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
     </div>
     <div class="findings" style="margin-top:14px">
-      <h3>Application defects (discrepancies)</h3>
-      <ul><li>{{TC-ID — documented behaviour vs observed behaviour}}</li></ul>
+      <h3>{{f_defects}}</h3>
+      <ul>
+<!-- {{#each f_defects_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_defects_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
     </div>
     <div class="findings pending" style="margin-top:14px">
-      <h3>Pending implementation</h3>
-      <ul><li>{{TC-ID — requirement-based, feature not built yet; not a defect}}</li></ul>
+      <h3>{{f_pending}}</h3>
+      <ul>
+<!-- {{#each f_pending_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_pending_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
     </div>
+    <div class="findings env" style="margin-top:14px">
+      <h3>{{f_env}}</h3>
+      <ul>
+<!-- {{#each f_env_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_env_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+    <div class="findings unclear" style="margin-top:14px">
+      <h3>{{f_unclear}}</h3>
+      <ul>
+<!-- {{#each f_unclear_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_unclear_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+<!-- {{#if f_other_items}} -->
+    <div class="findings" style="margin-top:14px">
+      <ul>
+<!-- {{#each f_other_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+      </ul>
+    </div>
+<!-- {{/if}} -->
   </section>
 
   <footer>
-    Source of truth: <code>TEST-CASES-{{feature}}.md</code> (always English) — this page is generated from it and adds nothing; when the page is Arabic it is a faithful translation.
-    Test data: <code>TEST-DATA-{{feature}}.md</code> — what each TC needs, whether it exists, and how to create what is missing.
-    To approve: adjust Automation Candidate / Smoke / Data effect / Shared data in the markdown, then set
-    <code>Status: APPROVED</code>. Approval unlocks <code>5-publish-test-cases-azure</code>, then
-    <code>6-test-run-automation</code>. To request changes, reply with corrections by TC-ID and re-run this
-    skill with <code>--revision</code>.
+    {{footer_1}} <code>TEST-CASES-{{feature}}.md</code> {{footer_1b}}
+    {{footer_2}} <code>TEST-DATA-{{feature}}.md</code> {{footer_2b}}
+    {{footer_3}} <code>Status: APPROVED</code>. {{footer_3b}} <code>link-qc-4-publish-test-cases-azure</code> {{footer_3c}} <code>link-qc-5-test-run-automation</code> {{footer_3d}}
+    {{footer_4}} <code>link-qc-3-generate-manual-test-cases --revision</code>. {{footer_4b}} <code>link-qc-3b-validate-manual-test-cases</code> {{footer_4c}}
   </footer>
 
 </div>

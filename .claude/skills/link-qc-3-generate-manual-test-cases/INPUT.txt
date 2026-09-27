@@ -1,7 +1,9 @@
-SKILL: 3-generate-manual-test-cases
-WHAT IT DOES: Designs complete manual test cases (all required locales) from the requirement,
-validates them against the LIVE application via Playwright MCP, and delivers a markdown TC
-document plus an HTML review page for HUMAN approval.
+SKILL: link-qc-3-generate-manual-test-cases
+WHAT IT DOES: Designs complete manual test cases (all required locales) from the requirement and
+the project learning file — DESIGN ONLY, no running application needed — and delivers a markdown
+TC document, a plain-English test-data file and a rendered HTML review page for HUMAN approval.
+Every TC leaves as "draft — not app-validated". Validating them live is the separate, OPTIONAL
+skill link-qc-3b-validate-manual-test-cases.
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE
@@ -29,35 +31,34 @@ PICK YOUR STARTING POINT (tell the skill which case applies):
 OPTIONAL FLAGS:
   --lang ar|en Language of the HTML review page (TEST-CASES / TEST-DATA markdown stay English).
   --revision   Apply the reviewer's corrections to the TCs they name (patch, never regenerate).
+               A TC that 3b / 3c had validated and you now change is reset to draft (stale — revised).
   --audit      Health-check only: reports the resolved profile, the entry case, existing
                deliverables, the planned TC count and coverage, and what WOULD be overwritten.
                Writes NOTHING — not even the learning file.
 
-ASKED DURING THE RUN (before any live validation):
-  2. Application base URL                  — reused from the learning file when recorded there;
-                                             otherwise asked
-  3. Username + password PER ROLE          — exact accounts used in the TC steps
-                                             (ALWAYS asked fresh; usernames appear in the steps,
-                                             passwords are NEVER written to any file)
-  4. Is the story implemented?             — implemented / partially / not implemented /
-                                             not sure (skill verifies live either way)
-  5. Review page language                  — taken from --lang or a saved project preference
+OPTIONAL INPUT (asked only when the skill cannot settle it):
+  2. Is the story implemented?             — implemented / partially / not implemented / not
+                                             sure. Taken from your answer or an existing
+                                             link-qc-10-white-box-testing report; otherwise the header
+                                             says "Cannot be validated — not yet checked live".
+                                             The skill does NOT check the app itself.
+  3. Review page language                  — taken from --lang or a saved project preference
                                              when present (a saved Arabic preference applies
                                              even to an English REQ); asked ONLY when the
                                              requirement is written in Arabic and nothing is
                                              saved; the answer is saved to the learning file
-
-  No Playwright MCP server attached? The skill detects that BEFORE asking for credentials,
-  skips the ask, still designs and delivers the full document, and marks every TC
-  "draft — not app-validated" with the reason.
-
-OPTIONAL:
   - Learning file path                     — default from qa-manifest.json
                                              (Testing/project-learning.md, created by skill 1)
 
-IF ANYTHING IS MISSING: the skill searches the learning file first, then asks you in ONE message
-and WAITS. It never assumes. Your answers (never credentials) are saved to the file's
-"Manual TC Model" section so they are not asked again.
+NEEDS NO ENVIRONMENT: no application URL, no credentials, no Playwright MCP. Those belong to the
+optional link-qc-3b-validate-manual-test-cases.
+
+IF ANYTHING IS MISSING: the skill searches the learning file and previous answers first, then
+asks you in ONE message — every question with the gap, the affected TCs, the evidence, a
+recommended answer and its reason, the alternatives and what stays pending — and WAITS. It never
+proceeds on an unanswered recommendation: TCs that depend on the answer stay open and are listed.
+Your confirmed answers (never credentials) are saved to the file's "Manual TC Model" section so
+they are not asked again.
 
 ============================================================
 OUTPUT — WHAT YOU GET
@@ -67,33 +68,46 @@ OUTPUT — WHAT YOU GET
                                                        ALSO used when the REQ-*.md you give sits
                                                        under Testing/Requirements/SPEC-{spec-name}/
     US-{id}-{name}/                                 <- one per story (same name as skill 2's folder)
-      TEST-CASES-{feature}.md   <- source of truth (Status: PENDING HUMAN REVIEW) — always English
+      TEST-CASES-{feature}.md   <- source of truth (Status: PENDING HUMAN REVIEW) — always English;
+                                   every TC "Validation: draft — not app-validated";
+                                   "App validation progress: 0/N"; requirement coverage score;
+                                   "## Open Questions" with every unresolved question
       TEST-DATA-{feature}.md    <- plain-English test data per story: what data the TCs need,
-                                   whether it exists (READY / MISSING / IMPOSSIBLE / UNKNOWN),
-                                   problems, and how to create what is missing (e2e scenario /
-                                   api / db / set directly / manual). Skill 6 starts from it.
-      TC-REVIEW-{feature}.html  <- visual review page (coverage gauge, badges, what stays manual,
-                                   test data) in the chosen language (Arabic pages are RTL)
+                                   whether it is KNOWN to exist (READY only from the learning
+                                   file, else UNKNOWN — nothing is checked live here), problems,
+                                   and how to create what is missing (e2e scenario / api / db /
+                                   set directly / manual). Skill 5 starts from it; 3b updates it.
+      TC-REVIEW-{feature}.html  <- review page RENDERED by scripts/render-tc-review.mjs (coverage
+                                   gauge, badges, what stays manual, test data, open questions)
+                                   in the chosen language (Arabic pages are RTL)
+      TC-REVIEW-STRINGS-{feature}.ar.json  <- Arabic pages only: the persisted translation
+                                   sidecar (English + Arabic per string; unchanged translations
+                                   survive re-renders). An incomplete translation gives a clearly
+                                   marked PREVIEW page, never the Arabic deliverable.
     TC-GENERATION-SUMMARY.md    (only when several stories were run)
 
   Stories given as ADO IDs / Word / pasted text (no spec file, REQ directly under Requirements/):
   Testing/Manual_Test/TestCases/US-{id}-{name}/
-    TEST-CASES-{feature}.md
-    TEST-DATA-{feature}.md
-    TC-REVIEW-{feature}.html
+    TEST-CASES-{feature}.md · TEST-DATA-{feature}.md · TC-REVIEW-{feature}.html
+    [TC-REVIEW-STRINGS-{feature}.ar.json]
   Testing/Manual_Test/TestCases/TC-GENERATION-SUMMARY.md   (only when several stories were run)
 
   Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/REQ-{id}-{feature}.md (Case 2 only)
-  Testing/project-learning.md <- updated: flows, UI behaviour, test data, locale notes, Q&A
+  Testing/project-learning.md <- updated: design knowledge, test data known, locale notes, Q&A
 
   An existing document with Status: APPROVED is never overwritten — the skill stops and offers
-  --revision, the Case 1 update route, or an explicit overwrite (which then needs skill 5
+  --revision, the Case 1 update route, or an explicit overwrite (which then needs skill 4
   --republish, because the published revision changed).
 
-YOUR NEXT STEP: review, adjust Smoke / Automation Candidate markings, optionally fill the
-"Data effect" (read-only / creates / modifies / deletes) and "Shared data" fields on TCs
-that change or share data (skill 6 uses them to decide parallel vs one-after-another
-execution; blank = it infers), check the Problems table in TEST-DATA-{feature}.md (fix or
-accept each data gap — skill 6 will validate the MISSING / UNKNOWN items before running),
-then set Status: APPROVED in the markdown — that unlocks skill 5 (publish to Azure DevOps)
-and then skill 6 (automation).
+YOUR NEXT STEP: review the page, adjust Smoke / Automation Candidate markings, optionally fill
+the "Data effect" (read-only / creates / modifies / deletes) and "Shared data" fields on TCs
+that change or share data (skill 5 uses them to decide parallel vs one-after-another
+execution; blank = it infers), answer the open questions, check the Problems table in
+TEST-DATA-{feature}.md, then set Status: APPROVED in the markdown — that unlocks skill 4
+(publish to Azure DevOps, optional) and skill 5 (automation), independently.
+
+OPTIONAL BEFORE OR AFTER APPROVAL: /link-qc-3b-validate-manual-test-cases on the same document walks the
+TCs in the running application (needs Playwright MCP, the app URL and credentials), sets the
+validation states, records potential bugs and updates the test-data statuses in place. Skills 4
+and 5 accept the document whether or not 3b ever ran. /link-qc-3c-validate-manual-test-cases-cli is the
+same optional step through playwright-cli (an evaluation twin of 3b — one or the other, not both).

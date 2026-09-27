@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// READ-ONLY preflight for 1-generate-update-testing-structure.
+// READ-ONLY preflight for link-qc-1-generate-update-testing-structure.
 // Captures the ORIGINAL project state and classifies NEW vs EXISTING before anything is changed.
 // Usage: node preflight.mjs [--root <path>] [--pretty]
 // Exit code is always 0; every result lives in the JSON payload.
 import path from 'node:path';
-import { parseArgs, print, scanGit, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanManifest, scanPat, SKILLS } from './lib.mjs';
+import { parseArgs, print, scanGit, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanManifest, scanPat, scanGitignore, scanBrowserSecrets, SKILLS, PLAYWRIGHT_CLI_IGNORE, ENV_RESTART_HINT, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const root = path.resolve(args.root || process.cwd());
@@ -17,7 +17,14 @@ const learning = scanLearning(root);
 const mcp = scanMcp(root);
 const toolchain = scanToolchain(root);
 const manifest = scanManifest(root);
-const pat = scanPat(); // existence only — the value is never read into the output
+// PAT: existence only, of the variable the azure-devops entry references (both known names when there is no entry) — the value is never read into the output.
+const pat = scanPat(mcp.azureDevops.present ? mcp.azureDevops.patVar || (mcp.azureDevops.package === 'self-hosted' ? PAT_VAR_SELF_HOSTED : PAT_VAR_CLOUD) : null);
+// Hosting of the Azure DevOps entry vs the git remote (cloud = dev.azure.com / *.visualstudio.com; anything else = self-hosted). Details: mcp.azureDevops + git.azureDevOps.
+const azureDevOps = { hosting: mcp.azureDevops.hosting || (git.isRepo ? git.azureDevOps.hosting : null) || null,
+  source: mcp.azureDevops.hosting ? '.mcp.json' : git.isRepo && git.azureDevOps.hosting ? 'git remote' : null,
+  mismatch: Boolean(mcp.azureDevops.present && mcp.azureDevops.hosting && git.isRepo && git.azureDevOps.hosting && git.azureDevOps.hosting !== mcp.azureDevops.hosting) };
+const gitignore = scanGitignore(root);
+const browserSecrets = scanBrowserSecrets(); // existence only — the file is never read
 
 // Classification markers. M5 (skills installed) is reported but deliberately NOT used for
 // classification: the skill itself installs skills, so it must not change the evidence it judges.
@@ -38,9 +45,17 @@ print({
   tool: 'preflight', readOnly: true, root, generatedOn: new Date().toISOString(),
   classification, classificationRule: 'EXISTING if M1 or M2, or any two of M3/M4/M6/M7; M5 never counts',
   note: onlyPlaywright ? 'Playwright present for app development only — treated as NEW' : null,
-  markers, git, suite, testing, steering, learning, mcp, toolchain, manifest, pat,
+  markers, git, suite, testing, steering, learning, mcp, azureDevOps, toolchain, manifest, pat, gitignore, browserSecrets,
   warnings: [
-    mcp.servers.includes('azure-devops') && !pat.persisted ? `${pat.name} is not set for this user — ask the user to run ${pat.setupScript} (masked prompt) and reopen the session` : null,
+    toolchain.playwrightCli.version && git.isRepo && !gitignore.ignoresPlaywrightCli ? `playwright-cli is installed but ${PLAYWRIGHT_CLI_IGNORE} is not in .gitignore — its snapshot files would be committed (/sync-skills --tools adds the line)` : null,
+    !toolchain.playwrightCli.version && suite.present.includes('link-qc-3c-validate-manual-test-cases-cli') ? 'skill 3c is installed but playwright-cli is not — 3c will BLOCK until /sync-skills --tools runs (3b is unaffected)' : null,
+    suite.present.includes('link-qc-6-ui-testing') && toolchain.python.command && !toolchain.python.ready ? `Python ${toolchain.python.version} found but pillow/numpy missing — link-qc-6-ui-testing cannot annotate static design images until /sync-skills --tools runs (live-URL audits are unaffected)` : null,
+    suite.present.includes('link-qc-6-ui-testing') && mcp.valid && !mcp.optional.figma ? 'link-qc-6-ui-testing is installed but no figma MCP entry exists — optional; Figma links fall back to exported screenshots (mcp-setup.md §2c)' : null,
+    mcp.servers.includes('azure-devops') && !pat.persisted && !pat.inProcess ? `${pat.name} is not set for this user — ask the user to run ${pat.setupScript} (masked prompt; stores both AZURE_DEVOPS_PAT_B64 and AZURE_DEVOPS_PAT), then ${ENV_RESTART_HINT}` : null,
+    pat.sessionMissing ? `${pat.name} is saved on this machine but missing from this session — the MCP server would start without a token (401 / anonymous access): ${ENV_RESTART_HINT}` : null,
+    mcp.azureDevops.inlinePat ? `.mcp.json: ${mcp.azureDevops.patKey} holds a literal token — replace it with the \${${mcp.azureDevops.package === 'self-hosted' ? 'AZURE_DEVOPS_PAT' : 'AZURE_DEVOPS_PAT_B64'}} reference and let the user rotate the token` : null,
+    azureDevOps.mismatch ? `azure-devops entry is ${mcp.azureDevops.hosting} but the git remote is ${git.azureDevOps.hosting} (${git.azureDevOps.orgUrl}) — cloud needs @azure-devops/mcp, self-hosted needs @tiberriver256/mcp-server-azure-devops` : null,
+    mcp.azureDevops.present && mcp.azureDevops.package === 'self-hosted' && (mcp.azureDevops.authMethod !== 'pat' || !mcp.azureDevops.orgUrl) ? 'self-hosted azure-devops entry needs AZURE_DEVOPS_ORG_URL (https://host/Collection) and AZURE_DEVOPS_AUTH_METHOD=pat' : null,
     suite.uppercaseDir ? `non-canonical skills folder .claude/${suite.skillsDir.split('/').pop()} — canonical is .claude/skills` : null,
     steering.nonCanonical.length ? `non-canonical steering names: ${steering.nonCanonical.join(', ')}` : null,
     steering.duplicates.length ? `duplicate steering layers: ${steering.duplicates.join(', ')}` : null,

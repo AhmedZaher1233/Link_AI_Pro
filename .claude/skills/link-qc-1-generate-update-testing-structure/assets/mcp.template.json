@@ -20,10 +20,28 @@
       "args": ["--from", "docx-mcp-server", "--with", "mcp<2", "docx-mcp-server"]
     }
   },
+  "_self_hosted_azure_devops_server": {
+    "azure-devops": {
+      "command": "npx",
+      "args": ["-y", "@tiberriver256/mcp-server-azure-devops"],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "{ORG_URL}",
+        "AZURE_DEVOPS_AUTH_METHOD": "pat",
+        "AZURE_DEVOPS_PAT": "${AZURE_DEVOPS_PAT}",
+        "AZURE_DEVOPS_DEFAULT_PROJECT": "{PROJECT_NAME}"
+      }
+    }
+  },
   "_optional_azure_resources_server": {
     "azure": {
       "command": "npx",
       "args": ["-y", "@azure/mcp@latest", "server", "start"]
+    }
+  },
+  "_optional_figma_server_for_qc_ui": {
+    "figma": {
+      "type": "http",
+      "url": "https://mcp.figma.com/mcp"
     }
   }
 }

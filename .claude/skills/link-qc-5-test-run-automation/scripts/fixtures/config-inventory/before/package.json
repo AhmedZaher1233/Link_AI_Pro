@@ -1,0 +1,8 @@
+{
+  "name": "fixture-project",
+  "scripts": {
+    "test": "playwright test",
+    "test:us1234": "playwright test --config Testing/Automation/playwright.us-1234.config.ts --project=chromium",
+    "test:ci": "playwright test -c Testing/Automation/playwright.ci.config.ts"
+  }
+}

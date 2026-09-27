@@ -1,0 +1,24 @@
+SKILL QUALITY REVIEW
+
+Provide:
+- A SKILL.md, pasted skill text, skill folder, ZIP, or directory of skills.
+- Optional: intended Claude environment, known problems, preferred report language.
+- Say "review only" or "review and improve". Default: review only.
+
+Receive:
+- A clear verdict with review coverage and limitations.
+- Prioritized findings with evidence, impact, corrections, and verification steps.
+- Quality checklist and realistic behavior test scenarios.
+- Updated files only when improvements are requested.
+
+Example requests:
+"Review the attached skill and tell me whether it is ready to use."
+"Review all skills in this folder. Find conflicting instructions and broken handoffs."
+"Review and improve this skill. Preserve its purpose and output format."
+
+Claude chat: upload the skill-quality-review.zip package through the Skills interface,
+then attach the skill you want reviewed and use one of the requests above.
+Claude Code: copy this folder into .claude/skills/ in your chosen project,
+then invoke /skill-quality-review with the target path or request a review in chat.
+
+This is a standalone authoring helper; it does not require the Link_AI_Pro QA pipeline.

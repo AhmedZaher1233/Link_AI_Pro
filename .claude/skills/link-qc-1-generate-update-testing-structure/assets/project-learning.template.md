@@ -1,5 +1,5 @@
 # Project Learning — {project name}
-<!-- Shared knowledge base for all QA skills (skills 1-7). Read before asking; update after learning.
+<!-- Shared knowledge base for all QA skills (skills 1-11, 3b and 3c). Read before asking; update after learning.
      One tagged line per fact, plain English. Never store credentials, tokens or secrets here.
      Specs and steering documents always win over this file. -->
 
@@ -40,24 +40,46 @@
 
 ### Manual TC Model (skill 3)
 #### Knowledge
+<!-- design-time facts: spec sources per module, review-page language, implementation status as stated by the tester -->
 #### Questions and Answers
 
-### White-Box Model (skill 4)
+### Validation Model (skill 3b)
 #### Knowledge
-<!-- which business area each feature belongs to, rules the code enforces (in words), where checks happen, bug patterns; link to White_Box_Testing/.project-profile.md -->
+<!-- base URL per environment (never a credential), common flows walked live (name + date), screens confirmed locale-independent, where the app shows its build number -->
 #### Questions and Answers
 
-### Publish Model (skill 5)
+### CLI Validation Model (skill 3c)
 #### Knowledge
-<!-- Azure DevOps organisation/project, process-template quirks (accepted AutomationStatus values, custom fields), tagging convention -->
+<!-- same facts observed through playwright-cli; the login method used per environment (attended / secrets file — a name, never a value); cross-validator answers -->
 #### Questions and Answers
 
-### Automation Model (skill 6)
+### Publish Model (skill 4)
+#### Knowledge
+<!-- Azure DevOps hosting (cloud / self-hosted — which MCP server, org or org URL, project; the self-hosted server has no test plan / suite tools), process-template quirks (accepted AutomationStatus values, custom fields), tagging convention, suite placement decision -->
+#### Questions and Answers
+
+### Automation Model (skill 5)
 #### Knowledge
 <!-- pages that already have page objects (page names only), how to run, environment presets, heal patterns -->
 #### Questions and Answers
 
-### Rule Discovery Model (skill 7)
+### UI Visual QA Model (skill 6)
+#### Knowledge
+<!-- locales the product ships, which screens have an approved design and where (Figma file names, never node ids), the role each screen is audited as, the tracker's accepted Bug Trigger / Impact / Classification values, where the bug reports live; measured UI rules stay in UI-Testing/Learning-UI.md -->
+#### Questions and Answers
+
+### Azure Sync Model (skills 7 to 9)
+#### Knowledge
+<!-- Confirmed [type: env] answers only: ado_org, ado_project, test_plan_id, test_suite_id / plan URL, bug_story_filter_tags, flaky_story_title, default_assignee (optional), custom_fields, language_switch, reopen_mention_text. No PAT or credentials. -->
+#### Questions and Answers
+<!-- Search before asking; one bundled question; confirmed answers only, dated and tagged. -->
+
+### White-Box Model (skill 10)
+#### Knowledge
+<!-- which business area each feature belongs to, rules the code enforces (in words), where checks happen, bug patterns; link to White_Box_Testing/.project-profile.md -->
+#### Questions and Answers
+
+### Rule Discovery Model (skill 11)
 #### Knowledge
 <!-- rules the code enforces that the spec never stated (in words, with the story as source), UI-only / DB-only enforcement, QC decisions on undocumented rules -->
 #### Questions and Answers

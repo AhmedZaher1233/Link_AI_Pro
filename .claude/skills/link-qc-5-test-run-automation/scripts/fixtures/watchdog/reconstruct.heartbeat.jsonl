@@ -1,0 +1,13 @@
+{"at":"2026-09-20T10:00:00Z","worker":0,"tc":"TC-001","event":"test-start"}
+{"at":"2026-09-20T10:00:00Z","worker":1,"tc":"TC-002","event":"test-start"}
+{"at":"2026-09-20T10:00:02Z","worker":0,"tc":"TC-001","step":"create","event":"start","deadline_ms":30000}
+{"at":"2026-09-20T10:00:10Z","worker":0,"tc":"TC-001","step":"create","event":"end","outcome":"ok"}
+{"at":"2026-09-20T10:00:11Z","worker":0,"tc":"TC-001","event":"evidence"}
+{"at":"2026-09-20T10:00:12Z","worker":0,"tc":"TC-001","event":"test-end"}
+{"at":"2026-09-20T10:00:03Z","worker":1,"tc":"TC-002","step":"open","event":"start","deadline_ms":30000}
+{"at":"2026-09-20T10:00:20Z","worker":1,"tc":"TC-002","step":"open","event":"end","outcome":"error"}
+{"at":"2026-09-20T10:00:21Z","worker":1,"tc":"TC-002","event":"test-end"}
+{"at":"2026-09-20T10:00:22Z","worker":1,"tc":"TC-003","event":"test-start"}
+{"at":"2026-09-20T10:00:23Z","worker":1,"tc":"TC-003","event":"test-end"}
+{"at":"2026-09-20T10:00:15Z","worker":0,"tc":"TC-004","event":"test-start"}
+{"at":"2026-09-20T10:00:16Z","worker":0,"tc":"TC-004","step":"approve the request","event":"start","deadline_ms":30000,"note":"the status badge reads Approved"}

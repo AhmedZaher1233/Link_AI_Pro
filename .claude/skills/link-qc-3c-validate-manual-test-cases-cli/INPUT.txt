@@ -1,0 +1,147 @@
+SKILL: link-qc-3c-validate-manual-test-cases-cli
+WHAT IT DOES: OPTIONAL step after link-qc-3-generate-manual-test-cases, and the evaluation twin of
+link-qc-3b-validate-manual-test-cases. Executes an existing test-case document in the RUNNING application
+through the Playwright command line (playwright-cli) instead of the Playwright MCP server —
+targeted discovery, not a replay, and WITHOUT a scope gate: every test case in the document is
+walked on every run (each common flow once + every TC's unique tail; nothing is skipped, nothing
+is asked) — sets each TC's validation state with evidence (including what
+was actually observed for the expected result), corrects labels and missing steps, records
+potential bugs with a screenshot, updates the test-data statuses, and patches the same files in
+place (markdown, test-data file, re-rendered HTML page). Before or after human approval. It is
+NOT a gate: skills 4 and 5 accept a document that never went through it. 3b remains the default
+validator; this skill exists to be compared with it (references/cli-vs-mcp-comparison.md).
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+
+ALWAYS REQUIRED:
+  1. The TC document                       — a path to TEST-CASES-{feature}.md, OR a feature name /
+                                             User Story ID (the skill finds the document under
+                                             Testing/Manual_Test/TestCases/**/US-{id}-*/), OR a
+                                             SPEC-{name}/ folder (every story inside is validated;
+                                             one combined ask, per-story write-back).
+                                             Status may be PENDING HUMAN REVIEW or APPROVED.
+
+PREREQUISITES (installed for you — the skill never installs anything itself):
+  - playwright-cli + its browser           — installed by `/sync-skills --tools` (or by
+                                             /link-qc-1-generate-update-testing-structure repair when you
+                                             answer yes to the playwright-cli question). Missing →
+                                             the skill stops BEFORE asking for anything (BLOCKED,
+                                             with that hint). It never falls back to the MCP server.
+  - .playwright-cli/ in .gitignore         — added by the same sync step (snapshots land there).
+  - OPTIONAL: a browser secrets file       — run skill 1's scripts/set-playwright-secrets.ps1 (or
+                                             .sh) ONCE in your own terminal if you want unattended
+                                             logins; it stores usernames / passwords per role in a
+                                             file outside the repo and points PLAYWRIGHT_MCP_SECRETS_FILE
+                                             at it. The skill only ever types the secret NAMES.
+                                             Without it, you log in yourself (attended login).
+
+OPTIONAL FLAGS:
+  (no scope flag)                There is no scope gate: every TC is walked on every run —
+                                 each common flow once + every TC's unique tail, including
+                                 TCs whose earlier evidence (this skill's or 3b's) is still
+                                 fresh. "--full" is accepted (it is already the behaviour, so
+                                 the 3b-vs-3c comparison can pass the same flag to both);
+                                 "--scope shared" / "--scope <ids>" are NOT supported — the
+                                 skill says so in one line and walks everything. For a
+                                 narrowed live check use skill 3b.
+  --authorize-revision           On an APPROVED document: you already authorize the changes,
+                                 so the skill patches without asking (Status becomes PENDING
+                                 HUMAN REVIEW only if something actually changed).
+  --lang ar|en                   Language of the re-rendered review page (default: the
+                                 document's "Review page language" line).
+  --audit                        Probe playwright-cli and analyse the document only: reports
+                                 the document state, the common flows, the executable set
+                                 that a run would walk and what it would write. Writes
+                                 NOTHING, asks for nothing else.
+
+ASKED DURING THE RUN — ONE message, after the playwright-cli probe:
+  2. Application base URL                  — reused from the learning file when recorded there
+  3. Username PER ROLE                     — for the steps; usernames appear in the steps
+  4. Login method PER ROLE                 — A) attended: the skill opens a visible browser for
+                                             that role and asks you to log in yourself, then
+                                             continues (works with SSO / MFA); or
+                                             B) secrets file: the skill types the secret NAMES
+                                             from the file the setup script created. A password
+                                             is NEVER typed in chat or on a command line, and
+                                             NEVER written to any file by the skill.
+  5. Is the story implemented?             — only when the document's header says
+                                             "not yet checked live"; the skill verifies live
+                                             either way
+  6. Environment notes                     — e.g. VPN, test tenant, build shown in the footer,
+                                             "this is production" (then no data changes)
+  7. May this run change data on {env}?    — yes: test cases whose Data effect is creates /
+                                             modifies / deletes are executed, records are
+                                             identified before the change, reverted through the
+                                             UI where a way exists, and listed at the end;
+                                             no: those TCs stay draft (reason recorded)
+  8. Revision authorization                — only for an APPROVED document when changes are
+                                             expected and --authorize-revision was not given;
+                                             asked once with the concrete list of changes
+
+NOT ASKED (by design — this skill has no scope gate):
+  - Scope                                  — every TC is walked; the skill states the plan in
+                                             one line ("walking all N executable TCs, F common
+                                             flows once") and starts.
+  - Re-validate TCs validated by skill 3b  — never asked: TCs carrying 3b evidence are
+                                             re-validated like every other TC; the 3c stamp
+                                             replaces the 3b stamp on observation, and the final
+                                             message lists which TCs that were (current vs stale
+                                             at intake).
+
+IF ANYTHING ELSE IS UNCLEAR: the skill searches the learning file and previous answers first, then
+asks with the gap, the affected TCs, the evidence, a recommended answer and its reason, the
+alternatives and what stays pending — and never acts on an unanswered recommendation. Your
+confirmed answers (never credentials) are saved under "CLI Validation Model (skill 3c)".
+
+============================================================
+OUTPUT — WHAT YOU GET (same folder, patched in place)
+============================================================
+  Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]US-{id}-{name}/
+    TEST-CASES-{feature}.md   <- per TC: Validation state (validated / enhanced / inferred /
+                                 discrepancy / not-implemented / draft) + an evidence stamp
+                                 (date, environment, build, scope, content + requirement hashes,
+                                 tool: cli, outcome-check = what was observed for the expected
+                                 result); corrected labels and inserted reveal / wait / trigger
+                                 steps; header: Implementation status, MCP validation (+ "by 3c
+                                 on {date}, env, scope full, tool cli"), App validation progress;
+                                 ## Enhancement Log appended; ## Potential Bugs (PB-n: title,
+                                 TC, steps to reproduce, expected, actual; screenshot path in
+                                 the hidden metadata); ## Open Questions; findings buckets.
+                                 Design fields, TC IDs, coverage score, traceability and
+                                 manual-only tables: UNCHANGED.
+    TEST-DATA-{feature}.md    <- item statuses from one read-only look each (READY / MISSING /
+                                 UNKNOWN), exact values and states seen, extra accounts,
+                                 creation ways confirmed available, problems closed or added,
+                                 "Environment: {env} checked {date}"
+    TC-REVIEW-{feature}.html  <- re-rendered by scripts/render-tc-review.mjs (never hand-edited);
+                                 Arabic pages reuse TC-REVIEW-STRINGS-{feature}.ar.json — only
+                                 changed strings need a new translation; an incomplete
+                                 translation is delivered as a clearly marked PREVIEW
+    evidence/PB-{n}-{date}.png <- one screenshot per potential bug (only for discrepancies)
+    comparison/               <- only when the 3b-vs-3c comparison protocol runs: the two runs'
+                                 output copies (3b-… / 3c-… prefixed) and
+                                 VALIDATION-COMPARISON-{feature}.md
+    TC-GENERATION-SUMMARY.md  <- status / findings columns patched (multi-story only)
+  Testing/project-learning.md <- base URL per environment (no credentials), login method used per
+                                 environment (name only), common flows walked, labels, locale
+                                 facts, READY test data, tricks, confirmed Q&A
+  Browser sessions the run opened are closed and the run's snapshot files under .playwright-cli/
+  are deleted before the final message.
+
+  APPROVED document: validated READ-ONLY by default (report only, nothing written, approval and
+  ADO-MAP intact). With your authorization it is patched; Status becomes PENDING HUMAN REVIEW only
+  when something actually changed, and you are told to re-run skill 4 with --republish only when
+  an ADO-MAP.md exists for it.
+
+YOUR NEXT STEP: open the page; every TC the application let the skill reach carries a fresh state
+from this run; review "inferred" and "discrepancy" cards with extra care and the
+Potential Bugs (screenshots under evidence/); answer the open questions; then approve the markdown
+(or, if it was approved and changed, re-review and re-approve). Skills 4 and 5 run on the approved
+document as before.
+
+WHEN TO RUN: after skill 3, whenever the application is reachable — before approval, after
+approval, or again after a new build. Never required. Do not chain it with 3b on the same document
+while the comparison is running (references/cli-vs-mcp-comparison.md restores the files between
+the two runs).

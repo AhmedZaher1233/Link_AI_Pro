@@ -45,7 +45,7 @@ This project already has a testing structure. What should I do?
      manifest update. Lists exactly what B would change.
 
   B) REPAIR — update skills and add what is missing (keep the structure as it is)
-     Sync skills 1-7 + the sync-skills command from the source repo, install any missing
+     Sync skills 1-12, 3b and 3c + the sync-skills command from the source repo, install any missing
      steering layer, folder, MCP entry or learning-file section, normalize non-canonical
      steering file names, migrate an uppercase .claude/Skills folder, write the manifest,
      then health-check. Existing folders, tests, pages, configs, steering content and
@@ -69,7 +69,8 @@ Reply A, B or C.
 | Testing/ folders | verify | create **missing** only | create after the move plan is confirmed |
 | Steering docs | verify | install missing layers, rename non-canonical, seed README | same, plus relocate from non-standard dirs (confirmed) |
 | Node / NPM / Playwright | verify | install/repair **missing** pieces | same |
-| `.mcp.json` | validate | add **missing** entries only | same |
+| playwright-cli (skill 3c only) | verify; `sync --check` lists the planned `--tools` actions | ask once "install playwright-cli for skill 3c? (yes/no)" (recorded, never re-asked); yes → `sync --apply --tools` / `toolchain.md`; no → WARN rows stay, 3b unaffected | same |
+| `.mcp.json` | validate (incl. Azure DevOps hosting vs entry) | add **missing** entries only — the `azure-devops` entry as the cloud or self-hosted block per the detected hosting (`mcp-setup.md` §1b); an existing entry with the wrong package for the host is reported, rewritten only after the user confirms | same |
 | Uppercase `.claude/Skills` | WARN | migrate to `.claude/skills` | same |
 | Learning file | verify | create if missing; add missing sections; rename legacy heading; write Setup Model lines | same, plus migration entry |
 | `Testing/qa-manifest.json` | verify | write / refresh | write / refresh |
@@ -111,7 +112,7 @@ model for the session — as advice to the user, never as a requirement.
   manifest.
 * Steering documents living elsewhere (`steering/`, `docs/qa/`, `.claude/rules/`) are relocated
   only in Mode C with confirmation; otherwise record the actual path as a deviation so skills
-  2-7 can be pointed at it.
+  2-11 can be pointed at it.
 * A valid root-level `automation/` project is relocated only in Mode C; otherwise extend in
   place and record the deviation.
 * Another naming convention → document the decision before changing anything.

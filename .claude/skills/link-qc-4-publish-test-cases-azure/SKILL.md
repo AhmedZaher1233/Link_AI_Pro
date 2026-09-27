@@ -1,5 +1,5 @@
 ---
-name: publish-test-cases-azure
+name: link-qc-4-publish-test-cases-azure
 model: claude-opus-5
 description: >
   Publish Test Cases to Azure DevOps — takes a HUMAN-APPROVED test case document (skill 3
@@ -9,38 +9,49 @@ description: >
   source / Playwright MCP as a last resort, meaning-preservation gate), then publishes THAT
   document to Azure DevOps as Test Case work items linked to the User Story with Tested-By,
   idempotently (re-runs update, never duplicate), AutomationStatus = Planned, and writes
-  ADO-MAP.md (TC-ID → work item ID), which 6-test-run-automation uses to detect that this story
+  ADO-MAP.md (TC-ID → work item ID), which link-qc-5-test-run-automation uses to detect that this story
   is already published and to close the loop in DevOps — it is NOT that skill's entry gate.
   Never edits the approved source document, never changes the meaning of a TC, never writes
   credentials into the published steps. Runs AFTER human approval of skill 3's document and
-  before or after 6-test-run-automation, or not at all. Trigger on: "publish TCs to Azure DevOps", "upload test
+  before or after link-qc-5-test-run-automation, or not at all. Trigger on: "publish TCs to Azure DevOps", "upload test
   cases to ADO", "beautify the test cases", "create test case work items", "link TCs to the
-  user story", "sync approved TCs to DevOps".
-argument-hint: "[<approved TC document path>] [<User Story ID or title>] [--beautify-only] [--republish]"
+  user story", "sync approved TCs to DevOps". Also owns Test Plan SUITE placement: `--suite-only`
+  adds already-published TCs (ADO-MAP.md) to a plan + suite later, additively, without
+  re-publishing — trigger on "add the TCs to the suite", "place the published test cases in
+  a Test Plan suite", "sync approved test cases to the Test Plan".
+argument-hint: "[<approved TC document path>] [<User Story ID or title>] [--beautify-only] [--republish] [--suite-only <suite URL | planId suiteId>]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__azure-devops, mcp__playwright
 ---
 
 <role>
 You are the **publishing step** of the QA pipeline. You take over AFTER a human has approved
-the test case document produced by `3-generate-manual-test-cases`, and you own exactly two
+the test case document produced by `link-qc-3-generate-manual-test-cases`, and you own exactly two
 things:
 
 1. **Beautify** the approved TCs into a SEPARATE, standalone-readable upload document
 2. **Publish** that document to Azure DevOps as Test Case work items linked to the User
    Story, and persist the TC-ID → work-item map (`ADO-MAP.md`)
 
-`6-test-run-automation` is INDEPENDENT of this skill and does not wait for it. Its only document
+`link-qc-5-test-run-automation` is INDEPENDENT of this skill and does not wait for it. Its only document
 gate is `Status: APPROVED`. When `ADO-MAP.md` and the beautified document happen to exist for the
 same source revision it detects that (`ado_mode = linked`) and closes the loop in DevOps;
 otherwise it runs purely locally and skips that phase. Automation code, coverage, runs and the
 DevOps close-out (`Custom.TestAutomated`) are **not** your job.
+
+The approved document may or may not have been validated live by the optional
+`link-qc-3b-validate-manual-test-cases` (or its evaluation twin `link-qc-3c-validate-manual-test-cases-cli`): a
+document whose TCs are all `draft — not app-validated` is normal and is never a reason to block
+or to ask for 3b or 3c. Expect more step-confirmation gaps on an
+unvalidated document — resolve them one step at a time as below. When 3b later patches a
+document you already published (with the user's revision authorization), the source revision
+changes → re-run this skill with `--republish`.
 
 **Two documents, two consumers — never confuse them:**
 
 | Consumer | Reads |
 |---|---|
 | Azure DevOps (this skill) | the **beautified** `*-beautified.md` |
-| Automation code (skill 6) | the **original** approved TC document |
+| Automation code (skill 5) | the **original** approved TC document |
 
 You do NOT:
 - design or invent test scenarios beyond the approved document
@@ -52,10 +63,10 @@ You do NOT:
 - write a credential, env-var name or auth mechanism into a step — role names only
 - create duplicate work items — publishing is idempotent
 - set `AutomationStatus = Automated` (rejected by the template) or `Custom.TestAutomated`
-  (that is skill 6's close-out, once automation exists)
+  (that is skill 5's close-out, once automation exists)
 
 If any required input is missing → BLOCKED. Azure DevOps unreachable → BLOCKED with the
-reconnect instruction (never ask for the token in chat).
+restart instruction from PHASE 0 (never ask for the token in chat).
 </role>
 
 ---
@@ -65,7 +76,7 @@ reconnect instruction (never ask for the token in chat).
 <input_gate>
 **Before asking anything**, search `Testing/project-learning.md` per the
 `<project_learning_file>` protocol below: the Index, `[module: …]` tags for this story's
-feature, `[type: env]` lines, and `### Publish Model (skill 5) → #### Questions and Answers`.
+feature, `[type: env]` lines, and `### Publish Model (skill 4) → #### Questions and Answers`.
 Reuse recorded ADO organisation/project, TC-document locations and template quirks — say
 what you reused. After ANY ask, write the answer (never a PAT) to this skill's Q&A and, if
 project-wide, to `## Project Knowledge`.
@@ -86,25 +97,57 @@ Required inputs — missing from the task input AND the learning file → ASK th
 
 Flags: `--beautify-only` → run PHASE 1 and stop (no ADO writes; useful for a dry review of
 the upload document). `--republish` → force an ADO update of every item even when the
-beautified document is unchanged since the last publish.
+beautified document is unchanged since the last publish. `--suite-only <suite URL | planId suiteId>`
+→ skip PHASE 1 and the publish: only place the already-published work items of `ADO-MAP.md`
+in that suite (see `<suite_only_mode>` below).
+
+**Which Azure DevOps server:** read the `azure-devops` entry of `.mcp.json` (cloud =
+`@azure-devops/mcp`, self-hosted Azure DevOps Server = `@tiberriver256/mcp-server-azure-devops`)
+or simply use the tools the attached server exposes — `ado_hosting` = `cloud` | `self-hosted`,
+recorded once as a `[type: env]` line. The self-hosted server has **no test plan / suite
+tools**; PHASE 2 says what that changes (work items, links and fields work the same).
 
 **ADO connectivity check:** perform one cheap read (the User Story fetch counts).
-On 401/403 → STOP. 401 → the Azure DevOps MCP server holds a rejected or stale token:
-ask the user to **reconnect the Azure DevOps MCP server** (`/mcp` → azure-devops →
-reconnect; if the PAT itself expired they renew it first — a **read/write PAT** with
-Work Items Read/Write/Manage + Test Management Read/Write — where the server reads it
-from). You cannot connect or disconnect MCP servers yourself, so always ask, wait for
-the user, then retry the read once. 403 → a scope is missing on an otherwise valid
+On 401/403 → STOP. **401 or "anonymous access" (`TF400813`)** → the PAT variable is empty in
+the MCP server's process — VS Code was not fully restarted after the variable was created:
+ask the user to **fully quit VS Code (all windows) and relaunch** (a window reload or an
+`/mcp` reconnect does not help). Still 401 after that → the token expired or was revoked →
+they re-run skill 1's `set-azure-devops-pat.ps1` / `.sh` (a **read/write PAT** with Work
+Items Read/Write/Manage + Test Management Read/Write; the script stores both variable forms)
+and relaunch again. You cannot connect or disconnect MCP servers yourself, so always ask,
+wait for the user, then retry the read once. 403 → a scope is missing on an otherwise valid
 token. Never ask for the token in chat; never echo, log, or write it anywhere.
 </input_gate>
 
+<suite_only_mode>
+**`--suite-only` — suite placement after the fact.** Entry gate: `{ado_map}` exists (missing →
+BLOCKED "publish first — nothing is in Azure DevOps yet for this story"). Nothing is
+beautified or published; the approved document is not even required to be re-read beyond
+locating the folder. Steps:
+1. Read `ADO-MAP.md`; a `source_sha256` older than the approved document is a WARN
+   ("map is stale — republish before relying on it"), not a stop: the work items exist.
+2. Resolve the plan + suite from the flag value (URL or two IDs). Probe the suite-list and
+   add-to-suite capabilities of the attached server first; self-hosted → the REST fallback of
+   PHASE 2 step 6 applies unchanged; neither available → every row is
+   `NOT_RUN (no suite tools)` and nothing is written.
+3. List the suite's current test cases; diff against the map: in the map and not in the
+   suite → add (one batch call); already in the suite → `current`; in the document but not
+   in the map → `skipped (unpublished — run the full publish)`; in the suite but not in the
+   map → reported, **never removed**.
+4. Write only the `Suite` column of the rows you added or confirmed; every other column,
+   row and header line stays byte-identical.
+5. Return `SUITE PLACEMENT COMPLETE` with `| TC-ID | ADO Work Item ID | Suite action |`
+   (`added / current / skipped (reason) / NOT_RUN (reason)`) and the counts; `—` never `0`.
+This is the only way the suite of a published story is changed later; link-qc-7-sync-tc-status-to-azure needs the points it creates.
+</suite_only_mode>
+
 <qa_manifest>
 **Structure contract — read `Testing/qa-manifest.json` first.** Written by
-`1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
+`link-qc-1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
 requirements, manual test cases, automation root, pages, tests, reports, screenshots, logs,
 white-box folder, learning file), the steering file paths, the framework config and every
 documented deviation. Use its paths before any auto-detection; fall back to detection only when
-the manifest is absent, and then tell the user to run `/1-generate-update-testing-structure`
+the manifest is absent, and then tell the user to run `/link-qc-1-generate-update-testing-structure`
 (audit first, then repair) — never invoke that skill yourself. Steering conflicts resolve per
 the rules in `docs/steering/README.md` (L1 baseline, L2 refines, L3 values + stricter +
 approved exemptions; specs govern business truth, steering governs quality policy, the learning
@@ -113,18 +156,20 @@ file overrides neither). Behaviour knowledge stays in `Testing/project-learning.
 
 <project_profile>
 This skill is generic — no hardcoded project paths in the rules. **Resolution order for
-every key: task input → `Testing/project-learning.md` (`### Publish Model (skill 5) →
+every key: task input → `Testing/project-learning.md` (`### Publish Model (skill 4) →
 #### Knowledge`, `[type: env]` lines) → auto-detection → default.** Every key resolved by
 detection is written back to the learning file as one plain-English tagged line so the next
 run skips detection. Resolve:
 
 | Profile key | Auto-detection | Default |
 |---|---|---|
-| `ado_org` / `ado_project` | task input → derive from `git remote` → `.mcp.json` azure-devops entry | ask |
+| `ado_org` / `ado_project` | task input → derive from `git remote` → `.mcp.json` azure-devops entry (cloud: organization name; self-hosted: `AZURE_DEVOPS_ORG_URL` = `https://host/Collection` and `AZURE_DEVOPS_DEFAULT_PROJECT`) | ask |
+| `ado_hosting` | `.mcp.json` azure-devops package → the attached server's tool names (`wit_*` = cloud, `get_work_item` = self-hosted) → learning file `[type: env]` | `cloud` — recorded once |
+| `ado_suite` | task input only: a test plan ID + suite ID (or a suite URL `…/_testPlans/execute?planId=…&suiteId=…`), given with the publish or through `--suite-only` — never asked | none → suite placement reported as skipped |
 | `tc_output_folder` | folder containing the approved TC doc — per the structure `Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/` (skill 3 nests stories that came from a spec file under a `SPEC-*` folder) | same; given only a story ID, locate the doc with glob `Testing/Manual_Test/TestCases/**/US-{id}-*/TEST-CASES-*.md` (legacy docs may sit in `docs/test-design/{feature}/`) |
 | `source_tc_doc` | the approved input — **read-only** | `{tc_output_folder}/TEST-CASES-{feature}.md` |
 | `beautified_tc_doc` | PHASE 1 output — **ADO publishes this** | `{tc_output_folder}/{stem}-beautified.md` |
-| `ado_map` | PHASE 2 output — what skill 6 reads to detect `ado_mode = linked` (not a gate) | `{tc_output_folder}/ADO-MAP.md` |
+| `ado_map` | PHASE 2 output — what skill 5 reads to detect `ado_mode = linked` (not a gate) | `{tc_output_folder}/ADO-MAP.md` |
 | `automation_root` | an EXISTING Playwright project (search for `playwright.config.ts`); else `Testing/Automation/` — used ONLY to read page objects for step confirmation | `Testing/Automation/` |
 | `login_page_object` | scan `{automation_root}/pages/` for the auth page object | none |
 | `app_source_roots` | UI templates, `data-testid` attributes, i18n files (`en.json` / `ar.json`) per the repo layout | auto |
@@ -136,11 +181,11 @@ Steering priority: the resolution rules in docs/steering/README.md, then CLAUDE.
 </project_profile>
 
 <project_learning_file>
-**Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
+**Project Learning File protocol — shared by skills 1-11, 3b and 3c (read first, ask second, write back).**
 
 `Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
-(created by `1-generate-update-testing-structure`). This skill's section is
-`### Publish Model (skill 5)`. If `Testing/` exists but the file does not, create it with
+(created by `link-qc-1-generate-update-testing-structure`). This skill's section is
+`### Publish Model (skill 4)`. If `Testing/` exists but the file does not, create it with
 the skeleton defined in skill 1, section 2. If the file exists but this section is missing,
 add it (`#### Knowledge`, `#### Questions and Answers`) without touching anything else.
 
@@ -158,7 +203,7 @@ add it (`#### Knowledge`, `#### Questions and Answers`) without touching anythin
 re-ask what the file answers; state what you are reusing. PATs are NEVER written to the file.
 
 *Write back (mandatory before PUBLISH COMPLETE):*
-- Every answered question → `- [module: X] [type: qa] **Q (skill 5, {YYYY-MM-DD}):** … — **A:** …`
+- Every answered question → `- [module: X] [type: qa] **Q (skill 4, {YYYY-MM-DD}):** … — **A:** …`
   under this skill's Q&A; project-wide answers also under `## Project Knowledge`.
 - ADO facts → `[type: env]` lines in this skill's `#### Knowledge`: organisation and project
   names, which AutomationStatus values the template accepts, custom fields that exist, the
@@ -352,19 +397,27 @@ For EVERY test case in it (all of them — not only automation candidates):
 1. **Create a Test Case work item** in `{ado_project}`:
    - Title: `[TC-ID] {description}`
    - Steps: map each numbered step → ADO test step (action + expected result from
-     the inline assertion); final Expected Result → last step's expected result
+     the inline assertion); final Expected Result → last step's expected result. The steps
+     live in the field `Microsoft.VSTS.TCM.Steps` as ADO's steps XML — one `<step>` per
+     numbered step, HTML-escaped text:
+     `<steps id="0" last="{N}"><step id="{i}" type="ValidateStep"><parameterizedString isformatted="true">{action}</parameterizedString><parameterizedString isformatted="true">{expected}</parameterizedString><description/></step>…</steps>`
+     (cloud: the test-case tools accept plain steps and write that field for you; self-hosted:
+     `create_work_item` with `workItemType: "Test Case"` and the XML in
+     `Microsoft.VSTS.TCM.Steps` via `additionalFields`, then `update_work_item` on re-runs).
    - Description: REQ-IDs, locale, preconditions, Data Oracle
    - Tags: `{feature}`; add `smoke` for TCs marked `Smoke: YES` in the document
 2. **Link it to the User Story** with the **Tested By** relation
    (`Microsoft.VSTS.Common.TestedBy-Forward` from the story's side — the Test Case
-   appears under the story's "Tested By" links).
+   appears under the story's "Tested By" links; self-hosted: `manage_work_item_link` with
+   `sourceWorkItemId` = the story, `targetWorkItemId` = the Test Case, that relation type).
 3. **Automation status at publish time.**
    ⚠️ Do NOT look for an `Automation Candidate: YES` field in legacy documents —
    older TC documents don't have one. At publish time the automation does not exist yet,
    so candidacy is not yet knowable:
-   - Set `Microsoft.VSTS.TCM.AutomationStatus` = `Planned` on every TC
+   - Set `Microsoft.VSTS.TCM.AutomationStatus` = `Planned` on every TC (self-hosted:
+     `update_work_item` `additionalFields`)
    - Add tag `automation`
-   - **Skill 6 sets `Custom.TestAutomated` = `true`** in its close-out once the generated
+   - **Skill 5 sets `Custom.TestAutomated` = `true`** in its close-out once the generated
      code exists. Never set it here.
    ⚠️ Some process templates (e.g. SMO) accept ONLY `Not Automated` and `Planned` for
    `Automation status`; `Automated` is rejected with a 400. Check the learning file
@@ -372,7 +425,9 @@ For EVERY test case in it (all of them — not only automation candidates):
 4. **Carry review notes across.** A TC marked `> Needs human review: …` by `<beautify>`
    keeps that note in its ADO description, so nobody treats an unverified step as verified.
 5. **Idempotency — never duplicate.** Before creating anything, fetch the User
-   Story's existing Tested-By links and match titles on the `[TC-ID]` prefix:
+   Story's existing Tested-By links (self-hosted: `get_work_item` on the story with
+   `expand: "relations"`, or a `search_work_items` / WIQL query for Test Cases linked to it)
+   and match titles on the `[TC-ID]` prefix:
    - Match found → UPDATE that work item (steps, description, tags, status) in place
    - No match → create new
    Re-running this skill on the same document must produce zero duplicates.
@@ -380,24 +435,41 @@ For EVERY test case in it (all of them — not only automation candidates):
    Without `--republish`, items whose beautified content is unchanged since the last
    publish (same `source_sha256` recorded in `ADO-MAP.md`) are left untouched and reported
    as `current`.
-6. **Persist the map** to `{ado_map}` (`{tc_output_folder}/ADO-MAP.md`):
+6. **Suite placement — only when `ado_suite` was given.** Nothing here is asked for; without
+   a plan + suite the summary says `suite placement skipped (no suite given)` and that is a
+   complete outcome, not a failure (it can be done later with `--suite-only`).
+   - cloud → add the work items to the suite with the test-plan tools.
+   - self-hosted → the server has no suite tools; use ONE REST call per batch through the
+     project's shell: `POST {ado_org_url}/{ado_project}/_apis/testplan/Plans/{planId}/Suites/{suiteId}/TestCase?api-version=7.1`
+     with body `[{"workItem":{"id":<id>}}, …]` (older TFS: `POST …/_apis/test/Plans/{planId}/suites/{suiteId}/testcases/{id,id}?api-version=5.0`).
+     Authorization is `Basic` with the value of the environment variable `AZURE_DEVOPS_PAT_B64`
+     **read by name inside the command** (PowerShell `$env:AZURE_DEVOPS_PAT_B64`, bash
+     `"$AZURE_DEVOPS_PAT_B64"`) — never pasted, never printed, never written to a file, never
+     echoed in the output. The variable missing from the session → `suite placement skipped
+     (PAT variable not in this session — fully quit VS Code and relaunch)`.
+   - Any failure → `suite placement skipped ({http status / reason})`; the work items stay
+     published and linked. Record the outcome in the `Suite` column of `ADO-MAP.md`.
+7. **Persist the map** to `{ado_map}` (`{tc_output_folder}/ADO-MAP.md`):
 
    ```markdown
    <!-- source_sha256: {hash of the approved document this publish reflects} -->
-   <!-- published_on: {ISO-8601} · story: {US id} · project: {ado_project} -->
-   | TC-ID | ADO Work Item ID | Automation candidate | AutomationStatus |
-   |-------|------------------|----------------------|------------------|
+   <!-- published_on: {ISO-8601} · story: {US id} · project: {ado_project} · hosting: {ado_hosting} -->
+   | TC-ID | ADO Work Item ID | Automation candidate | AutomationStatus | Suite |
+   |-------|------------------|----------------------|------------------|-------|
    ```
 
-   Skill 6 reads this file to detect that the story is already published, and later fills the
-   last two columns. It is not skill 6's entry gate — that is `Status: APPROVED`. If it
+   `Suite` is `{suiteId}` or `skipped` (never blank). An earlier map without the column is
+   read as-is and rewritten with it.
+
+   Skill 5 reads this file to detect that the story is already published, and later fills the
+   `Automation candidate` and `AutomationStatus` columns (the `Suite` column is skill 4's). It is not skill 5's entry gate — that is `Status: APPROVED`. If it
    already exists from a previous run, reconcile against it first (never drop a row for a
    TC that still exists in the document; mark rows for TCs removed from the document as
    `removed from document — work item left in place`).
 
 Any ADO write failure → report the exact item and error; finish the remaining
-items; list failures in the output. Total auth failure → stop with the reconnect
-instruction from PHASE 0.
+items; list failures in the output. Total auth failure → stop with the restart
+instruction from PHASE 0 (full quit + relaunch of VS Code, never "reconnect").
 </ado_publish>
 
 ---
@@ -437,10 +509,10 @@ requirements, Data Oracle, type, smoke and locale unchanged — PASS
 |---|---|---|---|
 {rows}
 {failures, or "All items published"} · Tested-By links verified on the story: {n}/{N}
-**Map:** {ado_map path} — `6-test-run-automation` will detect this publish and close the loop
+**Map:** {ado_map path} — `link-qc-5-test-run-automation` will detect this publish and close the loop
 
 ### Next
-Run `6-test-run-automation` with the same approved document and User Story — it can also be run
+Run `link-qc-5-test-run-automation` with the same approved document and User Story — it can also be run
 before this skill, or without it. If `ADO-MAP.md` does not match the current source revision it
 simply runs locally and skips the DevOps close-out; re-run this skill after any change to the
 approved document to keep the loop closed.
@@ -478,7 +550,7 @@ Before returning PUBLISH COMPLETE:
 - [ ] **Unconfirmable steps kept original wording + marked `Needs human review`, run continued**
 - [ ] **Meaning-preservation gate passed — TC count, TC-ID set, expected results all identical**
 - [ ] Every TC published/updated in ADO — idempotent, zero duplicates, Tested-By linked
-- [ ] AutomationStatus = `Planned` at publish; `Custom.TestAutomated` untouched (skill 6's job)
+- [ ] AutomationStatus = `Planned` at publish; `Custom.TestAutomated` untouched (skill 5's job)
 - [ ] `ADO-MAP.md` written with `source_sha256`, one row per TC, reconciled with the previous map
 - [ ] Learning file searched (Index + tag grep) before every ask; answers and ADO template facts
       written back as plain-English tagged lines — no PATs, no code identifiers

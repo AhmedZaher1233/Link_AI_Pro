@@ -20,7 +20,7 @@ Everything else is evidence, not authority:
 | Application code | how the feature is implemented today | proof that behaviour is correct |
 | Observed behaviour (a live run, a Playwright MCP pass) | what the app currently does | an approved expectation |
 | `project-learning.md` entries | accumulated knowledge, of varying provenance | an override of an approved requirement |
-| Skill 7's discovered business rules | rules the code enforces | requirements, until the PO approves them |
+| Skill 11's discovered business rules | rules the code enforces | requirements, until the PO approves them |
 
 **Weigh a learning-file entry, do not rank it.** Judge each by its source (was it a user answer, an
 observation, or a guess?), its approval (did a human confirm it?), and its relevance (same module,
@@ -28,9 +28,9 @@ page, element, locale?). A line that merely records what the app did never outra
 requirement. When a learning line contradicts a requirement, the requirement wins and the
 contradiction is reported.
 
-**Skill 7 findings need approval.** A rule exported by `7-discover-business-rules` is a proposal
+**Skill 11 findings need approval.** A rule exported by `link-qc-11-discover-business-rules` is a proposal
 marked `PENDING PO APPROVAL`. It may be used as an expected result only after the decision block is
-filled and skill 7 has been re-run with `--apply-approved`. Until then it may inform a *question*,
+filled and skill 11 has been re-run with `--apply-approved`. Until then it may inform a *question*,
 never an assertion.
 
 **Conflicts are reported, not resolved.** Where an approved TC and its requirement disagree, say so
@@ -81,11 +81,11 @@ suite-level (`test.describe.skip(...)`).
 | `slow` | Allowed with a reason. It **extends the timeout**; it does not skip anything. Never report a `slow` test as skipped, and never use it to paper over an unexplained slowdown. |
 
 **Targeted runs are preserved** — that is what the runner's own filters are for:
-`--grep` / `--grep-invert`, `--project`, `--last-failed`, `--repeat-each`, and the per-story config.
-Use those. Never edit a test file to focus a run.
+`--grep` / `--grep-invert`, `--project`, `--last-failed`, `--repeat-each`, `--workers` — on the one
+shared config. Use those. Never edit a test file to focus a run, and never reach for `--config`.
 
 **A missing prerequisite must stay visible.** A skipped or blocked test is reported against the
-original scope with its reason, in the phase JSON, the HTML report and the chat summary. It is never
+original scope with its reason, in the run file, the report's phase section and the chat summary. It is never
 removed from the scope, never counted as a pass, and never allowed to disappear from the totals.
 
 ---
@@ -102,6 +102,17 @@ removed from the scope, never counted as a pass, and never allowed to disappear 
   is either known (say it) or unknown (investigate it, don't pad it).
 - These rules apply in every layer. A `waitForTimeout` moved from a spec into a page object is the
   same fixed wait in a different file.
+- **`networkidle` is not a readiness signal** (`waitForLoadState('networkidle')`, `waitUntil:
+  'networkidle'`): it never settles on pages that poll or stream and settles too early on lazy
+  pages. Wait for the loader to hide, for the response that carries the data, or for a web-first
+  assertion on the element the step needs (validator warning `wait-network-idle`; a justified
+  exception is stated on the line above).
+- **Every wait is bounded by the step's deadline** (`helpers/steps.ts`, values from `timeouts.ts`).
+  A visible loader never extends it: a loader that outlives the deadline IS the timeout the step
+  reports, with "loader still visible" as the observed condition.
+- **Timeout values are never inline.** Test budget, step deadline, action, navigation, expect and
+  hook values come from `timeouts.ts`; a known long operation is a named `operations.*` key with
+  its reason beside it. `references/code-craft.md` §9 holds the policy and the calibration rule.
 
 ---
 
@@ -156,16 +167,19 @@ invent, derive or renumber a requirement ID during automation** — skill 2 owns
 TC IDs.
 
 **Requirement IDs belong in the artifacts.** `coverage-summary.csv`, `coverage-detail.csv`,
-`manual-scenarios.csv`, the coverage dashboard and `phase-{N}.json` each carry the requirement ID(s)
+`manual-scenarios.csv`, the Coverage section and `.runs/phase-{N}.json` each carry the requirement ID(s)
 for every row, so Requirement → TC → automated test → execution result is mappable end to end.
 
 **Keep the gaps visible.** Missing, partial, blocked and unexecuted coverage each keep their own
 count. Extend the existing reports; do not replace them.
 
-### Carrying forward skill 3's TC validation states
+### Carrying forward the document's TC validation states
 
 The approved document marks each TC `validated` / `enhanced` / `inferred` / `discrepancy` /
-`not-implemented` / `draft`. Those labels were true when they were written and **may now be stale**.
+`not-implemented` / `draft`. Every state but `draft` comes from the optional
+`link-qc-3b-validate-manual-test-cases` or `link-qc-3c-validate-manual-test-cases-cli`; a document that never went through either is all `draft`, which is
+normal and never a reason to ask for it. Those labels were true when they were written and **may
+now be stale**.
 
 - **Re-verify readiness where you can.** An `inferred` or `draft` TC whose screen you can now reach
   is worth re-checking before you trust its label.

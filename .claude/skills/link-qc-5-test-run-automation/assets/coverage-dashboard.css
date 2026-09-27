@@ -1,3 +1,4 @@
+/* Token source for run-report.template.html; not read at runtime. */
 /* measure-coverage dashboard — "blueprint instrument panel" identity.
    Inline this whole block inside a <style> tag in the standalone HTML.
    Semantic colours (green/amber/red) are reserved ONLY for coverage meaning;

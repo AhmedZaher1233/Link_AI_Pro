@@ -1,4 +1,4 @@
-SKILL: 2-review-requirements
+SKILL: link-qc-2-review-requirements
 WHAT IT DOES: Reviews a requirement / user story / spec for completeness, clarity,
 testability, consistency, feasibility, and risk. Splits multi-story specs and writes one
 folder per User Story (REQ file + review file). Stories taken from a spec FILE are grouped

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // The ONE implementation of QA-skill synchronization from the canonical repository.
-// Used by /sync-skills and by 1-generate-update-testing-structure (Mode B/C, new project).
+// Used by /sync-skills and by link-qc-1-generate-update-testing-structure (Mode B/C, new project).
 //
 //   node sync-qa-skills.mjs --check   [--target <projectRoot>] [--branch main] [--only <skill>]... [--no-mcp] [--pretty]
-//   node sync-qa-skills.mjs --apply   [--target <projectRoot>] [--branch main] [--only <skill>]... [--force] [--no-mcp] [--pretty]
+//   node sync-qa-skills.mjs --apply   [--target <projectRoot>] [--branch main] [--only <skill>]... [--force] [--no-mcp] [--tools] [--pretty]
 //
 // --check  : read-only. Reports NEW / UPDATED / CURRENT / LOCAL-ONLY / SKIPPED(local edits) per file, plus the
 //            planned .mcp.json migration (`mcp.actions`). Never writes.
@@ -12,14 +12,21 @@
 //            An uppercase .claude/Skills folder is migrated to .claude/skills (two-step rename, git mv when possible).
 //            .mcp.json migration (skip with --no-mcp): removes every legacy `word` server (office-word-mcp-server,
 //            read-only comments) and adds/pins the `docx` server (docx-mcp-server, `--with mcp<2`, absolute uvx path).
-//            Only the docx entry and legacy word entries are ever touched; other servers are never changed.
+//            Only the docx entry and legacy word entries are ever touched; other servers are never changed — the
+//            `azure-devops` entry in particular (cloud @azure-devops/mcp or self-hosted @tiberriver256/…) is left
+//            byte-for-byte as it is; scripts/selftest.mjs guards that.
+//            Optional tools (opt-in, --tools): installs @playwright/cli globally, its chromium browser, adds
+//            `.playwright-cli/` to .gitignore (skill 3c), and — only when a Python interpreter already exists —
+//            `pip install pillow numpy` (link-qc-6-ui-testing's static-image annotation fallback). --check always reports the tool
+//            status and the planned actions (`tools.actions`); without --tools nothing is installed — none of it is
+//            a prerequisite for 3b or any other skill.
 //            If the apply updated the sync implementation itself (this script, lib.mjs, the /sync-skills command),
 //            it re-runs ONCE with the new code (internal flag --rerun) and reports both passes — one run is enough.
 // Exit code is always 0; the JSON payload carries the result (and `error` when the source is unreachable).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseArgs, print, run, isDir, isFile, read, actualName, planMcpMigration, resolveUvx, SKILLS, SOURCE_REPO, DOCX_SERVER, DOCX_ARGS, DOCX_MCP_PIN, LEGACY_WORD_PACKAGE } from './lib.mjs';
+import { parseArgs, print, run, isDir, isFile, read, actualName, planMcpMigration, applyMcpMigration, resolveUvx, planTools, SKILLS, SKILL_RENAMES, SOURCE_REPO, DOCX_SERVER, PLAYWRIGHT_CLI_PACKAGE, PLAYWRIGHT_CLI_BIN, PLAYWRIGHT_CLI_IGNORE, PYTHON_PACKAGES } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const mode = args.apply ? 'apply' : 'check';
@@ -27,8 +34,9 @@ const target = path.resolve(args.target || process.cwd());
 const branch = args.branch && args.branch !== true ? args.branch : 'main';
 const only = [].concat(args.only || []).filter((x) => x !== true);
 const wanted = only.length ? SKILLS.filter((s) => only.includes(s)) : SKILLS;
-const OWNED = ['.claude/skills', '.claude/commands/sync-skills.md', `.mcp.json (${DOCX_SERVER} entry + legacy word entries only)`];
+const OWNED = ['.claude/skills', '.claude/commands/sync-skills.md', `.mcp.json (${DOCX_SERVER} entry + legacy word entries only)`, `with --tools: the global ${PLAYWRIGHT_CLI_PACKAGE} package, its chromium browser, the ${PLAYWRIGHT_CLI_IGNORE} line of .gitignore, and the Python packages ${PYTHON_PACKAGES.join(' + ')} when a Python interpreter exists (link-qc-6-ui-testing annotation fallback)`];
 const migrateMcp = !args['no-mcp'];
+const installTools = Boolean(args.tools);
 
 function fail(error, extra = {}) { print({ tool: 'sync-qa-skills', mode, target, source: { repo: SOURCE_REPO, branch }, error, ...extra }, args); process.exit(0); }
 
@@ -97,7 +105,10 @@ if (isFile(cmdSrc)) {
   const localEdits = status === 'UPDATED' && hasLocalEdits('.claude/commands/sync-skills.md');
   files.push({ skill: 'commands', file: '.claude/commands/sync-skills.md', status: localEdits && !args.force ? 'SKIPPED' : status, localEdits, src: cmdSrc });
 }
-const localOnlySkills = existingName ? fs.readdirSync(path.join(targetClaude, existingName)).filter((e) => isDir(path.join(targetClaude, existingName, e)) && !SKILLS.includes(e)) : [];
+const targetSkillDirs = existingName ? fs.readdirSync(path.join(targetClaude, existingName)).filter((e) => isDir(path.join(targetClaude, existingName, e))) : [];
+const localOnlySkills = targetSkillDirs.filter((e) => !SKILLS.includes(e) && !(e in SKILL_RENAMES));
+// Folders from before the link-qc-N naming (or merged into another skill): removed by --apply once the replacement is synced.
+const legacySkills = targetSkillDirs.filter((e) => e in SKILL_RENAMES).map((e) => ({ folder: e, replacement: SKILL_RENAMES[e], action: mode === 'apply' ? 'removed by --apply' : 'legacy (removed by --apply)' }));
 
 // 3b. Plan the .mcp.json migration (legacy word -> docx). Read-only here; applied in step 4.
 const mcp = planMcp();
@@ -107,7 +118,7 @@ function planMcp() {
   if (!migrateMcp) return base;
   let json = { mcpServers: {} };
   if (base.exists) {
-    try { json = JSON.parse(read(file)); } catch { return { ...base, error: 'invalid JSON - .mcp.json not touched; fix it by hand or via 1-generate-update-testing-structure' }; }
+    try { json = JSON.parse(read(file)); } catch { return { ...base, error: 'invalid JSON - .mcp.json not touched; fix it by hand or via link-qc-1-generate-update-testing-structure' }; }
     if (json === null || typeof json !== 'object' || Array.isArray(json)) return { ...base, error: 'unexpected shape - .mcp.json not touched' };
   }
   const plan = planMcpMigration(json);
@@ -116,20 +127,40 @@ function planMcp() {
 }
 function applyMcp() {
   if (!migrateMcp || mcp.error || !mcp.actions.length) return [];
-  const out = [];
-  const json = mcp.json; json.mcpServers = json.mcpServers || {};
-  for (const name of mcp.legacyWord) { delete json.mcpServers[name]; out.push({ action: 'mcp-removed', server: name, reason: `${LEGACY_WORD_PACKAGE} is superseded by ${DOCX_SERVER}` }); }
-  const needsDocx = mcp.actions.some((a) => a.startsWith('add:') || a.startsWith('pin:'));
-  if (needsDocx) {
-    const name = mcp.plan.docxName || DOCX_SERVER;
-    const existing = json.mcpServers[name] || {};
-    const keepCommand = typeof existing.command === 'string' && existing.command !== 'uvx' && isFile(existing.command);
-    json.mcpServers[name] = { ...existing, command: keepCommand ? existing.command : mcp.uvxPath, args: [...DOCX_ARGS] };
-    out.push({ action: mcp.docxPresent ? 'mcp-updated' : 'mcp-added', server: name, command: json.mcpServers[name].command, pin: DOCX_MCP_PIN });
-  }
+  // The JSON mutation lives in lib.mjs (applyMcpMigration) so scripts/selftest.mjs can prove it never touches the
+  // `azure-devops` entry (cloud or self-hosted) or any other server — only docx + legacy word entries.
+  const { json, applied } = applyMcpMigration(mcp.json, mcp.uvxPath);
   fs.writeFileSync(path.join(target, '.mcp.json'), JSON.stringify(json, null, 2) + '\n');
+  return applied;
+}
+
+// 3c. Plan the optional tools — skill 3c's browser CLI and link-qc-6-ui-testing's Python packages (read-only; applied in step 4 only with --tools).
+const tools = { ...planTools(target), requested: installTools, skipped: !installTools };
+function applyTools() {
+  if (!installTools || !tools.actions.length) return [];
+  const out = [];
+  for (const action of tools.actions) {
+    if (action.startsWith('install:')) {
+      const r = run(`npm install -g ${PLAYWRIGHT_CLI_PACKAGE}@latest`, target, 300000);
+      out.push(r.ok ? { action: 'tool-installed', tool: PLAYWRIGHT_CLI_BIN, package: PLAYWRIGHT_CLI_PACKAGE } : { action: 'tool-failed', step: action, error: firstLine(r.out) });
+      if (!r.ok) break; // the browser needs the CLI
+    } else if (action.startsWith('install-browser:')) {
+      const r = run(`${PLAYWRIGHT_CLI_BIN} install-browser`, target, 600000);
+      out.push(r.ok ? { action: 'browser-installed', tool: PLAYWRIGHT_CLI_BIN, browser: 'chromium' } : { action: 'tool-failed', step: action, error: firstLine(r.out) });
+    } else if (action.startsWith('gitignore:')) {
+      const p = path.join(target, '.gitignore');
+      const cur = isFile(p) ? read(p) || '' : '';
+      fs.writeFileSync(p, (cur.length && !cur.endsWith('\n') ? cur + '\n' : cur) + `${PLAYWRIGHT_CLI_IGNORE}\n`);
+      out.push({ action: 'gitignore-added', file: '.gitignore', line: PLAYWRIGHT_CLI_IGNORE });
+    } else if (action.startsWith('pip:')) {
+      // link-qc-6-ui-testing's annotation fallback: only when an interpreter already exists (planTools never plans it otherwise).
+      const r = run(`${tools.python.command} -m pip install ${PYTHON_PACKAGES.join(' ')}`, target, 300000);
+      out.push(r.ok ? { action: 'python-packages-installed', interpreter: tools.python.command, packages: PYTHON_PACKAGES } : { action: 'tool-failed', step: action, error: firstLine(r.out) });
+    }
+  }
   return out;
 }
+function firstLine(s) { return String(s || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) || 'no output'; }
 
 // 4. Apply.
 const applied = [];
@@ -148,14 +179,24 @@ if (mode === 'apply') {
     fs.copyFileSync(f.src, dst);
     applied.push({ action: f.status === 'NEW' ? 'created' : 'updated', file: f.file });
   }
+  for (const l of legacySkills) {
+    const replacementReady = isFile(path.join(targetSkills, l.replacement, 'SKILL.md'));
+    if (!replacementReady) { applied.push({ action: 'legacy-kept', folder: `.claude/skills/${l.folder}`, reason: `replacement ${l.replacement} not synced` }); continue; }
+    const rel = `.claude/skills/${l.folder}`;
+    const useGit = git && run(`git ls-files --error-unmatch -- "${rel}"`, target).ok;
+    if (useGit) run(`git rm -r -q -- "${rel}"`, target);
+    fs.rmSync(path.join(targetSkills, l.folder), { recursive: true, force: true });
+    applied.push({ action: 'legacy-removed', folder: rel, replacement: l.replacement, via: useGit ? 'git rm' : 'fs.rm' });
+  }
   applied.push(...applyMcp());
+  applied.push(...applyTools());
 }
 cleanup();
 
 // 5. Self-update: when this pass refreshed the sync implementation itself (this script, lib.mjs or the
 //    /sync-skills command), the NEW code may sync differently — re-run it ONCE (--rerun guards the loop) so the
 //    user never has to run /sync-skills twice. Both passes are reported in one payload.
-const SELF_FILES = ['.claude/skills/1-generate-update-testing-structure/scripts/sync-qa-skills.mjs', '.claude/skills/1-generate-update-testing-structure/scripts/lib.mjs', '.claude/commands/sync-skills.md'];
+const SELF_FILES = ['.claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs', '.claude/skills/link-qc-1-generate-update-testing-structure/scripts/lib.mjs', '.claude/commands/sync-skills.md'];
 const selfUpdated = applied.filter((a) => SELF_FILES.includes(a.file)).map((a) => a.file);
 let rerunFailed = null;
 if (mode === 'apply' && !args.rerun && selfUpdated.length) {
@@ -181,18 +222,26 @@ const summary = files.reduce((a, f) => ((a[f.status.toLowerCase().replace('-', '
 const skillMdChanged = applied.some((a) => /SKILL\.md$|sync-skills\.md$/.test(a.file || ''));
 const mcpChanged = applied.some((a) => String(a.action).startsWith('mcp-'));
 const { json: _j, plan: _p, ...mcpReport } = mcp;
+const toolsReport = { ...tools, after: mode === 'apply' && installTools ? planTools(target) : null };
+const toolFailed = applied.filter((a) => a.action === 'tool-failed');
 const hints = [];
+if (legacySkills.length) hints.push(`legacy skill folder(s) ${legacySkills.map((l) => l.folder).join(', ')} — renamed in this release; --apply removes each one once its replacement is in place`);
 if (mode === 'check') hints.push('read-only check — nothing copied' + (mcp.actions.length ? `; .mcp.json migration planned: ${mcp.actions.join(', ')} (skip with --no-mcp)` : ''));
 if (mode === 'apply' && files.some((f) => f.status === 'SKIPPED')) hints.push('some files skipped (local edits) — re-run with --force to overwrite');
 if (mcp.error) hints.push(`.mcp.json: ${mcp.error}`);
 if (mcp.uvxFound === false) hints.push('uv not found — the docx entry uses command "uvx"; install uv (powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  or  pip install uv), then re-run so the absolute uvx path is written');
-if (!mcp.exists && migrateMcp && mode === 'apply' && mcpChanged) hints.push('.mcp.json created with the docx entry only — run /1-generate-update-testing-structure for playwright and azure-devops');
-if (mcpChanged) hints.push('.mcp.json changed — reload the Claude Code session and approve the docx server via /mcp');
+if (!mcp.exists && migrateMcp && mode === 'apply' && mcpChanged) hints.push('.mcp.json created with the docx entry only — run /link-qc-1-generate-update-testing-structure for playwright and azure-devops');
+if (mcpChanged) hints.push('.mcp.json changed — reload the Claude Code session and approve the docx server via /mcp (a reload is enough for a server entry; only a NEW environment variable needs a full quit + relaunch of VS Code)');
+if (tools.actions.length && !installTools) hints.push(`tools (skill 3c playwright-cli / link-qc-6-ui-testing pillow+numpy — optional): playwright-cli ${tools.cli.version ? 'installed ' + tools.cli.version : 'not installed'}, python ${tools.python.command ? (tools.python.ready ? 'ready' : 'packages missing') : 'absent'} — planned with --tools: ${tools.actions.join(', ')}; not needed by 3b or any other skill`);
+if (mode === 'apply' && installTools && !tools.actions.length) hints.push('playwright-cli already installed with its browser and the gitignore line' + (tools.python.ready ? ', pillow + numpy present' : '') + ' — skill 3c ready' + (tools.python.ready ? ', link-qc-6-ui-testing annotation fallback ready' : ''));
+if (mode === 'apply' && installTools && tools.actions.length && !toolFailed.length) hints.push('tools installed (' + tools.actions.join(', ') + ') — no session reload needed');
+if (mode === 'apply' && installTools && !tools.python.command) hints.push('no Python interpreter — pillow + numpy not installed (link-qc-6-ui-testing annotates live pages in the DOM without them; install Python 3 and re-run --tools only to annotate static design images)');
+if (toolFailed.length) hints.push(`tool setup failed at ${toolFailed.map((a) => a.step).join(', ')} (${toolFailed.map((a) => a.error).join(' | ')}) — run /link-qc-1-generate-update-testing-structure repair, or use 3b (Playwright MCP) / DOM annotation meanwhile; every skill file was still synced`);
 if (rerunFailed) hints.push(rerunFailed);
 print({
   tool: 'sync-qa-skills', mode, target, source, owned: OWNED, skillsChecked: wanted,
   uppercaseDir: uppercaseDir ? `.claude/${existingName}` : null,
-  files: files.map(({ src, ...rest }) => rest), summary, localOnlySkills, mcp: mcpReport, applied,
+  files: files.map(({ src, ...rest }) => rest), summary, localOnlySkills, legacySkills, mcp: mcpReport, tools: toolsReport, applied,
   reloadRequired: skillMdChanged || mcpChanged,
   hint: hints.length ? hints.join(' | ') : null,
 }, args);

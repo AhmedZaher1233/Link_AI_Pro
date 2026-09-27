@@ -1,0 +1,8 @@
+name: e2e
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npx playwright test --config Testing/Automation/playwright.ci.config.ts
+      # the nightly job also used playwright.us-1234.config.ts before the shared config existed

@@ -1,16 +1,16 @@
 ---
-name: i-have-adhd
-description: 'Shape CHAT output for a reader with ADHD: lead with the next action, number multi-step work, restate state across turns, suppress tangents, give specific time estimates, make wins visible. Enhanced for the Link_AI_Pro QA pipeline (skills 1-7): restates pipeline position, turns every human gate (Status: APPROVED, PO decision, QC readiness, an unresolved compliance item) into ONE next action, reshapes BLOCKED returns as cause -> fix, and NEVER reshapes files the skills write (REQ, TC docs, HTML review pages, ADO-MAP, learning file, reports). Invoke with /i-have-adhd; stays on until "stop adhd mode".'
+name: link-qc-12-adhd-output-style
+description: 'Shape CHAT output for a reader with ADHD: lead with the next action, number multi-step work, restate state across turns, suppress tangents, give specific time estimates, make wins visible. Enhanced for the Link_AI_Pro QA pipeline (skills 1-11, 3b and 3c): restates pipeline position, turns every human gate (Status: APPROVED, PO decision, QC readiness, an unresolved compliance item) into ONE next action, reshapes BLOCKED returns as cause -> fix, and NEVER reshapes files the skills write (REQ, TC docs, HTML review pages, ADO-MAP, learning file, reports). Invoke with /link-qc-12-adhd-output-style; stays on until "stop adhd mode".'
 disable-model-invocation: true
 license: MIT
 metadata:
   tags: "ADHD, Output Style, Productivity, Formatting, QA pipeline"
   category: "productivity"
   upstream: "ayghri/i-have-adhd@i-have-adhd (17.4K installs, MIT) — installed 2026-09-14 as a project-owned copy"
-  project-additions: "section 'QA pipeline overlay (Link_AI_Pro skills 1-7)', break-rule 7, pre-send checks (c)(d), references/qa-pipeline.md"
+  project-additions: "section 'QA pipeline overlay (Link_AI_Pro skills 1-11, 3b and 3c)', break-rule 7, pre-send checks (c)(d), references/qa-pipeline.md"
 ---
 
-# i-have-adhd
+# link-qc-12-adhd-output-style — ADHD chat output style (Link (QC) skill 12)
 
 The reader has ADHD. Output is not just brief. It is shaped so an ADHD brain can act on it.
 
@@ -118,11 +118,14 @@ Forbidden closers: "Let me know if you need anything else," "Hope this helps," "
 
 Start with the answer. End when the answer is done.
 
-## QA pipeline overlay (Link_AI_Pro skills 1-7)
+## QA pipeline overlay (Link_AI_Pro skills 1-11, 3b and 3c)
 
-This project runs a QA pipeline: `1-generate-update-testing-structure` -> `2-review-requirements`
--> (`7-discover-business-rules`) -> `3-generate-manual-test-cases` -> (`4-white-box-testing`)
--> `5-publish-test-cases-azure` -> `6-test-run-automation`. When any of them is running, the ten
+This project runs a QA pipeline: `link-qc-1-generate-update-testing-structure` -> `link-qc-2-review-requirements`
+-> `link-qc-3-generate-manual-test-cases` -> (`link-qc-3b-validate-manual-test-cases`
+or its CLI twin `link-qc-3c-validate-manual-test-cases-cli`, optional) -> human sets APPROVED -> (`link-qc-4-publish-test-cases-azure`,
+optional) / `link-qc-5-test-run-automation` -> the Azure loop (`link-qc-7-sync-tc-status-to-azure`, `link-qc-8-sync-bugs-azure`,
+`link-qc-9-retesting`, all optional); `link-qc-6-ui-testing` (visual UI audit per screen) runs beside the chain at any time and
+gates nothing; `link-qc-10-white-box-testing` and `link-qc-11-discover-business-rules` are the closing code audits (any time after the requirement exists). When any of them is running, the sixteen
 rules above still apply to the CHAT, with these additions. Detail and worked examples:
 `references/qa-pipeline.md`.
 
@@ -140,7 +143,8 @@ skill's required content stays complete.
 ### B. Restate pipeline position, not just step position
 
 Every turn inside a skill opens with one line: skill, phase, story.
-`Skill 3 · Phase 2 of 5 (TC design) · US-1234 Yearly leave · 18 TCs drafted, 0 validated.`
+`Skill 3 · Phase 2 of 4 (TC design) · US-1234 Yearly leave · 18 TCs drafted (all draft — 3b optional).`
+`Skill 3b · Phase 3 of 4 (live walk) · US-1234 Yearly leave · scope FULL · 11/18 observed.`
 Multi-story runs: name the current story and the count (`story 2 of 4`).
 
 ### C. A human gate is THE next action
@@ -149,12 +153,15 @@ The pipeline stops at fixed human gates. When one is reached, the first line of 
 the exact thing the reader must do, with the path, and nothing before it:
 
 - Skill 2 intake gate -> the one question still open after `project-learning.md` was consulted.
-- Skill 3 review page -> `Open {path}.html, review, then set "Status: APPROVED" in {path}.md.`
-- Skill 5 / 6 entry gate -> `Set Status: APPROVED in {path}` (the only document gate for both; publishing to Azure DevOps is optional and never a prerequisite).
-- Skill 6 PHASE 2.6 test-data readiness -> the missing data item and where to add it.
-- Skill 6 Checkpoint A / B -> the one compliance item still unresolved and what would close it (the skill repairs its own code defects; it only surfaces what needs a human).
-- Skill 6 30% smoke failure gate -> the majority failure class and the one decision (continue / stop).
-- Skill 7 PO decision block -> `Open {export path}, fill the decision block, re-run with --apply-approved.`
+- Skill 3 review page -> `Open {path}.html, review, then set "Status: APPROVED" in {path}.md.` (optional before that: `/link-qc-3b-validate-manual-test-cases {path}.md` — never a gate)
+- Skill 3b scope gate -> the one scope choice (FULL / SHARED / CUSTOM) with the recommendation and the TC-IDs it leaves unvalidated; other-validator evidence in scope -> the one cross-validator choice (skip current, re-validate stale). Skill 3c has neither (it walks every TC) -> restate the plan line only. Approved document (3b or 3c) -> the one revision authorization with the list of changes.
+- Skill 3c attended login -> `Log in as {role} in the browser window that just opened, then reply done.` (one per role; the model never sees a password).
+- Skill 4 / 5 entry gate -> `Set Status: APPROVED in {path}` (the only document gate for both; publishing to Azure DevOps is optional and never a prerequisite).
+- Skill 5 PHASE 2.6 test-data readiness -> the missing data item and where to add it.
+- Skill 5 Checkpoint A / B -> the one compliance item still unresolved and what would close it (the skill repairs its own code defects; it only surfaces what needs a human).
+- Skill 5 30% smoke failure gate -> the majority failure class and the one decision (continue / stop).
+- Skill 11 PO decision block -> `Open {export path}, fill the decision block, re-run with --apply-approved.`
+- link-qc-6-ui-testing report -> `Open {report path}; answer the Open Questions (measured values inside) so they become bugs or confirmed rules.` (the one pre-flight ask — languages, role, credentials, environment — comes as a single message before the browser opens)
 
 Never ask "want me to continue?" in place of the gate line. Never flip a status yourself.
 
@@ -166,10 +173,11 @@ Environment failures (VPN, unreachable app, expired credentials) are never phras
 
 ### E. Long runs: progress lines, not prose
 
-Skill 6 live progress is one line per refresh:
+Skill 5 live progress is one line per refresh:
 `Smoke 4/9 · TC-YLVL-012 running · 03:10 elapsed · ETA 04:00 · 0 failed`.
-Skill 3 Playwright discovery and skill 4/7 code discovery: `Validated 7/18 TCs · 2 pending
-implementation` — no narration of each click or file.
+Skill 3b / 3c live validation and skill 10/11 code discovery: `Validated 7/18 · flows 2/3 · 2 pending
+implementation · 1 stale · 0 blocked` (3c appends `· tool cli`) — no narration of each click, command or file.
+link-qc-6-ui-testing measurement: `Regions 8/12 · states 6/11 · widths 3/5 · bugs so far 7 (S2 1 · S3 4 · S4 2)`.
 
 ### F. Lists inside QA output
 
@@ -211,3 +219,5 @@ Before sending, delete:
 Then verify: if the reader reads only the first line and the last line, do they know (a) what to do next, and (b) what just happened? Inside a QA skill, also: (c) which skill / phase / story this is, and (d) did every file the skill must write keep its full template?
 
 If yes, send.
+
+Azure loop (skills 7 to 9): TC outcomes, two-way bug sync with its direction gate, retest. Use the three rows and the grouping/timing guidance in references/qa-pipeline.md. Status example: `link-qc-9 · retest · 2/5 observed · 1 pass, 1 fail, Azure push pending`. Preserve map identities and full summaries; a conflict has one next action: `link-qc-8 --direction azure-to-md`, then re-evaluate.

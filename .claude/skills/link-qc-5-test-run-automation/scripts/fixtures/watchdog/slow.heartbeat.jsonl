@@ -1,0 +1,2 @@
+{"at":"2026-09-20T10:00:00Z","worker":0,"tc":"TC-001","event":"test-start"}
+{"at":"2026-09-20T10:00:05Z","worker":0,"tc":"TC-001","step":"export the yearly report","event":"start","deadline_ms":120000,"note":"the download completes"}

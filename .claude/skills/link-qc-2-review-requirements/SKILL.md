@@ -1,7 +1,7 @@
 ---
-name: 2-review-requirements
+name: link-qc-2-review-requirements
 model: claude-opus-5
-description: Review requirements, user stories, and acceptance criteria for testability, completeness, clarity, consistency, feasibility, and risk. Accepts EVERY input type — an Azure DevOps User Story (via Azure DevOps MCP), a Word document (via the docx MCP — findings are also written back into the .docx as Word review comments, one per finding, and reviewer replies on those comments can be read back into the review), directly pasted text, a small spec file, or a big spec file containing multiple user stories. A multi-story spec is SPLIT: each user story is reviewed separately and its output lands in its own folder — stories that come from a spec FILE are grouped under a parent folder named after that spec, Testing/Requirements/SPEC-{spec-name}/US-{id}-{name}/, while Azure DevOps / Word / pasted-text stories go directly under Testing/Requirements/US-{id}-{name}/ (per the 1-generate-update-testing-structure layout) — holding both the extracted structured requirement file (REQ-*.md) and the review file, plus a SPEC-REVIEW-SUMMARY.md inside the spec folder for cross-story findings. Follows the spec's REQUIREMENT dependencies only: when the spec explicitly refers to other requirement files (another spec or story, a glossary, a permission matrix, story IDs defined elsewhere) it resolves them, reads them, checks the spec against them, and fully reviews any dependency spec that has no review yet in its own SPEC-{dep-name}/ folder. Technical files (source code, API files, configuration, database schemas, data models, technical design documents, infrastructure, automation code) are never read or reviewed — the review stays a requirements review written in simple QA English. Use whenever the user asks to review requirements, review a spec or spec.md, analyze user stories, check acceptance criteria, assess testability, find gaps in specs, or evaluate any PRD/feature document for QA readiness. Trigger on phrases like "review this spec", "review this story", "check requirements", "is this testable", "requirements analysis", "acceptance criteria review", "QA this spec", "QA this story", "review-user-story"; for a Word source also "read the replies", "check comment replies", "pull reviewer answers from the Word file", "sync Word comments".
+description: Review requirements, user stories, and acceptance criteria for testability, completeness, clarity, consistency, feasibility, and risk. Accepts EVERY input type — an Azure DevOps User Story (via Azure DevOps MCP), a Word document (via the docx MCP — findings are also written back into the .docx as Word review comments, one per finding, and reviewer replies on those comments can be read back into the review), directly pasted text, a small spec file, or a big spec file containing multiple user stories. A multi-story spec is SPLIT: each user story is reviewed separately and its output lands in its own folder — stories that come from a spec FILE are grouped under a parent folder named after that spec, Testing/Requirements/SPEC-{spec-name}/US-{id}-{name}/, while Azure DevOps / Word / pasted-text stories go directly under Testing/Requirements/US-{id}-{name}/ (per the link-qc-1-generate-update-testing-structure layout) — holding both the extracted structured requirement file (REQ-*.md) and the review file, plus a SPEC-REVIEW-SUMMARY.md inside the spec folder for cross-story findings. Follows the spec's REQUIREMENT dependencies only: when the spec explicitly refers to other requirement files (another spec or story, a glossary, a permission matrix, story IDs defined elsewhere) it resolves them, reads them, checks the spec against them, and fully reviews any dependency spec that has no review yet in its own SPEC-{dep-name}/ folder. Technical files (source code, API files, configuration, database schemas, data models, technical design documents, infrastructure, automation code) are never read or reviewed — the review stays a requirements review written in simple QA English. Use whenever the user asks to review requirements, review a spec or spec.md, analyze user stories, check acceptance criteria, assess testability, find gaps in specs, or evaluate any PRD/feature document for QA readiness. Trigger on phrases like "review this spec", "review this story", "check requirements", "is this testable", "requirements analysis", "acceptance criteria review", "QA this spec", "QA this story", "review-user-story"; for a Word source also "read the replies", "check comment replies", "pull reviewer answers from the Word file", "sync Word comments".
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__azure-devops, mcp__docx
 argument-hint: "[<story-id> | <feature-name> | <path/to/spec.md> | <path/to/story.md> | <path/to/doc.docx> | <pasted text> | all] [--lang ar|en]"
 ---
@@ -47,7 +47,7 @@ and state what you resolved so the user can override it.
 
 Whatever the language: story IDs, REQ-IDs, file paths and names, rating emojis, `Depends on`
 paths and everything written to the learning file stay Latin / English. `REQ-{id}-{name}.md`
-is **always English** because `3-generate-manual-test-cases` consumes it; only
+is **always English** because `link-qc-3-generate-manual-test-cases` consumes it; only
 `US-{id}-review.md` and `SPEC-REVIEW-SUMMARY.md` follow the chosen language.
 
 ### Step 0.a — Consult `Testing/project-learning.md` BEFORE asking
@@ -61,11 +61,11 @@ Follow the protocol below.
 
 <qa_manifest>
 **Structure contract — read `Testing/qa-manifest.json` first.** Written by
-`1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
+`link-qc-1-generate-update-testing-structure`; it holds the project's QA paths (testing root,
 requirements, manual test cases, automation root, pages, tests, reports, screenshots, logs,
 white-box folder, learning file), the steering file paths, the framework config and every
 documented deviation. Use its paths before any auto-detection; fall back to detection only when
-the manifest is absent, and then tell the user to run `/1-generate-update-testing-structure`
+the manifest is absent, and then tell the user to run `/link-qc-1-generate-update-testing-structure`
 (audit first, then repair) — never invoke that skill yourself. Steering conflicts resolve per
 the rules in `docs/steering/README.md` (L1 baseline, L2 refines, L3 values + stricter +
 approved exemptions; specs govern business truth, steering governs quality policy, the learning
@@ -73,10 +73,10 @@ file overrides neither). Behaviour knowledge stays in `Testing/project-learning.
 </qa_manifest>
 
 <project_learning_file>
-**Project Learning File protocol — shared by skills 1-7 (read first, ask second, write back).**
+**Project Learning File protocol — shared by skills 1-11, 3b and 3c (read first, ask second, write back).**
 
 `Testing/project-learning.md` is the plain-English knowledge base for ALL QA skills
-(created by `1-generate-update-testing-structure`). This skill's section is
+(created by `link-qc-1-generate-update-testing-structure`). This skill's section is
 `### Requirements Review Model (skill 2)`. If `Testing/` exists but the file does not,
 create it with the skeleton defined in skill 1, section 2.
 
@@ -160,7 +160,7 @@ The requirement is the source of truth (the oracle) whichever way it arrives:
 
 | Source | How to read |
 |--------|-------------|
-| **Azure DevOps User Story** (ID like `1031475` / `US-1031475`, or exact title) | Fetch via the Azure DevOps MCP (`wit_work_item` / `search_workitem`): title, description, acceptance criteria, linked items. Title given → resolve to exactly one ID; zero or multiple matches → ask the user (show candidates), never guess. On **401/403** STOP and report: 401 → the Azure DevOps MCP server is holding a rejected or stale token → ask the user to **reconnect the Azure DevOps MCP server** (`/mcp` → azure-devops → reconnect; if the PAT itself expired they renew it first where the server reads it from) — you cannot connect or disconnect MCP servers yourself, so always ask and wait, then retry once; 403 → missing scope on the PAT. Never ask for the token in chat |
+| **Azure DevOps User Story** (ID like `1031475` / `US-1031475`, or exact title) | Fetch via the Azure DevOps MCP — read the work item by ID, or search work items by exact title: cloud server (`@azure-devops/mcp`) `wit_get_work_item` / `search_workitem`; self-hosted Azure DevOps Server (`@tiberriver256/mcp-server-azure-devops`) `get_work_item` / `search_work_items` — use whichever the attached server exposes. Read title, description, acceptance criteria, linked items. Title given → resolve to exactly one ID; zero or multiple matches → ask the user (show candidates), never guess. On **401/403** STOP and report: **401 or "anonymous access" (`TF400813`)** → the PAT variable is empty in the MCP server's process (VS Code was not fully restarted after the variable was created) → ask the user to **fully quit VS Code (all windows) and relaunch** — a window reload or an `/mcp` reconnect does not help; still 401 after that → the token expired or was revoked → they re-run `set-azure-devops-pat.ps1` / `.sh` (skill 1) and relaunch again. You cannot connect or disconnect MCP servers yourself, so always ask and wait, then retry once; 403 → missing scope on the PAT. Never ask for the token in chat |
 | **Word document** (`.docx` path or reference) | Read via the docx MCP: `open_document(path, document_handle)` first (one unique handle per document), then `export_markdown` — or `get_body_text` when markdown export fails — as the review material, and `get_document_outline` / `get_headings` to detect story boundaries for Multi-Story Splitting. Then run *Embedded figures* below before rating. The same document later receives the findings as Word comments (*Word write-back* below). If the `docx` MCP is not attached, ask the user to export to markdown/text or paste the content (then no write-back is possible — say so) |
 | **Direct text** (requirement/PRD pasted inline) | Use the provided content directly |
 | **Small spec file** (one user story) | Read the file directly |
@@ -309,7 +309,7 @@ Then:
 
 ---
 
-## Output Location — `1-generate-update-testing-structure` layout
+## Output Location — `link-qc-1-generate-update-testing-structure` layout
 
 All output goes under `Testing/Requirements/`, **one folder per user story**. Stories that
 come from a spec FILE are grouped under a parent folder named after that spec
@@ -339,13 +339,13 @@ Rules:
    `{story-folder}` below means `Testing/Requirements/[SPEC-{spec-name}/]US-{id}-{name}/`.
 1. Folder name: `US-{id}-{kebab-case-story-name}` (no ID available → `{kebab-case-story-name}`).
    Create the folder if missing. If `Testing/` does not exist, run the
-   `1-generate-update-testing-structure` skill first or create the needed subtree —
+   `link-qc-1-generate-update-testing-structure` skill first or create the needed subtree —
    **never fall back to `test/reviews/`** or any other location.
 2. **Structured requirement file** `REQ-{id}-{name}.md` — written whenever the source was
    Azure DevOps, Word, direct text, or a split section of a big spec. Contents: title,
    story ID, source reference, description, numbered acceptance criteria, derived
    requirement IDs (`REQ-{id}-NN`, one per testable statement), roles, out-of-scope notes,
-   open questions. This is the same file the `3-generate-manual-test-cases` skill consumes,
+   open questions. This is the same file the `link-qc-3-generate-manual-test-cases` skill consumes,
    so it is **always written in English**, whatever `output_language` is — an Arabic source is
    translated faithfully (same ACs, same order, nothing added or dropped; Arabic UI labels the
    requirement quotes may be kept verbatim in parentheses).
@@ -726,7 +726,7 @@ the spec folder `Testing/Requirements/SPEC-{spec-name}/` (spec-file input) ·
 per-story folder paths + verdicts · summary file path (multi-story) · the output language
 used for the review files and how it was resolved (task input / reused from the learning
 file / asked / default) · that the `REQ-*.md` files are English and ready as input for the
-`3-generate-manual-test-cases` skill · for a `.docx` source: `figures checked: {N} ({M} mismatches | none)`,
+`link-qc-3-generate-manual-test-cases` skill · for a `.docx` source: `figures checked: {N} ({M} mismatches | none)`,
 the number of Word comments written
 and the target path (copy or original) — or, for a reply-sync run, threads read / answered /
 accepted / rejected / pending and which comments were resolved or replied to · and

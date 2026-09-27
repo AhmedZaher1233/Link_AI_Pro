@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 
 /* ---------------- argv + output (copied verbatim from skill 1's lib.mjs) ----------------
    Not imported across skill folders: /sync-skills copies one skill folder at a time,
-   so skill 6 must run even when skill 1 is not present. */
+   so skill 5 must run even when skill 1 is not present. */
 
 export function parseArgs(argv) {
   const out = { _: [] };

@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<!-- MIRROR — byte-identical copies live in the sibling skill folders
+     (link-qc-3-generate-manual-test-cases ↔ link-qc-3b-validate-manual-test-cases ↔ link-qc-3c-validate-manual-test-cases-cli, each under assets/). Edit all three;
+     scripts/selftest.mjs case 0 sha256-compares every mirrored file.
+     TC review page template. RENDERED ONLY BY scripts/render-tc-review.mjs — never filled by hand.
+     The renderer inserts its provenance comment as line 2 of the output (source / data / strings
+     sha256 + a self-hash) and recomputes every number from the markdown tables; the markdown is
+     the source of truth and this page never adds, rewords or reorders content.
+     Placeholders: double-brace snake_case keys only (HTML-escaped). Blocks are HTML comments
+     carrying #each / #if / #unless openers and the matching closers (see references/html-page.md).
+     Keep the CSS as it is: the tokens, the gauge and the chip/bar grammar match
+     link-qc-5-test-run-automation/assets/coverage-dashboard.css so both stages read the same way.
+     Self-contained: no external requests, ever. Never render a password, token, selector or code
+     identifier on this page. LANGUAGE: the html lang / dir attributes come from the renderer
+     ("en"/"ltr" or "ar"/"rtl"); the CSS uses logical properties so the layout mirrors by itself. IDs, paths,
+     usernames, URLs, dates and the Status keyword stay Latin inside <span class="ltr">. -->
+<html lang="{{lang}}" dir="{{dir}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test Cases — {{feature}}</title>
+<style>
+/* Light palette on bare :root; dark redefines the same tokens. Semantic colours (green/amber/
+   red/orange/purple/blue) carry meaning only — the accent is structural. */
+:root {
+  --ground: #F6F8FB; --panel: #FFFFFF; --panel-2: #EFF3F9; --line: #D7DFEA;
+  --text: #16223A; --muted: #5B6E8A; --accent: #4A5BD4;
+  --green: #1F9D40; --amber: #B98207; --red: #D24B32; --orange: #C2660C;
+  --purple: #7A4FD0; --blue: #1F6FD0;
+  --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Tahoma, "Noto Sans Arabic", "Noto Naskh Arabic", Roboto, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0E1726; --panel: #16223A; --panel-2: #1C2C49; --line: #2A3C5E;
+    --text: #E6EDF5; --muted: #8195B0; --accent: #7C8CF8;
+    --green: #3FB950; --amber: #E3B341; --red: #F0664E; --orange: #E08A3C;
+    --purple: #A98BF5; --blue: #58A6FF;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0E1726; --panel: #16223A; --panel-2: #1C2C49; --line: #2A3C5E;
+  --text: #E6EDF5; --muted: #8195B0; --accent: #7C8CF8;
+  --green: #3FB950; --amber: #E3B341; --red: #F0664E; --orange: #E08A3C;
+  --purple: #A98BF5; --blue: #58A6FF;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--text); font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: clamp(20px, 4vw, 56px) clamp(16px, 4vw, 40px) 64px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
+h1 { font-weight: 800; font-size: clamp(26px, 5vw, 42px); letter-spacing: -0.02em; line-height: 1.05; margin: 0 0 10px; }
+.sub { color: var(--muted); font-size: 14px; max-width: 70ch; margin: 0 0 12px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 26px; }
+.meta b { color: var(--text); font-weight: 600; }
+.banner { border: 1px solid var(--line); border-inline-start: 4px solid var(--amber); background: var(--panel); border-radius: 10px; padding: 14px 18px; margin-bottom: 26px; }
+.banner.impl { border-inline-start-color: var(--orange); }
+.banner b { font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase; font-size: 12px; }
+/* ---- Tiles ---- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 28px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.tile b { display: block; font-family: var(--mono); font-size: 26px; font-weight: 700; line-height: 1; }
+.tile span { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+/* ---- Coverage hero (same grammar as skill 5's dashboard) ---- */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: clamp(20px, 4vw, 44px); align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: clamp(24px, 4vw, 40px); margin-bottom: 28px; }
+.gauge-wrap { display: flex; justify-content: center; }
+/* --p = Fully Covered share of ACs, --q = Fully + Partially share */
+.gauge { --p: {{full_pct}}; --q: {{full_plus_partial_pct}}; width: clamp(170px, 40vw, 220px); aspect-ratio: 1; border-radius: 50%; background: conic-gradient(var(--green) 0 calc(var(--p) * 1%), var(--amber) 0 calc(var(--q) * 1%), var(--red) 0 100%); display: grid; place-items: center; position: relative; }
+.gauge::after { content: ""; position: absolute; inset: 18%; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); }
+.gauge-num { position: relative; z-index: 1; text-align: center; }
+.gauge-num b { display: block; font-family: var(--mono); font-size: clamp(30px, 8vw, 44px); font-weight: 700; line-height: 1; }
+.gauge-num span { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
+.legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.chip { background: var(--panel-2); border: 1px solid var(--line); border-inline-start-width: 4px; border-radius: 8px; padding: 12px 14px; }
+.chip.full { border-inline-start-color: var(--green); } .chip.partial { border-inline-start-color: var(--amber); } .chip.none { border-inline-start-color: var(--muted); }
+.chip b { font-family: var(--mono); font-size: 22px; font-weight: 700; display: block; line-height: 1; }
+.chip span { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+/* ---- Per-AC depth bars ---- */
+.story { margin-bottom: 18px; }
+.story-top { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.story-id { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+.story-name { font-size: 14px; font-weight: 600; }
+.story-pct { margin-inline-start: auto; font-family: var(--mono); font-size: 16px; font-weight: 700; }
+.bar { display: flex; height: 28px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); background: var(--panel-2); }
+.seg { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.seg.happy { background: var(--green); } .seg.neg { background: var(--blue); } .seg.loc { background: var(--purple); } .seg.missing { background: transparent; }
+.seg b { font-family: var(--mono); font-size: 11px; font-weight: 700; color: #0B1320; padding: 0 5px; white-space: nowrap; }
+/* ---- Sections ---- */
+section { margin-top: 40px; }
+.sec-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 22px; }
+.sec-head h2 { font-size: 13px; font-family: var(--mono); letter-spacing: 0.2em; text-transform: uppercase; font-weight: 600; margin: 0; }
+.sec-head .note { color: var(--muted); font-size: 13px; margin-inline-start: auto; }
+/* ---- Tables: always scroll inside their own container ---- */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+th, td { text-align: start; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+tr.gap td { background: color-mix(in srgb, var(--red) 12%, transparent); }
+tr.prio-high td:first-child { border-inline-start: 4px solid var(--red); }
+tr.prio-medium td:first-child { border-inline-start: 4px solid var(--amber); }
+tr.prio-low td:first-child { border-inline-start: 4px solid var(--muted); }
+/* ---- Badges ---- */
+.badge { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--muted); white-space: nowrap; }
+.badge.type { color: var(--text); }
+.badge.smoke { border-color: var(--red); color: var(--red); }
+.badge.auto-yes { border-color: var(--green); color: var(--green); }
+.badge.auto-no { border-color: var(--muted); }
+.badge.v-validated { border-color: var(--green); color: var(--green); }
+.badge.v-enhanced { border-color: var(--blue); color: var(--blue); }
+.badge.v-inferred { border-color: var(--purple); color: var(--purple); }
+.badge.v-discrepancy { border-color: var(--amber); color: var(--amber); }
+.badge.v-notimpl { border-color: var(--orange); color: var(--orange); }
+.badge.v-draft { border-color: var(--muted); }
+.badge.run { border-style: dashed; }
+/* test-data statuses — same four words as TEST-DATA-{feature}.md and skill 5 */
+.badge.d-ready { border-color: var(--green); color: var(--green); }
+.badge.d-missing { border-color: var(--amber); color: var(--amber); }
+.badge.d-impossible { border-color: var(--red); color: var(--red); }
+.badge.d-unknown { border-color: var(--muted); }
+/* ---- TC cards ---- */
+details.tc { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; }
+details.tc > summary { cursor: pointer; padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; list-style: none; }
+details.tc > summary::-webkit-details-marker { display: none; }
+.tc-id { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent); }
+.tc-desc { font-size: 14px; flex: 1 1 260px; min-width: 0; }
+.tc-body { padding: 0 16px 18px; border-top: 1px solid var(--line); }
+.tc-body h4 { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+.tc-body ol, .tc-body ul { margin: 0; padding-inline-start: 22px; font-size: 13.5px; }
+.tc-body li { margin-bottom: 6px; }
+.caption { border-inline-start: 3px solid var(--purple); background: var(--panel-2); border-start-start-radius: 0; border-end-start-radius: 0; border-start-end-radius: 8px; border-end-end-radius: 8px; padding: 9px 13px; font-size: 12.5px; margin: 12px 0 0; }
+.caption.discrepancy { border-inline-start-color: var(--amber); }
+.caption.notimpl { border-inline-start-color: var(--orange); }
+.notes { border: 1px dashed var(--line); border-radius: 8px; padding: 12px 14px; color: var(--muted); font-size: 12.5px; margin-top: 16px; }
+.oracle { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 13px; }
+/* ---- Findings ---- */
+.findings { background: var(--panel); border: 1px solid var(--line); border-inline-start: 4px solid var(--red); border-radius: 12px; padding: 18px 20px; }
+.findings h3 { font-size: 13px; font-family: var(--mono); letter-spacing: 0.14em; text-transform: uppercase; margin: 20px 0 8px; }
+.findings h3:first-child { margin-top: 0; }
+.findings.gaps { border-inline-start-color: var(--amber); }
+.findings.pending { border-inline-start-color: var(--orange); }
+.findings.env { border-inline-start-color: var(--blue); }
+.findings.unclear { border-inline-start-color: var(--purple); }
+/* ---- Direction: the page direction comes from <html dir="{{dir}}">; logical properties above mirror the layout.
+   Latin tokens (IDs, paths, usernames, URLs, dates, Status) always sit in .ltr so they read correctly inside Arabic text. ---- */
+.ltr, code { direction: ltr; unicode-bidi: isolate; }
+.ltr { display: inline-block; }
+/* Arabic has no upper case and breaks under wide tracking — switch both off on an RTL page. */
+[dir="rtl"] .eyebrow, [dir="rtl"] .meta, [dir="rtl"] .banner b, [dir="rtl"] .tile span, [dir="rtl"] .chip span,
+[dir="rtl"] .gauge-num span, [dir="rtl"] .sec-head h2, [dir="rtl"] th, [dir="rtl"] .badge, [dir="rtl"] .tc-body h4,
+[dir="rtl"] .findings h3 { letter-spacing: 0; text-transform: none; }
+[dir="rtl"] h1 { letter-spacing: 0; }
+footer { margin-top: 44px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+footer code { font-family: var(--mono); color: var(--text); }
+@media (max-width: 760px) { .hero { grid-template-columns: 1fr; } .legend { grid-template-columns: 1fr; } }
+/* ---- Renderer additions: consistency warning, Arabic preview, stale evidence, potential bugs, open questions ---- */
+.warn-strip { border: 1px solid var(--red); background: color-mix(in srgb, var(--red) 10%, var(--panel)); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 13px; }
+.preview-banner { border: 2px dashed var(--amber); background: color-mix(in srgb, var(--amber) 12%, var(--panel)); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-weight: 600; }
+.untranslated { outline: 1px dashed var(--amber); outline-offset: 2px; direction: ltr; unicode-bidi: isolate; display: inline-block; }
+.badge.stale { border-color: var(--red); color: var(--red); border-style: dashed; }
+.badge.orphan { border-color: var(--red); color: var(--red); }
+.caption.stale { border-inline-start-color: var(--red); }
+.caption.draft { border-inline-start-color: var(--muted); }
+.caption.orphan { border-inline-start-color: var(--red); }
+.evidence { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+.gauge-caption { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; grid-column: 1 / -1; }
+.pb-card, .q-card { background: var(--panel); border: 1px solid var(--line); border-inline-start: 4px solid var(--amber); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; }
+.pb-card.resolved { border-inline-start-color: var(--green); opacity: 0.8; }
+.pb-card.not-checked { border-inline-start-color: var(--muted); }
+.q-card { border-inline-start-color: var(--purple); }
+.pb-head, .q-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; margin-bottom: 8px; }
+.pb-head h3, .q-head h3 { font-size: 15px; margin: 0; }
+.pb-card dl, .q-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 13.5px; }
+.pb-card dt, .q-card dt { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.pb-card dd, .q-card dd { margin: 0; }
+.pb-card ol { margin: 0; padding-inline-start: 20px; }
+.pb-meta { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+[dir="rtl"] .pb-card dt, [dir="rtl"] .q-card dt { letter-spacing: 0; text-transform: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">{{eyebrow}}</p>
+  <h1>{{feature}}</h1>
+<!-- {{#if has_scope}} -->
+  <p class="sub">{{{scope}}}</p>
+<!-- {{/if}} -->
+  <div class="meta">
+    <span><b>{{l_status}}</b> <span class="ltr">{{status}}</span></span>
+    <span><b>{{l_generated}}</b> <span class="ltr">{{generated}}</span></span>
+    <span><b>{{l_language}}</b> {{lang_word}}</span>
+    <span><b>{{l_entry}}</b> {{{entry}}}</span>
+    <span><b>{{l_reqids}}</b> <span class="ltr">{{req_ids}}</span></span>
+    <span><b>{{l_source}}</b> <span class="ltr">TEST-CASES-{{feature}}.md</span> {{l_source_note}}</span>
+<!-- {{#if has_stamp}} -->
+    <span><b>{{l_validation}}</b> {{val_by}} <span class="ltr">{{stamp_date}}</span> · {{val_scope}} <span class="ltr">{{stamp_scope}}</span></span>
+<!-- {{/if}} -->
+<!-- {{#unless has_stamp}} -->
+    <span><b>{{l_validation}}</b> {{val_none}}</span>
+<!-- {{/unless}} -->
+  </div>
+
+<!-- {{#if arabic_incomplete}} -->
+  <div class="preview-banner">{{preview_banner}} (<span class="ltr">{{outstanding_count}}</span>)</div>
+<!-- {{/if}} -->
+<!-- {{#if has_mismatch}} -->
+  <div class="warn-strip"><b>!</b> {{warn_strip}} (<span class="ltr">{{mismatch_count}}</span>)</div>
+<!-- {{/if}} -->
+
+<!-- {{#if pending}} -->
+  <div class="banner"><b>{{banner_pending_title}}</b> — {{banner_pending_text}}</div>
+<!-- {{/if}} -->
+<!-- {{#if approved}} -->
+  <div class="banner"><b>{{banner_approved_title}}</b> — {{banner_approved_text}}</div>
+<!-- {{/if}} -->
+<!-- {{#if show_impl}} -->
+  <div class="banner impl"><b>{{banner_impl_title}}</b> — {{{impl_text}}}</div>
+<!-- {{/if}} -->
+
+  <div class="tiles">
+    <div class="tile"><b>{{n_total}}</b><span>{{t_tcs}}</span></div>
+    <div class="tile"><b>{{n_happy}}/{{n_edge}}/{{n_negative}}</b><span>{{t_types}}</span></div>
+    <div class="tile"><b>{{n_per_locale}}</b><span>{{t_locale}} (<span class="ltr">{{locales}}</span>)</span></div>
+    <div class="tile"><b>{{n_smoke}}</b><span>{{t_smoke}}</span></div>
+    <div class="tile"><b>{{n_auto}}</b><span>{{t_auto}}</span></div>
+    <div class="tile"><b>{{v_breakdown}}</b><span>{{t_validation}}</span></div>
+    <div class="tile"><b>{{progress_tile}}</b><span>{{t_progress}} ({{progress_pct}})</span></div>
+    <div class="tile"><b>{{data_tile}}</b><span>{{t_data}}</span></div>
+    <div class="tile"><b>{{bugs_tile}}</b><span>{{t_bugs}}</span></div>
+  </div>
+
+  <div class="hero">
+    <div class="gauge-wrap">
+      <div class="gauge"><div class="gauge-num"><b>{{weighted_pct}}</b><span>{{gauge_label}}</span></div></div>
+    </div>
+    <div class="legend">
+      <div class="chip full"><b>{{n_full}}</b><span>{{chip_full}}</span></div>
+      <div class="chip partial"><b>{{n_partial}}</b><span>{{chip_partial}}</span></div>
+      <div class="chip none"><b>{{n_none}}</b><span>{{chip_none}}</span></div>
+    </div>
+    <p class="gauge-caption">{{gauge_caption}}</p>
+  </div>
+
+<!-- {{#if has_coverage}} -->
+  <section>
+    <div class="sec-head"><h2>{{s_depth}}</h2><span class="note">{{s_depth_note}}</span></div>
+<!-- {{#each acs}} -->
+    <div class="story">
+      <div class="story-top"><span class="story-id ltr">{{req}}</span><span class="story-name">{{{ac}}}</span><span class="story-pct">{{status_word}}</span></div>
+      <div class="bar">
+        <div class="seg happy" style="flex: {{w1}}"><b>{{seg_happy}} {{happy}}</b></div>
+        <div class="seg neg" style="flex: {{w2}}"><b>{{seg_neg}} {{neg}}</b></div>
+        <div class="seg loc" style="flex: {{w3}}"><b>{{seg_loc}} {{loc}}</b></div>
+<!-- {{#if has_missing}} -->
+        <div class="seg missing" style="flex: {{w4}}"><b>{{seg_missing}}: {{{missing}}}</b></div>
+<!-- {{/if}} -->
+      </div>
+    </div>
+<!-- {{/each}} -->
+  </section>
+<!-- {{/if}} -->
+
+<!-- {{#if has_trace}} -->
+  <section>
+    <div class="sec-head"><h2>{{s_trace}}</h2><span class="note">{{s_trace_note}}</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>{{h_ac}}</th><th>{{h_req}}</th><th>{{h_tcs}}</th><th>{{h_status}}</th><th>{{h_missing}}</th></tr></thead>
+      <tbody>
+<!-- {{#each trace}} -->
+<!-- {{#if gap}} -->
+        <tr class="gap"><td>{{{ac}}}</td><td><span class="ltr">{{req}}</span></td><td><span class="ltr">{{tcs}}</span></td><td>{{status}}</td><td>{{{missing}}}</td></tr>
+<!-- {{/if}} -->
+<!-- {{#unless gap}} -->
+        <tr><td>{{{ac}}}</td><td><span class="ltr">{{req}}</span></td><td><span class="ltr">{{tcs}}</span></td><td>{{status}}</td><td>{{{missing}}}</td></tr>
+<!-- {{/unless}} -->
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+  </section>
+<!-- {{/if}} -->
+
+  <section>
+    <div class="sec-head"><h2>{{s_manual}}</h2><span class="note"><span class="ltr">{{n_manual}}</span> · High <span class="ltr">{{n_manual_high}}</span> · Medium <span class="ltr">{{n_manual_medium}}</span> · Low <span class="ltr">{{n_manual_low}}</span></span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>{{h_category}}</th><th>{{h_tcid}}</th><th>{{h_scenario}}</th><th>{{h_why_manual}}</th><th>{{h_priority}}</th></tr></thead>
+      <tbody>
+<!-- {{#each manual}} -->
+        <tr class="{{prio_class}}"><td>{{{category}}}</td><td><span class="ltr">{{tc}}</span></td><td>{{{scenario}}}</td><td>{{{why}}}</td><td>{{priority}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+  </section>
+
+<!-- {{#if has_data}} -->
+  <section>
+    <div class="sec-head"><h2>{{s_data}}</h2><span class="note"><span class="ltr">{{n_data}}</span> · <span class="ltr">{{n_ready}}</span> / <span class="ltr">{{n_missing}}</span> / <span class="ltr">{{n_impossible}}</span> / <span class="ltr">{{n_unknown}}</span> — {{s_data_note}} <span class="ltr">TEST-DATA-{{feature}}.md</span></span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>{{h_num}}</th><th>{{h_item}}</th><th>{{h_look}}</th><th>{{h_used}}</th><th>{{h_status}}</th><th>{{h_way}}</th></tr></thead>
+      <tbody>
+<!-- {{#each data_items}} -->
+        <tr><td><span class="ltr">{{num}}</span></td><td>{{{name}}}</td><td>{{{look}}}</td><td><span class="ltr">{{used}}</span></td><td><span class="badge {{d_class}}">{{status}}</span></td><td>{{{way}}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{#if problems}} -->
+    <div class="tablewrap" style="margin-top:14px"><table>
+      <thead><tr><th>{{h_num}}</th><th>{{h_item}}</th><th>{{h_problem}}</th><th>{{h_why}}</th><th>{{h_decision}}</th></tr></thead>
+      <tbody>
+<!-- {{#each problems}} -->
+        <tr class="prio-high"><td><span class="ltr">{{num}}</span></td><td><span class="ltr">{{item}}</span></td><td>{{{problem}}}</td><td>{{{why}}}</td><td>{{{decision}}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+  </section>
+<!-- {{/if}} -->
+
+<!-- {{#if has_existing}} -->
+  <section>
+    <div class="sec-head"><h2>{{s_existing}}</h2></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>{{h_original}}</th><th>{{h_disposition}}</th><th>{{h_reason}}</th></tr></thead>
+      <tbody>
+<!-- {{#each existing}} -->
+        <tr><td><span class="ltr">{{original}}</span></td><td>{{{disposition}}}</td><td>{{{reason}}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+  </section>
+<!-- {{/if}} -->
+
+  <section>
+    <div class="sec-head"><h2>{{s_tcs}}</h2><span class="note">{{s_tcs_note}}</span></div>
+<!-- {{#each tcs}} -->
+    <details class="tc" id="{{id}}">
+      <summary>
+        <span class="tc-id ltr">{{id}}</span>
+        <span class="tc-desc">{{{description}}}</span>
+        <span class="badge type">{{type}}</span>
+        <span class="badge"><span class="ltr">{{locale}}</span></span>
+        <span class="badge"><span class="ltr">{{stage}}</span></span>
+<!-- {{#if smoke}} -->
+        <span class="badge smoke">{{b_smoke}}</span>
+<!-- {{/if}} -->
+<!-- {{#if auto_yes}} -->
+        <span class="badge auto-yes">{{b_auto_yes}}</span>
+<!-- {{/if}} -->
+<!-- {{#if auto_no}} -->
+        <span class="badge auto-no">{{b_auto_no}}</span>
+<!-- {{/if}} -->
+        <span class="badge {{v_class}}">{{v_word}}</span>
+<!-- {{#if stale}} -->
+        <span class="badge stale">{{b_stale}}</span>
+<!-- {{/if}} -->
+<!-- {{#if orphan}} -->
+        <span class="badge orphan">{{b_orphan}}</span>
+<!-- {{/if}} -->
+<!-- {{#if has_run}} -->
+        <span class="badge run">{{{run}}}</span>
+<!-- {{/if}} -->
+      </summary>
+      <div class="tc-body">
+<!-- {{#if is_inferred}} -->
+        <p class="caption">{{cap_inferred}}</p>
+<!-- {{/if}} -->
+<!-- {{#if is_discrepancy}} -->
+        <p class="caption discrepancy">{{cap_discrepancy}}</p>
+<!-- {{/if}} -->
+<!-- {{#if is_notimpl}} -->
+        <p class="caption notimpl">{{cap_notimpl}}</p>
+<!-- {{/if}} -->
+<!-- {{#if is_draft}} -->
+        <p class="caption draft">{{cap_draft}}</p>
+<!-- {{/if}} -->
+<!-- {{#if stale}} -->
+        <p class="caption stale">{{cap_stale}}</p>
+<!-- {{/if}} -->
+<!-- {{#if orphan_summary}} -->
+        <p class="caption orphan">{{cap_orphan_summary}}</p>
+<!-- {{/if}} -->
+<!-- {{#if orphan_section}} -->
+        <p class="caption orphan">{{cap_orphan_section}}</p>
+<!-- {{/if}} -->
+        <h4>{{tc_requirement}}</h4><p><span class="ltr">{{requirement}}</span></p>
+        <h4>{{tc_pre}}</h4><ul>
+<!-- {{#each preconditions}} -->
+          <li>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ul>
+        <h4>{{tc_steps}}</h4><ol>
+<!-- {{#each steps}} -->
+          <li>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ol>
+        <h4>{{tc_expected}}</h4><p>{{{expected}}}</p>
+<!-- {{#if has_oracle}} -->
+        <h4>{{tc_oracle}}</h4><p class="oracle">{{{oracle}}}</p>
+<!-- {{/if}} -->
+        <h4>{{tc_run}}</h4>
+<!-- {{#if has_run}} -->
+        <p>{{{run}}}</p>
+<!-- {{/if}} -->
+<!-- {{#unless has_run}} -->
+        <p>{{tc_infer}}</p>
+<!-- {{/unless}} -->
+<!-- {{#if has_evidence}} -->
+        <p class="evidence">{{tc_evidence}}: {{ev_on}} <span class="ltr">{{evidence_on}}</span> · {{ev_env}} <span class="ltr">{{evidence_env}}</span> · {{ev_build}} <span class="ltr">{{evidence_build}}</span> · {{ev_scope}} <span class="ltr">{{evidence_scope}}</span></p>
+<!-- {{/if}} -->
+        <p class="notes">{{tc_notes}} ______________________________________________</p>
+      </div>
+    </details>
+<!-- {{/each}} -->
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>{{s_log}}</h2><span class="note">{{s_log_note}}</span></div>
+<!-- {{#if has_log}} -->
+    <div class="tablewrap"><table>
+      <thead><tr>
+<!-- {{#each log_header}} -->
+        <th>{{{text}}}</th>
+<!-- {{/each}} -->
+      </tr></thead>
+      <tbody>
+<!-- {{#each log_rows}} -->
+        <tr>
+<!-- {{#each cells}} -->
+          <td>{{{text}}}</td>
+<!-- {{/each}} -->
+        </tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+<!-- {{#unless has_log}} -->
+    <p class="sub">{{none}}</p>
+<!-- {{/unless}} -->
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>{{s_bugs}}</h2><span class="note">{{s_bugs_note}}</span></div>
+<!-- {{#each bugs}} -->
+    <div class="pb-card {{status}}">
+      <div class="pb-head"><span class="tc-id ltr">{{id}}</span><h3>{{{title}}}</h3><span class="badge">{{status_word}}</span></div>
+      <dl>
+        <dt>{{pb_tc}}</dt><dd><span class="ltr">{{tc}}</span></dd>
+        <dt>{{pb_steps}}</dt><dd><ol>
+<!-- {{#each steps}} -->
+          <li>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ol></dd>
+        <dt>{{pb_expected}}</dt><dd>{{{expected}}}</dd>
+        <dt>{{pb_actual}}</dt><dd>{{{actual}}}</dd>
+      </dl>
+      <p class="pb-meta">{{pb_first}} <span class="ltr">{{first}}</span> · {{pb_last}} <span class="ltr">{{last}}</span></p>
+    </div>
+<!-- {{/each}} -->
+<!-- {{#unless has_bugs}} -->
+    <p class="sub">{{none}}</p>
+<!-- {{/unless}} -->
+  </section>
+
+<!-- {{#if has_questions}} -->
+  <section>
+    <div class="sec-head"><h2>{{s_questions}}</h2><span class="note">{{s_questions_note}}</span></div>
+<!-- {{#each questions}} -->
+    <div class="q-card">
+      <div class="q-head"><span class="tc-id ltr">{{id}}</span><h3>{{{title}}}</h3><span class="badge"><span class="ltr">{{status}}</span></span></div>
+      <dl>
+        <dt>{{q_tcs}}</dt><dd><span class="ltr">{{tcs}}</span></dd>
+        <dt>{{q_gap}}</dt><dd>{{{gap}}}</dd>
+        <dt>{{q_why}}</dt><dd>{{{why}}}</dd>
+        <dt>{{q_evidence}}</dt><dd>{{{evidence}}}</dd>
+        <dt>{{q_recommended}}</dt><dd>{{{recommended}}}</dd>
+        <dt>{{q_alternatives}}</dt><dd>{{{alternatives}}}</dd>
+        <dt>{{q_pending}}</dt><dd>{{{pending}}}</dd>
+      </dl>
+    </div>
+<!-- {{/each}} -->
+  </section>
+<!-- {{/if}} -->
+
+<!-- {{#if has_selfreview}} -->
+  <section>
+    <div class="sec-head"><h2>{{s_selfreview}}</h2></div>
+<!-- {{#if negative}} -->
+    <h4 class="sub">{{s_negative}}</h4>
+    <div class="tablewrap"><table>
+      <thead><tr>
+<!-- {{#each negative.header}} -->
+        <th>{{{text}}}</th>
+<!-- {{/each}} -->
+      </tr></thead>
+      <tbody>
+<!-- {{#each negative.rows}} -->
+        <tr>
+<!-- {{#each cells}} -->
+          <td>{{{text}}}</td>
+<!-- {{/each}} -->
+        </tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+<!-- {{#if standards}} -->
+    <h4 class="sub" style="margin-top:18px">{{s_standards}}</h4>
+    <div class="tablewrap"><table>
+      <thead><tr>
+<!-- {{#each standards.header}} -->
+        <th>{{{text}}}</th>
+<!-- {{/each}} -->
+      </tr></thead>
+      <tbody>
+<!-- {{#each standards.rows}} -->
+        <tr>
+<!-- {{#each cells}} -->
+          <td>{{{text}}}</td>
+<!-- {{/each}} -->
+        </tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+  </section>
+<!-- {{/if}} -->
+
+  <section>
+    <div class="sec-head"><h2>{{s_findings}}</h2><span class="note">{{s_findings_note}}</span></div>
+    <div class="findings gaps">
+      <h3>{{f_gaps}}</h3>
+      <ul>
+<!-- {{#each f_gaps_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_gaps_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+    <div class="findings" style="margin-top:14px">
+      <h3>{{f_defects}}</h3>
+      <ul>
+<!-- {{#each f_defects_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_defects_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+    <div class="findings pending" style="margin-top:14px">
+      <h3>{{f_pending}}</h3>
+      <ul>
+<!-- {{#each f_pending_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_pending_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+    <div class="findings env" style="margin-top:14px">
+      <h3>{{f_env}}</h3>
+      <ul>
+<!-- {{#each f_env_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_env_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+    <div class="findings unclear" style="margin-top:14px">
+      <h3>{{f_unclear}}</h3>
+      <ul>
+<!-- {{#each f_unclear_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_unclear_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+<!-- {{#if f_other_items}} -->
+    <div class="findings" style="margin-top:14px">
+      <ul>
+<!-- {{#each f_other_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+      </ul>
+    </div>
+<!-- {{/if}} -->
+  </section>
+
+  <footer>
+    {{footer_1}} <code>TEST-CASES-{{feature}}.md</code> {{footer_1b}}
+    {{footer_2}} <code>TEST-DATA-{{feature}}.md</code> {{footer_2b}}
+    {{footer_3}} <code>Status: APPROVED</code>. {{footer_3b}} <code>link-qc-4-publish-test-cases-azure</code> {{footer_3c}} <code>link-qc-5-test-run-automation</code> {{footer_3d}}
+    {{footer_4}} <code>link-qc-3-generate-manual-test-cases --revision</code>. {{footer_4b}} <code>link-qc-3b-validate-manual-test-cases</code> {{footer_4c}}
+  </footer>
+
+</div>
+</body>
+</html>

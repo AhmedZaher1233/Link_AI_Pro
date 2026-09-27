@@ -1,6 +1,6 @@
 # Skills sync — the one procedure
 
-The canonical source of skills 1-7 and the `/sync-skills` command is
+The canonical source of skills 1-12, 3b and 3c (12 = the ADHD chat overlay) and the `/sync-skills` command is
 `https://github.com/AhmedZaher1233/Link_AI_Pro` (branch `main`). The only implementation is
 `scripts/sync-qa-skills.mjs`; `/sync-skills` (`.claude/commands/sync-skills.md`) is a thin
 wrapper around it. Never re-describe the procedure elsewhere — link here.
@@ -9,8 +9,9 @@ wrapper around it. Never re-describe the procedure elsewhere — link here.
 |---|---|---|
 | Mode A (audit) | `node ${CLAUDE_SKILL_DIR}/scripts/sync-qa-skills.mjs --check --target <project>` | no |
 | Mode B / C, new project | `node ${CLAUDE_SKILL_DIR}/scripts/sync-qa-skills.mjs --apply --target <project>` | yes — normal permission flow |
-| one skill only | add `--only 6-test-run-automation` | |
+| one skill only | add `--only link-qc-5-test-run-automation` | |
 | locally edited skill files | add `--force` (only when the user says so) | |
+| install the optional tools — playwright-cli for skill 3c, Pillow + numpy for link-qc-6-ui-testing (opt-in) | add `--tools` to `--apply` (only after the user said yes) | yes — global `@playwright/cli`, its chromium browser, the `.playwright-cli/` line in `.gitignore`, and `pip install pillow numpy` when a Python interpreter already exists |
 
 What the script does:
 1. Refuses to run inside the canonical repository itself (`git pull` there instead).
@@ -28,9 +29,18 @@ What the script does:
    server (`docx-mcp-server`, absolute `uvx` path, `--with "mcp<2"`). Only those entries are
    touched; other servers, an unparsable file, and everything else stay as they are. `--check`
    lists the planned actions under `mcp.actions`.
-6. Owns nothing else: never touches `docs/`, `Testing/`, other `.mcp.json` servers, settings,
-   tests or app code.
-7. Emits JSON: `files[]`, `summary`, `applied[]`, `localOnlySkills`, `mcp`, `reloadRequired`. Pass the
+6. Optional tools (**only with `--tools`** on `--apply`): `npm install -g
+   @playwright/cli@latest`, `playwright-cli install-browser` (chromium) and the
+   `.playwright-cli/` line in `.gitignore` (inside a git repository) for skill 3c; and
+   `<python> -m pip install pillow numpy` for link-qc-6-ui-testing's static-image annotation — only when a
+   Python interpreter is already present (the interpreter itself is never installed; without it
+   link-qc-6-ui-testing annotates live pages in the DOM). `--check` always reports the tool status and the
+   planned actions under `tools` (`tools.python` carries the interpreter and package state); a
+   failed step is reported as `tool-failed` and never stops the skills copy. None of it is
+   needed by 3b or any other skill, so the flag is never implied.
+7. Owns nothing else: never touches `docs/`, `Testing/`, other `.mcp.json` servers, settings,
+   tests, app code, or the browser secrets file (user-run script only).
+8. Emits JSON: `files[]`, `summary`, `applied[]`, `localOnlySkills`, `mcp`, `tools`, `reloadRequired`. Pass the
    `--check` output file to `validate-setup.mjs --sync-report` so the `Skills current` row is
    measured, not guessed.
 

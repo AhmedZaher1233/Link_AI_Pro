@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<!-- render-tc-review v1.0 · source=9b2b904016178a3667ad2e505d0ab14ad31a8a941516d9ee24cbc90ae06d064c · data=bcc232a7c41db8578d69e850d967657b31e90fc06c3509dfd0b88a43f4311415 · strings=9125cb279c16c96766fe6f60af22e908d3ab34a524c2832dcc2adee9f729573f · lang=ar · page=10ba8c370943028cbaa2906b80cc60ab20af48bfd8ab076fbf961c7bce0b27b2 -->
+<!-- MIRROR — byte-identical copies live in the sibling skill folders
+     (link-qc-3-generate-manual-test-cases ↔ link-qc-3b-validate-manual-test-cases ↔ link-qc-3c-validate-manual-test-cases-cli, each under assets/). Edit all three;
+     scripts/selftest.mjs case 0 sha256-compares every mirrored file.
+     TC review page template. RENDERED ONLY BY scripts/render-tc-review.mjs — never filled by hand.
+     The renderer inserts its provenance comment as line 2 of the output (source / data / strings
+     sha256 + a self-hash) and recomputes every number from the markdown tables; the markdown is
+     the source of truth and this page never adds, rewords or reorders content.
+     Placeholders: double-brace snake_case keys only (HTML-escaped). Blocks are HTML comments
+     carrying #each / #if / #unless openers and the matching closers (see references/html-page.md).
+     Keep the CSS as it is: the tokens, the gauge and the chip/bar grammar match
+     link-qc-5-test-run-automation/assets/coverage-dashboard.css so both stages read the same way.
+     Self-contained: no external requests, ever. Never render a password, token, selector or code
+     identifier on this page. LANGUAGE: the html lang / dir attributes come from the renderer
+     ("en"/"ltr" or "ar"/"rtl"); the CSS uses logical properties so the layout mirrors by itself. IDs, paths,
+     usernames, URLs, dates and the Status keyword stay Latin inside <span class="ltr">. -->
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test Cases — kpi-filter</title>
+<style>
+/* Light palette on bare :root; dark redefines the same tokens. Semantic colours (green/amber/
+   red/orange/purple/blue) carry meaning only — the accent is structural. */
+:root {
+  --ground: #F6F8FB; --panel: #FFFFFF; --panel-2: #EFF3F9; --line: #D7DFEA;
+  --text: #16223A; --muted: #5B6E8A; --accent: #4A5BD4;
+  --green: #1F9D40; --amber: #B98207; --red: #D24B32; --orange: #C2660C;
+  --purple: #7A4FD0; --blue: #1F6FD0;
+  --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Tahoma, "Noto Sans Arabic", "Noto Naskh Arabic", Roboto, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0E1726; --panel: #16223A; --panel-2: #1C2C49; --line: #2A3C5E;
+    --text: #E6EDF5; --muted: #8195B0; --accent: #7C8CF8;
+    --green: #3FB950; --amber: #E3B341; --red: #F0664E; --orange: #E08A3C;
+    --purple: #A98BF5; --blue: #58A6FF;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0E1726; --panel: #16223A; --panel-2: #1C2C49; --line: #2A3C5E;
+  --text: #E6EDF5; --muted: #8195B0; --accent: #7C8CF8;
+  --green: #3FB950; --amber: #E3B341; --red: #F0664E; --orange: #E08A3C;
+  --purple: #A98BF5; --blue: #58A6FF;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--text); font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: clamp(20px, 4vw, 56px) clamp(16px, 4vw, 40px) 64px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
+h1 { font-weight: 800; font-size: clamp(26px, 5vw, 42px); letter-spacing: -0.02em; line-height: 1.05; margin: 0 0 10px; }
+.sub { color: var(--muted); font-size: 14px; max-width: 70ch; margin: 0 0 12px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 26px; }
+.meta b { color: var(--text); font-weight: 600; }
+.banner { border: 1px solid var(--line); border-inline-start: 4px solid var(--amber); background: var(--panel); border-radius: 10px; padding: 14px 18px; margin-bottom: 26px; }
+.banner.impl { border-inline-start-color: var(--orange); }
+.banner b { font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase; font-size: 12px; }
+/* ---- Tiles ---- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 28px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.tile b { display: block; font-family: var(--mono); font-size: 26px; font-weight: 700; line-height: 1; }
+.tile span { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+/* ---- Coverage hero (same grammar as skill 5's dashboard) ---- */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: clamp(20px, 4vw, 44px); align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: clamp(24px, 4vw, 40px); margin-bottom: 28px; }
+.gauge-wrap { display: flex; justify-content: center; }
+/* --p = Fully Covered share of ACs, --q = Fully + Partially share */
+.gauge { --p: 33.3; --q: 100; width: clamp(170px, 40vw, 220px); aspect-ratio: 1; border-radius: 50%; background: conic-gradient(var(--green) 0 calc(var(--p) * 1%), var(--amber) 0 calc(var(--q) * 1%), var(--red) 0 100%); display: grid; place-items: center; position: relative; }
+.gauge::after { content: ""; position: absolute; inset: 18%; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); }
+.gauge-num { position: relative; z-index: 1; text-align: center; }
+.gauge-num b { display: block; font-family: var(--mono); font-size: clamp(30px, 8vw, 44px); font-weight: 700; line-height: 1; }
+.gauge-num span { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
+.legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.chip { background: var(--panel-2); border: 1px solid var(--line); border-inline-start-width: 4px; border-radius: 8px; padding: 12px 14px; }
+.chip.full { border-inline-start-color: var(--green); } .chip.partial { border-inline-start-color: var(--amber); } .chip.none { border-inline-start-color: var(--muted); }
+.chip b { font-family: var(--mono); font-size: 22px; font-weight: 700; display: block; line-height: 1; }
+.chip span { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+/* ---- Per-AC depth bars ---- */
+.story { margin-bottom: 18px; }
+.story-top { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.story-id { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+.story-name { font-size: 14px; font-weight: 600; }
+.story-pct { margin-inline-start: auto; font-family: var(--mono); font-size: 16px; font-weight: 700; }
+.bar { display: flex; height: 28px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); background: var(--panel-2); }
+.seg { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.seg.happy { background: var(--green); } .seg.neg { background: var(--blue); } .seg.loc { background: var(--purple); } .seg.missing { background: transparent; }
+.seg b { font-family: var(--mono); font-size: 11px; font-weight: 700; color: #0B1320; padding: 0 5px; white-space: nowrap; }
+/* ---- Sections ---- */
+section { margin-top: 40px; }
+.sec-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 22px; }
+.sec-head h2 { font-size: 13px; font-family: var(--mono); letter-spacing: 0.2em; text-transform: uppercase; font-weight: 600; margin: 0; }
+.sec-head .note { color: var(--muted); font-size: 13px; margin-inline-start: auto; }
+/* ---- Tables: always scroll inside their own container ---- */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+th, td { text-align: start; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+tr.gap td { background: color-mix(in srgb, var(--red) 12%, transparent); }
+tr.prio-high td:first-child { border-inline-start: 4px solid var(--red); }
+tr.prio-medium td:first-child { border-inline-start: 4px solid var(--amber); }
+tr.prio-low td:first-child { border-inline-start: 4px solid var(--muted); }
+/* ---- Badges ---- */
+.badge { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--muted); white-space: nowrap; }
+.badge.type { color: var(--text); }
+.badge.smoke { border-color: var(--red); color: var(--red); }
+.badge.auto-yes { border-color: var(--green); color: var(--green); }
+.badge.auto-no { border-color: var(--muted); }
+.badge.v-validated { border-color: var(--green); color: var(--green); }
+.badge.v-enhanced { border-color: var(--blue); color: var(--blue); }
+.badge.v-inferred { border-color: var(--purple); color: var(--purple); }
+.badge.v-discrepancy { border-color: var(--amber); color: var(--amber); }
+.badge.v-notimpl { border-color: var(--orange); color: var(--orange); }
+.badge.v-draft { border-color: var(--muted); }
+.badge.run { border-style: dashed; }
+/* test-data statuses — same four words as TEST-DATA-{feature}.md and skill 5 */
+.badge.d-ready { border-color: var(--green); color: var(--green); }
+.badge.d-missing { border-color: var(--amber); color: var(--amber); }
+.badge.d-impossible { border-color: var(--red); color: var(--red); }
+.badge.d-unknown { border-color: var(--muted); }
+/* ---- TC cards ---- */
+details.tc { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; }
+details.tc > summary { cursor: pointer; padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; list-style: none; }
+details.tc > summary::-webkit-details-marker { display: none; }
+.tc-id { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent); }
+.tc-desc { font-size: 14px; flex: 1 1 260px; min-width: 0; }
+.tc-body { padding: 0 16px 18px; border-top: 1px solid var(--line); }
+.tc-body h4 { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+.tc-body ol, .tc-body ul { margin: 0; padding-inline-start: 22px; font-size: 13.5px; }
+.tc-body li { margin-bottom: 6px; }
+.caption { border-inline-start: 3px solid var(--purple); background: var(--panel-2); border-start-start-radius: 0; border-end-start-radius: 0; border-start-end-radius: 8px; border-end-end-radius: 8px; padding: 9px 13px; font-size: 12.5px; margin: 12px 0 0; }
+.caption.discrepancy { border-inline-start-color: var(--amber); }
+.caption.notimpl { border-inline-start-color: var(--orange); }
+.notes { border: 1px dashed var(--line); border-radius: 8px; padding: 12px 14px; color: var(--muted); font-size: 12.5px; margin-top: 16px; }
+.oracle { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 13px; }
+/* ---- Findings ---- */
+.findings { background: var(--panel); border: 1px solid var(--line); border-inline-start: 4px solid var(--red); border-radius: 12px; padding: 18px 20px; }
+.findings h3 { font-size: 13px; font-family: var(--mono); letter-spacing: 0.14em; text-transform: uppercase; margin: 20px 0 8px; }
+.findings h3:first-child { margin-top: 0; }
+.findings.gaps { border-inline-start-color: var(--amber); }
+.findings.pending { border-inline-start-color: var(--orange); }
+.findings.env { border-inline-start-color: var(--blue); }
+.findings.unclear { border-inline-start-color: var(--purple); }
+/* ---- Direction: the page direction comes from <html dir="rtl">; logical properties above mirror the layout.
+   Latin tokens (IDs, paths, usernames, URLs, dates, Status) always sit in .ltr so they read correctly inside Arabic text. ---- */
+.ltr, code { direction: ltr; unicode-bidi: isolate; }
+.ltr { display: inline-block; }
+/* Arabic has no upper case and breaks under wide tracking — switch both off on an RTL page. */
+[dir="rtl"] .eyebrow, [dir="rtl"] .meta, [dir="rtl"] .banner b, [dir="rtl"] .tile span, [dir="rtl"] .chip span,
+[dir="rtl"] .gauge-num span, [dir="rtl"] .sec-head h2, [dir="rtl"] th, [dir="rtl"] .badge, [dir="rtl"] .tc-body h4,
+[dir="rtl"] .findings h3 { letter-spacing: 0; text-transform: none; }
+[dir="rtl"] h1 { letter-spacing: 0; }
+footer { margin-top: 44px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+footer code { font-family: var(--mono); color: var(--text); }
+@media (max-width: 760px) { .hero { grid-template-columns: 1fr; } .legend { grid-template-columns: 1fr; } }
+/* ---- Renderer additions: consistency warning, Arabic preview, stale evidence, potential bugs, open questions ---- */
+.warn-strip { border: 1px solid var(--red); background: color-mix(in srgb, var(--red) 10%, var(--panel)); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 13px; }
+.preview-banner { border: 2px dashed var(--amber); background: color-mix(in srgb, var(--amber) 12%, var(--panel)); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-weight: 600; }
+.untranslated { outline: 1px dashed var(--amber); outline-offset: 2px; direction: ltr; unicode-bidi: isolate; display: inline-block; }
+.badge.stale { border-color: var(--red); color: var(--red); border-style: dashed; }
+.badge.orphan { border-color: var(--red); color: var(--red); }
+.caption.stale { border-inline-start-color: var(--red); }
+.caption.draft { border-inline-start-color: var(--muted); }
+.caption.orphan { border-inline-start-color: var(--red); }
+.evidence { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+.gauge-caption { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; grid-column: 1 / -1; }
+.pb-card, .q-card { background: var(--panel); border: 1px solid var(--line); border-inline-start: 4px solid var(--amber); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; }
+.pb-card.resolved { border-inline-start-color: var(--green); opacity: 0.8; }
+.pb-card.not-checked { border-inline-start-color: var(--muted); }
+.q-card { border-inline-start-color: var(--purple); }
+.pb-head, .q-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; margin-bottom: 8px; }
+.pb-head h3, .q-head h3 { font-size: 15px; margin: 0; }
+.pb-card dl, .q-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 13.5px; }
+.pb-card dt, .q-card dt { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.pb-card dd, .q-card dd { margin: 0; }
+.pb-card ol { margin: 0; padding-inline-start: 20px; }
+.pb-meta { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+[dir="rtl"] .pb-card dt, [dir="rtl"] .q-card dt { letter-spacing: 0; text-transform: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">حالات الاختبار اليدوية · مراجعة بشرية</p>
+  <h1>kpi-filter</h1>
+  <p class="sub">تصفية شبكة تفاصيل المؤشر حسب نوع العرض والسنة.</p>
+  <div class="meta">
+    <span><b>الحالة</b> <span class="ltr">PENDING HUMAN REVIEW</span></span>
+    <span><b>تاريخ الإنشاء</b> <span class="ltr">2026-09-20</span></span>
+    <span><b>اللغة</b> العربية</span>
+    <span><b>نقطة البدء</b> تصميم جديد</span>
+    <span><b>معرّفات المتطلبات</b> <span class="ltr">REQ-1234-01, REQ-1234-02, REQ-1234-03</span></span>
+    <span><b>المصدر المعتمد</b> <span class="ltr">TEST-CASES-kpi-filter.md</span> (بالإنجليزية)</span>
+    <span><b>التحقق</b> تحقّقت منه المهارة 3b في <span class="ltr">2026-09-25</span> · النطاق <span class="ltr">full</span></span>
+  </div>
+
+
+  <div class="banner"><b>بانتظار المراجعة البشرية</b> — عدّل حقول Automation Candidate / Smoke / Data effect / Shared data في ملف الماركداون ثم اضبط Status: APPROVED. الاعتماد يفتح المهارة 5 (النشر إلى Azure DevOps) والمهارة 6 (الأتمتة) كلًّا على حدة؛ التحقق الحي (المهارة 3b) اختياري.</div>
+  <div class="banner impl"><b>حالة التنفيذ</b> — منفَّذ جزئيًا — نقطة الدخول شوهدت حيًا على بيئة staging؛ معيار القبول AC-3 (التصدير) غير موجود</div>
+
+  <div class="tiles">
+    <div class="tile"><b>5</b><span>حالات الاختبار</span></div>
+    <div class="tile"><b>3/1/1</b><span>المسار السعيد / الحدّي / السلبي</span></div>
+    <div class="tile"><b>4/1</b><span>لكل لغة (<span class="ltr">en, ar</span>)</span></div>
+    <div class="tile"><b>1</b><span>اختبارات الدخان</span></div>
+    <div class="tile"><b>4</b><span>مرشّحة للأتمتة</span></div>
+    <div class="tile"><b>1/0/1/1/1/1</b><span>متحقَّق / محسَّن / مستنتَج / تعارض / غير منفَّذ / مسودة</span></div>
+    <div class="tile"><b>2/5</b><span>تقدّم التحقق من التطبيق · شوهد حيًا (40%)</span></div>
+    <div class="tile"><b>3 · 2/0/0/1</b><span>عناصر بيانات الاختبار · جاهزة / مفقودة / مستحيلة / غير معروفة</span></div>
+    <div class="tile"><b>1/0/0</b><span>أخطاء محتملة · مفتوحة / لم تُفحص / محلولة</span></div>
+  </div>
+
+  <div class="hero">
+    <div class="gauge-wrap">
+      <div class="gauge"><div class="gauge-num"><b>66.7%</b><span>تغطية المتطلبات</span></div></div>
+    </div>
+    <div class="legend">
+      <div class="chip full"><b>1</b><span>مغطّى بالكامل</span></div>
+      <div class="chip partial"><b>2</b><span>مغطّى جزئيًا</span></div>
+      <div class="chip none"><b>0</b><span>غير مغطّى</span></div>
+    </div>
+    <p class="gauge-caption">تغطية المتطلبات محسوبة من معايير القبول وحالات الاختبار المصمَّمة. وهي مستقلة عن التحقق الحي.</p>
+  </div>
+
+  <section>
+    <div class="sec-head"><h2>عمق التغطية لكل معيار قبول</h2><span class="note">عرض كل جزء = نسبة الفحوص المتوفرة لهذا المعيار</span></div>
+    <div class="story">
+      <div class="story-top"><span class="story-id ltr">REQ-1234-01</span><span class="story-name">AC-1 التصفية حسب السنة</span><span class="story-pct">مغطّى بالكامل</span></div>
+      <div class="bar">
+        <div class="seg happy" style="flex: 50"><b>سعيد 2</b></div>
+        <div class="seg neg" style="flex: 1"><b>سلبي 0</b></div>
+        <div class="seg loc" style="flex: 50"><b>لغات 2</b></div>
+      </div>
+    </div>
+    <div class="story">
+      <div class="story-top"><span class="story-id ltr">REQ-1234-02</span><span class="story-name">AC-2 المسح والحماية</span><span class="story-pct">مغطّى جزئيًا</span></div>
+      <div class="bar">
+        <div class="seg happy" style="flex: 33"><b>سعيد 1</b></div>
+        <div class="seg neg" style="flex: 33"><b>سلبي 1</b></div>
+        <div class="seg loc" style="flex: 33"><b>لغات 1</b></div>
+        <div class="seg missing" style="flex: 1"><b>مفقود: النسخة العربية</b></div>
+      </div>
+    </div>
+    <div class="story">
+      <div class="story-top"><span class="story-id ltr">REQ-1234-03</span><span class="story-name">AC-3 التصدير</span><span class="story-pct">مغطّى جزئيًا</span></div>
+      <div class="bar">
+        <div class="seg happy" style="flex: 50"><b>سعيد 1</b></div>
+        <div class="seg neg" style="flex: 1"><b>سلبي 0</b></div>
+        <div class="seg loc" style="flex: 50"><b>لغات 1</b></div>
+        <div class="seg missing" style="flex: 1"><b>مفقود: حالة سلبية، النسخة العربية</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>مصفوفة التتبّع</h2><span class="note">الفجوات مظلّلة</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>معيار القبول</th><th>معرّف المتطلب</th><th>حالات الاختبار</th><th>الحالة</th><th>المفقود</th></tr></thead>
+      <tbody>
+        <tr><td>AC-1 التصفية حسب السنة</td><td><span class="ltr">REQ-1234-01</span></td><td><span class="ltr">TC-KPI-01, TC-KPI-01b</span></td><td>Fully Covered</td><td>—</td></tr>
+        <tr><td>AC-2 المسح والحماية</td><td><span class="ltr">REQ-1234-02</span></td><td><span class="ltr">TC-KPI-02, TC-KPI-03</span></td><td>Partially Covered</td><td>النسخة العربية</td></tr>
+        <tr><td>AC-3 التصدير</td><td><span class="ltr">REQ-1234-03</span></td><td><span class="ltr">TC-KPI-04</span></td><td>Partially Covered</td><td>حالة سلبية، النسخة العربية</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>ما يبقى يدويًا</h2><span class="note"><span class="ltr">1</span> · High <span class="ltr">1</span> · Medium <span class="ltr">0</span> · Low <span class="ltr">0</span></span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>الفئة</th><th>معرّف الحالة</th><th>السيناريو</th><th>لماذا يدوي</th><th>الأولوية</th></tr></thead>
+      <tbody>
+        <tr class="prio-high"><td>بانتظار التنفيذ</td><td><span class="ltr">TC-KPI-04</span></td><td>تصدير الشبكة المصفّاة</td><td>الميزة غير مبنية بعد</td><td>High</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>بيانات الاختبار</h2><span class="note"><span class="ltr">3</span> · <span class="ltr">2</span> / <span class="ltr">0</span> / <span class="ltr">0</span> / <span class="ltr">1</span> — التفاصيل في <span class="ltr">TEST-DATA-kpi-filter.md</span></span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>عنصر البيانات</th><th>يجب أن يبدو كـ</th><th>تستخدمه الحالات</th><th>الحالة</th><th>أفضل طريقة للحصول عليه</th></tr></thead>
+      <tbody>
+        <tr><td><span class="ltr">D1</span></td><td>المؤشر &quot;Revenue&quot; بـ 12 قيمة شهرية لسنة 2026</td><td>12 صفًا، يناير…ديسمبر، الاستراتيجية &quot;Growth 2026&quot;</td><td><span class="ltr">TC-KPI-01, TC-KPI-01b, TC-KPI-04</span></td><td><span class="badge d-ready">READY</span></td><td>—</td></tr>
+        <tr><td><span class="ltr">D2</span></td><td>قيم المؤشر &quot;Revenue&quot; للسنوات 2024-2026</td><td>36 صفًا</td><td><span class="ltr">TC-KPI-02</span></td><td><span class="badge d-ready">READY</span></td><td>—</td></tr>
+        <tr><td><span class="ltr">D3</span></td><td>ملف مؤشر مُصدَّر</td><td>Excel، 12 صفًا</td><td><span class="ltr">TC-KPI-04</span></td><td><span class="badge d-unknown">UNKNOWN</span></td><td>للفحص — بانتظار التنفيذ</td></tr>
+      </tbody>
+    </table></div>
+    <div class="tablewrap" style="margin-top:14px"><table>
+      <thead><tr><th>#</th><th>عنصر البيانات</th><th>المشكلة</th><th>السبب</th><th>ما يجب أن يقرره QC / PO</th></tr></thead>
+      <tbody>
+        <tr class="prio-high"><td><span class="ltr">1</span></td><td><span class="ltr">D3</span></td><td>التصدير غير مبني بعد</td><td>AC-3 بانتظار التنفيذ</td><td>قبول UNKNOWN حتى تُسلَّم القصة</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+
+  <section>
+    <div class="sec-head"><h2>حالات الاختبار</h2><span class="note">أرقام البلاطات أعلاه تطابق هذه البطاقات</span></div>
+    <details class="tc" id="TC-KPI-01">
+      <summary>
+        <span class="tc-id ltr">TC-KPI-01</span>
+        <span class="tc-desc">تصفية شبكة المؤشر حسب السنة</span>
+        <span class="badge type">happy-path</span>
+        <span class="badge"><span class="ltr">en</span></span>
+        <span class="badge"><span class="ltr">@positive</span></span>
+        <span class="badge smoke">دخان</span>
+        <span class="badge auto-yes">أتمتة: نعم</span>
+        <span class="badge v-validated">متحقَّق</span>
+        <span class="badge run">قراءة فقط</span>
+      </summary>
+      <div class="tc-body">
+        <h4>المتطلب</h4><p><span class="ltr">REQ-1234-01</span></p>
+        <h4>الشروط المسبقة</h4><ul>
+          <li>تسجيل الدخول بدور Strategy Super Admin (اسم المستخدم strategy.admin)؛ لغة الصفحة الإنجليزية.</li>
+          <li>الاستراتيجية &quot;Growth 2026&quot; موجودة ومؤشرها &quot;Revenue&quot; يحمل 12 قيمة شهرية.</li>
+        </ul>
+        <h4>الخطوات</h4><ol>
+          <li>افتح الاستراتيجيات — تظهر قائمة الاستراتيجيات.</li>
+          <li>افتح الاستراتيجية &quot;Growth 2026&quot; — يعرض رأس الاستراتيجية اسمها.</li>
+          <li>افتح تفاصيل المؤشر &quot;Revenue&quot; — تُحمَّل شبكة المؤشر؛ يظهر مؤشر التحميل على الشبكة ثم يختفي.</li>
+          <li>افتح لوحة التصفية — تتمدد اللوحة وتعرض &quot;Display Type&quot; و&quot;Year&quot;.</li>
+          <li>اضبط Display Type على &quot;Year&quot; واختر 2026.</li>
+          <li>انقر Apply — يظهر التحميل على الشبكة ثم يختفي.</li>
+        </ol>
+        <h4>النتيجة المتوقعة</h4><p>تعرض الشبكة 12 صفًا بالضبط لسنة 2026 وتقرأ شارة السنة &quot;2026&quot;.</p>
+        <h4>مرجع البيانات</h4><p class="oracle">المؤشر &quot;Revenue&quot; 2026 — العدد المتوقع: 12، المعرّفات: يناير…ديسمبر</p>
+        <h4>سلوك التشغيل</h4>
+        <p>قراءة فقط</p>
+        <p class="evidence">الدليل: شوهد في <span class="ltr">2026-09-25</span> · البيئة <span class="ltr">staging</span> · الإصدار <span class="ltr">4.12.0</span> · النطاق <span class="ltr">full-tail</span></p>
+        <p class="notes">ملاحظات المراجع: ______________________________________________</p>
+      </div>
+    </details>
+    <details class="tc" id="TC-KPI-01b">
+      <summary>
+        <span class="tc-id ltr">TC-KPI-01b</span>
+        <span class="tc-desc">تصفية شبكة المؤشر حسب السنة (العربية)</span>
+        <span class="badge type">happy-path</span>
+        <span class="badge"><span class="ltr">ar</span></span>
+        <span class="badge"><span class="ltr">@positive</span></span>
+        <span class="badge auto-yes">أتمتة: نعم</span>
+        <span class="badge v-inferred">مستنتَج</span>
+        <span class="badge run">قراءة فقط</span>
+      </summary>
+      <div class="tc-body">
+        <p class="caption">مستنتَج — أُكِّد من معرفة سابقة ولم يُشاهَد مباشرة: راجعه بعناية إضافية</p>
+        <h4>المتطلب</h4><p><span class="ltr">REQ-1234-01</span></p>
+        <h4>الشروط المسبقة</h4><ul>
+          <li>تسجيل الدخول بدور Strategy Super Admin (اسم المستخدم strategy.admin)؛ لغة الصفحة العربية، الاتجاه من اليمين إلى اليسار.</li>
+        </ul>
+        <h4>الخطوات</h4><ol>
+          <li>تأكد أن الصفحة عربية واتجاهها من اليمين إلى اليسار.</li>
+          <li>افتح الاستراتيجيات — تظهر القائمة.</li>
+          <li>افتح الاستراتيجية &quot;Growth 2026&quot; ثم تفاصيل المؤشر &quot;Revenue&quot;.</li>
+          <li>افتح لوحة التصفية (تصفية) — تنفتح من الجهة المقابلة.</li>
+          <li>اضبط نوع العرض على &quot;سنة&quot; واختر 2026 ثم انقر تطبيق.</li>
+        </ol>
+        <h4>النتيجة المتوقعة</h4><p>تعرض الشبكة 12 صفًا لسنة 2026 بأسماء الأشهر العربية.</p>
+        <h4>مرجع البيانات</h4><p class="oracle">المؤشر &quot;Revenue&quot; 2026 — العدد المتوقع: 12</p>
+        <h4>سلوك التشغيل</h4>
+        <p>قراءة فقط</p>
+        <p class="evidence">الدليل: شوهد في <span class="ltr">2026-09-25</span> · البيئة <span class="ltr">staging</span> · الإصدار <span class="ltr">4.12.0</span> · النطاق <span class="ltr">prefix-only</span></p>
+        <p class="notes">ملاحظات المراجع: ______________________________________________</p>
+      </div>
+    </details>
+    <details class="tc" id="TC-KPI-02">
+      <summary>
+        <span class="tc-id ltr">TC-KPI-02</span>
+        <span class="tc-desc">مسح التصفية يعيد كل الصفوف</span>
+        <span class="badge type">edge-case</span>
+        <span class="badge"><span class="ltr">en</span></span>
+        <span class="badge"><span class="ltr">@positive</span></span>
+        <span class="badge auto-yes">أتمتة: نعم</span>
+        <span class="badge v-discrepancy">تعارض</span>
+        <span class="badge run">قراءة فقط</span>
+      </summary>
+      <div class="tc-body">
+        <p class="caption discrepancy">تعارض — التطبيق يخالف المتطلب؛ انظر الأخطاء المحتملة</p>
+        <h4>المتطلب</h4><p><span class="ltr">REQ-1234-02</span></p>
+        <h4>الشروط المسبقة</h4><ul>
+          <li>حالة TC-KPI-01: الشبكة مصفّاة على 2026.</li>
+        </ul>
+        <h4>الخطوات</h4><ol>
+          <li>انقر Clear في لوحة التصفية — تختفي شارة السنة.</li>
+          <li>انقر Apply — يظهر التحميل على الشبكة ثم يختفي.</li>
+        </ol>
+        <h4>النتيجة المتوقعة</h4><p>تعرض الشبكة كل الصفوف الـ 36 عبر 2024-2026.</p>
+        <h4>مرجع البيانات</h4><p class="oracle">المؤشر &quot;Revenue&quot; كل السنوات — العدد المتوقع: 36</p>
+        <h4>سلوك التشغيل</h4>
+        <p>قراءة فقط</p>
+        <p class="evidence">الدليل: شوهد في <span class="ltr">2026-09-25</span> · البيئة <span class="ltr">staging</span> · الإصدار <span class="ltr">4.12.0</span> · النطاق <span class="ltr">full-tail</span></p>
+        <p class="notes">ملاحظات المراجع: ______________________________________________</p>
+      </div>
+    </details>
+    <details class="tc" id="TC-KPI-03">
+      <summary>
+        <span class="tc-id ltr">TC-KPI-03</span>
+        <span class="tc-desc">يُمنع التطبيق دون اختيار سنة</span>
+        <span class="badge type">negative</span>
+        <span class="badge"><span class="ltr">en</span></span>
+        <span class="badge"><span class="ltr">@negative</span></span>
+        <span class="badge auto-yes">أتمتة: نعم</span>
+        <span class="badge v-draft">مسودة</span>
+        <span class="badge run">قراءة فقط</span>
+      </summary>
+      <div class="tc-body">
+        <p class="caption draft">غير متحقَّق من التطبيق — صُمِّم من المتطلب ولم يُشاهَد في التطبيق بعد</p>
+        <h4>المتطلب</h4><p><span class="ltr">REQ-1234-02</span></p>
+        <h4>الشروط المسبقة</h4><ul>
+          <li>تسجيل الدخول بدور Strategy Super Admin (اسم المستخدم strategy.admin)؛ تفاصيل المؤشر &quot;Revenue&quot; مفتوحة.</li>
+        </ul>
+        <h4>الخطوات</h4><ol>
+          <li>افتح لوحة التصفية واضبط Display Type على &quot;Year&quot; دون اختيار سنة.</li>
+          <li>انقر Apply.</li>
+        </ol>
+        <h4>النتيجة المتوقعة</h4><p>تظهر رسالة التحقق &quot;Select a year&quot; تحت حقل السنة ولا تُعاد تحميل الشبكة.</p>
+        <h4>سلوك التشغيل</h4>
+        <p>قراءة فقط</p>
+        <p class="notes">ملاحظات المراجع: ______________________________________________</p>
+      </div>
+    </details>
+    <details class="tc" id="TC-KPI-04">
+      <summary>
+        <span class="tc-id ltr">TC-KPI-04</span>
+        <span class="tc-desc">تصدير الشبكة المصفّاة</span>
+        <span class="badge type">happy-path</span>
+        <span class="badge"><span class="ltr">en</span></span>
+        <span class="badge"><span class="ltr">@positive</span></span>
+        <span class="badge auto-no">أتمتة: لا</span>
+        <span class="badge v-notimpl">غير منفَّذ</span>
+        <span class="badge run">ينشئ · ملف تصدير المؤشر</span>
+      </summary>
+      <div class="tc-body">
+        <p class="caption notimpl">بانتظار التنفيذ — مبني على المتطلب؛ الميزة غير مبنية بعد. ليس عيبًا.</p>
+        <h4>المتطلب</h4><p><span class="ltr">REQ-1234-03</span></p>
+        <h4>الشروط المسبقة</h4><ul>
+          <li>حالة TC-KPI-01: الشبكة مصفّاة على 2026.</li>
+        </ul>
+        <h4>الخطوات</h4><ol>
+          <li>انقر Export — يبدأ تنزيل ملف.</li>
+        </ol>
+        <h4>النتيجة المتوقعة</h4><p>يُنزَّل ملف Excel يحوي 12 صفًا.</p>
+        <h4>مرجع البيانات</h4><p class="oracle">المؤشر &quot;Revenue&quot; 2026 — العدد المتوقع: 12</p>
+        <h4>سلوك التشغيل</h4>
+        <p>ينشئ · ملف تصدير المؤشر</p>
+        <p class="notes">ملاحظات المراجع: ______________________________________________</p>
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>سجل التحسينات</h2><span class="note">ما غيّره التطبيق الحي (فارغ حتى تعمل المهارة 3b)</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr>
+        <th>TC-ID</th>
+        <th>Validation</th>
+        <th>What changed</th>
+        <th>Why (what the app showed)</th>
+        <th>Run</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>TC-KPI-01</td>
+          <td>validated</td>
+          <td>تسمية الخطوة 4 &quot;Filters&quot; → &quot;Filter panel&quot;</td>
+          <td>رأس اللوحة يقرأ &quot;Filter panel&quot;</td>
+          <td>2026-09-25</td>
+        </tr>
+        <tr>
+          <td>TC-KPI-02</td>
+          <td>discrepancy</td>
+          <td>لا شيء — سُجِّلت الملاحظة كـ PB-1</td>
+          <td>المسح أبقى شارة السنة في مكانها</td>
+          <td>2026-09-25</td>
+        </tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>أخطاء محتملة</h2><span class="note">سلوك مُشاهَد يخالف المتطلب</span></div>
+    <div class="pb-card open">
+      <div class="pb-head"><span class="tc-id ltr">PB-1</span><h3>المسح لا يزيل شارة السنة</h3><span class="badge">مفتوح</span></div>
+      <dl>
+        <dt>حالة الاختبار</dt><dd><span class="ltr">TC-KPI-02</span></dd>
+        <dt>خطوات إعادة الإنتاج</dt><dd><ol>
+          <li>صفِّ شبكة المؤشر على 2026 (TC-KPI-01).</li>
+          <li>انقر Clear في لوحة التصفية.</li>
+          <li>انقر Apply.</li>
+        </ol></dd>
+        <dt>النتيجة المتوقعة</dt><dd>تعرض الشبكة كل الصفوف الـ 36 عبر 2024-2026.</dd>
+        <dt>النتيجة الفعلية</dt><dd>تبقى شارة السنة &quot;2026&quot; وما تزال الشبكة تعرض 12 صفًا.</dd>
+      </dl>
+      <p class="pb-meta">أول ظهور <span class="ltr">2026-09-25</span> · آخر فحص <span class="ltr">2026-09-25</span></p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>أسئلة مفتوحة</h2><span class="note">لم يُتخذ أي إجراء أدناه دون إجابة</span></div>
+    <div class="q-card">
+      <div class="q-head"><span class="tc-id ltr">Q-1</span><h3>أي الأدوار يمكنها التصدير؟</h3><span class="badge"><span class="ltr">open</span></span></div>
+      <dl>
+        <dt>الحالات المتأثرة</dt><dd><span class="ltr">TC-KPI-04</span></dd>
+        <dt>الفجوة</dt><dd>لا يذكر المتطلب أي الأدوار ترى زر Export.</dd>
+        <dt>لماذا يهم</dt><dd>يحدد ما إذا كانت هناك حاجة لحالة سلبية للصلاحيات.</dd>
+        <dt>الدليل</dt><dd>REQ-1234-03 لا يسمّي دورًا؛ ملف التعلّم لا يحوي مدخلًا لصلاحيات التصدير.</dd>
+        <dt>الموصى به</dt><dd>Strategy Super Admin فقط — يطابق بقية إجراءات المؤشر (وحدة مشابهة: تصدير الأهداف).</dd>
+        <dt>البدائل</dt><dd>كل الأدوار ذات صلاحية القراءة.</dd>
+        <dt>معلّق حتى الإجابة</dt><dd>تبقى TC-KPI-04 غير منفَّذة؛ لا تُصمَّم حالة صلاحيات حتى الإجابة.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>جداول المراجعة الذاتية</h2></div>
+    <h4 class="sub">التغطية السلبية</h4>
+    <div class="tablewrap"><table>
+      <thead><tr>
+        <th>L1 §4 category</th>
+        <th>Covered by</th>
+        <th>Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>مدخلات مطلوبة مفقودة</td>
+          <td>TC-KPI-03</td>
+          <td>COVERED</td>
+        </tr>
+        <tr>
+          <td>وصول غير مصرَّح</td>
+          <td>—</td>
+          <td>لا ينطبق — لا حماية أدوار على هذه الشاشة</td>
+        </tr>
+      </tbody>
+    </table></div>
+    <h4 class="sub" style="margin-top:18px">المواءمة مع المعايير</h4>
+    <div class="tablewrap"><table>
+      <thead><tr>
+        <th>L2 item</th>
+        <th>Status</th>
+        <th>TC-IDs</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>تأكيد مؤشر التحميل في خطوتين</td>
+          <td>COVERED</td>
+          <td>TC-KPI-01</td>
+        </tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>ملاحظات مفتوحة للمراجع البشري</h2><span class="note">لا تُطوى أبدًا</span></div>
+    <div class="findings gaps">
+      <h3>فجوات المتطلبات / التغطية</h3>
+      <ul>
+        <li>AC-2 بلا نسخة عربية — أضف TC-KPI-02b / TC-KPI-03b عبر المهارة 3 ‎--revision.</li>
+      </ul>
+    </div>
+    <div class="findings" style="margin-top:14px">
+      <h3>عيوب التطبيق (تعارضات)</h3>
+      <ul>
+        <li>TC-KPI-02 — انظر PB-1.</li>
+      </ul>
+    </div>
+    <div class="findings pending" style="margin-top:14px">
+      <h3>بانتظار التنفيذ</h3>
+      <ul>
+        <li>TC-KPI-04 — التصدير غير مبني بعد على staging (AC-3).</li>
+      </ul>
+    </div>
+    <div class="findings env" style="margin-top:14px">
+      <h3>معوّقات البيئة</h3>
+      <ul>
+        <li>لا شيء</li>
+      </ul>
+    </div>
+    <div class="findings unclear" style="margin-top:14px">
+      <h3>متطلبات غير واضحة</h3>
+      <ul>
+        <li>Q-1 — صلاحيات التصدير.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    المصدر المعتمد: <code>TEST-CASES-kpi-filter.md</code> (بالإنجليزية دائمًا) — هذه الصفحة مولَّدة منه بواسطة سكربت العرض ولا تضيف شيئًا؛ وعندما تكون بالعربية فهي ترجمة أمينة.
+    بيانات الاختبار: <code>TEST-DATA-kpi-filter.md</code> — ما تحتاجه كل حالة، وهل هو موجود، وكيف يُنشأ المفقود.
+    للاعتماد: عدّل Automation Candidate / Smoke / Data effect / Shared data في الماركداون ثم اضبط <code>Status: APPROVED</code>. الاعتماد يفتح <code>link-qc-4-publish-test-cases-azure</code> و <code>link-qc-5-test-run-automation</code> كلًّا على حدة (النشر اختياري).
+    لطلب تعديلات، أرسل التصحيحات بمعرّف الحالة وأعد تشغيل <code>link-qc-3-generate-manual-test-cases --revision</code>. للتحقق الحي من حالات الاختبار، شغّل المهارة الاختيارية <code>link-qc-3b-validate-manual-test-cases</code> (تحتاج Playwright MCP وعنوان التطبيق وبيانات الدخول).
+  </footer>
+
+</div>
+</body>
+</html>

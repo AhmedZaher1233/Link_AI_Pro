@@ -1,0 +1,39 @@
+SKILL: link-qc-8-sync-bugs-azure — Link (QC) skill 8
+WHAT IT DOES: Two-way bug sync between the story's bug reports (skill 5's BUG-REPORT-{feature}.md, skill 6's UI-Visual-QA-<page>.md) and Azure DevOps through the azure-devops MCP. md → Azure creates the bugs Azure does not have yet and pushes local status changes (verified close, reopen with [Reopened] + tag + first assignee + mention); Azure → md pulls developer states into the ledger and the bug History as retest candidates; both runs the pull first. Runs after skill 5 / skill 6 produced bugs and whenever developer states change; not a gate.
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+ALWAYS REQUIRED:
+  1. A bug source — BUG-REPORT-{feature}.md, UI-Visual-QA-<page>.md, or the story ID (both documents are then located).
+  2. The story ID — read from the bug-report header / ADO-MAP.md, otherwise asked once.
+
+OPTIONAL FLAGS / ARGUMENTS:
+  --direction md-to-azure | azure-to-md | both   skip the direction question
+  --only BUG-n,…                                 restrict to these bug IDs
+  --dry-run                                      plan and report; write nothing
+
+ASKED DURING THE RUN — ONE message each, before any write:
+  3. Direction (when --direction is absent): recommended from the ledger — no ledger → md-to-azure; local changes since the last sync → md-to-azure; nothing changed locally → azure-to-md; both kinds → both. Never persisted.
+  4. Missing required bug fields for the bugs to create (Testing Type / Bug Trigger / Impact / Classification when the Bug type declares them), batched into one list.
+  5. Configuration the manifest, learning file and .mcp.json do not already give (ado_org, ado_project, bug_story_filter_tags, flaky_story_title, default_assignee, reopen_mention_text). No credential or PAT in chat — ever.
+
+PREREQUISITES (checked by link-qc-1-generate-update-testing-structure):
+  - azure-devops MCP server in .mcp.json (cloud or self-hosted; work-item tools are enough for this skill).
+  - Testing/project-learning.md with the `### Azure Sync Model (skills 7 to 9)` section (added by skill 1 Mode B).
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+Testing/Manual_Test/TestCases/[SPEC-*/]US-{id}-{name}/ADO-BUG-MAP.md   — the ledger (Bug ID · Source · ADO Work Item ID · Story ID · Local status · ADO state · Last sync · Note), created beside ADO-MAP.md, rows never dropped
+Azure DevOps                                                          — new Bug work items (linked Parent → story, evidence attached), state / title / tag / assignee updates, mention comments on reopen
+BUG-REPORT-{feature}.md                                               — Azure → md only: appended History lines, Status `open` on a developer-side reopen, recomputed `**Bugs:**` header; nothing else in that file or folder
+Summary table  | Item | Source | ADO ID | Direction | Before | After | Result |  + metrics, retest candidates for link-qc-9-retesting, pending actions, learning-file changes
+
+WHEN TO RUN IT:
+  - After skill 5 (automation run) or skill 6 (UI audit) wrote new bugs → md-to-azure.
+  - After developers worked the Azure items → azure-to-md (lists the retest candidates for skill 9).
+  - After skill 9 or a human changed local statuses with retest evidence → md-to-azure.
+  - Unsure → both (pull first, then push).
+
+HARD RULES: MCP only, never a PAT / .env / REST; Azure Resolved never becomes a local resolved — only an actual successful retest does; a local resolved without retest evidence is not pushed; never edits a TC document, a UI report, ADO-MAP.md or anything in the reports folder beyond Status / History / the Bugs header; no project-specific defaults; the direction answer is never stored.

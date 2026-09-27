@@ -1,0 +1,35 @@
+SKILL: link-qc-9-retesting — Link (QC) skill 9
+WHAT IT DOES: Retests previously logged bugs in the RUNNING application through the Playwright MCP — re-executes each bug's own reproduction steps in the configured languages, positively observes the Expected result, captures evidence, sets the local Status (resolved only after an actual pass; open + History on a fail), then applies skill 8's md → Azure push inline (verified close, or reopen with [Reopened] + tag + first assignee + mention + attachment) and skill 7's outcome push for the related test case. Incidental new defects are logged in the producer format and created in Azure through skill 8's recipe. Runs after skill 8 (azure-to-md listed the candidates) or on explicit bug IDs; not a gate.
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+ALWAYS REQUIRED (one of):
+  1. Bug IDs with their source document (BUG-REPORT-{feature}.md or UI-Visual-QA-<page>.md), a bug document, a story ID, or --awaiting-retest (every ledger row Azure marked Resolved while it is still open locally).
+
+OPTIONAL FLAGS / ARGUMENTS:
+  --awaiting-retest        take the candidates from ADO-BUG-MAP.md
+  --locales en,ar          restrict the language passes
+
+ASKED DURING THE RUN — ONE message, before the browser opens:
+  2. Application base URL (unless recorded in the learning file), role per bug, environment / build.
+  3. Whether reproduction steps that create / modify / delete data may run in this environment.
+  4. The language-switch flow in words, unless the learning file already records it.
+  5. Login: the user types the password in the browser, or names the secret from the user-run secrets file (set-playwright-secrets.ps1 / .sh). Never in chat.
+
+PREREQUISITES (checked by link-qc-1-generate-update-testing-structure):
+  - playwright MCP server in .mcp.json (BLOCKED without it).
+  - azure-devops MCP server in .mcp.json; the bugs were synced by link-qc-8-sync-bugs-azure (an unsynced bug is skipped with the reason).
+  - Skill 7's test-point tools only when the related TC result should reach the Test Plan (otherwise that step is NOT_RUN).
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+BUG-REPORT-{feature}.md / ADO-BUG-MAP.md   — Status `resolved (phase N)` or `open`, appended History lines with evidence, recomputed Bugs header (UI bugs: ledger only)
+{evidence folder}/BUG-n-retest-{pass|fail}-{date-time}-{language}.png   — never overwritten
+Azure DevOps                               — verified close, or reopen ([Reopened] title, `reopened` tag, first assignee, mention comment, evidence attached); incidental new bugs created and linked to the same story
+Summary tables                             — retests (pass / fail / unobserved separated from the Azure results) and incidental defects; metrics; pending actions
+
+WHEN TO RUN IT: after skill 8 pulled developer states and listed retest candidates; whenever a specific bug should be re-verified; after a new build.
+
+HARD RULES: Playwright MCP + azure-devops MCP only; resolved only after a positive observation in every required language; no password anywhere; no fixed selector, role or path in the skill; TC results are edited only for the latest phase and only with explicit confirmation; nothing is created in Azure for a bug that was never synced.

@@ -1,0 +1,30 @@
+SKILL: link-qc-12-adhd-output-style — Link (QC) skill 12
+WHAT IT DOES: Reshapes the CHAT around the QA pipeline for a reader with ADHD — leads with the one
+next action, numbers multi-step work, restates the pipeline position on every turn, turns every
+human gate (Status: APPROVED, PO decision, QC readiness, an unresolved compliance item) into ONE
+next action, rewrites BLOCKED returns as cause -> fix, and makes wins visible. It never changes a
+skill and never reshapes the files the skills write (REQ, TC documents, HTML review pages, ADO-MAP,
+the learning file, run reports). Beside the chain, gates nothing. Explicit invocation only.
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+  Nothing. Type /link-qc-12-adhd-output-style once; the style stays on for the rest of the session,
+  across every QA skill you run afterwards.
+
+OPTIONAL:
+  "stop adhd mode" or "normal mode"   — turns it off (confirmed in one line).
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+  Chat only:
+    - every reply starts with the next action, then the numbered steps, then a one-line state
+      (`Skill N · phase · story · progress`)
+    - human gates appear as exactly one sentence saying what to do and where
+    - BLOCKED returns read as "cause -> fix"
+    - time estimates are specific, tangents are suppressed, finished work is called out
+  No file is written or altered by this skill.
+
+WHEN TO RUN: at the start of a session, before or between any of the QA skills 1-11, 3b and 3c.
+Never required by any other skill.

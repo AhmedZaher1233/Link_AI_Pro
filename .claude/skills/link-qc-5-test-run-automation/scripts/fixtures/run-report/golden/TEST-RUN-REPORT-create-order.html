@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<!-- render-run-report v1.0 · report=11432b7bffe249cb1dfc28b7c157d3d1229751ccfe3ccd5ac7f51ddefe31ad9b · bugs=9665ed9d16deaecfd7d333170b8a000f60993b5a8db7a7405e992886c31e995f · runs=4e8a5b3c7ed6c455e09ab1d58235daf51e19df9bb2568bc0f057a6048cdcd9ec · page=b138090dffa4708a3d75cf25e5b87f4920992c0cba185e941bcfdc10b5adab0a -->
+<!-- Run report page template. RENDERED ONLY BY scripts/render-run-report.mjs — never filled by hand.
+     The renderer inserts its provenance comment as line 2 of the output (report / bugs / runs sha256
+     + a self-hash) and recomputes every number from the two markdown files; TEST-RUN-REPORT-{feature}.md
+     and BUG-REPORT-{feature}.md are the sources of truth and this page never adds, rewords or reorders
+     content. Placeholders: double-brace snake_case keys only (HTML-escaped); triple braces only where
+     the renderer already escaped the value. Blocks are HTML comments carrying #each / #if / #unless
+     openers and the matching closers (see references/run-report.md §9).
+     The CSS tokens, tiles, chips, bars and badge grammar match assets/coverage-dashboard.css and the
+     skill 3 review page so the whole pipeline reads the same way. Self-contained: no external requests,
+     ever; screenshots are linked by RELATIVE path (thumbnail + "View screenshot" viewer), never embedded.
+     Never render a password, token, selector or code identifier on this page. -->
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test Run Report — create-order</title>
+<style>
+/* Light palette on bare :root; dark redefines the same tokens. Semantic colours carry meaning only. */
+:root {
+  --ground: #F6F8FB; --panel: #FFFFFF; --panel-2: #EFF3F9; --line: #D7DFEA;
+  --text: #16223A; --muted: #5B6E8A; --accent: #4A5BD4;
+  --green: #1F9D40; --amber: #B98207; --red: #D24B32; --orange: #C2660C;
+  --purple: #7A4FD0; --blue: #1F6FD0;
+  --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0E1726; --panel: #16223A; --panel-2: #1C2C49; --line: #2A3C5E;
+    --text: #E6EDF5; --muted: #8195B0; --accent: #7C8CF8;
+    --green: #3FB950; --amber: #E3B341; --red: #F0664E; --orange: #E08A3C;
+    --purple: #A98BF5; --blue: #58A6FF;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0E1726; --panel: #16223A; --panel-2: #1C2C49; --line: #2A3C5E;
+  --text: #E6EDF5; --muted: #8195B0; --accent: #7C8CF8;
+  --green: #3FB950; --amber: #E3B341; --red: #F0664E; --orange: #E08A3C;
+  --purple: #A98BF5; --blue: #58A6FF;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--text); font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: clamp(20px, 4vw, 56px) clamp(16px, 4vw, 40px) 64px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
+h1 { font-weight: 800; font-size: clamp(26px, 5vw, 42px); letter-spacing: -0.02em; line-height: 1.05; margin: 0 0 10px; }
+.sub { color: var(--muted); font-size: 14px; max-width: 80ch; margin: 0 0 12px; overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 26px; overflow-wrap: anywhere; }
+.meta b { color: var(--text); font-weight: 600; }
+a { color: var(--accent); }
+.banner { border: 1px solid var(--line); border-inline-start: 4px solid var(--amber); background: var(--panel); border-radius: 10px; padding: 14px 18px; margin-bottom: 26px; }
+.banner.gate-failed { border-inline-start-color: var(--red); background: color-mix(in srgb, var(--red) 10%, var(--panel)); }
+.banner.env-blocked { border-inline-start-color: var(--blue); }
+.banner b { font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase; font-size: 12px; }
+.warn-strip { border: 1px solid var(--red); background: color-mix(in srgb, var(--red) 10%, var(--panel)); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 13px; }
+/* ---- Tiles ---- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 28px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.tile b { display: block; font-family: var(--mono); font-size: 26px; font-weight: 700; line-height: 1; overflow-wrap: anywhere; }
+.tile span { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.tile.t-pass b { color: var(--green); } .tile.t-fail b { color: var(--red); } .tile.t-incomplete b { color: var(--orange); }
+/* ---- Sections ---- */
+section { margin-top: 40px; }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 22px; }
+.sec-head h2 { font-size: 13px; font-family: var(--mono); letter-spacing: 0.2em; text-transform: uppercase; font-weight: 600; margin: 0; }
+.sec-head .note { color: var(--muted); font-size: 13px; margin-inline-start: auto; font-family: var(--mono); }
+.part { border-top: 2px solid var(--accent); margin-top: 56px; padding-top: 8px; }
+.part .eyebrow { margin-bottom: 6px; }
+h3 { font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 22px 0 10px; }
+/* ---- Tables ---- */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+th, td { text-align: start; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+tr.gap td { background: color-mix(in srgb, var(--red) 12%, transparent); }
+tr.is-total td { font-weight: 700; background: var(--panel-2); }
+tr.attempts-row td { background: var(--panel-2); padding: 8px 14px 14px; }
+.attempts table { min-width: 0; font-size: 12.5px; }
+.attempts th, .attempts td { padding: 6px 10px; }
+/* ---- Badges + chips ---- */
+.badge { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--muted); white-space: nowrap; }
+.badge.s-pass, .badge.s-green { border-color: var(--green); color: var(--green); }
+.badge.s-fail, .badge.s-failures, .badge.s-smoke-gate-failed { border-color: var(--red); color: var(--red); }
+.badge.s-incomplete { border-color: var(--orange); color: var(--orange); }
+.badge.s-skip { border-color: var(--muted); }
+.badge.s-notrun, .badge.s-blocked, .badge.s-environment-blocked { border-color: var(--muted); border-style: dashed; }
+.badge.s-environment-blocked { color: var(--blue); border-color: var(--blue); }
+.badge.missing { border-color: var(--amber); color: var(--amber); border-style: dashed; }
+.badge.b-open { border-color: var(--red); color: var(--red); }
+.badge.b-resolved { border-color: var(--green); color: var(--green); }
+.badge.b-not-checked { border-color: var(--muted); border-style: dashed; }
+.badge.sev-critical, .badge.sev-high { border-color: var(--red); color: var(--red); }
+.badge.sev-medium { border-color: var(--amber); color: var(--amber); }
+.badge.sev-low { border-color: var(--muted); }
+.chip { display: inline-block; background: var(--panel-2); border: 1px solid var(--line); border-inline-start-width: 4px; border-radius: 8px; padding: 8px 12px; margin: 0 8px 8px 0; }
+.chip.full, .chip.c-full { border-inline-start-color: var(--green); } .chip.partial, .chip.c-partial, .chip.c-assumed { border-inline-start-color: var(--amber); } .chip.none, .chip.c-missing { border-inline-start-color: var(--red); }
+.chip b { font-family: var(--mono); font-size: 18px; font-weight: 700; display: block; line-height: 1; }
+.chip span { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+/* ---- Coverage bars (same grammar as the dashboard css) ---- */
+.story { margin-bottom: 18px; }
+.story-top { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.story-id { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+.story-count { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+.story-pct { margin-inline-start: auto; font-family: var(--mono); font-size: 16px; font-weight: 700; }
+.bar { display: flex; height: 28px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); background: var(--panel-2); }
+.seg { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.seg.full { background: var(--green); } .seg.partial { background: var(--amber); } .seg.none { background: var(--red); }
+.seg b { font-family: var(--mono); font-size: 11px; font-weight: 700; color: #0B1320; padding: 0 5px; white-space: nowrap; }
+.cov-line { font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin: 8px 0 14px; }
+/* ---- Phase cards ---- */
+details.phase { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; }
+details.phase > summary { cursor: pointer; padding: 14px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; list-style: none; }
+details.phase > summary::-webkit-details-marker { display: none; }
+details.phase > summary .ph-id { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--accent); }
+details.phase > summary .ph-counts { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-inline-start: auto; }
+.phase-body { padding: 0 18px 18px; border-top: 1px solid var(--line); }
+dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 14px 0 0; font-size: 13px; }
+dl.facts dt { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+dl.facts dd { margin: 0; overflow-wrap: anywhere; }
+.line { font-family: var(--mono); font-size: 12.5px; margin: 10px 0 0; overflow-wrap: anywhere; }
+.plain { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+.phase-body ul { margin: 6px 0 0; padding-inline-start: 22px; font-size: 13.5px; }
+/* ---- Evidence ---- */
+.evidence { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; margin: 0 10px 6px 0; vertical-align: top; }
+.evidence a.view { display: inline-block; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel-2); line-height: 0; }
+.evidence a.view img { display: block; max-height: 120px; max-width: 180px; width: auto; height: auto; }
+.evidence a.view-link, .evidence span.lbl { font-family: var(--mono); font-size: 11px; }
+.evidence span.lbl { color: var(--muted); }
+/* ---- Bug cards ---- */
+.bug-filter { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+.bug-filter button { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.bug-filter button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.bug-card { background: var(--panel); border: 1px solid var(--line); border-inline-start: 4px solid var(--red); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; }
+.bug-card.resolved { border-inline-start-color: var(--green); }
+.bug-card.not-checked { border-inline-start-color: var(--muted); }
+.bug-card[hidden] { display: none; }
+.bug-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; margin-bottom: 10px; }
+.bug-head h4 { font-size: 15px; margin: 0; }
+.bug-id { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent); }
+.bug-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 13.5px; }
+.bug-card dt { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.bug-card dd { margin: 0; overflow-wrap: anywhere; }
+.bug-card ol, .bug-card ul { margin: 0; padding-inline-start: 20px; }
+.bug-card pre { font-family: var(--mono); font-size: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+footer { margin-top: 44px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+footer code { font-family: var(--mono); color: var(--text); }
+.legacy { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+/* ---- Screenshot viewer ---- */
+dialog.viewer { width: 96vw; height: 94vh; max-width: 96vw; max-height: 94vh; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); overflow: hidden; }
+dialog.viewer::backdrop { background: rgba(4, 8, 16, 0.78); }
+dialog.viewer[open] { display: grid; grid-template-rows: auto 1fr; }
+.viewer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel-2); font-family: var(--mono); font-size: 12px; }
+.viewer-bar .vtitle { flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.viewer-bar button, .viewer-bar a.open-original { font-family: var(--mono); font-size: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 5px 10px; cursor: pointer; text-decoration: none; }
+.viewer-bar button:focus-visible, .viewer-bar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.viewer-bar .zoom { min-width: 5ch; text-align: center; color: var(--muted); }
+.viewer-pane { overflow: auto; background: repeating-conic-gradient(var(--panel-2) 0 25%, var(--panel) 0 50%) 0 0 / 24px 24px; }
+.viewer-pane img { display: block; transform-origin: top left; width: 100%; height: auto; }
+@media (max-width: 760px) { .tiles { grid-template-columns: repeat(2, 1fr); } dl.facts, .bug-card dl { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">Test run report · automation evidence</p>
+  <h1>US-1234 — Create order</h1>
+  <p class="sub"><span class="lbl">Feature</span> <b>create-order</b> · source <b>../../../Manual_Test/TestCases/US-1234-create-order/TEST-CASES-create-order.md</b> · revision <b>3f1c9a2b7d4e</b></p>
+  <div class="meta">
+    <span><b>Spec</b> —</span>
+    <span><b>Environment</b> UAT</span>
+    <span><b>Latest phase</b> 2 (2026-09-21 14:05)</span>
+    <span><b>Status</b> <span class="badge s-incomplete">INCOMPLETE</span></span>
+    <span><b>Compliance</b> Checkpoint A PASS · Checkpoint B PASS</span>
+    <span><b>Azure DevOps</b> local</span>
+    <span><b>Run file</b> .runs/phase-2.json</span>
+    <span><b>Screenshots</b> ../../screenshots/US-1234-create-order/phase-2/</span>
+    <span><b>Progress log</b> ../../automation-logs/US-1234-create-order/run-progress-2026-09-21-1345.log</span>
+    <span><b>Bug report</b> BUG-REPORT-create-order.md</span>
+    <span><b>Earlier phases</b> —</span>
+  </div>
+
+
+  <div class="tiles">
+    <div class="tile t-pass"><b>2</b><span>Passed</span></div>
+    <div class="tile t-fail"><b>0</b><span>Failed</span></div>
+    <div class="tile t-incomplete"><b>1</b><span>Incomplete</span></div>
+    <div class="tile"><b>1</b><span>Skipped</span></div>
+    <div class="tile"><b>0</b><span>Not run</span></div>
+    <div class="tile"><b>4</b><span>Test cases · phase 2</span></div>
+    <div class="tile"><b>3 / 0 / 1 / 1</b><span>Variants · passed / failed / skipped / not run</span></div>
+    <div class="tile"><b>00:05:12</b><span>Duration · planned ~00:07:00 · serial-only ~00:14:00</span></div>
+    <div class="tile"><b>87.5%</b><span>Static coverage · PASS</span></div>
+    <div class="tile"><b>1 / 1 / 0</b><span>Bugs · open / resolved / not checked</span></div>
+    <div class="tile"><b>1</b><span>Unverified assumptions</span></div>
+  </div>
+
+  <section>
+    <div class="sec-head"><h2>Run history</h2><span class="note">one row per phase · earlier phases never rewritten</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Phase</th><th>Date</th><th>Outcome</th><th>Passed</th><th>Failed</th><th>Incomplete</th><th>Skipped</th><th>Not run</th><th>Total</th><th>Duration</th><th>Bugs</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#phase-1">Phase 1</a></td><td>2026-09-20</td><td><span class="badge s-failures">FAILURES</span></td><td>2</td><td>1</td><td>0</td><td>1</td><td>0</td><td>4</td><td>00:06:41</td><td>BUG-1</td></tr>
+        <tr><td><a href="#phase-2">Phase 2</a></td><td>2026-09-21</td><td><span class="badge s-incomplete">INCOMPLETE</span></td><td>2</td><td>0</td><td>1</td><td>1</td><td>0</td><td>4</td><td>00:05:12</td><td>BUG-1, BUG-2</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>Static coverage · latest phase</h2><span class="note">measured from the spec source before the run · not a pass rate</span></div>
+    <div class="story">
+      <div class="story-top"><span class="story-id">Smoke</span><span class="story-count">1 · 0 · 0 of 1</span><span class="story-pct">100%</span></div>
+      <div class="bar"><div class="seg full" style="width:100%"><b>1</b></div><div class="seg partial" style="width:0%"><b>0</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+    </div>
+    <div class="story">
+      <div class="story-top"><span class="story-id">Positive</span><span class="story-count">2 · 0 · 0 of 2</span><span class="story-pct">100%</span></div>
+      <div class="bar"><div class="seg full" style="width:100%"><b>2</b></div><div class="seg partial" style="width:0%"><b>0</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+    </div>
+    <div class="story">
+      <div class="story-top"><span class="story-id">Negative</span><span class="story-count">0 · 1 · 0 of 1</span><span class="story-pct">50%</span></div>
+      <div class="bar"><div class="seg full" style="width:0%"><b>0</b></div><div class="seg partial" style="width:100%"><b>1</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+    </div>
+    <div class="story">
+      <div class="story-top"><span class="story-id">Total</span><span class="story-count">3 · 1 · 0 of 4</span><span class="story-pct">87.5%</span></div>
+      <div class="bar"><div class="seg full" style="width:75%"><b>3</b></div><div class="seg partial" style="width:25%"><b>1</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+    </div>
+    <p class="cov-line">80% (default, soft block) — PASS · Δ vs phase 1: +12.5 pts — improved TC-007</p>
+    <h3>Requirement outcome coverage</h3>
+    <p class="plain">Linkage is not coverage: a requirement is Full only when its required outcome is asserted; Assumed rests on an unverified-assumption test.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Requirement</th><th>Outcome</th><th>Asserted by</th></tr></thead>
+      <tbody>
+        <tr><td>REQ-01</td><td><span class="chip c-full"><span>Full</span></span></td><td>TC-001</td></tr>
+        <tr><td>REQ-02</td><td><span class="chip c-assumed"><span>Assumed</span></span></td><td>TC-007</td></tr>
+        <tr><td>REQ-03</td><td><span class="chip c-full"><span>Full</span></span></td><td>TC-010</td></tr>
+        <tr><td>REQ-04</td><td><span class="chip c-missing"><span>Missing</span></span></td><td>—</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="part" id="results">
+    <p class="eyebrow">Part 1 · test results</p>
+    <div class="sec-head"><h2>Phases</h2><span class="note">source: TEST-RUN-REPORT-create-order.md</span></div>
+    <details class="phase" id="phase-1">
+      <summary><span class="ph-id">Phase 1</span><span>2026-09-20</span><span class="badge s-failures">FAILURES</span><span class="ph-counts">passed / failed / incomplete / skipped / not run · 2 / 1 / 0 / 1 / 0 of 4</span></summary>
+      <div class="phase-body">
+        <dl class="facts">
+          <dt>Environment</dt><dd>UAT</dd>
+          <dt>Build</dt><dd>4.12.0</dd>
+          <dt>Run command</dt><dd>cd Testing/Automation &amp;&amp; npx playwright test --project=chromium</dd>
+          <dt>Headed / workers</dt><dd>yes / parallel ×3, serial ×1</dd>
+          <dt>Started</dt><dd>2026-09-20 10:12</dd>
+          <dt>Duration</dt><dd>00:06:41 (planned ~00:07:00 · serial-only ~00:14:00)</dd>
+          <dt>Run file</dt><dd>.runs/phase-1.json</dd>
+          <dt>Progress log</dt><dd>../../automation-logs/US-1234-create-order/run-progress-2026-09-20-1012.log</dd>
+          <dt>Screenshots</dt><dd>../../screenshots/US-1234-create-order/phase-1/</dd>
+          <dt>Compliance</dt><dd>Checkpoint A PASS (a1b2c3d4) · Checkpoint B PASS (a1b2c3d4)</dd>
+          <dt>Azure DevOps</dt><dd>local</dd>
+          <dt>Previous phase</dt><dd>none</dd>
+        </dl>
+
+        <h3>Stages</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Stage</th><th>Total</th><th>Passed</th><th>Failed</th><th>Incomplete</th><th>Skipped</th><th>Not run</th></tr></thead>
+          <tbody>
+            <tr class=""><td>Smoke</td><td>1</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+            <tr class=""><td>Positive</td><td>2</td><td>1</td><td>1</td><td>0</td><td>0</td><td>0</td></tr>
+            <tr class=""><td>Negative</td><td>1</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+            <tr class="is-total"><td>Total</td><td>4</td><td>2</td><td>1</td><td>0</td><td>1</td><td>0</td></tr>
+          </tbody>
+        </table></div>
+        <p class="line"><b>Smoke gate:</b> <span class="badge s-pass">passed</span> — fail% 0% — no action needed</p>
+
+        <h3>Run plan</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>Group</th>
+            <th>Mode</th>
+            <th>Workers</th>
+            <th>TCs</th>
+            <th>Reason</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>parallel</td>
+              <td>parallel</td>
+              <td>3</td>
+              <td>TC-001, TC-007, TC-020</td>
+              <td>read-only or independent data</td>
+            </tr>
+            <tr>
+              <td>serial:orders</td>
+              <td>serial</td>
+              <td>1</td>
+              <td>TC-010</td>
+              <td>deletes the shared draft order</td>
+            </tr>
+          </tbody>
+        </table></div>
+        <p class="line">Decisions: 2 field · 1 inferred · 0 fail-safe</p>
+
+        <h3>Static coverage</h3>
+        <div class="story">
+          <div class="story-top"><span class="story-id">Smoke</span><span class="story-count">1 · 0 · 0 of 1</span><span class="story-pct">100%</span></div>
+          <div class="bar"><div class="seg full" style="width:100%"><b>1</b></div><div class="seg partial" style="width:0%"><b>0</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+        </div>
+        <div class="story">
+          <div class="story-top"><span class="story-id">Positive</span><span class="story-count">1 · 1 · 0 of 2</span><span class="story-pct">75%</span></div>
+          <div class="bar"><div class="seg full" style="width:50%"><b>1</b></div><div class="seg partial" style="width:50%"><b>1</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+        </div>
+        <div class="story">
+          <div class="story-top"><span class="story-id">Negative</span><span class="story-count">0 · 1 · 0 of 1</span><span class="story-pct">50%</span></div>
+          <div class="bar"><div class="seg full" style="width:0%"><b>0</b></div><div class="seg partial" style="width:100%"><b>1</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+        </div>
+        <div class="story">
+          <div class="story-top"><span class="story-id">Total</span><span class="story-count">2 · 2 · 0 of 4</span><span class="story-pct">75%</span></div>
+          <div class="bar"><div class="seg full" style="width:50%"><b>2</b></div><div class="seg partial" style="width:50%"><b>2</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+        </div>
+        <p class="cov-line">80% (default, soft block) — user override · Δ vs phase 0: no prior measurement</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Requirement</th><th>Outcome</th><th>Asserted by</th></tr></thead>
+          <tbody>
+            <tr><td>REQ-01</td><td><span class="chip c-full"><span>Full</span></span></td><td>TC-001</td></tr>
+            <tr><td>REQ-02</td><td><span class="chip c-partial"><span>Partial</span></span></td><td>TC-007</td></tr>
+            <tr><td>REQ-03</td><td><span class="chip c-full"><span>Full</span></span></td><td>TC-010</td></tr>
+            <tr><td>REQ-04</td><td><span class="chip c-missing"><span>Missing</span></span></td><td>—</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Results · one row per test case</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>TC-ID</th><th>REQ</th><th>Name</th><th>Status</th><th>Group</th><th>Duration</th><th>Classification</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr class="" id="tc-1-TC-001"><td>TC-001</td><td>REQ-01</td><td>Create an order with valid data</td><td><span class="badge s-pass">PASS</span></td><td>parallel</td><td>00:00:41</td><td>—</td><td>
+              <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-1/TC-001/chromium--none--r0/attempt-1.png" data-viewer data-group="phase-1" data-title="TC-001 · attempt-1.png · phase 1"><img src="../../screenshots/US-1234-create-order/phase-1/TC-001/chromium--none--r0/attempt-1.png" loading="lazy" alt="TC-001 · attempt-1.png · phase 1"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-1/TC-001/chromium--none--r0/attempt-1.png" data-viewer data-group="phase-1" data-title="TC-001 · attempt-1.png · phase 1">View screenshot</a></span>
+            </td></tr>
+            <tr class="" id="tc-1-TC-007"><td>TC-007</td><td>REQ-02</td><td>Order total recalculates — variation A</td><td><span class="badge s-pass">PASS</span></td><td>parallel</td><td>00:01:02</td><td>—</td><td>
+              <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-2.png" data-viewer data-group="phase-1" data-title="TC-007 · attempt-2.png · phase 1"><img src="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-2.png" loading="lazy" alt="TC-007 · attempt-2.png · phase 1"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-2.png" data-viewer data-group="phase-1" data-title="TC-007 · attempt-2.png · phase 1">View screenshot</a></span>
+            </td></tr>
+            <tr class="attempts-row"><td colspan="8"><div class="attempts">
+              <span class="lbl">Variants and attempts of TC-007 (from the run file)</span>
+              <table>
+                <thead><tr><th>Variant</th><th>Attempt</th><th>Stage</th><th>Status</th><th>Evidence</th><th>Error</th></tr></thead>
+                <tbody>
+                  <tr><td>chromium--variation-a--r0</td><td>1</td><td>positive</td><td><span class="badge s-fail">FAIL</span></td><td>
+                    <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-1.png" data-viewer data-group="phase-1" data-title="TC-007 · chromium--variation-a--r0 · attempt 1 · attempt-1.png · phase 1"><img src="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-1.png" loading="lazy" alt="TC-007 · chromium--variation-a--r0 · attempt 1 · attempt-1.png · phase 1"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-1.png" data-viewer data-group="phase-1" data-title="TC-007 · chromium--variation-a--r0 · attempt 1 · attempt-1.png · phase 1">View screenshot</a></span>
+                    <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-1-failed.png" data-viewer data-group="phase-1" data-title="TC-007 · chromium--variation-a--r0 · attempt 1 · failed · phase 1"><img src="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-1-failed.png" loading="lazy" alt="TC-007 · chromium--variation-a--r0 · attempt 1 · failed · phase 1"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-1-failed.png" data-viewer data-group="phase-1" data-title="TC-007 · chromium--variation-a--r0 · attempt 1 · failed · phase 1">View screenshot</a></span>
+                  </td><td>locator.click: Timeout 30000ms exceeded waiting for getByText(&#39;Recalculate&#39;)</td></tr>
+                  <tr><td>chromium--variation-a--r0</td><td>2</td><td>positive</td><td><span class="badge s-pass">PASS</span></td><td>
+                    <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-2.png" data-viewer data-group="phase-1" data-title="TC-007 · chromium--variation-a--r0 · attempt 2 · attempt-2.png · phase 1"><img src="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-2.png" loading="lazy" alt="TC-007 · chromium--variation-a--r0 · attempt 2 · attempt-2.png · phase 1"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-1/TC-007/chromium--variation-a--r0/attempt-2.png" data-viewer data-group="phase-1" data-title="TC-007 · chromium--variation-a--r0 · attempt 2 · attempt-2.png · phase 1">View screenshot</a></span>
+                  </td><td>—</td></tr>
+                </tbody>
+              </table>
+            </div></td></tr>
+            <tr class="gap" id="tc-1-TC-010"><td>TC-010</td><td>REQ-03</td><td>Delete a draft order</td><td><span class="badge s-fail">FAIL</span></td><td>serial:orders</td><td>00:00:55</td><td>app_bug</td><td>
+              <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-1/TC-010/chromium--none--r0/attempt-1.png" data-viewer data-group="phase-1" data-title="TC-010 · attempt-1.png · phase 1"><img src="../../screenshots/US-1234-create-order/phase-1/TC-010/chromium--none--r0/attempt-1.png" loading="lazy" alt="TC-010 · attempt-1.png · phase 1"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-1/TC-010/chromium--none--r0/attempt-1.png" data-viewer data-group="phase-1" data-title="TC-010 · attempt-1.png · phase 1">View screenshot</a></span>
+              <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-1/TC-010/chromium--none--r0/attempt-1-failed.png" data-viewer data-group="phase-1" data-title="TC-010 · failed · phase 1"><img src="../../screenshots/US-1234-create-order/phase-1/TC-010/chromium--none--r0/attempt-1-failed.png" loading="lazy" alt="TC-010 · failed · phase 1"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-1/TC-010/chromium--none--r0/attempt-1-failed.png" data-viewer data-group="phase-1" data-title="TC-010 · failed · phase 1">View screenshot</a></span>
+            </td></tr>
+            <tr class="" id="tc-1-TC-020"><td>TC-020</td><td>REQ-04</td><td>Reject an order without a customer</td><td><span class="badge s-skip">SKIP</span></td><td>parallel</td><td>—</td><td>data_missing</td><td>
+              —
+            </td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Unverified assumptions · questions for a human, not bugs</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>TC-ID</th>
+            <th>Ambiguity</th>
+            <th>Interpretation encoded</th>
+            <th>Evidence</th>
+            <th>Result</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>TC-007</td>
+              <td>&quot;the total updates correctly&quot;</td>
+              <td>total = sum of line totals after each edit, VAT excluded</td>
+              <td>OrderTotal.ts line 42 sums lineTotal only</td>
+              <td>PASS</td>
+            </tr>
+          </tbody>
+        </table></div>
+
+        <h3>Bugs found or retested in this phase</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Bug</th><th>TC-ID</th><th>Severity</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td><a href="#BUG-1">BUG-1</a></td><td>TC-010</td><td>High</td><td><span class="badge b-open">open</span></td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Heal log · first run</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>TC-ID</th>
+            <th>Affected test / files changed</th>
+            <th>Defect category</th>
+            <th>Previous value</th>
+            <th>Updated value</th>
+            <th>Reason the new value is correct</th>
+            <th>Approved-requirement reference</th>
+            <th>Verification performed</th>
+            <th>Rerun result</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>TC-007</td>
+              <td>pages/OrderPage.ts:58</td>
+              <td>selector_failure</td>
+              <td>getByText(&#39;Recalculate&#39;)</td>
+              <td>getByRole(&#39;button&#39;, { name: &#39;Recalculate&#39; })</td>
+              <td>the label moved into a button; same element, same behaviour</td>
+              <td>n/a (locator repair)</td>
+              <td>validator rules · semantic re-review</td>
+              <td>TC-007 re-run — PASS</td>
+            </tr>
+          </tbody>
+        </table></div>
+
+        <h3>Skips and residual failures</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>TC-ID</th>
+            <th>Status</th>
+            <th>Reason</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>TC-020</td>
+              <td>SKIP</td>
+              <td>customer fixture missing — QC chose skip</td>
+            </tr>
+          </tbody>
+        </table></div>
+
+        <h3>Open questions</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>#</th>
+            <th>Source</th>
+            <th>Ambiguity</th>
+            <th>TCs</th>
+            <th>Decision</th>
+            <th>By</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>TC-007 expected result</td>
+              <td>&quot;the total updates correctly&quot;</td>
+              <td>TC-007</td>
+              <td>sum of line totals, VAT excluded</td>
+              <td>assumption</td>
+            </tr>
+          </tbody>
+        </table></div>
+
+        <h3>Test-data readiness</h3>
+        <p class="line">Verdict: READY-WITH-SKIPS (1 TC)</p>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>Gap</th>
+            <th>TCs</th>
+            <th>Decision</th>
+            <th>Source</th>
+            <th>Provisioning</th>
+            <th>Cleanup</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>customer without orders</td>
+              <td>TC-020</td>
+              <td>skip</td>
+              <td>qc</td>
+              <td>—</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table></div>
+
+      </div>
+    </details>
+    <details class="phase" id="phase-2" open>
+      <summary><span class="ph-id">Phase 2</span><span>2026-09-21</span><span class="badge s-incomplete">INCOMPLETE</span><span class="ph-counts">passed / failed / incomplete / skipped / not run · 2 / 0 / 1 / 1 / 0 of 4</span></summary>
+      <div class="phase-body">
+        <dl class="facts">
+          <dt>Environment</dt><dd>UAT</dd>
+          <dt>Build</dt><dd>4.12.1</dd>
+          <dt>Run command</dt><dd>cd Testing/Automation &amp;&amp; npx playwright test --project=chromium</dd>
+          <dt>Headed / workers</dt><dd>yes / parallel ×3, serial ×1</dd>
+          <dt>Started</dt><dd>2026-09-21 13:45</dd>
+          <dt>Duration</dt><dd>00:05:12 (planned ~00:07:00 · serial-only ~00:14:00)</dd>
+          <dt>Run file</dt><dd>.runs/phase-2.json</dd>
+          <dt>Progress log</dt><dd>../../automation-logs/US-1234-create-order/run-progress-2026-09-21-1345.log</dd>
+          <dt>Screenshots</dt><dd>../../screenshots/US-1234-create-order/phase-2/</dd>
+          <dt>Compliance</dt><dd>Checkpoint A PASS (b7c8d9e0) · Checkpoint B PASS (b7c8d9e0)</dd>
+          <dt>Azure DevOps</dt><dd>local</dd>
+          <dt>Previous phase</dt><dd>.runs/phase-1.json</dd>
+        </dl>
+
+        <h3>Stages</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Stage</th><th>Total</th><th>Passed</th><th>Failed</th><th>Incomplete</th><th>Skipped</th><th>Not run</th></tr></thead>
+          <tbody>
+            <tr class=""><td>Smoke</td><td>1</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+            <tr class=""><td>Positive</td><td>2</td><td>1</td><td>0</td><td>1</td><td>0</td><td>0</td></tr>
+            <tr class=""><td>Negative</td><td>1</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+            <tr class="is-total"><td>Total</td><td>4</td><td>2</td><td>0</td><td>1</td><td>1</td><td>0</td></tr>
+          </tbody>
+        </table></div>
+        <p class="line"><b>Smoke gate:</b> <span class="badge s-pass">passed</span> — fail% 0% — no action needed</p>
+
+        <h3>Run plan</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>Group</th>
+            <th>Mode</th>
+            <th>Workers</th>
+            <th>TCs</th>
+            <th>Reason</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>parallel</td>
+              <td>parallel</td>
+              <td>3</td>
+              <td>TC-001, TC-007, TC-020</td>
+              <td>read-only or independent data</td>
+            </tr>
+            <tr>
+              <td>serial:orders</td>
+              <td>serial</td>
+              <td>1</td>
+              <td>TC-010</td>
+              <td>deletes the shared draft order</td>
+            </tr>
+          </tbody>
+        </table></div>
+        <p class="line">Decisions: 2 field · 1 inferred · 0 fail-safe</p>
+
+        <h3>Static coverage</h3>
+        <div class="story">
+          <div class="story-top"><span class="story-id">Smoke</span><span class="story-count">1 · 0 · 0 of 1</span><span class="story-pct">100%</span></div>
+          <div class="bar"><div class="seg full" style="width:100%"><b>1</b></div><div class="seg partial" style="width:0%"><b>0</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+        </div>
+        <div class="story">
+          <div class="story-top"><span class="story-id">Positive</span><span class="story-count">2 · 0 · 0 of 2</span><span class="story-pct">100%</span></div>
+          <div class="bar"><div class="seg full" style="width:100%"><b>2</b></div><div class="seg partial" style="width:0%"><b>0</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+        </div>
+        <div class="story">
+          <div class="story-top"><span class="story-id">Negative</span><span class="story-count">0 · 1 · 0 of 1</span><span class="story-pct">50%</span></div>
+          <div class="bar"><div class="seg full" style="width:0%"><b>0</b></div><div class="seg partial" style="width:100%"><b>1</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+        </div>
+        <div class="story">
+          <div class="story-top"><span class="story-id">Total</span><span class="story-count">3 · 1 · 0 of 4</span><span class="story-pct">87.5%</span></div>
+          <div class="bar"><div class="seg full" style="width:75%"><b>3</b></div><div class="seg partial" style="width:25%"><b>1</b></div><div class="seg none" style="width:0%"><b>0</b></div></div>
+        </div>
+        <p class="cov-line">80% (default, soft block) — PASS · Δ vs phase 1: +12.5 pts — improved TC-007</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Requirement</th><th>Outcome</th><th>Asserted by</th></tr></thead>
+          <tbody>
+            <tr><td>REQ-01</td><td><span class="chip c-full"><span>Full</span></span></td><td>TC-001</td></tr>
+            <tr><td>REQ-02</td><td><span class="chip c-assumed"><span>Assumed</span></span></td><td>TC-007</td></tr>
+            <tr><td>REQ-03</td><td><span class="chip c-full"><span>Full</span></span></td><td>TC-010</td></tr>
+            <tr><td>REQ-04</td><td><span class="chip c-missing"><span>Missing</span></span></td><td>—</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Results · one row per test case</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>TC-ID</th><th>REQ</th><th>Name</th><th>Status</th><th>Group</th><th>Duration</th><th>Classification</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr class="" id="tc-2-TC-001"><td>TC-001</td><td>REQ-01</td><td>Create an order with valid data</td><td><span class="badge s-pass">PASS</span></td><td>parallel</td><td>00:00:39</td><td>—</td><td>
+              <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-2/TC-001/chromium--none--r0/attempt-1.png" data-viewer data-group="phase-2" data-title="TC-001 · attempt-1.png · phase 2"><img src="../../screenshots/US-1234-create-order/phase-2/TC-001/chromium--none--r0/attempt-1.png" loading="lazy" alt="TC-001 · attempt-1.png · phase 2"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-2/TC-001/chromium--none--r0/attempt-1.png" data-viewer data-group="phase-2" data-title="TC-001 · attempt-1.png · phase 2">View screenshot</a></span>
+            </td></tr>
+            <tr class="" id="tc-2-TC-007"><td>TC-007</td><td>REQ-02</td><td>Order total recalculates</td><td><span class="badge s-incomplete">INCOMPLETE</span></td><td>parallel</td><td>00:00:58</td><td>incomplete: chromium--variation-b--r0</td><td>
+              <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-2/TC-007/chromium--variation-a--r0/attempt-1.png" data-viewer data-group="phase-2" data-title="TC-007 · attempt-1.png · phase 2"><img src="../../screenshots/US-1234-create-order/phase-2/TC-007/chromium--variation-a--r0/attempt-1.png" loading="lazy" alt="TC-007 · attempt-1.png · phase 2"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-2/TC-007/chromium--variation-a--r0/attempt-1.png" data-viewer data-group="phase-2" data-title="TC-007 · attempt-1.png · phase 2">View screenshot</a></span>
+            </td></tr>
+            <tr class="attempts-row"><td colspan="8"><div class="attempts">
+              <span class="lbl">Variants and attempts of TC-007 (from the run file) · missing required variants: chromium--variation-b--r0</span>
+              <table>
+                <thead><tr><th>Variant</th><th>Attempt</th><th>Stage</th><th>Status</th><th>Evidence</th><th>Error</th></tr></thead>
+                <tbody>
+                  <tr><td>chromium--variation-a--r0</td><td>1</td><td>positive</td><td><span class="badge s-pass">PASS</span></td><td>
+                    <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-2/TC-007/chromium--variation-a--r0/attempt-1.png" data-viewer data-group="phase-2" data-title="TC-007 · chromium--variation-a--r0 · attempt 1 · attempt-1.png · phase 2"><img src="../../screenshots/US-1234-create-order/phase-2/TC-007/chromium--variation-a--r0/attempt-1.png" loading="lazy" alt="TC-007 · chromium--variation-a--r0 · attempt 1 · attempt-1.png · phase 2"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-2/TC-007/chromium--variation-a--r0/attempt-1.png" data-viewer data-group="phase-2" data-title="TC-007 · chromium--variation-a--r0 · attempt 1 · attempt-1.png · phase 2">View screenshot</a></span>
+                  </td><td>—</td></tr>
+                </tbody>
+              </table>
+            </div></td></tr>
+            <tr class="" id="tc-2-TC-010"><td>TC-010</td><td>REQ-03</td><td>Delete a draft order</td><td><span class="badge s-pass">PASS</span></td><td>serial:orders</td><td>00:00:50</td><td>—</td><td>
+              <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-2/TC-010/chromium--none--r0/attempt-1.png" data-viewer data-group="phase-2" data-title="TC-010 · attempt-1.png · phase 2"><img src="../../screenshots/US-1234-create-order/phase-2/TC-010/chromium--none--r0/attempt-1.png" loading="lazy" alt="TC-010 · attempt-1.png · phase 2"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-2/TC-010/chromium--none--r0/attempt-1.png" data-viewer data-group="phase-2" data-title="TC-010 · attempt-1.png · phase 2">View screenshot</a></span>
+            </td></tr>
+            <tr class="" id="tc-2-TC-020"><td>TC-020</td><td>REQ-04</td><td>Reject an order without a customer</td><td><span class="badge s-skip">SKIP</span></td><td>parallel</td><td>—</td><td>data_missing</td><td>
+              —
+            </td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Unverified assumptions · questions for a human, not bugs</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>TC-ID</th>
+            <th>Ambiguity</th>
+            <th>Interpretation encoded</th>
+            <th>Evidence</th>
+            <th>Result</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>TC-007</td>
+              <td>&quot;the total updates correctly&quot;</td>
+              <td>total = sum of line totals after each edit, VAT excluded</td>
+              <td>OrderTotal.ts line 42 sums lineTotal only</td>
+              <td>INCOMPLETE</td>
+            </tr>
+          </tbody>
+        </table></div>
+
+        <h3>Bugs found or retested in this phase</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Bug</th><th>TC-ID</th><th>Severity</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td><a href="#BUG-1">BUG-1</a></td><td>TC-010</td><td>High</td><td><span class="badge b-resolved">resolved (phase 2)</span></td></tr>
+            <tr><td><a href="#BUG-2">BUG-2</a></td><td>TC-007</td><td>Medium</td><td><span class="badge b-open">open</span></td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Heal log · first run</h3>
+        <p class="plain">First run fully green</p>
+
+        <h3>Skips and residual failures</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>TC-ID</th>
+            <th>Status</th>
+            <th>Reason</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>TC-020</td>
+              <td>SKIP</td>
+              <td>customer fixture missing — QC chose skip</td>
+            </tr>
+          </tbody>
+        </table></div>
+
+
+        <h3>Test-data readiness</h3>
+        <p class="line">Verdict: READY-WITH-SKIPS (1 TC)</p>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>Gap</th>
+            <th>TCs</th>
+            <th>Decision</th>
+            <th>Source</th>
+            <th>Provisioning</th>
+            <th>Cleanup</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>customer without orders</td>
+              <td>TC-020</td>
+              <td>skip</td>
+              <td>learning</td>
+              <td>—</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table></div>
+
+        <h3>Deviations</h3>
+        <ul>
+          <li>variation B of TC-007 did not execute: the parametrised title lost its label after the retest edit; re-queued for phase 3</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <section class="part" id="bugs">
+    <p class="eyebrow">Part 2 · bug report</p>
+    <div class="sec-head"><h2>Bugs</h2><span class="note">source: BUG-REPORT-create-order.md</span></div>
+    <div class="chips">
+      <span class="chip c-missing"><b>1</b><span>open</span></span>
+      <span class="chip c-full"><b>1</b><span>resolved</span></span>
+      <span class="chip"><b>0</b><span>not checked this run</span></span>
+      <span class="chip"><b>2</b><span>total</span></span>
+    </div>
+    <div class="bug-filter" role="group" aria-label="Filter bugs">
+      <button type="button" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" data-filter="open" aria-pressed="false">Open</button>
+      <button type="button" data-filter="resolved" aria-pressed="false">Resolved</button>
+      <button type="button" data-filter="not-checked" aria-pressed="false">Not checked</button>
+    </div>
+    <article class="bug-card resolved" id="BUG-1" data-status="resolved">
+      <div class="bug-head"><span class="bug-id">BUG-1</span><h4>The system doesn&#39;t remove a draft order when the user confirms Delete</h4><span class="badge b-resolved">resolved · phase 2</span><span class="badge sev-high">High</span></div>
+      <dl>
+        <dt>Test case</dt><dd>
+          <a href="#tc-1-TC-010">TC-010</a> · found in phase 1
+        </dd>
+        <dt>Requirement</dt><dd>REQ-03</dd>
+        <dt>Where</dt><dd>UAT · chromium · en · build 4.12.0</dd>
+        <dt>Root cause</dt><dd>DELETE /orders/{id} answers 200 but the grid keeps the row until a manual refresh</dd>
+        <dt>Steps to reproduce</dt><dd><ol>
+          <li>Log in as the sales user.</li>
+          <li>Open Orders and create a draft order.</li>
+          <li>Click Delete on that row and confirm the dialog.</li>
+        </ol></dd>
+        <dt>Expected</dt><dd>The row disappears and the toast &quot;Order deleted&quot; is shown.</dd>
+        <dt>Actual</dt><dd>The row stays in the list and no toast is shown.</dd>
+        <dt>Screenshot</dt><dd>
+          <span class="evidence"><a class="view" href="../../screenshots/US-1234-create-order/phase-1/TC-010/chromium--none--r0/attempt-1-failed.png" data-viewer data-group="bugs" data-title="BUG-1 · attempt-1-failed.png · phase 1"><img src="../../screenshots/US-1234-create-order/phase-1/TC-010/chromium--none--r0/attempt-1-failed.png" loading="lazy" alt="BUG-1 · attempt-1-failed.png · phase 1"></a><a class="view-link" href="../../screenshots/US-1234-create-order/phase-1/TC-010/chromium--none--r0/attempt-1-failed.png" data-viewer data-group="bugs" data-title="BUG-1 · attempt-1-failed.png · phase 1">View screenshot</a></span>
+        </dd>
+        <dt>Evidence</dt><dd><pre>expect(orderRow).toHaveCount(0) — received 1</pre></dd>
+        <dt>History</dt><dd><ul>
+          <li>phase 1 — FAIL: first seen on build 4.12.0</li>
+          <li>phase 2 — PASS: retest passed on build 4.12.1</li>
+        </ul></dd>
+      </dl>
+    </article>
+    <article class="bug-card open" id="BUG-2" data-status="open">
+      <div class="bug-head"><span class="bug-id">BUG-2</span><h4>The system doesn&#39;t recalculate the order total when the user edits the quantity of variation B</h4><span class="badge b-open">open</span><span class="badge sev-medium">Medium</span></div>
+      <dl>
+        <dt>Test case</dt><dd>
+          <a href="#tc-2-TC-007">TC-007</a> · found in phase 2
+        </dd>
+        <dt>Requirement</dt><dd>REQ-02</dd>
+        <dt>Where</dt><dd>UAT · chromium · en · build 4.12.1</dd>
+        <dt>Root cause</dt><dd>not yet known — the recalculation request is not sent for the second line</dd>
+        <dt>Steps to reproduce</dt><dd><ol>
+          <li>Log in as the sales user.</li>
+          <li>Open an order that has two lines.</li>
+          <li>Change the quantity of the second line and leave the field.</li>
+        </ol></dd>
+        <dt>Expected</dt><dd>The total updates to the sum of both line totals.</dd>
+        <dt>Actual</dt><dd>The total keeps the previous value.</dd>
+        <dt>Screenshot</dt><dd>
+          none captured
+        </dd>
+        <dt>Evidence</dt><dd><pre>observed manually while investigating the INCOMPLETE variant — not asserted by automation yet</pre></dd>
+        <dt>History</dt><dd><ul>
+          <li>phase 2 — FAIL: first seen while variation B was being investigated</li>
+        </ul></dd>
+      </dl>
+    </article>
+  </section>
+
+  <footer>
+    Sources of truth: <code>TEST-RUN-REPORT-create-order.md</code> and <code>BUG-REPORT-create-order.md</code> — this page is rendered from them by <code>scripts/render-run-report.mjs</code> and adds nothing. To change it, edit the markdown and re-render. Screenshots are linked by relative path into the screenshots folder; the page shows them only while both keep their relative positions.
+  </footer>
+</div>
+
+<dialog class="viewer" aria-label="Screenshot viewer">
+  <div class="viewer-bar">
+    <span class="vtitle" id="viewer-title">Screenshot</span>
+    <button type="button" data-act="prev" aria-label="Previous screenshot">←</button>
+    <button type="button" data-act="next" aria-label="Next screenshot">→</button>
+    <button type="button" data-act="out" aria-label="Zoom out">−</button>
+    <span class="zoom" id="viewer-zoom">fit</span>
+    <button type="button" data-act="in" aria-label="Zoom in">+</button>
+    <button type="button" data-act="100" aria-label="Actual size">100%</button>
+    <button type="button" data-act="fit" aria-label="Fit to width">Fit</button>
+    <a class="open-original" id="viewer-original" href="#" target="_blank" rel="noopener">Open original in new tab</a>
+    <button type="button" data-act="close" aria-label="Close viewer">×</button>
+  </div>
+  <div class="viewer-pane" id="viewer-pane"><img id="viewer-img" alt=""></div>
+</dialog>
+<script>
+(function () {
+  var dlg = document.querySelector('dialog.viewer'); if (!dlg || !dlg.showModal) return;
+  var img = document.getElementById('viewer-img'), title = document.getElementById('viewer-title'), zoomLbl = document.getElementById('viewer-zoom'), orig = document.getElementById('viewer-original'), pane = document.getElementById('viewer-pane');
+  var items = [], index = -1, zoom = 0; /* 0 = fit to width, otherwise a percentage */
+  function apply() { if (!zoom) { img.style.width = '100%'; zoomLbl.textContent = 'fit'; } else { img.style.width = zoom + '%'; zoomLbl.textContent = zoom + '%'; } }
+  function show(i) {
+    if (i < 0 || i >= items.length) return; index = i; var el = items[i];
+    img.src = el.getAttribute('href'); img.alt = el.getAttribute('data-title') || ''; title.textContent = (el.getAttribute('data-title') || 'Screenshot') + ' · ' + (i + 1) + '/' + items.length;
+    orig.href = el.getAttribute('href'); zoom = 0; apply(); pane.scrollTop = 0; pane.scrollLeft = 0;
+  }
+  function open(el) {
+    var group = el.getAttribute('data-group') || '';
+    items = Array.prototype.filter.call(document.querySelectorAll('a.view[data-viewer]'), function (a) { return (a.getAttribute('data-group') || '') === group; });
+    var i = items.indexOf(el); if (i < 0) { var href = el.getAttribute('href'); i = items.findIndex(function (a) { return a.getAttribute('href') === href; }); }
+    if (i < 0) { items = [el]; i = 0; }
+    show(i); if (!dlg.open) dlg.showModal();
+  }
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target.closest('[data-viewer]') : null;
+    if (t) { e.preventDefault(); open(t); return; }
+    var b = e.target.closest ? e.target.closest('.viewer-bar button') : null;
+    if (b) { var act = b.getAttribute('data-act');
+      if (act === 'close') dlg.close(); else if (act === 'prev') show(index - 1); else if (act === 'next') show(index + 1);
+      else if (act === 'in') { zoom = Math.min(400, (zoom || 100) + 25); apply(); } else if (act === 'out') { zoom = Math.max(25, (zoom || 100) - 25); apply(); }
+      else if (act === '100') { zoom = 100; apply(); } else if (act === 'fit') { zoom = 0; apply(); }
+      return; }
+    var f = e.target.closest ? e.target.closest('.bug-filter button') : null;
+    if (f) { var want = f.getAttribute('data-filter');
+      Array.prototype.forEach.call(document.querySelectorAll('.bug-filter button'), function (x) { x.setAttribute('aria-pressed', x === f ? 'true' : 'false'); });
+      Array.prototype.forEach.call(document.querySelectorAll('.bug-card'), function (c) { c.hidden = want !== 'all' && c.getAttribute('data-status') !== want; }); }
+  });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+  dlg.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowLeft') { show(index - 1); e.preventDefault(); } else if (e.key === 'ArrowRight') { show(index + 1); e.preventDefault(); }
+    else if (e.key === '+' || e.key === '=') { zoom = Math.min(400, (zoom || 100) + 25); apply(); e.preventDefault(); }
+    else if (e.key === '-') { zoom = Math.max(25, (zoom || 100) - 25); apply(); e.preventDefault(); }
+    else if (e.key === '0') { zoom = 0; apply(); e.preventDefault(); }
+  });
+  pane.addEventListener('wheel', function (e) { if (!e.ctrlKey) return; e.preventDefault(); zoom = Math.max(25, Math.min(400, (zoom || 100) + (e.deltaY < 0 ? 10 : -10))); apply(); }, { passive: false });
+})();
+</script>
+</body>
+</html>

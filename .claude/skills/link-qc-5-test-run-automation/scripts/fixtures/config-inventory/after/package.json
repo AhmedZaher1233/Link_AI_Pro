@@ -1,0 +1,8 @@
+{
+  "name": "fixture-project",
+  "scripts": {
+    "test": "playwright test",
+    "test:us1234": "playwright test --project=chromium --grep @us-1234",
+    "test:ci": "playwright test -c Testing/Automation/playwright.ci.config.ts"
+  }
+}

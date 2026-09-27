@@ -101,7 +101,7 @@ Items marked `M+S` need both — a clean grep does not prove compliance.
 | 15 | Evidence is never captured from `afterEach`/`afterAll`; exactly one per test | M | A |
 | 16 | The call sits at the assertion point and before teardown | S (the scanner cannot prove placement) | A |
 | 17 | Evidence helper, screenshot config and output roots exist and are writable | S | A |
-| 18 | The images, phase JSON and HTML were **actually produced**, associated with the right TC, and correspond to the final tested code | S | **B only** |
+| 18 | The images, the run file (`.runs/phase-N.json`), the report's phase section, the bug file entries and the rendered HTML were **actually produced**, associated with the right TC, and correspond to the final tested code | S | **B only** |
 | 19 | No PASS whose image shows a cleaned-up screen | S | **B only** |
 
 At Checkpoint A only the *implementation and configuration* of evidence and reporting are verified.
@@ -132,7 +132,7 @@ Runtime artifacts do not exist yet: record them as `scheduled for Checkpoint B`,
 |---|---|---|---|
 | 29 | Every test title carries its `[TC-ID]`; every suite title carries its requirement ID | M | A, B |
 | 30 | Referenced IDs validated against the resolved sources; **no requirement ID invented here** — upstream owns ID assignment | M (`trace-unknown-*`) | A, B |
-| 31 | Requirement ID(s) present in the coverage artifacts and in the phase JSON | S | A, B |
+| 31 | Requirement ID(s) present in the coverage artifacts and in the run JSON | S | A, B |
 | 32 | Requirement → TC → automated test → execution result is mappable end to end | S | B |
 | 33 | Requirement outcome coverage, TC automation coverage and execution pass rate reported **separately** | S | A (first two), B (all three) |
 | 34 | Missing, partial, blocked and unexecuted coverage stay visible | S | A, B |
@@ -147,6 +147,20 @@ Runtime artifacts do not exist yet: record them as `scheduled for Checkpoint B`,
 | 38 | No credential, token or connection string in code, config, logs or the learning file | M (warning) + S | A, B |
 | 39 | Every exception honoured by the scanner has had its **source opened and its substance recorded** | S | A, B |
 
+### Code craft, configuration and timeouts (`references/code-craft.md` [M] items)
+
+| # | Check | How | Gate |
+|---|---|---|---|
+| 40 | Every generated / updated test wraps each manual step in `step()` (validator run with `--require-steps`); `captureEvidence` is a top-level statement before the Assert step, never inside a step | M (`step-missing`) + S | A, B |
+| 41 | Positional selectors (`first` / `last` / `nth`) are scoped by `filter({ has \| hasText })` or a named container, or justified on the line above | M (`positional-unscoped`) + S | A, B |
+| 42 | No `networkidle` readiness in any layer; waits are bounded by the step deadline | M (`wait-network-idle`) + S | A, B |
+| 43 | Every timeout value comes from `timeouts.ts` (none inline); initial values and `playwright_version` recorded; calibration changes carry `{key, from, to, reason, evidence}`; no retry added to absorb a timeout | S | A (initial), B (calibration) |
+| 44 | ONE shared `playwright.config.ts` to the §8 contract; extra configs merged only when reproducible, references rewritten, deleted only after `config-inventory.mjs` listed them deletable; unmergeable ones reported; reporters additive (`line`, `json`, `progress-reporter` beside the project's own) | S (+ `config-inventory.mjs`) | A, B |
+| 45 | Created test data named by `uniqueName()` / cleaned by `runPrefix()`; teardown timeouts flagged `cleanup_incomplete` and swept | S | A, B |
+| 46 | Console guard attached in `beforeEach` and reported in `afterEach`; unexpected entries listed under Deviations, never a TC failure by themselves | S | A, B |
+| 47 | Page objects, component objects and locator chains follow `code-craft.md` §1-3 (readonly locators, intent-named methods, scoping `Locator` for components, testid → role → label → text → stable CSS, no build-generated attributes); fixtures (when present) wrap `prerequest/` functions; `.gitignore` lines present | S | A, B |
+| 48 | Watchdog stops are taken only on `FROZEN` verdicts from `watchdog.mjs`; completed results preserved, interrupted and not-started TCs named, the event classified `timeout_failure`; the consumer-project probe recorded PASS or NOT_RUN with the reason | S | **B only** |
+
 ---
 
 ## 3. Checkpoint A — before execution
@@ -155,12 +169,14 @@ Runs after generation and before anything is executed. It is the first gate in
 `<environment_gate>`, ahead of the coverage and readiness gates.
 
 1. **Review the full scope** — every test created, modified or selected for this run, plus the page
-   objects, fixtures, helpers, configuration and evidence/reporting code they touch.
-2. **Run the mechanical checks.** `validate-automation.mjs` over the in-scope files, plus the
-   project's own lint/typecheck where it exists. Report `gate`, `counts`, `review[]`, `notRun[]` and
-   `exceptions[]` together — never just "clean".
+   objects, fixtures, helpers, the shared configuration, `timeouts.ts` and evidence/reporting code
+   they touch.
+2. **Run the mechanical checks.** `validate-automation.mjs` over the in-scope files — specs AND the
+   page objects / helpers they touch, with `--require-steps` for generated or updated specs — plus
+   `config-inventory.mjs` and the project's own lint/typecheck where it exists. Report `gate`,
+   `counts`, `review[]`, `notRun[]` and `exceptions[]` together — never just "clean".
 3. **Run the semantic review** for every `S` item above. A clean grep proves nothing about items 3,
-   7, 10, 11, 16 or 39.
+   7, 10, 11, 16, 39, 43, 44 or 47.
 4. **Fix confirmed automation-code violations immediately.** They are repairs, not recommendations:
    do not defer them, do not list them for the user to approve, do not ask anyone to say "fix 1".
    Routine repairs need no approval. Only an unresolved *business* decision — one that changes what
@@ -180,9 +196,11 @@ Runs after execution and after all debugging, before `AUTOMATION COMPLETE`.
 2. **Confirm debugging introduced no shortcuts:** no weakened assertion, no broken POM boundary, no
    removed evidence, no suppressed error, no new unjustified skip, no changed application setting,
    no product-code edit.
-3. **Verify the artifacts exist.** Items 18, 19, 22, 32 and 33: the evidence images, phase JSON,
-   merged results, HTML report and logs were actually written, are associated with the right TC, and
+3. **Verify the artifacts exist.** Items 18, 19, 22, 32 and 33: the evidence images, the run file with its merged results, the `## Phase N` section of `TEST-RUN-REPORT-{feature}.md`, the `BUG-REPORT-{feature}.md` entries of this phase, the rendered HTML (renderer gate PASS, provenance verified) and the logs were actually written, are associated with the right TC, and
    correspond to the final tested code — compare the recorded `scopeDigest` with the current one.
+
+Verify renderer PASS, provenance, no missing evidence and new root entries within the
+run-report.md whitelist (legacy files untouched). These are semantic artifact checks.
 
 ### When Checkpoint B finds an automation defect
 

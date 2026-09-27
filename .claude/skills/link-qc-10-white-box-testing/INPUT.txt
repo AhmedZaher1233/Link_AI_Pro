@@ -1,4 +1,4 @@
-SKILL: 4-white-box-testing
+SKILL: link-qc-10-white-box-testing
 WHAT IT DOES: Audits the CODEBASE against a requirement — traces where/how it is
 implemented, finds gaps, potential bugs, and concrete reproduction scenarios.
 (First run auto-profiles the repository and caches the profile.)
@@ -26,7 +26,7 @@ NOTES:
 OUTPUT — WHAT YOU GET
 ============================================================
   Testing/White_Box_Testing/                 (root = paths.whiteBox from qa-manifest.json)
-    .project-profile.md                     ← cached repo profile (reused next runs, shared with skill 7)
+    .project-profile.md                     ← cached repo profile (reused next runs, shared with skill 11)
     SPEC-{spec-name}/                       ← when the REQ sits under Requirements/SPEC-{spec-name}/
       US-{id}-{name}/                       ←   (or the requirement came from a spec file)
         {RequirementID}-{Feature}-analysis.md   ← gaps, bugs, repro scenarios, verdict

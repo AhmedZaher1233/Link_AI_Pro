@@ -61,7 +61,7 @@ README rules instead.
    configuration section exists, count `[placeholder]` keys) or a standalone
    `project-config.md` exists where L2 expects it and L3 points at it. Never fill the contract
    yourself; report unfilled keys under `USER ACTION REQUIRED` (L2 §17.8 makes an incomplete
-   contract a blocker for skills 3, 5 and 6).
+   contract a blocker for skills 3, 4 and 5).
 7. **Relocation** of steering files living outside `docs/steering/` happens only in Mode C with
    a confirmed move plan; otherwise record the actual path as a manifest deviation.
 

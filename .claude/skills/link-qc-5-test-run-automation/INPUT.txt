@@ -1,13 +1,15 @@
-SKILL: 6-test-run-automation
+SKILL: link-qc-5-test-run-automation
 WHAT IT DOES: Takes the HUMAN-APPROVED TC document → generates Playwright automation (POM
 mandatory) → passes a pre-run COMPLIANCE CHECKPOINT → measures static coverage → resolves
 test-data readiness with you → runs
 smoke-gated staged execution (smoke → positive → negative) with live progress + ETA in the
-chat → produces the phase HTML report + bug report → passes a post-run COMPLIANCE CHECKPOINT
+chat → appends this run's section to the story's TEST-RUN-REPORT-{feature}.md, updates
+BUG-REPORT-{feature}.md, folds the run's machine data into .runs/phase-N.json and renders both
+markdown files into one HTML page with a script → passes a post-run COMPLIANCE CHECKPOINT
 on the final code → and, ONLY if the story is already
 published to Azure DevOps, closes the loop there (the template's automation flag on the work
-items skill 5 created).
-It does NOT beautify or publish TCs — that is 5-publish-test-cases-azure, a SEPARATE and
+items skill 4 created).
+It does NOT beautify or publish TCs — that is link-qc-4-publish-test-cases-azure, a SEPARATE and
 OPTIONAL skill. You are never asked to run it.
 
 ============================================================
@@ -23,7 +25,7 @@ REQUIRED:
                                    lookup needed. It only names the report/log/screenshot
                                    folders, so a free-text label is fine.
 
-AZURE DEVOPS IS OPTIONAL (auto-detected, never asked): if skill 5 already published these TCs
+AZURE DEVOPS IS OPTIONAL (auto-detected, never asked): if skill 4 already published these TCs
   ({Story}/ADO-MAP.md + TEST-CASES-*-beautified.md matching the approved document's hash), the
   run closes the loop in DevOps at the end. If not — or the map is stale, or ADO is
   unreachable — the run is simply LOCAL: everything else happens exactly the same, and you are
@@ -32,9 +34,11 @@ AZURE DEVOPS IS OPTIONAL (auto-detected, never asked): if skill 5 already publis
 OPTIONAL:
   3. Environment                 — target test environment (defaults to the automation
                                    project's TEST_ENV preset)
-  4. --workers N                 — browser windows for the parallel group (default 3;
-                                   serial groups always run with 1)
-  5. --headless                  — hide the browser (default: VISIBLE, you watch the run)
+  4. --workers N                 — browser windows for the parallel group (default 2, from the
+                                   ONE shared playwright.config.ts; serial groups always run
+                                   with 1, the documented override)
+  5. --headless                  — hide the browser (default: VISIBLE Google Chrome window,
+                                   you watch the run; passed to the config as PW_HEADLESS=1)
 
 COMPLIANCE GATES: the run passes through TWO mandatory compliance checkpoints, and BOTH must
   pass before the skill claims the automation is compliant.
@@ -60,12 +64,20 @@ COMPLIANCE GATES: the run passes through TWO mandatory compliance checkpoints, a
 HOW IT RUNS: the skill builds a run plan from your TCs — read-only TCs run in parallel,
 TCs that create/edit/delete or share the same data run one after another (you can steer
 this with the optional "Data effect" / "Shared data" fields from skill 3) — then runs
-smoke → positive → negative with the browser visible.
+smoke → positive → negative with the browser visible, from ONE shared playwright.config.ts
+(Google Chrome, 2 workers). An existing config is updated in place; several are consolidated
+into one — each extra config is merged only when its behaviour can be reproduced, its
+references (package scripts, CI, docs) rewritten first, and deleted only after nothing refers
+to it; a config that cannot be merged safely is kept and reported. A config is created only
+when none exists. Timeouts come from one timeouts.ts (test budget separate from per-step
+deadlines, initial values documented, calibrated after the first run from evidence — never
+raised to hide a broken locator or a frozen step); a heartbeat watchdog stops only a genuinely
+hung worker, keeps every finished result and names interrupted vs never-started TCs.
 
 OPEN QUESTIONS: an APPROVED document that still reads ambiguously in places is NOT dropped and
   NOT blocked. The skill generates the code for everything else FIRST, then asks you about each
   ambiguity — a vague expected result ("shows the correct order"), an element the source does
-  not settle, a "Needs human review" note from skill 5, a TBD — one question at a time, with
+  not settle, a "Needs human review" note from skill 4, a TBD — one question at a time, with
   2-4 options it actually found (what the code does, what a sibling TC says) and a
   recommendation, so you just pick. The parked TCs are then generated from your answers.
   Anything you do not answer is automated on the best-evidenced reading and clearly marked
@@ -90,39 +102,57 @@ PREREQUISITES (asked/checked, not guessed):
     / skip. Created data is deleted after the run unless you add "keep".
 
 OPTIONAL (only when the story is already published to Azure DevOps):
-  - Azure DevOps MCP connected with a read/write PAT (Work Items + Test Management) — used
-    ONLY for the close-out. Not connected, or 401/403 → the run continues locally and the
-    close-out is skipped; you are never blocked and never asked to publish.
+  - Azure DevOps MCP connected with a read/write PAT (Work Items + Test Management) — cloud
+    or self-hosted server — used ONLY for the close-out. Not connected, or 401/403 → the run
+    continues locally and the close-out is skipped; you are never blocked and never asked to
+    publish. (A 401 / "anonymous access" right after the PAT was created means VS Code needs a
+    full quit + relaunch, not an /mcp reconnect. On the self-hosted server test-point outcomes
+    cannot be written — reported as skipped, fields and comments still updated.)
 
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
-  Results mirror the TC folder: [SPEC-{spec-name}/] appears below whenever the approved
-  document sits under Testing/Manual_Test/TestCases/SPEC-{spec-name}/; otherwise the paths
-  are flat US-{id}/ as before.
+  Reports, logs and screenshots mirror the TC folder with the SAME leaf:
+  [SPEC-{spec-name}/]US-{id}-{name}/ (older US-{id}/ folders from earlier runs are kept as
+  read-only history; nothing is moved).
 
-  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/phase-N.json + phase-N.html  ← run of record
-                                                                    (history never overwritten)
-  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/stages/*.json  ← one Playwright JSON per
-                                                  execution stage / group (replaced each run)
-  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/merged-results.json ← all stages merged per
-                                                  test variant (browser × data variation) with
-                                                  full attempt history; a TC is Passed only when
-                                                  EVERY required variant passed, otherwise
-                                                  INCOMPLETE (never published as Passed)
-  {automation_root}/automation-logs/[SPEC-{spec-name}/]US-{id}/run-progress-{stamp}.log ← live tailable log
-  {automation_root}/screenshots/[SPEC-{spec-name}/]{UserStoryName}/
+  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}-{name}/
+      TEST-RUN-REPORT-{feature}.md     ← test-case status, the run of record: status header, run
+                                         history table, one "## Phase N" section per run (appended —
+                                         earlier phases are never rewritten)
+      BUG-REPORT-{feature}.md          ← the bugs: one "### BUG-n" entry per defect with reproducible
+                                         steps, expected / actual, the failure screenshot (relative
+                                         link) and a per-phase History; resolved only after a passing
+                                         retest
+      TEST-RUN-REPORT-{feature}.html   ← BOTH files rendered into one page by
+                                         scripts/render-run-report.mjs after every run: separate
+                                         "Test Results" and "Bugs" sections, screenshot thumbnails
+                                         with a "View screenshot" viewer (zoom, scroll, open the
+                                         original in a new tab) — relative links, never base64,
+                                         never hand-written
+      .runs/phase-N.json               ← ALL machine data of phase N: run plan, open questions,
+                                         test-data readiness, coverage snapshot, compliance gates,
+                                         merged stage results per variant / attempt, per-TC results,
+                                         bugs, heal log — immutable once final
+      coverage/                        ← coverage-summary.csv · coverage-detail.csv ·
+                                         manual-scenarios.csv (replaced each run)
+      artifacts/stages/*.json          ← raw Playwright JSON per stage command (replaced each run)
+      artifacts/progress/*.jsonl       ← heartbeat + incremental results per stage command (the
+                                         watchdog's inputs); *.watchdog.json only when a frozen
+                                         command was stopped (replaced each run)
+      artifacts/test-output/           ← Playwright traces / attachments (replaced each run)
+  Nothing else is written at that top level.
+  {automation_root}/automation-logs/[SPEC-{spec-name}/]US-{id}-{name}/run-progress-{stamp}.log ← live tailable log
+  {automation_root}/screenshots/[SPEC-{spec-name}/]US-{id}-{name}/
       phase-{N}/{TC-ID}/{browser}--{variation}--r{n}/attempt-{a}.png   ← EVERY attempt of every
-                                                  variant, taken at the ASSERTION POINT (before
-                                                  any data cleanup); attempt-{a}-failed.png on
-                                                  failure. NEVER overwritten or deleted — earlier
-                                                  attempts and earlier phases stay
-  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/run-plan.json        ← parallel/serial groups + required variants per TC
-  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/open-questions.json  ← ambiguities, the options
-                                                  offered, your decisions, and any unverified assumption
-  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/data-readiness.json  ← test-data gaps + your decisions
-  {automation_root}/reports/[SPEC-{spec-name}/]US-{id}/coverage/            ← static coverage dashboard + CSVs
-  {automation_root}/playwright.us-{id}.config.ts                       ← per-story config (headed)
+                                         variant, taken at the ASSERTION POINT (before any data
+                                         cleanup); attempt-{a}-failed.png on failure. NEVER
+                                         overwritten or deleted — earlier attempts and phases stay
+  {automation_root}/playwright.config.ts  ← the ONE shared config, updated in place (never a per-story file)
+  {automation_root}/timeouts.ts           ← the timeout policy (initial values → calibrated after the first run)
+  {automation_root}/helpers/steps.ts · progress-reporter.ts · console-guard.ts · test-data.ts  ← copied from the skill's templates when absent
+  + a "Timeout policy" section in the final report: initial values, first-run events, adjustments
+    with reasons and evidence, the watchdog probe result — each NOT_RUN with the reason when no run happened
   Azure DevOps (ONLY when already published): automation flag + automated-test metadata on the
                 TC work items, summary comment on the story; {Story}/ADO-MAP.md updated with
                 the final status. Not published → this output simply does not appear.
@@ -133,5 +163,6 @@ OUTPUT — WHAT YOU GET
   Testing/project-learning.md  ← updated: automation tricks, element identification, env fixes, Q&A
 
 WHEN TO RUN: after a human set Status: APPROVED on skill 3's output. Publishing to Azure
-DevOps (skill 5) is a separate, optional step — run it before or after this skill, or not
-at all.
+DevOps (skill 4) is a separate, optional step — run it before or after this skill, or not
+at all. Live validation of the TCs (skill 3b, or its CLI twin 3c) is optional too: an all-"draft" document is
+accepted as it is.
