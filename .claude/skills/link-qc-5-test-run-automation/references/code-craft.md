@@ -30,6 +30,17 @@ with its reason; it never blocks. Every section is tagged.
   is `prerequest/` or a fixture (§6).
 - **Match the project's existing style first** (file naming, constructor shape, how `page` is
   held). These rules fill gaps; they never trigger a rewrite of a working convention.
+- **[M] One page class per screen across the WHOLE automation root — never a twin.** Before a
+  page object is written, `<automation_inventory>` scans every class under `{automation_root}`
+  (any folder, whatever skill or agent wrote it) and records one decision row per screen in
+  `{reports_folder}/automation-inventory.md`: `reuse {class}` / `extend {class} (+methods)` /
+  `create {class}`, naming every candidate the matching surfaced (same normalized name, same
+  route, two or more identical locators) with the reason it was accepted or rejected. A class
+  is created only from a `create` row whose candidates are all rejected with a reason; a second
+  `OrderPage`, a `4-ListingPage.ts` beside `ListingPage.ts`, or a new class on a route another
+  class already opens is a Checkpoint A failure (validator `pom-duplicate-page`, run with
+  `--inventory`). The decision is recorded in the learning file `## Automation Tricks` so the
+  next run reuses it.
 
 ## 2. Component objects [M]
 

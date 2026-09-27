@@ -70,9 +70,10 @@ description: >
   compliance status is always reported separately from execution status.
   Does NOT beautify or publish TCs — that is link-qc-4-publish-test-cases-azure. Trigger on:
   "automate the approved test cases", "run the automation", "generate playwright tests
-  from the TC document", "run the test cases for the story".
+  from the TC document", "run the test cases for the story", "read my comments on the run
+  report", "address the review comments on the test run".
 argument-hint: "[<approved TC document path>] [<User Story ID or title>] [<environment>] [--workers N] [--headless]"
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Bash(node *validate-automation.mjs*), Bash(node *selftest.mjs*), Bash(node *render-run-report.mjs*), Bash(node *selftest-run-report.mjs*), mcp__azure-devops, mcp__playwright
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Bash(node *validate-automation.mjs*), Bash(node *selftest.mjs*), Bash(node *render-run-report.mjs*), Bash(node *selftest-run-report.mjs*), Bash(node *tc-hash.mjs*), Bash(node *selftest-tc-hash.mjs*), mcp__azure-devops, mcp__playwright
 ---
 
 <role>
@@ -400,6 +401,19 @@ automatable when every step maps deterministically to an action and an assertion
 publishes as the template's automation flag. TCs that cannot be automated deterministically appear in
 the coverage table as `manual — not automated`, with the reason stated.
 
+**`[HUMAN]` steps do not change candidacy — they bound the execution.** A candidate TC whose
+steps carry the `[HUMAN] ` marker (skill 3 writes it only where no authorized test interface
+exists for an out-of-browser outcome — an SMS code read on a test phone, a letter on a desk) is
+**generated up to the first human step**: every step before it becomes automation with its
+assertions and the evidence image, the human step and everything after it are not written into
+the spec. Its coverage-table status is `partial (human step: n)` (`n` = the step number) and its run
+outcome word is **`PARTIAL — human step pending`** (`references/run-report.md` §4 — Classification
+`human step: n`). A partial TC **never** reports `PASS`, never counts as passed anywhere, never
+becomes `Automated` in Azure DevOps and never gets an `automated_tc_sha256` (PHASE 5). The four
+axes stay separate: design coverage (the TC exists in full — skill 3), automation candidacy (YES
+/ NO — the document), execution coverage (`full` / `partial (human step: n)` / `manual — not
+automated` — this skill) and validation status (3b / 3c).
+
 **Generate first, ask second.** An approved document can still read ambiguously in places. Such
 a TC is **NOT a failure and NOT a block** — this phase writes every TC it can and **parks** the
 rest as open questions for `PHASE 2.4`, which asks the user with concrete options and then
@@ -459,20 +473,54 @@ Full rules, including assertion quality: `references/automation-rules.md` §1-§
    |------|------|----------------------|---------------------------------------------|
 </hierarchy_verification>
 
+<automation_inventory>
+**Mandatory pre-write scan — no page object is written before the inventory exists.** A twin page
+class (a second `OrderPage`, a `4-ListingPage.ts` beside `ListingPage.ts`, a new class on a route
+another class already opens) is a Checkpoint A failure, whatever folder or agent wrote the original.
+
+1. **Scan the WHOLE `{automation_root}`** — every folder, not only `pages/` and
+   `pages/components/`: every class that takes a `Page` in its constructor or extends a base page,
+   with its file, class name, route / URL literal and exported locator names. Run
+   `node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --root . --pretty`
+   once for its `pageScan` section (the same walk, machine-made) and read the classes yourself.
+2. **Match each screen the TCs touch against the classes** — by normalized name (case, a trailing
+   `s` / `Page`, a numeric file prefix ignored), then by route literal, then by two or more identical
+   locators. A match is **evidence for a decision, never the decision**: a different class name on
+   the same route is a reuse candidate; a legitimately shared route or a common loader locator is
+   closed by the reason you write.
+3. **Write `{reports_folder}/automation-inventory.md`** (`{results_root}`, beside the run report —
+   in the whitelist, rewritten each run) with the decision table, **one row per screen**:
+
+   | Screen | Decision | Class | Candidates considered | Reason |
+   |---|---|---|---|---|
+   | {screen} | `reuse {class}` \| `extend {class} (+{methods})` \| `create {class}` | `{Class} ({path})` | `{Class} — accepted \| rejected`, every candidate the matching surfaced | why each candidate was accepted or rejected — the same-route / shared-locator justification lives here |
+
+   A `create` row with a candidate that is not addressed with a reason is a Checkpoint A failure;
+   a candidate pair with no row is one too.
+4. **Validate with the inventory** — every validator run of this story passes
+   `--inventory {reports_folder}/automation-inventory.md`: a candidate pair a row covers is
+   `pom-duplicate-page-decided` (info); an uncovered pair stays `pom-duplicate-page` (review) and
+   keeps the scanner gate BLOCKED (`references/validator.md`).
+5. **Record every decision in the learning file** `## Automation Tricks`, one plain-English
+   `[type: trick]` line per screen (`- [module: Orders] [page: Order list] [type: trick] Page object
+   OrderListPage covers the orders list; OrdersOverview was rejected as a duplicate on the same
+   route.`) so the next run reuses the decision instead of re-deriving it.
+</automation_inventory>
+
 <pom_mandatory>
 **Page Object Model is MANDATORY — no direct locators in spec files.**
 
 - Every screen interaction in a spec goes through a page-object method.
-- REUSE an existing page object from `pages/` when it fits (scan the directory
-  first — list every `pages/*.ts` and `pages/components/*.ts` and match them to the
-  screens the TC touches by name, then by the locators inside). Never report "no POM
-  exists" without checking.
+- REUSE an existing page object when it fits — decided by the `<automation_inventory>` row for
+  that screen (the scan covers the WHOLE automation root, not only `pages/*.ts` and
+  `pages/components/*.ts`, and matches by normalized name, then route, then locators). Never
+  report "no POM exists" without the inventory.
 - EXTEND the relevant page object with new methods when it partially fits —
-  match the file's existing style.
+  match the file's existing style (`extend {class} (+methods)` row).
 - CREATE a new page-object class (matching the conventions of the existing
-  `pages/` files) when none exists for the screen.
+  `pages/` files) only from a `create` row whose candidates were all rejected with a reason.
 - New/updated page files are part of the deliverable and MUST appear in the
-  Placement Manifest.
+  Placement Manifest and in `automation-inventory.md`.
 - A locator inline in a spec file is a self-check FAILURE — move it into a page
   object before running anything.
 
@@ -598,6 +646,19 @@ Internal step (no JSON handoff files) — normalize each approved TC:
   (`role user exists`, `record of type X in state Y exists (count N)`, `empty state for Z`,
   `configuration / feature flag`, `external system or background job`). These feed
   PHASE 2.6 `<data_readiness>`; a TC with none is `read-only, no data need`.
+- **Reference tokens resolve per ID, never by shortcut.** A TC names its configuration as
+  `Open the portal [E1]`, `Login as Administrator [A1]`, `price list "Sample" [D1]`
+  (`TEST-DATA-{feature}.md` §0 / §1 / §2). `[E{n}]` maps to **its own** environment entry keyed by
+  the E-ID (E1 is not "the" URL — E2 may be the mail sandbox); `[A{n}]` maps to **that** account
+  keyed by the A-ID, credentials looked up by account ID and never by role (a role may own several
+  accounts); `[D{n}]` maps to that data item. In code this is `environment('E1')`, `account('A1')`,
+  `dataItem('D1')` from `helpers/test-data.ts` (`assets/test-data.template.ts`) reading the env
+  vars named after the ID (`E1_URL`, `A1_USER` / `A1_PASSWORD`) — no default, no literal, no
+  "first E row" or "any Administrator" anywhere. A `[HUMAN]` step is kept as text and bounds the
+  generated part (PHASE 2 candidacy). A `- **Reviewer comment:**` bullet is the reviewer's note to
+  the QA skills: it is never normalized, never generated into code, never part of the TC hash; an
+  open one that asks for a TC change is reported once ("route to skill 3 `--revision`"), and the
+  approved text is automated as written.
 </normalization>
 
 <selector_resolution>
@@ -773,7 +834,11 @@ policy it imports is `assets/timeouts.template.ts` → `{automation_root}/timeou
 6. **Helpers.** Copy `assets/steps.template.ts`, `progress-reporter.template.ts`,
    `console-guard.template.ts`, `test-data.template.ts` into `helpers/` when the project has no
    equivalent (match an existing equivalent instead of duplicating it); add the `.gitignore`
-   lines of `references/code-craft.md` §12. Everything touched goes in the Placement Manifest.
+   lines of `references/code-craft.md` §12. `helpers/test-data.ts` carries the per-ID maps of
+   `<normalization>` — `environments` keyed by E-ID and `accounts` keyed by A-ID, each entry
+   reading `{ID}_URL` / `{ID}_USER` / `{ID}_PASSWORD` at run time with no default — fill one entry
+   per row the story's TEST-DATA file has; an existing env layer keyed by role is extended with the
+   ID-keyed entries, never replaced. Everything touched goes in the Placement Manifest.
 7. **Version gate.** Resolve `playwright_version` (`<project_profile>`); < 1.42 → BLOCKED with
    the upgrade command; otherwise record the feature gates (tags object, `--last-failed`, native
    step timeout) for `<spec_writing>` and the Timeout policy section.
@@ -926,10 +991,14 @@ fixtures, helpers, configuration and evidence/reporting code they touch.
    ```bash
    node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs \
      --root . --pretty --files <in-scope specs + the page objects, components, fixtures and helpers they touch> \
-     --tc-ids <approved TC doc> --req-ids <REQ file> --require-steps
+     --tc-ids <approved TC doc> --req-ids <REQ file> --require-steps \
+     --inventory {reports_folder}/automation-inventory.md
    ```
    `--files` carries the page objects and helpers too: the wait, positional-selector and
    `networkidle` rules apply in every layer, and a file the scanner never sees is never checked.
+   `--inventory` is the `<automation_inventory>` decision table: the page-class pass walks the
+   whole automation root on its own, and a candidate pair no row covers is `pom-duplicate-page`
+   (review) that keeps the scanner gate BLOCKED — an unaddressed candidate fails this checkpoint.
    `--require-steps` is passed for the specs this run generated or updated (legacy specs may
    omit it; say so). Report `gate`, `counts`, `review[]`, `notRun[]` and `exceptions[]` together
    — never just "clean". A `gate: PASS` means no banned pattern was found and **nothing more**.
@@ -964,11 +1033,21 @@ Claiming they exist, or marking their runtime verification passed, is a false cl
 Checklist (all of these, plus `references/compliance-checkpoints.md` §2):
 
 - [ ] Placement Manifest complete; spec + page objects at correct paths; spec registered
+- [ ] **Automation inventory written before any page object** (`<automation_inventory>`): the
+      whole automation root scanned, one decision row per screen in
+      `{reports_folder}/automation-inventory.md`, every candidate named with its reason, the
+      validator run with `--inventory` and **no open `pom-duplicate-page`** (every candidate pair
+      `pom-duplicate-page-decided`); a `create` row with an unaddressed candidate = FAIL
 - [ ] Zero inline locators in specs — all interaction through page objects
 - [ ] **POM self-check grep run and reported clean** (see `<pom_mandatory>`)
 - [ ] No spec-local function takes `page` or a page object and drives the screen
 - [ ] No `.locator()` / `.evaluate()` / `.count()` chained off a page object's exposed locator
-- [ ] Every automation-candidate TC-ID implemented or skip-guarded with a precise reason
+- [ ] Every automation-candidate TC-ID implemented or skip-guarded with a precise reason; a
+      candidate with `[HUMAN]` steps implemented up to the first one and listed
+      `partial (human step: n)` — never as full coverage
+- [ ] **Every `[E{n}]` / `[A{n}]` / `[D{n}]` reference resolved through its own ID-keyed entry**
+      (`environment('E1')`, `account('A1')`, `dataItem('D1')`) — no role-to-account, no
+      "first E row", no literal URL or username in code
 - [ ] Coverage table matches the approved document exactly (no invented scenarios)
 - [ ] No banned patterns (waitForTimeout / test.only / hardcoded creds or URLs)
 - [ ] AAA identifiable in every test; every test has ≥1 assertion
@@ -1297,9 +1376,13 @@ precondition cannot be met or its data is absent from the environment is **decid
 QC — never discovered by the run.** The run must not be the first place a "no data" skip appears.
 
 **1. Collect the requirements** — start from skill 3's
-`{tc_output_folder}/TEST-DATA-{feature}.md` when it exists: take its data items, TC mapping,
-accounts, statuses (`READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN`), Problems table and
-recommended ways as the inventory of record — **do not rebuild the inventory from scratch**.
+`{tc_output_folder}/TEST-DATA-{feature}.md` when it exists: take its environment rows (`## 0.
+Environment`, `E{n}`), data items (`D{n}`), TC mapping, accounts (`## 1. Accounts`, `A{n}`),
+statuses (`READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN`), Problems table and recommended ways as
+the inventory of record — **do not rebuild the inventory from scratch**. Every ID a TC references
+is a requirement of its own: `[E2]` is the mail sandbox row, not the base URL; `[A2]` is that
+account, not "an Administrator"; a referenced ID with no row is a gap to list here, never a
+substitution.
 Add only requirements the approved TC document carries that the file lacks (a Preconditions /
 Data Oracle / Shared data sentence or a role with no data item), and say which were added.
 Skill 3 owns that file — never edit it; record outcomes in the learning file and
@@ -1316,7 +1399,9 @@ the file marks "to be confirmed" (`api` / `db`) is offered to the QC only after 
 it:
 1. `Testing/project-learning.md` first: `[type: data]` lines (`## Test Data`), `[type: env]`
    lines, and this skill's Q&A. A recorded fixture or a recorded decision is reused — say so.
-2. Role users: the env layer / role-user configuration of the automation project.
+2. Accounts: the env layer of the automation project keyed by account ID (`helpers/test-data.ts`
+   `accounts['A1']` → `A1_USER` / `A1_PASSWORD`); a role-keyed legacy layer is read for the
+   username only and the ID-keyed entry is added — never "any user of that role".
 3. Existing provisioning: `prerequest/*PreRequest.ts` fixtures, DB-oracle helpers in `pages/`,
    `00-setup-*.spec.ts` journeys from earlier stories.
 4. One read probe per remaining data need: an existing API GET through the project's request
@@ -1432,6 +1517,7 @@ contract, both markdown shapes, the run-file schema and the renderer's gates.
       TEST-RUN-REPORT-create-order.md        ← test-case status: header + ## Run history + one ## Phase N per run (appended)
       BUG-REPORT-create-order.md             ← the bugs: one ### BUG-n entry per defect, Status + History per phase
       TEST-RUN-REPORT-create-order.html      ← rendered from both files by scripts/render-run-report.mjs after every run
+      automation-inventory.md                ← page-object decision table (<automation_inventory>), rewritten each run, read by the validator --inventory
       coverage/                              ← coverage-summary.csv · coverage-detail.csv · manual-scenarios.csv (replaced)
       .runs/phase-1.json … phase-N.json      ← ALL machine data of each phase (schema skill6-run/1); immutable once final
       artifacts/stages/*.json                ← raw Playwright JSON per stage command (emptied at run start)
@@ -1442,10 +1528,13 @@ contract, both markdown shapes, the run-file schema and the renderer's gates.
 ```
 
 - **Top-level whitelist.** The story folder holds exactly `TEST-RUN-REPORT-{feature}.md`,
-  `BUG-REPORT-{feature}.md`, `TEST-RUN-REPORT-{feature}.html`, `coverage/`, `.runs/`,
-  `artifacts/`. Nothing else is ever created there — not a checkpoint record, a fixture cache, a
-  status file, a backup folder, a retest folder or an extra results JSON. Machine data of a run
-  goes into `.runs/phase-{N}.json`; scratch goes under `artifacts/` (replaced each run).
+  `BUG-REPORT-{feature}.md`, `TEST-RUN-REPORT-{feature}.html`, `automation-inventory.md`,
+  `coverage/`, `.runs/`, `artifacts/`, plus the reviewer's optional `REVIEW-COMMENTS-{feature}.md`
+  (saved from the page by the reviewer; the skill never creates it and only sets each handled
+  entry's Status and Response). Nothing else is ever created there — not a checkpoint
+  record, a fixture cache, a status file, a backup folder, a retest folder or an extra results
+  JSON. Machine data of a run goes into `.runs/phase-{N}.json`; scratch goes under `artifacts/`
+  (replaced each run).
 - **Legacy locations are first-class, read-only history.** Projects set up before this layout keep
   their `reports/[SPEC-*/]US-{id}/` folders, top-level `phase-N.json` / `phase-N.html`,
   `merged-results.json`, `run-plan.json`, `open-questions.json`, `data-readiness.json`,
@@ -1901,7 +1990,10 @@ worked in the learning file.
      `PASS` but another required variant `SKIP` / `NOT_RUN` / missing → **`INCOMPLETE`** (never
      `PASS`) with `missing_variants[]`; only `SKIP` → `SKIP`; nothing executed → `NOT_RUN`.
      Extra, non-required variants are kept and reported but never make up for a missing
-     required one.
+     required one. A TC generated up to a `[HUMAN]` step (PHASE 2 candidacy) whose automated
+     part passed on every required variant is **`PARTIAL`** — written `PARTIAL — human step
+     pending` in the Results table, classification `human step: {n}`, `human_step: {n}` in the
+     run file — never `PASS`; its automated part failing is `FAIL` like any other.
    - **Totals count TCs**, one per TC-ID, from the overall status — a TC is never counted
      twice; per-variant counts go to `variant_totals`.
 
@@ -1921,8 +2013,8 @@ worked in the learning file.
                     "final_status": "PASS" }],
      "tcs": [{ "tc_id": "TC-007", "required_variants": ["chromium--variation-a--r0", "chromium--variation-b--r0"],
                "variant_slugs": ["chromium--variation-a--r0", "chromium--variation-b--r0"],
-               "status": "PASS | FAIL | INCOMPLETE | SKIP | NOT_RUN", "missing_variants": [], "skipped_variants": [] }],
-     "variant_totals": { "passed": 0, "failed": 0, "skipped": 0, "not_run": 0 }
+               "status": "PASS | FAIL | INCOMPLETE | SKIP | NOT_RUN | PARTIAL", "missing_variants": [], "skipped_variants": [] }],
+     "variant_totals": { "passed": 0, "failed": 0, "skipped": 0, "not_run": 0, "partial": 0 }
    }
    ```
 
@@ -1934,9 +2026,9 @@ worked in the learning file.
    {
      "results": [{
        "tc_id": "TC-01", "req_id": "REQ-01", "test_name": "...",
-       "status": "PASS | FAIL | INCOMPLETE | SKIP | NOT_RUN",
+       "status": "PASS | FAIL | INCOMPLETE | SKIP | NOT_RUN | PARTIAL",
        "duration_ms": 0,
-       "classification": "app_bug | selector_failure | unverified_assumption | ... | N/A",
+       "classification": "app_bug | selector_failure | unverified_assumption | ... | human step: {n} (PARTIAL only) | N/A",
        "unverified_assumption": false,
        "assumption": "the interpretation the test encodes, or null",
        "error_message": "...", "root_cause": "...",
@@ -1971,6 +2063,16 @@ worked in the learning file.
      a bug whose TC did not run becomes `not-checked-this-run`. Never rewrite an entry; never
      reuse an id; update the header's `Bugs` count line. Unverified-assumption failures are
      never entered here (they are questions, not bugs).
+   - **Reviewer comments.** When `REVIEW-COMMENTS-{feature}.md` exists beside the report (saved
+     from the page), or the reviewer pasted comments in chat, read every open entry (`General`,
+     `BUG-{n}`, `phase-{N}`) and every `Reviewer comment` bullet. Act on it under this skill's
+     rules — a re-run request is a new phase, a question gets an answer, "not a bug" is weighed
+     against the requirement — then set only that entry's Status to `applied` / `answered` /
+     `declined {date}` with a one-line `Response`, and recompute the header count
+     (`references/run-report.md` §9b). A comment never changes a bug's Status by itself (only a
+     passing retest resolves it), never edits the reviewer's text, and a request for a TC change
+     is `answered` with the route to skill 3 `--revision`. "read my comments" alone runs this step
+     and the render, without executing tests.
    - Record Checkpoint B in `{run_file}.compliance`, set the run file's final status, then
      **render** — the HTML is never hand-written:
 
@@ -2006,7 +2108,10 @@ same checklist again.
      repeated review.
 2. **Confirm debugging introduced no shortcuts:** no weakened assertion, no broken POM boundary,
    no removed or relocated evidence, no suppressed error, no new unjustified skip or raised
-   timeout, no changed application setting, no product-code edit.
+   timeout, no changed application setting, no product-code edit — and **no page class written
+   during debugging outside the inventory**: the re-run validator (with `--inventory`) reports no
+   open `pom-duplicate-page`, and every class it lists under `pageScan` has its
+   `automation-inventory.md` row.
 3. **Verify the artifacts were ACTUALLY produced** — this is the half Checkpoint A could not do:
    - every executed attempt has its assertion-point image at the path `{run_file}` records, and
      every failed attempt its failure image;
@@ -2114,8 +2219,27 @@ return as `not applicable — story not published to Azure DevOps` and move on. 
 running `link-qc-4-publish-test-cases-azure`, do NOT ask the user to publish or upload, and do NOT
 treat the skipped phase as a failure — the run is complete without it.
 
-Under `ado_mode = linked`, using `{tc_output_folder}/ADO-MAP.md`:
+Under `ado_mode = linked`, using `{tc_output_folder}/ADO-MAP.md` — columns
+`| TC-ID | ADO Work Item ID | published_tc_sha256 | automated_tc_sha256 | Automation candidate |
+AutomationStatus | Tags (introduced) | Suite |`. **This skill owns exactly two of them**:
+`automated_tc_sha256` and `AutomationStatus` (the `Automated` value only). `published_tc_sha256`
+and `Tags (introduced)` are skill 4's, `Suite` is skill 4's `--suite-only`; none of them is ever
+touched here, and a legacy map without the hash columns gets them added, never rewritten:
 
+0. **Compute the canonical hash of every TC that earned `Automated`** — ran `full` coverage (no
+   `[HUMAN]` step), `PASS` on every required variant in run 2, **after Checkpoint B PASS**:
+   ```bash
+   node .claude/skills/link-qc-5-test-run-automation/scripts/tc-hash.mjs --tc {source_tc_doc} --data {tc_output_folder}/TEST-DATA-{feature}.md --ids TC-01,TC-02 --pretty
+   ```
+   and write each `hashes[TC-ID]` into that TC's `automated_tc_sha256`. The hash is semantic
+   (behaviour fields + the role / data shape the TC references — `references/run-report.md` names
+   the script; the contract is the file's header): skill 4 keeps `Automated` on a later publish
+   only while it still equals `canonical(current TC)`, so a changed step or data shape flips the
+   Azure status to a conflict instead of overstating it. **A `PARTIAL` TC never gets a hash and
+   never `Automated`** (nor does a FAIL, INCOMPLETE, SKIP, NOT_RUN or `@unverified-assumption`
+   TC); its cell stays `—`. `tc-hash.mjs` is a byte-identical copy of skill 4's (MIRROR banner) —
+   run `node …/scripts/selftest-tc-hash.mjs` once per run before writing a hash; a failing harness
+   means no hash is written and the column is reported `NOT_RUN`.
 1. For every TC whose automation now exists and executed in run 2:
    - **Resolve the template's automation flag ONCE per project** (`automation_flag`):
      learning file `[type: env]` line → skill 4's `tc_template_quirks` → inspect the
@@ -2140,7 +2264,9 @@ Under `ado_mode = linked`, using `{tc_output_folder}/ADO-MAP.md`:
    - Keep `Planned` for candidates that ended up skip-guarded (note why in the map), for any
      TC whose PHASE 2.5 status is Partially / Not Covered — copy the reason from
      `coverage-detail.csv` — for any TC skipped by a PHASE 2.6 decision — copy the gap
-     text from `{run_file}.data_readiness` — and for any TC tagged `@unverified-assumption`, copying
+     text from `{run_file}.data_readiness` — **for every `PARTIAL — human step pending` TC**
+     (note `partial (human step: n)` in the map; its test outcome is `Inconclusive`, its
+     `automated_tc_sha256` stays `—`) and for any TC tagged `@unverified-assumption`, copying
      the assumption from `{run_file}.open_questions`, so the ADO status never overstates the coverage.
    - **Test outcome per TC** (where the project records outcomes on test points / results —
      the self-hosted server has no test-plan tools, so there the outcome is recorded as
@@ -2148,7 +2274,8 @@ Under `ado_mode = linked`, using `{tc_output_folder}/ADO-MAP.md`:
      comment, never claimed):
      `PASS` → `Passed`; `FAIL` → `Failed`; **`INCOMPLETE` → `Inconclusive`** (or the project's
      configured non-pass outcome — never `Passed`), with the missing variants and every
-     variant's result in the result comment; `SKIP` → `Not Applicable` / the project's skip
+     variant's result in the result comment; **`PARTIAL` → `Inconclusive`** with `human step
+     pending: step {n}` in the result comment; `SKIP` → `Not Applicable` / the project's skip
      outcome; `NOT_RUN` → left not executed. A TC with one required variant passed and another
      skipped or not run is therefore never reported as Passed anywhere in ADO.
      **A TC tagged `@unverified-assumption` is never `Passed` either** — `Inconclusive` with the
@@ -2158,7 +2285,9 @@ Under `ado_mode = linked`, using `{tc_output_folder}/ADO-MAP.md`:
    number of app bugs found (with TC-IDs), and the `TEST-RUN-REPORT-{feature}.md`
    (`## Phase {N}` section), `BUG-REPORT-{feature}.md`, `.html` and `.runs/phase-{N}.json` paths
    (under `reports/{spec_level}{user_story_name}/`).
-3. Update `ADO-MAP.md` with the final AutomationStatus column.
+3. Update `ADO-MAP.md`: the `AutomationStatus` column (the value Azure DevOps actually accepted,
+   never `Automated` when the template refused it) and the `automated_tc_sha256` column from
+   step 0 — the other columns byte-identical.
 
 ADO failures here degrade gracefully: report what could not be updated — never
 fake a status.
@@ -2194,6 +2323,13 @@ separate skill 4 and is not required for this run.`
 
 ### Placement Manifest
 {File · Path · Registered · Status table — includes the shared playwright.config.ts (updated / consolidated / created), timeouts.ts, helpers/evidence.ts, helpers/steps.ts, helpers/progress-reporter.ts, helpers/console-guard.ts, helpers/test-data.ts, .gitignore, and every config removed as `removed (consolidated from …)`}
+
+### Automation inventory
+**Scanned:** the whole `{automation_root}` — {N} page classes in {N} files (validator `pageScan`) · **File:** `{reports_folder}/automation-inventory.md`
+| Screen | Decision | Class | Candidates considered | Reason |
+|---|---|---|---|---|
+{one row per screen the TCs touch — `reuse {class}` / `extend {class} (+methods)` / `create {class}`; every candidate the matching surfaced, accepted or rejected with the reason}
+**Validator:** `pom-duplicate-page-decided` {n} · **open `pom-duplicate-page`: 0** (anything else is a Checkpoint A failure) · **Learning lines written:** {n}
 
 ### Configuration
 **Shared config:** {path} — {updated in place | consolidated from N files | created from the template} · **Chrome channel:** {yes} · **Workers:** 2 (serial groups 1) · **Playwright:** {version} ({feature gates: tags object · --last-failed · native step timeout — each yes/no})
@@ -2259,7 +2395,7 @@ ADO-MAP}; unresolvable IDs listed here, never invented.}
 **(2) TC automation coverage**
 | TC-ID | Requirement ID(s) | Smoke | Automation candidate | Implementation | Static coverage | Run 2 status |
 |-------|-------------------|-------|----------------------|----------------|-----------------|--------------|
-{— includes `manual — not automated` and `pending — not covered for this run` rows; Static coverage = Fully / Partially / Not Covered from PHASE 2.5}
+{Implementation = `full` / `partial (human step: n)` / `manual — not automated` / `pending — not covered for this run`; Static coverage = Fully / Partially / Not Covered from PHASE 2.5; Run 2 status = PASS / FAIL / INCOMPLETE / SKIP / NOT_RUN / `PARTIAL — human step pending`}
 
 **Weighted static coverage (pre-run):** {x}% — target {t}% ({L3 | default}, {mechanism}) — **{PASS | user override | report-only}**
 Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None {n} of {N}
@@ -2279,9 +2415,10 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 | User Story | US-{ID} — {title} |
 | Run / Phase | Phase {N} |
 | Total TCs | {N} |
-| Passed / Failed / Incomplete / Skipped / NOT_RUN | {n} / {n} / {n} / {n} / {n} (TC counts — each TC-ID once) |
+| Passed / Failed / Incomplete / Skipped / NOT_RUN / Partial | {n} / {n} / {n} / {n} / {n} / {n} (TC counts — each TC-ID once; a PARTIAL TC is never in Passed) |
 | Variants executed | {n} passed / {n} failed / {n} skipped over {N} required variants ({projects} × data variations); attempts {n} |
 | Incomplete TCs | {TC-IDs with their missing variants — or "none"} (published to ADO as Inconclusive, never Passed) |
+| Partial TCs | {TC-IDs with `human step: n` — or "none"} (`PARTIAL — human step pending`: Inconclusive in ADO, never `Automated`, no `automated_tc_sha256`) |
 | Smoke | {n} TCs — gate: {passed \| healed-then-passed \| FAILED-STOPPED} (fail% {x}%) |
 | Positive | {passed}/{total} |
 | Negative | {passed}/{total} |
@@ -2305,7 +2442,7 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 **App bugs found:** {N} — {BUG-ids · TC-IDs + one-line titles}
 
 ### DevOps close-out
-{AutomationStatus updates + US comment link — or what failed}
+{AutomationStatus updates + `automated_tc_sha256` written for {n} TCs (full coverage, PASS, Checkpoint B PASS — never a PARTIAL) + US comment link — or what failed; the other ADO-MAP.md columns untouched}
 
 ### Compliance gates
 **Checkpoint A (pre-run):** {PASS | FAIL | BLOCKED} · **Checkpoint B (final code):** {PASS | FAIL | BLOCKED}
@@ -2424,6 +2561,17 @@ Before returning AUTOMATION COMPLETE:
 - [ ] **Automation generated from the ORIGINAL approved document, never from the beautified file**
 - [ ] Hierarchy verified/created; Placement Manifest emitted; spec registered in the browser project
 - [ ] POM mandatory rule enforced — zero inline locators in specs; self-check grep reported
+- [ ] **Automation inventory (`<automation_inventory>`): the WHOLE automation root scanned before
+      any page object was written; `{reports_folder}/automation-inventory.md` holds one decision
+      row per screen (`reuse` / `extend` / `create`) naming every candidate with its reason; the
+      validator ran with `--inventory` at both checkpoints with no open `pom-duplicate-page`; no
+      `create` row left a candidate unaddressed; each decision recorded in `## Automation Tricks`**
+- [ ] **Every TEST-DATA reference resolved per ID — `[E{n}]` its own environment entry, `[A{n}]`
+      that account by ID (never by role), `[D{n}]` that data item — through `helpers/test-data.ts`
+      env vars named after the ID; no literal URL / username, no default value**
+- [ ] **`[HUMAN]` steps: the candidate TC generated up to the first one, coverage
+      `partial (human step: n)`, run status `PARTIAL — human step pending` in its own bucket —
+      never PASS, never `Automated`, never an `automated_tc_sha256`**
 - [ ] No spec-local UI helper functions; no chaining off exposed page-object locators
 - [ ] Every selector confirmed in source; safe-fix impact checks run before any rename
 - [ ] Self-check passed before first run; no banned patterns
@@ -2486,7 +2634,11 @@ Before returning AUTOMATION COMPLETE:
 - [ ] Every app_bug has root cause and a screenshot (or states plainly that none was captured)
 - [ ] ADO close-out **under `ado_mode = linked` only**: the resolved automation flag set where
       earned (if the template rejects `AutomationStatus = Automated`, it stays `Planned` and the
-      custom flag carries the status); summary comment posted; ADO-MAP updated.
+      custom flag carries the status); summary comment posted; ADO-MAP updated — only the
+      `AutomationStatus` and `automated_tc_sha256` columns, the hash from `scripts/tc-hash.mjs`
+      (harness `selftest-tc-hash.mjs` passing) for TCs that ran full coverage with PASS after
+      Checkpoint B PASS, `—` for every PARTIAL / other TC; `published_tc_sha256`,
+      `Tags (introduced)` and `Suite` never touched.
       Under `local`: phase skipped silently, recorded as not applicable, no publish suggested
 - [ ] Deviations honest and complete
 - [ ] Learning file searched (Index + tag grep, not the whole file) before every ask and before

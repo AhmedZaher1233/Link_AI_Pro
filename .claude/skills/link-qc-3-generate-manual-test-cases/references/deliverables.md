@@ -14,7 +14,7 @@ first write:
 
 | Target state | What you do |
 |---|---|
-| Nothing there | Write all deliverables normally (TC markdown, test-data file, rendered page, Arabic sidecar when Arabic). |
+| Nothing there | Write all deliverables normally (TC markdown, test-data file, rendered page, Arabic sidecar under `--lang ar`). |
 | `Status: APPROVED` | **STOP — do not write.** Report: the document is human-approved and `link-qc-4-publish-test-cases-azure` may already have published it, so regenerating it changes the source revision `ADO-MAP.md` was built from. Offer three routes: `--revision` (patch only the TCs the reviewer names), Case 1 (ingest the approved set as the baseline and produce an updated set the reviewer re-approves), or an explicit "overwrite it" instruction from the user. Proceed only on that explicit instruction, and then say in the final message that skill 4 must be re-run with `--republish` **if an `ADO-MAP.md` exists** for this document. |
 | `Status: PENDING HUMAN REVIEW` | Do not silently overwrite. Say what exists (TC count, date, whether 3b already validated it — the `MCP validation:` stamp) and offer the Case 1 route; on the user's go-ahead, regenerate. In `--revision` mode, patch it in place as usual. |
 | Markdown present, HTML missing, unrecognizable or hand-edited | Keep the markdown authority and re-render (`html-page.md` §1). A hand-edited page is refused by the renderer until `--force` — tell the user what will be lost first. Never delete an existing page. |
@@ -40,7 +40,7 @@ it. Header block (every line present; an empty optional value is `—`, never bl
 **Status:** PENDING HUMAN REVIEW
 **Scope:** {one sentence — what this story's TCs cover; the page's subtitle}
 **Generated:** {YYYY-MM-DD}
-**Review page language:** {English | Arabic} — see TC-REVIEW-{feature}.html
+**Review page language:** {English | Arabic} — see TC-REVIEW-{feature}.html   ← a RECORD of what this run rendered, rewritten every run; it never decides a later run's language
 **Entry case:** {fresh design | existing-TC update | story retrieved from Azure DevOps/Word}
 **Implementation status:** {Implemented | Partially implemented | Not implemented | Cannot be validated} — {tester's answer {date} | skill-4 report {path} | not yet checked live}
 **Requirement IDs covered:** {list}
@@ -53,13 +53,15 @@ it. Header block (every line present; an empty optional value is `—`, never bl
 **Automation candidates:** {N of total}
 **Requirement coverage (weighted):** {x}% — Full {n} / Partial {n} / None {n} of {ACs} acceptance criteria
 **Manual-only scenarios:** {N} (High {h} · Medium {m} · Low {l})
+**Tag convention:** {tags every TC of this project carries, from a learning-file [type: env] "tag convention" line | —}
 ```
 
 Every header count must equal what the tables below say — the renderer recomputes them and
-reports a `MISMATCH` otherwise (fix the header, re-render).
+reports a `MISMATCH` otherwise (fix the header, re-render). `Tag convention` is informational
+(skill 4 reads it; the renderer does not count it).
 
 Then the **frozen level-2 anchors, in this order** (`html-page.md` §3): `## Summary` (table: ID,
-Type, Locale, Requirement, Stage, Smoke, Automation Candidate, Data effect, Shared data,
+Type, Locale, Requirement, Stage, Smoke, Automation Candidate, Data effect, Shared data, Tags,
 Validation, Description) → `## Test Cases` (one `### {TC-ID} — {Description}` block per TC in
 the frozen shape from `tc-design.md`) → `## Existing-TC Analysis` (Case 1 only) →
 `## Enhancement Log` (table header only, plus one line "empty until link-qc-3b-validate-manual-test-cases
@@ -75,11 +77,15 @@ Environment blockers · Unclear requirements (one line per open `Q-{n}`).
 
 One file per story, in the same `{tc_output_folder}`, built from the data-item list collected
 during design (`tc-design.md` "Test-data collection"). Statuses come from the **learning file
-only** — this skill checks nothing live. It is **derived from the TC document** — every item
-traces to TC-IDs, and the TC document never depends on it. Written in every mode that writes the
-TC document (fresh design, Case 1, Case 2, each story of a multi-story run). Skill 5 reads it as
-the starting inventory of its test-data readiness gate and 3b patches it with live statuses, so
-the four status words and the five way names are frozen.
+only** — this skill checks nothing live. The two files are **written together**: every row
+traces to TC-IDs, and the TC document references this file for every environment URL, account
+and shared dataset (`[E{n}]` / `[A{n}]` / `[D{n}]` — name + token, resolved per ID, never by role
+and never "E1 = the URL"). Written in every mode that writes the TC document (fresh design,
+Case 1, Case 2, each story of a multi-story run). Skill 5 reads it as the starting inventory of
+its test-data readiness gate (environment entries keyed by E-ID, accounts by A-ID), 3b / 3c patch
+it with live statuses and fill an `unknown` E-row `Value` they asked for, and skill 4 copies the
+rows a TC references into that TC's published "Test data" block — so the four status words, the
+five way names and the three ID prefixes are frozen.
 
 **Audience: QC / QA and PO.** Short sentences. Simple words. No locator names, API endpoint
 paths, database table or column names, code / class / function names, implementation details,
@@ -89,17 +95,24 @@ passwords or tokens. Entities, screens, roles, values and flows are named in pla
 # Test Data — {feature}
 **Story:** US-{id} · **TC document:** TEST-CASES-{feature}.md ({YYYY-MM-DD}) · **Environment:** not checked
 **Data items:** {N} — ready {n} · missing 0 · impossible {n} · unknown {n}
-**Accounts needed:** {N} roles — {n} confirmed · {n} unknown
+**Accounts needed:** {N} accounts — {n} confirmed · {n} unknown
+**Environment rows:** {N} — {n} ready · {n} unknown
+
+## 0. Environment
+| ID | What | Value | Status |
+|---|---|---|---|
+| E1 | application base URL | {https://{host} from a learning-file [type: env] line, or "unknown — asked by 3b/3c"} | READY / UNKNOWN |
+| E2 | {e.g. mail sandbox (reads OTP / notification mail)} | {…} | {…} |
 
 ## 1. Accounts
-| Role | Username | Status | Used by TCs | Note |
-|---|---|---|---|---|
-| {role} | {exact username from the learning file, or "unknown"; no password} | READY / UNKNOWN | TC-… | {e.g. "used for login in every TC", "no account recorded for this role"} |
+| ID | Role | Username | Status | Used by TCs | Note |
+|---|---|---|---|---|---|
+| A1 | {e.g. Administrator} | {username from the learning file, e.g. admin.user, or "unknown"; no password} | READY / UNKNOWN | TC-… | {e.g. "used for login in most TCs", "no account recorded for this role"} |
 
 ## 2. Test data at a glance
 | # | Data item (plain name) | Must look like | Used by TCs | Status | Best way to get it |
 |---|---|---|---|---|---|
-| D1 | {e.g. an approved KPI with 12 monthly values} | {state, count, key values} | TC-… | READY | — |
+| D1 | {e.g. an approved order with 12 line items} | {state, count, key values} | TC-… | READY | — |
 | D2 | {…} | {…} | TC-… | UNKNOWN | e2e scenario (TC-…) — to check |
 | D3 | {…} | {…} | TC-… | IMPOSSIBLE | see Problems #1 |
 
@@ -122,7 +135,7 @@ passwords or tokens. Entities, screens, roles, values and flows are named in pla
 ### D2 — {plain name}  (recommended: e2e scenario)
 | Way | How, in plain words | Cleanup after | Availability |
 |---|---|---|---|
-| e2e scenario | Run TC-{id} (it creates this record), or the common flow "{name}": login as {username} → open {screen} → create {entity} with {values} → check it appears in {list} | delete it through {screen} | available |
+| e2e scenario | Run TC-{id} (it creates this record), or the common flow "{name}": login as {role} [A{n}] → open {screen} → create {entity} with {values} → check it appears in {list} | delete it through {screen} | available |
 | api | Create it through the project's API test-data seeding | delete it the same way | available — confirmed by {learning file | dev team} · OR · to be confirmed |
 | db | Insert the record directly in the database (QC needs access) | delete the record | available — confirmed · OR · to be confirmed |
 | set directly | {Admin settings → {section} → set {value}} | reset the value | available (settings only) |
@@ -137,6 +150,9 @@ Filling rules:
 | Rule | Detail |
 |---|---|
 | **Items** | One per distinct data need across all TCs' `Preconditions`, `Data Oracle`, `Shared data` and roles, de-duplicated, each mapped to its TC-IDs. Every item has ≥1 TC; every data-asserting TC has ≥1 item. |
+| **Environment rows** | `E1` is always the application base URL; one further row per service the TCs reach out of the browser (mail sandbox, SMS test provider, admin portal…) — only rows some TC references (`[E{n}]`). `Value` from a learning-file `[type: env]` line → `READY`; otherwise `unknown — asked by 3b/3c` → `UNKNOWN`. Never a credential in a value. |
+| **Accounts** | One row per account (`A{n}`), never per role — a role with two accounts has two rows. Username from the learning file or `unknown`; `Used by TCs` lists every TC that references `[A{n}]`. Every row is referenced by ≥1 TC (self-review check 14). |
+| **References** | Every `[E{n}]` / `[A{n}]` / `[D{n}]` token in the TC document resolves to a row here (check 12); no TC carries an environment value, a username or a shared item's identifier as a literal (the renderer warns `data-literal` / `data-ref-unresolved`). |
 | **Status** | `READY` = confirmed to exist by a learning-file `[type: data]` / `[type: env]` line. `IMPOSSIBLE` = cannot be created with any available or allowed way. `UNKNOWN` = everything else (not checked — this skill never checks live; story not implemented; spec silent on the value). **`MISSING` is never written by this skill** — it means "checked and absent", which only 3b or skill 5 can establish. |
 | **Best way / §5** | `e2e scenario` preferred when a UI flow exists · `api` only when API seeding is already available or explicitly confirmed · `db` only when DB seeding is confirmed AND the QC has access · `set directly` only for settings · `manual` otherwise. Unconfirmed `api` / `db` → written as `to be confirmed`, never recommended, never counted as an available way. |
 | **Shared data** | "Shared" means the TCs use the same data item. State execution order only when one TC depends on another TC's result. |
@@ -157,9 +173,22 @@ no code identifiers, never a credential, never an unanswered recommendation.
 
 Follow `references/html-page.md`. In short: write the markdown and the test-data file first, then
 run the renderer in dry-run to read its payload; fix any `MISMATCH` in the header lines and any
-`BLOCKED` error in the markdown; then `--write`. Arabic (`review_page_language = Arabic`):
-`--lang ar --write-skeleton` → fill only the `null` / `stale` `ar` values in
-`TC-REVIEW-STRINGS-{feature}.ar.json` (faithful translation, IDs / usernames / URLs / dates /
+`BLOCKED` error in the markdown; clear every `data-literal` / `data-ref-unresolved` /
+`narrative-not-english` warning in the markdown (a `(intentional input)` mark where the literal
+is deliberate); then `--write`.
+
+**Language.** *"The output language of a run is English unless this run's task input asks for
+another language (`--lang ar` or an explicit sentence). Nothing else decides it: not the source
+language, not a saved learning-file answer, not the document's `Review page language:` line, not
+an existing Arabic sidecar."* The page is therefore English unless this run passed `--lang ar`;
+the `Review page language:` header line is rewritten to what this run rendered. An Arabic
+sidecar already on disk stays untouched and is used only under `--lang ar` — the final message
+mentions it once ("an Arabic sidecar exists — pass `--lang ar` to render it"). Narrative is
+English; quoted application labels stay in the application's language (the renderer's
+`narrative-not-english` check ignores quoted strings).
+
+Arabic (`--lang ar`): `--lang ar --write-skeleton` → fill only the `null` / `stale` `ar` values in
+`TC-REVIEW-STRINGS-{feature}.ar.json` (faithful translation, IDs / reference tokens / dates /
 display labels unchanged) → `--lang ar --write`; `arabicComplete: false` → the page is a
 **preview**, say so and list the outstanding keys. Never open the template to fill it, never edit
 the rendered page, never present a `BLOCKED` render as delivered.
@@ -169,12 +198,16 @@ the rendered page, never present a `BLOCKED` render as delivered.
 Tell the reviewer, explicitly:
 
 1. Open `TC-REVIEW-{feature}.html` for the fast visual review — say which language the page is
-   in and how that was decided (task input / reused from the learning file / asked / default),
-   and whether it is complete or an Arabic **preview** (outstanding strings named); the markdown
-   is the source of truth and is always English. `TEST-DATA-{feature}.md` lists, in plain
-   English, the data every TC needs, whether it is known to exist, and how to create what is
-   missing. Also name the resolved `{tc_output_folder}` and mention any stray same-story folder
-   found at another level (never touched).
+   in and how that was decided (this run's `--lang` / explicit sentence, else the English
+   default — nothing else), whether it is complete or an Arabic **preview** (outstanding strings
+   named), and, once, that an Arabic sidecar exists and `--lang ar` renders it (when one is on
+   disk and this run rendered English); the markdown is the source of truth and is always
+   English. `TEST-DATA-{feature}.md` lists, in plain English, the data every TC needs, whether it
+   is known to exist, and how to create what is missing; every URL, account and shared dataset in
+   the TCs is a reference to it (`[E1]`, `[A1]`, `[D2]`), so the TCs carry no literal URL or
+   username. Name the TCs with `[HUMAN]` steps and the interface each lacks. Also name the
+   resolved `{tc_output_folder}` and mention any stray same-story folder found at another level
+   (never touched).
 2. **Every TC is `draft — not app-validated`** (or `not-implemented — pending implementation`
    where the story is not built) — designed from the requirement, not yet seen in the
    application; App validation progress is `0/{N}`. The requirement coverage score is
@@ -189,12 +222,16 @@ Tell the reviewer, explicitly:
    Ask the reviewer to fix or accept each gap before approval — skill 5 starts from this file
    and validates the `UNKNOWN` items before anything runs; a way marked "to be confirmed" needs
    a dev / project answer first.
-5. To approve: edit `TEST-CASES-{feature}.md` — adjust any **Automation Candidate** markings,
-   optionally set **Data effect** / **Shared data** on TCs that change data or share records
-   (this steers which TCs skill 5 runs in parallel vs one after another), then change `Status:`
-   to `APPROVED`.
-6. To request changes: reply with corrections (reference TC-IDs) → re-run this skill with
-   `--revision` (a TC 3b had validated is then reset to draft and needs `3b --scope <ids>`).
+5. To approve: edit `TEST-CASES-{feature}.md` — adjust any **Automation Candidate** markings
+   (a `[HUMAN]` step does not force NO), optionally set **Data effect** / **Shared data** on TCs
+   that change data or share records (this steers which TCs skill 5 runs in parallel vs one
+   after another) and **Tags** on TCs that need one in Azure DevOps, then change `Status:` to
+   `APPROVED`.
+6. To request changes: type in the comment box of any TC, potential bug or question on the page
+   (or the general box), click **Save comments** and save `REVIEW-COMMENTS-{feature}.md` beside
+   the page (or **Copy for chat** and paste it), then say "read my comments" or re-run this skill
+   with `--revision`. Corrections typed straight into the chat by TC-ID work too. A TC 3b had
+   validated is then reset to draft and needs `3b --scope <ids>`.
 7. Approval unlocks `link-qc-4-publish-test-cases-azure` (beautify + publish to Azure DevOps, writes
    `ADO-MAP.md`) **and** `link-qc-5-test-run-automation` independently — publishing is optional and is
    not skill 5's gate. Neither accepts a document that is not `Status: APPROVED`, and
@@ -206,9 +243,25 @@ Tell the reviewer, explicitly:
 
 ## `--revision` mode
 
-Input is human feedback referencing TC-IDs (or a corrected file).
+Input is human feedback referencing TC-IDs, from any of: the **open entries** of
+`REVIEW-COMMENTS-{feature}.md` beside the TC document (saved from the review page), the same text
+pasted in chat, `- **Reviewer comment:**` lines in the TC document, or a corrected file. "read my
+comments" (or "apply the reviewer comments") with no other instruction means a `--revision` run
+over the open entries.
 
+- **Read the comments first.** Load `REVIEW-COMMENTS-{feature}.md` when it exists (dry-run the
+  renderer: `payload.comments` lists every entry, its id and status) and read each open entry and
+  each `Reviewer comment` line. An entry on `General` or on a PB / Q is feedback like any other;
+  an entry on an id no longer in the document (`unknownIds[]`) is reported, never guessed.
 - Apply each correction exactly; touch ONLY the referenced TCs.
+- **Close the loop in the comments file** (`html-page.md` §7b): for each entry you handled change
+  only its `- **Status:**` to `applied {date}` (changed as asked), `answered {date}` (no change
+  needed, or the answer is a fact) or `declined {date}` (conflicts with the requirement — say
+  why), add `- **Response:** {one plain sentence}`, and recompute the `**Comments:**` header. An
+  unclear entry becomes a `Q-{n}` and stays `open`. Never edit the reviewer's text or delete an
+  entry. Remove a `Reviewer comment` line from a TC only when the reviewer asks; otherwise leave it
+  (it never affects skills 4 / 5). Re-render after the file is updated, so the page shows the
+  answers as history.
 - **Validation states.** A TC whose Preconditions, Steps or Expected Result you change is reset
   to `Validation: draft — not app-validated (stale — revised)` whatever state 3b had given it;
   its enhancement-log rows stay and get `superseded` appended to the `Run` column (history is
@@ -221,10 +274,12 @@ Input is human feedback referencing TC-IDs (or a corrected file).
   candidates, requirement coverage score, manual-only count). In `TEST-DATA-{feature}.md`, patch
   only the items whose TC-IDs, values or ways changed (add / remove the TC-ID, update the row,
   drop an item no TC uses any more) and recompute its header counts. Then **re-render the page**
-  (`html-page.md`) — never patch the HTML by hand; for Arabic, `--write-skeleton` first so
-  unchanged translations survive and only the changed strings need a new `ar`. The page keeps
-  the language recorded in the markdown's `Review page language:` line (or `--lang` when the
-  user changes it — then update that line too).
+  (`html-page.md`) — never patch the HTML by hand; under `--lang ar`, `--write-skeleton` first so
+  unchanged translations survive and only the changed strings need a new `ar`. The page is
+  English unless this run passes `--lang ar` (§4 language rule — the markdown's
+  `Review page language:` line never decides it); rewrite that line to what this run rendered.
+  A revision that adds an environment URL, an account or a shared dataset adds the row to
+  `TEST-DATA` and references it — never a literal.
 - Keep status `PENDING HUMAN REVIEW`. If the document was `APPROVED`, patching it means the
   source revision changed — say in the final message that skill 4 needs `--republish` when an
   `ADO-MAP.md` exists.
@@ -244,8 +299,10 @@ Input is human feedback referencing TC-IDs (or a corrected file).
 **Entry case:** {fresh design | existing-TC update | retrieved from Azure DevOps/Word}
 **Implementation status:** {Implemented | Partially implemented | Not implemented | Cannot be validated} — {tester's answer | skill-4 report | not yet checked live}
 **Deliverables:** {tc_output_folder}/TEST-CASES-{feature}.md · {tc_output_folder}/TEST-DATA-{feature}.md · {tc_output_folder}/TC-REVIEW-{feature}.html {· TC-REVIEW-STRINGS-{feature}.ar.json}
-**Review page language:** {English | Arabic} — {task input | reused from learning file | asked | default} {· PREVIEW — {n} strings outstanding}
-**Render:** gate {PASS | MISMATCH fixed → PASS} · compatibility {none | list}
+**Review page language:** {English | Arabic} — {flag | default} {· PREVIEW — {n} strings outstanding} {· Arabic sidecar on disk — pass --lang ar to render it}
+**Render:** gate {PASS | MISMATCH fixed → PASS} · compatibility {none | list} · warnings cleared {data-literal 0 · data-ref-unresolved 0 · narrative-not-english 0}
+**References:** {n} environment rows · {n} accounts · {n} data items — every token resolved
+**Human steps:** {n} TCs with a [HUMAN] step ({TC-IDs} — interface lacking: {mail sandbox | SMS test provider | …}) | none
 {Case 2: **Requirement file generated:** {requirements_folder}/REQ-{storyID}-{feature}.md}
 {Multi-story: **Stories processed:** {N} — spec folder: {manual test-cases root}/SPEC-{spec_name}/ (spec-file input) — summary: {manual test-cases root}/[SPEC-{spec_name}/]TC-GENERATION-SUMMARY.md}
 **Status:** PENDING HUMAN REVIEW
@@ -294,7 +351,10 @@ Input is human feedback referencing TC-IDs (or a corrected file).
 - [ ] Entry case resolved first (existing TCs / no spec / default) — asked, not assumed; multi-story input split per story
 - [ ] Manifest read first; deliverables written to the per-story folder `{tc_output_folder}` (no fallback locations)
 - [ ] `{tc_output_folder}` contains `SPEC-{spec_name}/` whenever the REQ path does; resolved once, stated in chat, unchanged for the whole run; a same-story folder at another level reported as stray, never written to
-- [ ] Review page language equals the resolved `review_page_language`; markdown and test-data file are English; IDs, paths and `Status` keywords are Latin; an Arabic page has `lang="ar"` + `dir="rtl"` and the header line `Review page language: Arabic`
+- [ ] Review page language is English unless this run's task input asked for Arabic (`--lang ar` / explicit sentence) — never from the source language, a saved answer, the existing header line or a sidecar on disk; markdown and test-data file are English (quoted application labels excepted); IDs, paths and `Status` keywords are Latin; an Arabic page has `lang="ar"` + `dir="rtl"`; the header line `Review page language:` records what this run rendered
+- [ ] No environment URL / host, username or shared-dataset identifier as a literal in any TC — references only (`[E{n}]` / `[A{n}]` / `[D{n}]`, name + token), every token resolving to its own `TEST-DATA` row; intentional inputs and expected outputs inline, a deliberate collision marked `(intentional input)`; renderer warnings `data-literal` / `data-ref-unresolved` / `narrative-not-english` cleared
+- [ ] Every requirement-defined out-of-browser outcome has a complete TC; interfaces resolved task input → learning file / other TEST-DATA files → one question (answer written as `[type: env]`); `[HUMAN]` only where no authorized interface exists, never as a reason to drop a TC or to mark `Automation Candidate: NO`
+- [ ] `Tags:` present on every TC (`—` when none); `**Tag convention:**` header line present
 - [ ] Pre-write guard run: no approved document overwritten without an explicit instruction; skill 4 `--republish` note given when it was and an `ADO-MAP.md` exists; a legacy-shape document not rewritten wholesale on its own
 - [ ] Writes confined to `{tc_output_folder}`, `{requirements_folder}` and `{learning_file}` — no spec, steering, source, ADO-MAP or automation file touched
 - [ ] Case 1: existing TCs read from their stated source; every original TC accounted for once in the Existing-TC Analysis table; set NOT regenerated from scratch
@@ -318,7 +378,7 @@ Input is human feedback referencing TC-IDs (or a corrected file).
 - [ ] Smoke marked deliberately on every TC (small critical set, ≥1 per screen) — never defaulted to YES
 - [ ] Header block complete (`Scope`, `Generated`, `App validation progress: 0/N`, …) and every header count equal to the tables; frozen anchors present in order; `## Potential Bugs` and `## Enhancement Log` present and empty
 - [ ] Learning file updated: confirmed answers under Manual TC Model Q&A with `(confirmed by user {date})`, new tagged knowledge added, Index row updated, duplicates removed, contradicted entries corrected, no credentials, code identifiers or unanswered recommendations written
-- [ ] `TEST-DATA-{feature}.md` written next to the TC document (§2b): every Preconditions / Data Oracle / Shared data sentence and every role maps to a data item with TC-IDs; plain English only
+- [ ] `TEST-DATA-{feature}.md` written next to the TC document (§2b): `## 0. Environment` (E1 = base URL, one row per referenced service), `## 1. Accounts` with the `ID` column (one row per account), every Preconditions / Data Oracle / Shared data sentence and every role maps to a row with TC-IDs and every E / A row is referenced by ≥ 1 TC; plain English only
 - [ ] Test-data statuses from the learning file only: `READY` confirmed there, `IMPOSSIBLE` only after the ways were considered, everything else `UNKNOWN` (never `MISSING` from this skill); `Environment: not checked`; header counts equal the table rows
 - [ ] Every `IMPOSSIBLE` / `UNKNOWN` item has a way in §5 or a row in the Problems table; `api` / `db` shown as available only when confirmed by the learning file or the user, otherwise "to be confirmed" and never recommended
 - [ ] Page produced by `scripts/render-tc-review.mjs` with `gate: PASS` (or `MISMATCH` fixed and re-rendered); never hand-written or hand-edited; Arabic complete, or explicitly delivered as a preview with the outstanding keys named

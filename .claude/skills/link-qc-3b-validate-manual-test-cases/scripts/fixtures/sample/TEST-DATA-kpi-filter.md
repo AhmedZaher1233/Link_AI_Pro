@@ -2,11 +2,17 @@
 **Story:** US-1234 · **TC document:** TEST-CASES-kpi-filter.md (2026-09-20) · **Environment:** staging checked 2026-09-25
 **Data items:** 3 — ready 2 · missing 0 · impossible 0 · unknown 1
 **Accounts needed:** 1 roles — 1 confirmed · 0 unknown
+**Environment items:** 1 — ready 1 · unknown 0
+
+## 0. Environment
+| ID | What | Value | Status |
+|---|---|---|---|
+| E1 | application base URL (portal) | https://portal.example.test | READY |
 
 ## 1. Accounts
-| Role | Username | Status | Used by TCs | Note |
-|---|---|---|---|---|
-| Strategy Super Admin | strategy.admin | READY | TC-KPI-01, TC-KPI-01b, TC-KPI-02, TC-KPI-03, TC-KPI-04 | used for login in every TC |
+| ID | Role | Username | Status | Used by TCs | Note |
+|---|---|---|---|---|---|
+| A1 | Administrator | admin.user | READY | TC-KPI-01, TC-KPI-01b, TC-KPI-02, TC-KPI-03, TC-KPI-04 | used for login in every TC |
 
 ## 2. Test data at a glance
 | # | Data item (plain name) | Must look like | Used by TCs | Status | Best way to get it |

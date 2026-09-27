@@ -72,6 +72,17 @@ Apply the plan within the chosen scope (FULL / SHARED / CUSTOM — `scope-gate.m
   unwalked ONLY when the scope excludes it (SHARED-FLOWS-ONLY) or when the learning file or an
   earlier observation this run confirms those exact steps on that exact screen — then the TC is
   marked `inferred`, never `validated`.
+- **Resolve every token through its own row.** `Open the portal [E1]` → the `E1` row's `Value`
+  (the base URL you asked for), `Open the mail sandbox [E2]` → the `E2` row — never "E1 = the
+  URL" for every `[E{n}]`; `Login as Administrator [A1]` → the `A1` row's username + the
+  password asked for that account — never "whoever has the role"; `[D2]` → that data item.
+  A token with no row → a `data-ref-unresolved` finding for skill 3, never a guess. The TC keeps
+  the token; the resolved value never enters a step.
+- **Stop at a `[HUMAN]` step.** Walk the TC up to the first step or expected-result line that
+  starts with `[HUMAN]`, confirm the steps before it, then stop: the TC ends `draft — not
+  app-validated (human step pending)` with `outcome-check: human step pending` in its stamp
+  (§6); it is never `validated`, `enhanced` or `inferred`, the marker is never reworded away,
+  and the TC is listed under "Needs a human run" in the final message.
 - **Observing only.** Do not write code, selectors, or JSON. You may read element identifiers
   incidentally and record them in the learning file's `## Automation Tricks` section — but
   NEVER in the TC deliverables.
@@ -118,7 +129,8 @@ locales.
    state the requirement implies but no TC covers) is a **requirement / coverage gap** for skill 3
    `--revision` — recorded under Open Findings, never added as a TC here (SKILL.md invariant 2).
 6. **Design fields are never touched**: `ID`, `Type`, `Locale`, `Requirement`, `Stage`, `Smoke`,
-   `Automation Candidate`, `Data effect`, `Shared data`, `Description`, the coverage tables.
+   `Automation Candidate`, `Data effect`, `Shared data`, `Tags`, `Description`, the coverage
+   tables. Reference tokens and `[HUMAN]` markers stay as written (§3).
 
 ## 6. Validation states — every TC gets exactly one
 
@@ -126,9 +138,12 @@ locales.
 matched) · `enhanced` (corrected / extended from observation — log what changed) · `inferred`
 (prefix seen, tail confirmed from prior knowledge or SHARED scope — not witnessed) ·
 `discrepancy` (app contradicts spec — PB recorded) · `not-implemented — pending implementation`
-(§1) · `draft — not app-validated` (not walked: scope excluded, app unreachable, or stale —
-reason in parentheses). Never mark a TC `validated` on the strength of its prefix alone — that
-is `inferred`. Every observed TC gets its evidence stamp (`patch-rules.md` §2).
+(§1) · `draft — not app-validated` (not walked: scope excluded, app unreachable, stale, or
+**human step pending** — reason in parentheses). A TC stopped at a `[HUMAN]` step is
+`draft — not app-validated (human step pending)`, stamped `outcome-check: human step pending`
+(the only case this skill writes that key); the six states are unchanged — this is a draft
+reason. Never mark a TC `validated` on the strength of its prefix alone — that is `inferred`.
+Every observed TC gets its evidence stamp (`patch-rules.md` §2).
 
 ## 7. Failure rule
 

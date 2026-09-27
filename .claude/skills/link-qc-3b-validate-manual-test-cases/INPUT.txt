@@ -30,17 +30,26 @@ OPTIONAL FLAGS:
   --authorize-revision           On an APPROVED document: you already authorize the changes,
                                  so the skill patches without asking (Status becomes PENDING
                                  HUMAN REVIEW only if something actually changed).
-  --lang ar|en                   Language of the re-rendered review page (default: the
-                                 document's "Review page language" line).
+  --lang ar|en                   Language of the re-rendered review page (default: English —
+                                 never the document's "Review page language" line, a saved
+                                 answer or an existing Arabic sidecar; only this run's flag or
+                                 an explicit sentence switches it; the line is rewritten to
+                                 what this run rendered).
   --audit                        Probe Playwright MCP and analyse the document only: reports
                                  the document state, the common flows, the recommended scope
                                  and what it would leave unvalidated. Writes NOTHING, asks
                                  for no credentials.
 
 ASKED DURING THE RUN — ONE message, after the Playwright MCP probe:
-  2. Application base URL                  — reused from the learning file when recorded there
-  3. Username + password PER ROLE          — ALWAYS asked fresh; usernames appear in the steps,
-                                             passwords are NEVER written to any file
+  2. Application base URL                  — the TEST-DATA "[E1]" row; reused from the learning
+                                             file when recorded there, otherwise asked and written
+                                             into that row (each [E2], [E3]… row is its own
+                                             service — never "the URL")
+  3. Password PER ACCOUNT the TCs reference — the TCs say "Login as Administrator [A1]"; the
+                                             username comes from TEST-DATA §1 (asked when that
+                                             row says "unknown" and filled there). Passwords are
+                                             asked fresh every run and NEVER written to any file;
+                                             no username is ever written into a step
   4. Is the story implemented?             — only when the document's header says
                                              "not yet checked live"; the skill verifies live
                                              either way
@@ -76,9 +85,12 @@ OUTPUT — WHAT YOU GET (same folder, patched in place)
     TEST-CASES-{feature}.md   <- per TC: Validation state (validated / enhanced / inferred /
                                  discrepancy / not-implemented / draft) + an evidence stamp
                                  (date, environment, build, scope, content + requirement hashes);
-                                 corrected labels and inserted reveal / wait / trigger steps;
-                                 header: Implementation status, MCP validation (+ "by 3b on
-                                 {date}, env, scope"), App validation progress;
+                                 corrected labels and inserted reveal / wait / trigger steps
+                                 (reference tokens [E1] / [A1] / [D2] kept — never a literal);
+                                 a TC with a "[HUMAN]" step is walked up to it and ends "draft —
+                                 not app-validated (human step pending)", listed under "Needs a
+                                 human run"; header: Implementation status, MCP validation (+ "by
+                                 3b on {date}, env, scope"), App validation progress;
                                  ## Enhancement Log appended; ## Potential Bugs (PB-n: title,
                                  TC, steps to reproduce, expected, actual); ## Open Questions;
                                  findings buckets. Design fields, TC IDs, coverage score,
@@ -87,10 +99,11 @@ OUTPUT — WHAT YOU GET (same folder, patched in place)
                                  UNKNOWN), exact values and states seen, extra accounts,
                                  creation ways confirmed available, problems closed or added,
                                  "Environment: {env} checked {date}"
-    TC-REVIEW-{feature}.html  <- re-rendered by scripts/render-tc-review.mjs (never hand-edited);
-                                 Arabic pages reuse TC-REVIEW-STRINGS-{feature}.ar.json — only
-                                 changed strings need a new translation; an incomplete
-                                 translation is delivered as a clearly marked PREVIEW
+    TC-REVIEW-{feature}.html  <- re-rendered by scripts/render-tc-review.mjs (never hand-edited),
+                                 in English unless you pass --lang ar; Arabic pages reuse
+                                 TC-REVIEW-STRINGS-{feature}.ar.json — only changed strings need
+                                 a new translation; an incomplete translation is delivered as a
+                                 clearly marked PREVIEW
     TC-GENERATION-SUMMARY.md  <- status / findings columns patched (multi-story only)
   Testing/project-learning.md <- base URL per environment (no credentials), common flows walked,
                                  labels, locale facts, READY test data, tricks, confirmed Q&A
@@ -103,6 +116,11 @@ OUTPUT — WHAT YOU GET (same folder, patched in place)
 YOUR NEXT STEP: open the page; review "inferred" and "discrepancy" cards with extra care and the
 Potential Bugs; answer the open questions; then approve the markdown (or, if it was approved and
 changed, re-review and re-approve). Skills 4 and 5 run on the approved document as before.
+
+COMMENTS: type in any comment box on the page, click "Save comments" (save
+REVIEW-COMMENTS-{feature}.md beside the page) or "Copy for chat", then say "read my comments".
+The next 3b run reads the open comments as hints for the walk and marks each one answered /
+declined with a one-line response. A change to a test case's design goes to skill 3 --revision.
 
 WHEN TO RUN: after skill 3, whenever the application is reachable — before approval, after
 approval, or again after a new build. Never required.

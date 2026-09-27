@@ -43,6 +43,11 @@ ASKED DURING THE RUN (only if it cannot detect them and the learning file has no
      Afterwards FULLY QUIT VS Code (all windows) and relaunch it — a window reload or an /mcp
      reconnect keeps the old environment, and the validator will say "saved on this machine but
      missing from this session" until you do.
+  5b. Replace the Link skills? — Mode B/C/new, when our skill folders are already present:
+     the sync DELETES the Link QA skill folders (+ the /sync-skills command) and downloads fresh
+     copies. Any enhancement you made to a Link skill is removed and replaced with the new version
+     (the question lists every edited / extra file). Replace / Update only (keep my edits) / Cancel.
+     Your own skills and every other file are never deleted. Asked every run, never recorded.
   6. Install the optional tools? (yes/no) — Mode B/C/new only, when something is missing:
      playwright-cli for skill 3c, and Pillow + numpy for link-qc-6-ui-testing's static-image annotation
      (only when a Python interpreter already exists — Python itself is never installed).

@@ -10,14 +10,14 @@ call — check what the task input already provides:
 - Spec or requirement source (file path, or the Azure DevOps story to retrieve)
 - Implementation status, if the tester knows it
 - Output folder, if non-standard
-- Review-page language (`review_page_language`, §3) — resolved in this order, first hit wins:
-  explicit task choice (`--lang ar|en`, "output in Arabic") → the saved learning-file
-  preference (applies to an English `REQ-*.md` too) → **asked only when the spec/story is
-  written in Arabic** (requirement body / ACs mainly in Arabic script; IDs, paths and code
-  tokens ignored) → English. Detection needs the spec read, so when the question is still open
-  at intake it joins the step-6 ask (the only question that step may add) — never a separate message. Question wording:
-  > "The requirement is written in Arabic. Which language do you want the review output in —
-  > Arabic or English? (Requirement files / TC markdown always stay English for the next skills.)"
+- Review-page language (`review_page_language`, §3) — one rule, never a question: *"The output
+  language of a run is English unless this run's task input asks for another language
+  (`--lang ar` or an explicit sentence). Nothing else decides it: not the source language, not a
+  saved learning-file answer, not the document's `Review page language:` line, not an existing
+  Arabic sidecar."* An Arabic requirement gets English narrative (descriptions, steps, expected
+  results) with its quoted application labels kept in Arabic. A learning-file line from an
+  earlier release recording an "Output language" answer is ignored and mentioned once in the
+  final message — never reused, never rewritten.
 
 **If ANY required item is missing or ambiguous → ask the user in ONE combined intake message
 listing exactly what is needed, and WAIT for the reply. Do NOT start any phase, read specs,
@@ -159,7 +159,7 @@ user.** Never invent a URL, a credential, or a spec path.
 | `spec_sources` | `paths.requirements` (per-story `REQ-*.md`) | CLAUDE.md "Spec Source" table; `docs/specs/*`; Case 2 generates one |
 | `qa_standards` | `steering.readme`, `steering.L1`, `steering.L2`, `steering.L3` | glob `docs/steering/*` |
 | `required_locales` | — | `qa_standards` / CLAUDE.md i18n rules; ask when neither states them |
-| `review_page_language` | — | language of `TC-REVIEW-{feature}.html` only (the markdown deliverables are always English). Resolution: task input `--lang ar|en` / explicit sentence → learning file (grep `output language`, `لغة` under `## Project Knowledge` and the skill Q&A; a saved Arabic preference applies even when the REQ is English) → **ask only when the source is Arabic** (in the combined ask) → default `English`. This is the *document* language for the human reviewer — distinct from `required_locales`, which are the application locales the TCs must cover |
+| `review_page_language` | — | language of `TC-REVIEW-{feature}.html` only (the markdown deliverables are always English). Resolution: this run's task input (`--lang ar|en` / an explicit sentence) → default `English`. Nothing else — not the source language, not a learning-file line, not the document's existing `Review page language:` line, not a sidecar on disk — and it is never asked. This is the *document* language for the human reviewer — distinct from `required_locales`, which are the application locales the TCs must cover |
 | `implementation_status` | — | tester's intake answer → newest `{white_box_reports}/**/US-{storyID}-*/{storyID}-*-analysis.md` (or a legacy flat report) → else `Cannot be validated — not yet checked live` (§4). Never probed live here |
 | `spec_name` | — | **First rule — path wins:** when the resolved `spec_sources` path contains `/SPEC-{x}/` (a `REQ-*.md` under `Testing/Requirements/SPEC-{x}/…`), `spec_name` = `{x}` — always; a REQ under a SPEC folder counts as spec-file origin. **Else**, when the source is a spec FILE: file stem, extension stripped, lowercase kebab-case, ≤ 6 words (`Resource Request Hours v2.docx` → `resource-request-hours-v2`); a generic stem (`spec`, `specification`, `requirements`, `prd`, `readme`) → use the parent folder name (`docs/specs/resource-request/spec.md` → `resource-request`). **Else** empty (ADO / Word / pasted stories, REQ directly under `Testing/Requirements/US-…/`) |
 | `spec_level` | — | `SPEC-{spec_name}/` when `spec_name` is set, otherwise empty. The same rule `link-qc-2-review-requirements` uses. **Immutable once resolved for the run** |

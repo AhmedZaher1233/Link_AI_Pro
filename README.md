@@ -15,14 +15,15 @@ This repository is the **canonical source**. Any project pulls the skills from h
       SKILL.md · INPUT.txt · references/ · scripts/ (preflight, validate-setup, sync-qa-skills) · assets/ (templates)
     link-qc-2-review-requirements/                 review a story / spec, produce the structured REQ file
     link-qc-3-generate-manual-test-cases/          design manual TCs (EN + AR) — design only, no environment; rendered HTML review page; human approval gate
-      SKILL.md INPUT.txt references/ (8) scripts/ (render-tc-review, selftest + fixtures) assets/ (1 template)
+      SKILL.md INPUT.txt references/ (8) scripts/ (render-tc-review, selftest + fixtures) assets/ (2: page body + shared report shell)
     link-qc-3b-validate-manual-test-cases/         OPTIONAL: walk the TCs live with Playwright MCP, set validation states, potential bugs, test-data facts — patches the same files in place
       SKILL.md INPUT.txt references/ (10) scripts/ + assets/ mirrored byte-for-byte with skill 3
     link-qc-3c-validate-manual-test-cases-cli/     OPTIONAL, evaluation twin of 3b through playwright-cli (no MCP): same contracts, attended / secret-name login, data-change authorization, PB screenshots, the 3b-vs-3c comparison protocol
       SKILL.md INPUT.txt references/ (12) scripts/ + assets/ mirrored byte-for-byte with skills 3 and 3b
-    link-qc-4-publish-test-cases-azure/            beautify the approved TCs and publish them to Azure DevOps (ADO-MAP.md); --suite-only places them in a Test Plan suite later
-    link-qc-5-test-run-automation/                 generate + run Playwright (POM), two compliance gates, coverage, reports
-      SKILL.md INPUT.txt references/ (5) scripts/ (9 + fixtures) assets/ (8)
+    link-qc-4-publish-test-cases-azure/            beautify the approved TCs and publish them to Azure DevOps with verified tags / automation status (ADO-MAP.md); --suite-only places them in a Test Plan suite later
+      SKILL.md INPUT.txt scripts/ (ado-sync-plan, tc-hash, selftest-ado-sync + fixtures)
+    link-qc-5-test-run-automation/                 generate + run Playwright (POM, automation inventory), two compliance gates, coverage, reports
+      SKILL.md INPUT.txt references/ (5) scripts/ (11 + fixtures) assets/ (8)
     link-qc-6-ui-testing/                          visual UI audit of an implemented screen against its design (Figma MCP / screenshots / reference site) or, with no design, against tokens, consistency, WCAG, RTL — beside the chain
       SKILL.md (≈420 lines) INPUT.txt references/ (10, loaded per step)
     link-qc-7-sync-tc-status-to-azure/             Azure loop: latest TC outcomes → one Test Plan run (cloud test-plan tools; else NOT_RUN)
@@ -175,11 +176,30 @@ it is *known* to exist from the learning file, how to create what is missing —
 test-data readiness from it) and the HTML review page — **rendered by
 `scripts/render-tc-review.mjs`, never hand-written**: every number recomputed from the tables, a
 requirement-coverage gauge that is independent of validation, an "App validation progress" tile
-(`0/N` from this skill), Potential Bugs and Open Questions sections. Arabic pages come from a
-persisted translation sidecar (`TC-REVIEW-STRINGS-{feature}.ar.json`); an incomplete translation
-is a clearly marked preview. **A human must set `Status: APPROVED`** — that unlocks skills 4
-(optional) and 6 independently. Live validation is the separate, optional skill 3b — or its
-evaluation twin 3c.
+(`0/N` from this skill), Potential Bugs and Open Questions sections. **Reviewer comments:**
+every TC, potential bug and open question on the page has a comment box, plus one general box.
+The reviewer types, clicks *Save comments* (the file `REVIEW-COMMENTS-{feature}.md` goes beside
+the page) or *Copy for chat*, then says "read my comments". Skill 3 `--revision` applies them and
+marks each one applied / answered / declined with a one-line response, which the next render
+shows as history. The page file itself never changes, so its hand-edit guard stays valid. **The page and the
+narrative are English unless this run's task input asks for Arabic** (`--lang ar` or an explicit
+sentence) — the source language, a saved learning-file answer, the document's `Review page
+language:` line (a record of the last render) and an existing sidecar never decide it; Arabic
+pages come from a persisted translation sidecar (`TC-REVIEW-STRINGS-{feature}.ar.json`) and an
+incomplete translation is a clearly marked preview. Application labels stay in the application's
+language on either page. **Configuration by reference:** environment URLs, account usernames and
+reusable datasets live only in `TEST-DATA-{feature}.md` (`## 0. Environment` rows `E{n}`,
+`## 1. Accounts` rows `A{n}`, items `D{n}`) and a TC names them by token — `Login as Administrator
+[A1]`, `Open the portal [E1]`; typed test inputs and exact expected outputs stay inline; the
+renderer warns on a repeated configuration value (`data-literal`) and on an unknown token. **Tool
+limits never reduce coverage:** an outcome that leaves the browser (email, SMS, OTP, push,
+notification, background job) gets a complete TC; the skill first checks which authorized test
+interfaces exist (task input → learning file → one question) and prefixes only a step a person
+must really perform or observe with `[HUMAN]` — candidacy, execution coverage (skill 5) and
+validation status (3b / 3c) stay separate axes. An optional per-TC `Tags` field (e.g. `uat`)
+travels to Azure DevOps through skill 4. **A human must set `Status: APPROVED`** — that unlocks
+skills 4 (optional) and 6 independently. Live validation is the separate, optional skill 3b — or
+its evaluation twin 3c.
 
 ### 3b — validate-manual-test-cases (optional)
 Takes an existing TC document (pending or approved) and walks it through the **running
@@ -232,18 +252,38 @@ Takes the **approved** TC document and **beautifies** it into a separate upload 
 "Validate that / Check that" titles, every Steps block opening with `Login with <role>` and
 the navigation journey, the nine canonical step verbs, every `as TC-…` delegation expanded
 inline, every step confirmed from page objects, the learning file or the app source
-(Playwright MCP only for a genuine gap), and a hard meaning-preservation gate. Then it
-**publishes** that document to Azure DevOps as Test Case work items linked to the User Story
-with Tested-By, idempotently, `AutomationStatus = Planned`, and writes `ADO-MAP.md` with the
-TC-ID → work item map and the source hash. The approved source document is never modified.
+(Playwright MCP only for a genuine gap), and a hard meaning-preservation gate; `[A{n}]` data
+references and `[HUMAN]` markers survive verbatim. Then it **publishes** that document to Azure
+DevOps as Test Case work items linked to the User Story with Tested-By, idempotently, with
+**owned fields decided by `scripts/ado-sync-plan.mjs`** (MCP does the I/O, the script decides):
+`AutomationStatus` from the TC's `Automation Candidate` (`YES` → `Planned`, `NO` → `Not
+Automated`, field absent → `unknown`, an existing `Automated` kept only while skill 5's
+`automated_tc_sha256` still matches the TC's canonical hash — otherwise a reconciliation
+conflict); tags it introduces (`{feature}`, `smoke`, `automation` / `manual`, `human-step`, the
+TC's `Tags:` values, the project's convention tags) tracked per TC so pre-existing tags are
+preserved and obsolete owned tags removed; a per-TC "Test data" description block (the referenced
+TEST-DATA rows, never a password) that makes the TC executable from Azure alone, plus a
+supplementary snapshot on the story. Every write is **read back** and compared; the outcome is one
+of `PUBLISHED AND VERIFIED` · `PUBLISHED, NOT VERIFIED` · `PUBLISHED WITH MISMATCHES` ·
+`PUBLICATION INCOMPLETE` · `BLOCKED`, never a success claim over a failed or unavailable read-back.
+`ADO-MAP.md` records the TC-ID → work item map, `published_tc_sha256`, `automated_tc_sha256`
+(skill 5's column), the introduced tags and the suite. The approved source document is never modified.
 `--suite-only <suite URL | planId suiteId>` skips beautify + publish and only adds the already-published
 work items of `ADO-MAP.md` to that Test Plan suite (additive; the `Suite` column records it) — the
 suite is where skill 7 later records outcomes.
 
 ### 5 — test-run-automation
 Its only document gate is `Status: APPROVED`; publishing to Azure DevOps (skill 4) is optional
-and never asked for. Generates Playwright
-automation with a mandatory Page Object Model from the original approved document, builds a
+and never asked for. Before writing any file it takes an **automation inventory** of the whole
+automation root — every page class, whatever skill or agent wrote it — and records one decision
+per screen (`reuse` / `extend` / `create`, each surfaced candidate accepted or rejected with a
+reason) in `automation-inventory.md`; the validator's `pom-duplicate-page` rule turns a
+same-name / same-route / shared-locator pair into a review item that only a documented decision
+closes, so a duplicate page object can no longer slip through. Generates Playwright
+automation with a mandatory Page Object Model from the original approved document (resolving
+`[A{n}]` / `[E{n}]` / `[D{n}]` references through TEST-DATA, each to its own row; a TC with
+`[HUMAN]` steps runs up to the human step and is reported `PARTIAL — human step pending`, never
+PASS), builds a
 per-story run plan (parallel vs serial groups), measures static coverage against the L3
 target, resolves test-data readiness with the QC, then runs headed in priority order (smoke
 behind a 30 % failure gate, then positive, then negative) with live progress and ETA, and takes
@@ -286,8 +326,11 @@ variant and attempt) folds into one immutable `.runs/phase-N.json`; raw Playwrig
 `artifacts/`; the three coverage CSVs stay. `scripts/render-run-report.mjs` renders both markdown
 files into one **`TEST-RUN-REPORT-{feature}.html`** with separate Test Results and Bugs sections and
 screenshot thumbnails that open a "View screenshot" viewer (zoom, scroll, open the original) —
-relative links, never base64, never hand-written. The story folder's top level holds nothing else;
-folders from the older layout are read-only history.
+relative links, never base64, never hand-written. It is the same general report page as skill 3's
+review page (one shared shell: header, tiles, cards, viewer, theme toggle and comment boxes), so
+every bug and phase takes a reviewer comment the same way; a comment never changes a bug's status
+on its own. The story folder's top level holds nothing else (plus the reviewer's optional
+`REVIEW-COMMENTS-{feature}.md`); folders from the older layout are read-only history.
 
 ### 6 — ui-testing (visual UI audit, beside the chain)
 Compares an implemented screen with its approved design and writes a **UI Visual QA Bug
@@ -456,6 +499,15 @@ reason, and leaves its gate BLOCKED.
 `AZURE_DEVOPS_PAT` (self-hosted) — both written by the one user-run PAT script; the app
 URL and test users are asked for at run time and stored only as non-secret facts.
 
+**Output language** — every review output (skill 2's review, skill 3's page, 3b / 3c re-renders)
+is English unless the current run's task input asks for another language (`--lang ar` or an
+explicit sentence). Nothing else decides it. Application text (quoted labels, messages) stays in
+the application's language.
+
+**Project-neutral** — no skill names a customer, product, project or real host; examples use
+neutral roles and screens (`Administrator`, `admin.user`, `Open Products`), templates and fixtures
+carry placeholders only, and skill 1's validator flags product tokens in the steering files.
+
 ---
 
 ## MCP servers the skills use
@@ -478,10 +530,10 @@ VS Code and relaunch it; reconnecting the server in `/mcp` does not help.
 ## Keeping projects up to date
 
 ```
-/sync-skills                            # all skills + the command itself
+/sync-skills                            # all skills + the command itself — asks first, then deletes our skill folders and downloads them fresh
 /sync-skills link-qc-5-test-run-automation      # one skill
 /sync-skills --dry-run                  # read-only check, nothing copied
-/sync-skills --force                    # overwrite locally edited skill files
+/sync-skills --force                    # with the "update only" answer: overwrite locally edited skill files
 /sync-skills --tools                    # also install playwright-cli + browser (skill 3c) and Pillow + numpy (link-qc-6-ui-testing, when Python exists) — opt-in
 ```
 
@@ -490,6 +542,16 @@ touches anything outside `.claude/skills/`, `.claude/commands/sync-skills.md`, t
 `.mcp.json` and — only with `--tools` — the global `@playwright/cli` package, its browser, the
 `.playwright-cli/` gitignore line and the `pillow` + `numpy` Python packages; never deletes
 local-only files, and skips locally edited files unless `--force` is given.
+
+**Clean replace, after confirmation.** `/sync-skills` (and skill 1 in repair / restructure / new-project
+mode) runs `--check` first and asks once: *this sync deletes the Link QA skill folders and downloads fresh
+copies — if you enhanced or edited any Link skill, those changes are removed and replaced with the new
+version* (it lists every edited or extra file that will disappear, and the other skills it keeps).
+**Replace** → `--apply --replace --yes` · **Update only — keep my edits** → the in-place update above ·
+**Cancel** → nothing changes. Only our folders (`lib.mjs` `SKILLS` + the legacy `SKILL_RENAMES` names) and
+`.claude/commands/sync-skills.md` are deleted and re-downloaded; your own skills, other commands, `.mcp.json`,
+`.gitignore`, `Testing/`, `docs/` and settings are never deleted. The script refuses `--replace` without
+`--yes`, so the question cannot be skipped.
 
 **Upgrading a project set up before September 2026:** run `/sync-skills` (it migrates
 `.claude/Skills` to `.claude/skills` and, once each replacement is in place, removes the skill folders that
@@ -522,8 +584,13 @@ template and four references (`learning-file.md`, `html-page.md`, `validation-st
 `open-questions.md`) as **byte-identical copies** in the three folders — `/sync-skills` copies one
 skill folder at a time, so none may import from another. Edit all copies; each carries a
 MIRROR banner, `scripts/fixtures/MIRROR.md` lists the comment-free ones, and self-test case 0
-sha256-compares every mirrored path against every sibling that is present. Skills 3b and 3c also
-share the cross-validator check prose (`patch-rules.md` §1b) word for word.
+sha256-compares every mirrored path against every sibling that is present. The **report shell**
+(`assets/report-shell.template.html`, the one general HTML page) and the renderers' "report-shell
+kit" block are shared four ways, by skills 3, 3b, 3c and 5: skill 3's case 27 and skill 5's run-report
+case 26 compare them. Skills 3b and 3c also
+share the cross-validator check prose (`patch-rules.md` §1b) word for word. Skills 4 and 5 share
+`scripts/tc-hash.mjs` (the canonical TC hash) the same way: byte-identical, MIRROR banner, and
+each harness asserts the same golden hash for the same fixture.
 
 Scripts are zero-dependency ESM, Node ≥ 18, and return their result as a JSON payload. The
 reporting scripts are read-only and always exit 0 (`--strict` on skill 5's validator and on the
@@ -537,6 +604,8 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-report.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-watchdog.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-config-inventory.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-tc-hash.mjs --pretty
+node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/selftest-ado-sync.mjs --pretty
 node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/selftest.mjs --pretty
 node .claude/skills/link-qc-3b-validate-manual-test-cases/scripts/selftest.mjs --pretty
 node .claude/skills/link-qc-3c-validate-manual-test-cases-cli/scripts/selftest.mjs --pretty

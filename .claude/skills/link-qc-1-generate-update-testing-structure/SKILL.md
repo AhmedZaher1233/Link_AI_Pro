@@ -5,7 +5,7 @@ description: >
   (L1/L2/L3), Node/NPM/Playwright, .mcp.json (Playwright, Azure DevOps, Docx MCP; optional Figma MCP), the optional
   playwright-cli for skill 3c and Python + Pillow for link-qc-6-ui-testing, the QA skills 1-12, 3b and 3c and the shared learning file — with a read-only preflight first and a deterministic
   PASS/FAIL validation at the end. Use once per project before skills 2-11, and again whenever the
-  setup drifts. New project: full setup, no questions. Existing project: asks A audit (zero
+  setup drifts. New project: full setup, no questions except the skills-replace confirmation. Existing project: asks A audit (zero
   writes) / B repair / C restructure (confirmed move plan). Invoke it explicitly:
   "/link-qc-1-generate-update-testing-structure [audit|repair|restructure]".
 argument-hint: "[audit | repair | restructure]"
@@ -69,8 +69,8 @@ only what the resolved mode permits.
 | # | Step | Load |
 |---|------|------|
 | 1 | **Preflight** — run `node ${CLAUDE_SKILL_DIR}/scripts/preflight.mjs --root <project> --pretty`. Read `classification`, `markers`, `suite`, `warnings`. Check `Testing/project-learning.md` (Index + `[type: qa]` in *Setup Model*) for recorded answers before asking anything. | `references/project-learning-protocol.md` (read part) |
-| 2 | **Resolve mode** — NEW → full setup (Mode B column) without questions. EXISTING → map the `audit|repair|restructure` argument to A/B/C, or ask the mode question and WAIT. | `references/run-modes.md` |
-| 3 | **Skills sync** — Mode A: `sync-qa-skills.mjs --check` (report only; its `tools` field lists what `--tools` would install for skill 3c and link-qc-6-ui-testing). Mode B/C/new: `--apply` (normal permission flow), with `--tools` only after the user answered yes to the optional-tools question of step 6 (ask it before this step when the preflight shows the CLI or the Python packages absent); migrate an uppercase `.claude/Skills` folder; remind the user to reload if any `SKILL.md` changed. | `references/skills-sync.md` |
+| 2 | **Resolve mode** — NEW → full setup (Mode B column) without questions (the step-3 replace confirmation is the one exception). EXISTING → map the `audit|repair|restructure` argument to A/B/C, or ask the mode question and WAIT. | `references/run-modes.md` |
+| 3 | **Skills sync** — Mode A: `sync-qa-skills.mjs --check` (report only; its `tools` field lists what `--tools` would install for skill 3c and link-qc-6-ui-testing). Mode B/C/new: `--check` first, then — when `replace.needsConfirmation` — ask ONCE with `replace.confirmText` (our Link skill folders + the command are deleted and downloaded fresh; local enhancements to them are lost; other skills and files untouched) and run `--apply --replace --yes` on Replace, plain `--apply` on Update only, no sync on Cancel (normal permission flow), with `--tools` only after the user answered yes to the optional-tools question of step 6 (ask it before this step when the preflight shows the CLI or the Python packages absent); migrate an uppercase `.claude/Skills` folder; remind the user to reload if any `SKILL.md` changed. | `references/skills-sync.md` |
 | 4 | **Structure** (B/C/new only) — create missing `Testing/` folders; copy `assets/project-learning.template.md` if the learning file is missing, else add missing sections and rename the legacy heading; Mode C first builds and confirms the move plan. | `references/testing-layout.md`, `references/run-modes.md` §4 |
 | 5 | **Steering** (B/C/new only) — normalize names, install missing layers from the source repo, seed `README.md` from `assets/steering-readme.template.md`, check L1/L2 stay generic, check the Project Configuration Contract. | `references/steering-governance.md` |
 | 6 | **Toolchain + MCP + optional tools** (B/C/new only, and only for rows the preflight shows unhealthy) — Node/NPM/Playwright install or repair; optional tools — playwright-cli for skill 3c and Pillow + numpy for link-qc-6-ui-testing (only when Python exists; the interpreter is never installed): when absent, ask once "install the optional tools (playwright-cli for skill 3c, Pillow + numpy for link-qc-6-ui-testing)? (yes/no)" (recorded as a `[type: qa]` answer, never re-asked; yes → the sync `--tools` step or `toolchain.md`; no → WARN rows stay, 3b unaffected, link-qc-6-ui-testing annotates live pages in the DOM); mention the optional secrets script once, without waiting (`mcp-setup.md` §2b); write or merge `.mcp.json` from `assets/mcp.template.json` — the `azure-devops` entry is the cloud or the self-hosted block per `preflight.azureDevOps.hosting` (git remote → learning file → a User Story URL from the user; `mcp-setup.md` §1b); the optional `figma` entry (link-qc-6-ui-testing, Figma designs only) is added only when the user wants Figma comparison — it needs a Figma login through `/mcp`, never a token in a file (`mcp-setup.md` §2c). When the `azure-devops` entry is written and `pat.persisted` is false, ask the user to run `scripts/set-azure-devops-pat.ps1` in their own terminal, then fully quit and relaunch VS Code, and WAIT (mcp-setup.md §2a); `pat.sessionMissing` afterwards means the restart has not happened yet. Docx MCP: step 3's `sync-qa-skills.mjs --apply` already replaced a legacy `word` entry with `docx`; verify the prerequisites (mcp-setup.md §1a). If a legacy `word` / `office-word-mcp-server` entry is still present (sync ran with `--no-mcp`), tell the user it is superseded and OFFER to remove it — ask, never delete silently. | `references/toolchain.md`, `references/mcp-setup.md` |
@@ -86,7 +86,7 @@ Load a reference only when its step runs. A healthy project in Mode A needs only
 
 | Mode | Trigger | May write |
 |------|---------|-----------|
-| **New project** | preflight `classification: NEW` | everything in the B column, no question asked |
+| **New project** | preflight `classification: NEW` | everything in the B column, no question asked except the step-3 replace confirmation |
 | **A — Audit** | argument `audit`, or answer A | nothing |
 | **B — Repair** | argument `repair`, or answer B | missing folders, missing steering layers + README, name normalizations (steering, skills folder case, legacy learning heading), skills sync, missing `.mcp.json` entries, toolchain repairs, playwright-cli + browser + `.gitignore` line and Pillow + numpy (only after a yes), learning-file sections and Setup Model lines, manifest |
 | **C — Restructure** | argument `restructure`, or answer C | everything in B, plus confirmed `git mv` moves and the reference updates they require |
@@ -96,7 +96,7 @@ Detailed rules, the mode question text and the Mode C procedure: `references/run
 ## Permissions
 
 The front-matter pre-approves only the three read-only script invocations. Every mutation —
-`sync-qa-skills.mjs --apply` (with or without `--tools`), creating folders or files, `npm install`,
+`sync-qa-skills.mjs --apply` (with or without `--replace --yes` / `--tools`; `--yes` only after the user answered the replace question), creating folders or files, `npm install`,
 `npx playwright install`, `npm install -g @playwright/cli`, `playwright-cli install-browser`,
 `pip install pillow numpy`, `git mv`, editing `.mcp.json` or `.gitignore` — goes through the normal permission flow and
 happens only in Mode B, Mode C or on a new project. MCP probes are ordinary tool calls.

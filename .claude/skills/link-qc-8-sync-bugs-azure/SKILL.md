@@ -30,6 +30,7 @@ A bug source (a `BUG-REPORT-{feature}.md`, a `UI-Visual-QA-<page>.md`, or a stor
 |---|---|---|---|---|---|---|
 
 ## Hard rules
+- A reviewer comment on a bug (a `Reviewer comment` bullet in `BUG-REPORT-{feature}.md`, or an open `BUG-{n}` entry in `REVIEW-COMMENTS-{feature}.md` beside it) is reviewer input, never a status source and never pushed to Azure as a state. Report open ones in the final message; mark one `answered` / `declined {date}` with a one-line `Response` only when this run actually addressed it (skill 5 `references/run-report.md` §9b). Never edit the reviewer's text.
 - Never request/read/store a PAT or use direct REST; a 401 means "fully quit VS Code and relaunch" (contract §3), never a token in chat.
 - Preserve unrelated fields, files, rows and history; never invent an ID, hash, outcome or count.
 - Resolved in Azure never proves a local fix; only observed successful retesting (skill 9) does. This skill never sets a local `resolved`.

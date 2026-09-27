@@ -15,15 +15,16 @@
 **Automation candidates:** 4
 **Requirement coverage (weighted):** 66.7% — Full 1 / Partial 2 / None 0 of 3 acceptance criteria
 **Manual-only scenarios:** 1 (High 1 · Medium 0 · Low 0)
+**Tag convention:** —
 
 ## Summary
-| ID | Type | Locale | Requirement | Stage | Smoke | Automation Candidate | Data effect | Shared data | Validation | Description |
-|---|---|---|---|---|---|---|---|---|---|---|
-| TC-KPI-01 | happy-path | en | REQ-1234-01 | @positive | YES | YES | read-only | — | validated | Filter the KPI grid by year |
-| TC-KPI-01b | happy-path | ar | REQ-1234-01 | @positive | NO | YES | read-only | — | inferred | Filter the KPI grid by year (Arabic) |
-| TC-KPI-02 | edge-case | en | REQ-1234-02 | @positive | NO | YES | read-only | — | discrepancy | Clear the filter restores all rows |
-| TC-KPI-03 | negative | en | REQ-1234-02 | @negative | NO | YES | read-only | — | draft — not app-validated | Apply without a selected year is blocked |
-| TC-KPI-04 | happy-path | en | REQ-1234-03 | @positive | NO | NO | creates | KPI export file | not-implemented — pending implementation | Export the filtered grid |
+| ID | Type | Locale | Requirement | Stage | Smoke | Automation Candidate | Data effect | Shared data | Tags | Validation | Description |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| TC-KPI-01 | happy-path | en | REQ-1234-01 | @positive | YES | YES | read-only | — | uat, regression | validated | Filter the KPI grid by year |
+| TC-KPI-01b | happy-path | ar | REQ-1234-01 | @positive | NO | YES | read-only | — | — | inferred | Filter the KPI grid by year (Arabic) |
+| TC-KPI-02 | edge-case | en | REQ-1234-02 | @positive | NO | YES | read-only | — | — | discrepancy | Clear the filter restores all rows |
+| TC-KPI-03 | negative | en | REQ-1234-02 | @negative | NO | YES | read-only | — | — | draft — not app-validated | Apply without a selected year is blocked |
+| TC-KPI-04 | happy-path | en | REQ-1234-03 | @positive | NO | NO | creates | KPI export file | — | not-implemented — pending implementation | Export the filtered grid |
 
 ## Test Cases
 
@@ -33,7 +34,7 @@
 - **Requirement:** REQ-1234-01
 - **Stage:** @positive
 - **Preconditions:**
-  1. Logged in as Strategy Super Admin (username strategy.admin); page language English.
+  1. Logged in as Administrator [A1] on the portal [E1]; page language English.
   2. Strategy "Growth 2026" exists with KPI "Revenue" holding 12 monthly values.
 - **Steps:**
   1. Open Strategies — the Strategies list is visible.
@@ -43,11 +44,12 @@
   5. Set Display Type to "Year" and select 2026.
   6. Click Apply — loading appears on the grid, then clears.
 - **Expected Result:** The grid shows exactly 12 rows for 2026 and the Year chip reads "2026".
-- **Data Oracle:** KPI "Revenue" 2026 — expected count: 12, identifiers: Jan…Dec
+- **Data Oracle:** KPI "Revenue" 2026 [D1] — expected count: 12, identifiers: Jan…Dec
 - **Smoke:** YES
 - **Automation Candidate:** YES
 - **Data effect:** read-only
 - **Shared data:** —
+- **Tags:** uat, regression
 - **Validation:** validated
 <!-- tc-evidence
 validated-on: 2026-09-25
@@ -66,7 +68,7 @@ checked-in-run: 2026-09-25
 - **Requirement:** REQ-1234-01
 - **Stage:** @positive
 - **Preconditions:**
-  1. Logged in as Strategy Super Admin (username strategy.admin); page language Arabic, direction right-to-left.
+  1. Logged in as Administrator [A1] on the portal [E1]; page language Arabic, direction right-to-left.
 - **Steps:**
   1. Confirm the page is Arabic and right-to-left.
   2. Open الاستراتيجيات — the list is visible.
@@ -74,11 +76,12 @@ checked-in-run: 2026-09-25
   4. Open the filter panel (تصفية) — it opens from the opposite side.
   5. Set نوع العرض to "سنة" and select 2026, then click تطبيق.
 - **Expected Result:** The grid shows 12 rows for 2026 with Arabic month names.
-- **Data Oracle:** KPI "Revenue" 2026 — expected count: 12
+- **Data Oracle:** KPI "Revenue" 2026 [D1] — expected count: 12
 - **Smoke:** NO
 - **Automation Candidate:** YES
 - **Data effect:** read-only
 - **Shared data:** —
+- **Tags:** —
 - **Validation:** inferred
 <!-- tc-evidence
 validated-on: 2026-09-25
@@ -102,11 +105,12 @@ checked-in-run: 2026-09-25
   1. Click Clear in the Filter panel — the Year chip disappears.
   2. Click Apply — loading appears on the grid, then clears.
 - **Expected Result:** The grid shows all 36 rows across 2024-2026.
-- **Data Oracle:** KPI "Revenue" all years — expected count: 36
+- **Data Oracle:** KPI "Revenue" all years [D2] — expected count: 36
 - **Smoke:** NO
 - **Automation Candidate:** YES
 - **Data effect:** read-only
 - **Shared data:** —
+- **Tags:** —
 - **Validation:** discrepancy
 <!-- tc-evidence
 validated-on: 2026-09-25
@@ -125,7 +129,7 @@ checked-in-run: 2026-09-25
 - **Requirement:** REQ-1234-02
 - **Stage:** @negative
 - **Preconditions:**
-  1. Logged in as Strategy Super Admin (username strategy.admin); KPI Details open for "Revenue".
+  1. Logged in as Administrator [A1]; KPI Details open for "Revenue".
 - **Steps:**
   1. Open the Filter panel and set Display Type to "Year" without selecting a year.
   2. Click Apply.
@@ -135,6 +139,7 @@ checked-in-run: 2026-09-25
 - **Automation Candidate:** YES
 - **Data effect:** read-only
 - **Shared data:** —
+- **Tags:** —
 - **Validation:** draft — not app-validated
 
 ### TC-KPI-04 — Export the filtered grid
@@ -146,12 +151,14 @@ checked-in-run: 2026-09-25
   1. TC-KPI-01 state: the grid is filtered to 2026.
 - **Steps:**
   1. Click Export — a file download starts.
+  2. [HUMAN] Open the downloaded file in a spreadsheet application and confirm it holds the 12 monthly rows [D1].
 - **Expected Result:** An Excel file with 12 rows is downloaded.
-- **Data Oracle:** KPI "Revenue" 2026 — expected count: 12
+- **Data Oracle:** KPI "Revenue" 2026 [D1] — expected count: 12
 - **Smoke:** NO
 - **Automation Candidate:** NO
 - **Data effect:** creates
 - **Shared data:** KPI export file
+- **Tags:** —
 - **Validation:** not-implemented — pending implementation
 
 ## Enhancement Log
@@ -209,7 +216,7 @@ checked-in-run: 2026-09-25
 - **Gap:** The requirement does not say which roles see the Export button.
 - **Why it matters:** Decides whether a permission negative case is needed.
 - **Evidence:** REQ-1234-03 names no role; learning file has no entry for export permissions.
-- **Recommended:** Strategy Super Admin only — matches the other KPI actions (similar module: Objectives export).
+- **Recommended:** Administrator only — matches the other KPI actions (similar module: Objectives export).
 - **Alternatives:** All roles with read access.
 - **Pending:** TC-KPI-04 stays not-implemented; no permission TC designed until answered.
 - **Status:** open

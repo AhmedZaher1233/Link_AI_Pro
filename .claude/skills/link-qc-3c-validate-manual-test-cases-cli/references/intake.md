@@ -18,9 +18,11 @@ while a `SPEC-*/US-*` twin exists) is reported and never written to.
 
 Companion files in the same folder, read when present: `TEST-DATA-{feature}.md` (the test-data
 inventory you patch — missing → validate the TCs, put data findings under Open Findings, tell the
-user to re-run skill 3; never author the file), `TC-REVIEW-STRINGS-{feature}.ar.json` (Arabic
-sidecar — reused by the renderer), `evidence/` (earlier PB screenshots — never deleted), `ADO-MAP.md`
-(only to know whether a publication exists).
+user to re-run skill 3; never author the file — its `## 0. Environment` / `## 1. Accounts` /
+`## 2.` rows are what every `[E{n}]` / `[A{n}]` / `[D{n}]` token in the TCs resolves to),
+`TC-REVIEW-STRINGS-{feature}.ar.json` (Arabic sidecar — used by the renderer only under
+`--lang ar`; its presence decides nothing), `evidence/` (earlier PB screenshots — never
+deleted), `ADO-MAP.md` (only to know whether a publication exists).
 
 ## 2. Document state — decides the run mode before anything else
 
@@ -36,9 +38,11 @@ Read the header block (`html-page.md` §3) and the frozen anchors, then classify
 | Frozen fields missing inside a TC (`Type`, `Steps`, `Expected Result`), or not a skill-3 document at all | invalid | BLOCKED — "not a skill-3 TC document"; never repair it |
 | `Implementation status:` says `not yet checked live` | status unknown | the combined ask includes the implementation question; §1 of `walk-rules.md` establishes it live either way |
 
-Also note: `Review page language` (drives the re-render; `--lang` overrides and updates the
-line), the existing `PB-*` and `Q-*` ids (reused, never reallocated), and the current per-TC
-`Validation` values with their evidence stamps.
+Also note: the `Review page language:` line — a **record** of what the last run rendered, never
+this run's decision (the page is English unless this run passes `--lang ar` or says so; you
+rewrite the line to what you render), the existing `PB-*` and `Q-*` ids (reused, never
+reallocated), the TCs carrying a `[HUMAN]` step (walked up to it, never past it), and the current
+per-TC `Validation` values with their evidence stamps.
 
 ## 3. playwright-cli probe, then the ONE combined ask
 
@@ -54,9 +58,9 @@ the three model sections' Q&A (`open-questions.md` §1) and stating what you reu
 
 | Item | Ask when | Never |
 |---|---|---|
-| Application base URL | not recorded as `[type: env]` for the target environment, or the user names another environment | auto-detected |
-| Username per role used in the TCs' Preconditions | always (a username is recorded in the steps) | — |
-| **Login method per role** — A) attended: you open a visible browser for that role and the user logs in themselves; B) secrets file: skill 1's `set-playwright-secrets` script was run and you type only the secret NAMES (`browser-cli.md` §3) | always, per role; state the recorded method for this environment as the recommendation when the learning file has one | a password — not in chat, not on a command line, not in a file; the run never receives one |
+| Application base URL — the `[E1]` row of `TEST-DATA` §0 | not recorded as `[type: env]` for the target environment (the row says `unknown — asked by 3b/3c`), or the user names another environment; the answer fills that row's `Value` / `Status`. Any other `[E{n}]` row still `unknown` (mail sandbox, SMS test provider…) is asked in the same message — each is its own service, never "the URL" | auto-detected; written into a TC as a literal |
+| Username per account the TCs reference (`[A{n}]` — role and username from `TEST-DATA` §1) | only for a row whose username is `unknown`; the answer fills that row | written into a step — the TC keeps `Login as {role} [A{n}]` |
+| **Login method per account** — A) attended: you open a visible browser for that account and the user logs in themselves; B) secrets file: skill 1's `set-playwright-secrets` script was run with names that follow the account ID (`A1_USER` / `A1_PASSWORD` for `[A1]`) and you type only those NAMES (`browser-cli.md` §3) | always, per referenced account; state the recorded method for this environment as the recommendation when the learning file has one | a password — not in chat, not on a command line, not in a file; the run never receives one |
 | Implementation status (implemented / partially / not implemented / not sure) | the header says `not yet checked live` and no skill-4 report answers it | trusted over the live look — both are recorded |
 | Environment notes | always, one line: VPN / tenant / where the build number shows / anything that blocks screens / whether this is production | — |
 | **Data changes on {env}** — may this run create / modify / delete data (`walk-rules.md` §3a)? | always; name the TCs it concerns (`Data effect` ≠ read-only) and what would be cleaned up; production named in the notes → "no" is stated, not asked | a mutation on "no"; a mutation on production |
@@ -64,8 +68,9 @@ the three model sections' Q&A (`open-questions.md` §1) and stating what you reu
 | Scope | never — this skill has no scope gate; every TC is walked (`discovery-plan.md`) | a scope question, a recommendation, a narrowing |
 | Re-validate 3b's evidence | never — every TC carrying 3b evidence is re-validated (`patch-rules.md` §1b) | a keep / skip question |
 
-Record every answer except anything secret before opening a browser: base URL → learning file
-`[type: env]` (project-wide); login method used on this environment → `### CLI Validation Model
+Record every answer except anything secret before opening a browser: base URL → the `[E1]` row
+of `TEST-DATA` §0 and the learning file `[type: env]` (project-wide); other environment rows and
+usernames → their `TEST-DATA` rows; login method used on this environment → `### CLI Validation Model
 (skill 3c)` (a name, never a value); implementation status → header + return; environment notes →
 header stamp (`env {name}`) and learning file when project-wide; the data-changes answer and the
 authorization → the run only.
@@ -73,7 +78,7 @@ authorization → the run only.
 ## 4. Multi-story input — a SPEC folder or several IDs
 
 1. List the stories you found and state the split before anything else.
-2. One probe, one combined ask for all stories (login method per role once; one attended login per role is reused across stories).
+2. One probe, one combined ask for all stories (login method per account once; one attended login per account is reused across stories).
 3. Set analysis **per story** — one plan line each (`discovery-plan.md` §3); every TC of every
    story is walked; no scope question for any of them.
 4. Shared common flows (login, navigation to a shared module) are walked ONCE and reused across

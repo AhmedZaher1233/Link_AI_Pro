@@ -31,6 +31,8 @@ Read every TC (`tc-format-contract.md`) and build the **discovery plan**:
    the rest) — they never exclude anything.
 6. **Gaps** — missing navigation, preconditions, test data, filters/selections, async waits or
    triggers, ambiguous steps, "(Arabic label: to be captured live)" notes: the discovery targets.
+   A `[HUMAN]` step is not a gap: the tail is walked up to it and stops there (`walk-rules.md`
+   §3); count those TCs for the plan line — they end `draft (human step pending)`.
 7. **Locale-sensitive points** — every element label referenced in any step, plus screens whose
    secondary-locale behaviour must be walked live (`walk-rules.md` §4).
 
@@ -40,7 +42,7 @@ Read every TC (`tc-format-contract.md`) and build the **discovery plan**:
   comment (3b takes the same flag, so the comparison protocol can pass it to both).
 - `--scope shared` / `--scope <TC-ID,…>`: **not supported by this skill.** State in one line that
   this skill always walks every TC, then walk every TC. Never narrow, never ask.
-- A sentence in the task naming a subset ("just TC-KPI-03") is answered the same way: one line,
+- A sentence in the task naming a subset ("just TC-ORD-03") is answered the same way: one line,
   then the full walk. The user who wants a narrowed live check runs skill 3b.
 
 ## 3. State the plan in one line, then walk
@@ -48,7 +50,7 @@ Read every TC (`tc-format-contract.md`) and build the **discovery plan**:
 Before the first browser command, after the implementation-status gate and the freshness pass:
 
 ```
-Walking all {N} executable TCs (of {T}; {n} not-implemented) · {F} common flows once · {d} data-changing ({authorized | not authorized}) · tool cli
+Walking all {N} executable TCs (of {T}; {n} not-implemented) · {F} common flows once · {d} data-changing ({authorized | not authorized}) · {h} stop at a [HUMAN] step · tool cli
 ```
 
 No WAIT here — nothing to answer.

@@ -28,35 +28,32 @@ exactly what is needed, and WAIT for the reply. Do NOT start the review, search,
 anything on assumptions.** Skip the ask only when the input already answers everything —
 and state what you resolved so the user can override it.
 
-**Output language** (`output_language`) — resolve it in this order and stop at the first hit:
+**Output language** (`output_language`) — one rule, no question:
 
-1. **Explicit task choice** — `--lang ar|en` or a sentence in the task input ("output in Arabic").
-2. **Saved project preference** — the learning-file line recorded by an earlier run (see Step
-   0.a). A saved Arabic preference applies even when this source is English. Say
-   "reusing: output language = Arabic/English".
-3. **Ask only if the source is Arabic.** After the source is read, treat it as Arabic when the
-   requirement body / acceptance criteria are written mainly in Arabic script (IDs, paths and
-   code tokens ignored; a mixed document whose ACs are Arabic counts as Arabic). Then add this
-   line to the ONE combined intake message — never a second message — and WAIT:
-   > "The requirement is written in Arabic. Which language do you want the review output in —
-   > Arabic or English? (Requirement files / TC markdown always stay English for the next
-   > skills.)"
-   Language can only be detected after the source is fetched, so this question may join the
-   intake ask after fetching — but always before any review work starts.
-4. **Default English** — English or other-language source with nothing saved: no question.
+> The output language of a run is English unless this run's task input asks for another language
+> (`--lang ar` or an explicit sentence). Nothing else decides it: not the source language, not a
+> saved learning-file answer, not the document's `Review page language:` line, not an existing
+> Arabic sidecar.
 
-Whatever the language: story IDs, REQ-IDs, file paths and names, rating emojis, `Depends on`
-paths and everything written to the learning file stay Latin / English. `REQ-{id}-{name}.md`
-is **always English** because `link-qc-3-generate-manual-test-cases` consumes it; only
-`US-{id}-review.md` and `SPEC-REVIEW-SUMMARY.md` follow the chosen language.
+An Arabic source therefore gets an English review unless this run asked for Arabic — no
+"which language?" question, ever. A learning-file line from an earlier release that recorded an
+output-language answer is **ignored** (mentioned once in the final message, never read as a
+preference, never written or updated).
+
+Narrative (headings, findings, explanations, recommendations) is written in the output language;
+application text the requirement quotes (display labels, messages, menu names) stays in the
+application's language. Whatever the language: story IDs, REQ-IDs, file paths and names, rating
+emojis, `Depends on` paths and everything written to the learning file stay Latin / English.
+`REQ-{id}-{name}.md` is **always English** because `link-qc-3-generate-manual-test-cases` consumes
+it; only `US-{id}-review.md` and `SPEC-REVIEW-SUMMARY.md` follow the output language.
 
 ### Step 0.a — Consult `Testing/project-learning.md` BEFORE asking
 
 Before the intake ask, search the shared learning file for what it already knows: recorded
 spec/story locations, the Azure DevOps project and area path, story-ID conventions, module
-names, glossary terms, the recorded **output-language preference** (grep `output language`
-and `لغة` under `## Project Knowledge` and this skill's Q&A), and earlier answers under
-`### Requirements Review Model (skill 2)`. Only what the file does not answer is asked.
+names, glossary terms, and earlier answers under `### Requirements Review Model (skill 2)`.
+The output language is never looked up here (Step 0 rule). Only what the file does not answer
+is asked.
 Follow the protocol below.
 
 <qa_manifest>
@@ -102,10 +99,8 @@ NEVER written to the file.
   `- [module: X] [type: qa] **Q (skill 2, {YYYY-MM-DD}):** … — **A:** …`. Project-wide
   answers (environments, roles, module names, where specs live) are ALSO added to
   `## Project Knowledge`.
-- The output-language answer is project-wide: write it under `## Project Knowledge` AND under
-  this skill's Q&A as
-  `- [module: project] [type: qa] **Q (skill 2, {YYYY-MM-DD}):** Output language for Arabic requirements — **A:** Arabic`
-  so skill 3 reuses it without asking. Update the existing line when the user changes their mind.
+- The output language is a per-run choice and is **never written** to the file (Step 0 rule);
+  an existing line from an earlier release that recorded it is left alone and ignored.
 - Every new fact → one tagged line in the matching shared section or this skill's
   `#### Knowledge`. Grep the same tags first; update or dedupe instead of appending twins.
 - A module / page / element that behaves like an existing one → add `[similar: …]` on both
@@ -318,11 +313,11 @@ come from a spec FILE are grouped under a parent folder named after that spec
 
 ```text
 Testing/Requirements/
-  SPEC-initiative-management/                   ← one per spec FILE (1 or many stories)
-    US-1031475-initiative-yearly-values/
-      REQ-1031475-initiative-yearly-values.md  ← structured requirement (extracted/converted)
-      US-1031475-review.md                     ← the full review
-    US-1031476-.../
+  SPEC-order-management/                        ← one per spec FILE (1 or many stories)
+    US-1234-order-details/
+      REQ-1234-order-details.md                ← structured requirement (extracted/converted)
+      US-1234-review.md                        ← the full review
+    US-1235-.../
       REQ-...
       US-1031476-review.md
     SPEC-REVIEW-SUMMARY.md                      ← only when the spec held >1 story
@@ -709,9 +704,9 @@ Per the `<project_learning_file>` protocol, write to `Testing/project-learning.m
   specs/stories live and how they are named, story-boundary patterns seen, and the
   business rules and domain terms learned from the requirement — one tagged line each, in
   plain words with the story ID as source, e.g.
-  `- [module: KPI] [type: rule] A KPI's yearly value is entered per year and cannot exceed its target. (source: US-1031475 AC-2)`.
-- Under `#### Questions and Answers`: every question the user answered this run — including
-  the output-language answer, which ALSO goes under `## Project Knowledge` (Step 0 rule).
+  `- [module: Orders] [type: rule] An order's discount is entered per line and cannot exceed the line total. (source: US-1234 AC-2)`.
+- Under `#### Questions and Answers`: every question the user answered this run (never the
+  output language — it is a per-run choice, Step 0 rule).
 - Project-wide facts (modules, roles, environments, glossary) → also `## Project Knowledge`;
   update the `## Index` row for every module touched; link `[similar: …]` modules that share rules.
 - Never copy requirement text verbatim, never write code identifiers.
@@ -724,8 +719,9 @@ folders), which reused an existing review, which are Missing / Unreadable / Skip
 technical files were seen and deliberately not read, and the count of cross-spec conflicts ·
 the spec folder `Testing/Requirements/SPEC-{spec-name}/` (spec-file input) ·
 per-story folder paths + verdicts · summary file path (multi-story) · the output language
-used for the review files and how it was resolved (task input / reused from the learning
-file / asked / default) · that the `REQ-*.md` files are English and ready as input for the
+used for the review files and how it was decided (this run's task input / default English —
+nothing else; an ignored legacy "Output language" line in the learning file is mentioned once
+here) · that the `REQ-*.md` files are English and ready as input for the
 `link-qc-3-generate-manual-test-cases` skill · for a `.docx` source: `figures checked: {N} ({M} mismatches | none)`,
 the number of Word comments written
 and the target path (copy or original) — or, for a reply-sync run, threads read / answered /
@@ -736,8 +732,8 @@ accepted / rejected / pending and which comments were resolved or replied to · 
 
 ## Output Style
 
-The review output must use simple and clear language — English by default, or Arabic when
-the user chose it for an Arabic requirement (Step 0 `output_language`). The reader is a QC,
+The review output must use simple and clear language — English by default, or Arabic only when
+this run's task input asked for it (Step 0 `output_language`). The reader is a QC,
 a QA lead or a Product Owner — not a developer. The rules below apply in either language.
 
 Use:
@@ -774,9 +770,10 @@ testable — not to review the technical implementation.
 7. Technical files (code, API files, configuration, database schemas, data models, technical
    design documents, infrastructure, automation) are never read, analysed or reviewed — even
    when the spec refers to them. Use only the requirement information in the requirement files.
-8. Write the review in simple QA language (Output Style) — English by default, Arabic when
-   chosen: short sentences, direct findings, no implementation details. `REQ-*.md` and the
-   learning file are always English.
+8. Write the review in simple QA language (Output Style) — English by default, Arabic only when
+   this run's task input asked for it (never from the source language or a saved answer): short
+   sentences, direct findings, no implementation details. `REQ-*.md` and the learning file are
+   always English.
 9. Word write-back and comment resolution happen only on an explicit user choice; never
    overwrite the original `.docx` without the user's say-so, never resolve or reply to a comment
    without asking, and never touch comments written by other authors.

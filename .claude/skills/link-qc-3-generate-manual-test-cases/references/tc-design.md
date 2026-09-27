@@ -32,22 +32,27 @@ A Manual TC must read as a complete, executable user journey. Vague steps are th
 downstream automation failure. BAD:
 
 ```text
-Open the KPI page. Apply the required filter. Verify the result.
+Open the Orders page. Apply the required filter. Verify the result.
 ```
 
-GOOD (every hop, precondition, selection, and trigger explicit):
+GOOD (every hop, precondition, selection, and trigger explicit; configuration by reference):
 
 ```text
-Login as Strategy Super Admin ({exact username})
-Open Strategies
-Open the required strategy
-Open KPI Details
+Open the portal [E1]
+Login as Administrator [A1]
+Open Products
+Open the required product
+Open Order Details
 Open the Filter panel
 Set Display Type to Year
 Select 2026
 Click Apply — confirm loading appears on the grid, then clears
-Verify the KPI row (Data Oracle: ...)
+Verify the order row (Data Oracle: price list "Sample" [D2] — expected count: 12, …)
 ```
+
+The URL, the username and the shared dataset are **references** (`[E1]`, `[A1]`, `[D2]`) to
+their rows in `TEST-DATA-{feature}.md` — never literals in the TC ("Test-data collection"
+below). Typed inputs (`2026`) and expected outputs stay inline.
 
 If the draft cannot state the journey at this resolution, that step is a GAP — record it for
 the MCP-pass discovery list instead of papering over it.
@@ -180,6 +185,49 @@ a distinct ID (secondary locale appends "b" to the ID). Each variant MUST:
 is walked live is the validator's decision — `link-qc-3b-validate-manual-test-cases/references/mcp-pass.md` §4,
 or `link-qc-3c-validate-manual-test-cases-cli/references/walk-rules.md` §4.)
 
+## Out-of-browser outcomes — design them anyway
+
+A requirement-defined outcome that leaves the browser — an email, an SMS or OTP code, a push
+notification, a notification-centre entry, a downloaded file, a background job's result — gets a
+**complete TC**, exactly like an on-screen outcome. "N/A" is valid only when the requirement
+defines no such outcome; what a browser tool can or cannot observe never removes a TC. Four axes
+stay separate:
+
+| Axis | Owner | Values |
+|---|---|---|
+| **Design coverage** | skill 3 | the TC exists in full — tool limits never remove it |
+| **Automation candidacy** | skill 3 proposes, the reviewer decides | `YES` / `NO` — decided on the interfaces available, not on the channel |
+| **Execution coverage** | skill 5 | `full` / `partial (human step: n)` / `manual — not automated` |
+| **Validation status** | 3b / 3c | the six frozen states; a `[HUMAN]` step is never observed by the tool |
+
+**Assess the interfaces first — ask only when nothing establishes them.** For each out-of-browser
+channel the requirement uses, resolve in this order and stop at the first answer:
+
+1. the current task input ("the UAT mail sandbox is …", "there is no test SMS provider");
+2. the learning file — `[type: env]` "test interfaces" lines — and the `## 0. Environment` rows
+   of the project's other `TEST-DATA-*.md` files;
+3. only when neither says whether an authorized mail sandbox / SMS test provider / OTP test hook
+   / notification API / job trigger exists for this environment: ONE question in the
+   `open-questions.md` shape (with a recommendation), joined to the step-6 ask. The answer is
+   written back as a `[type: env]` fact so it is never asked again — a recorded **"none
+   available" is as good an answer as a recorded interface**.
+
+An available interface becomes an Environment row (`[E2]` mail sandbox, `[E3]` SMS test
+provider …) and the step stays an ordinary step (`Open the mail sandbox [E2] and open the newest
+message for [A2]`). Only with **no** authorized interface is the step prefixed **`[HUMAN]`** — a
+frozen marker at the start of the step or expected-result line, no new field:
+
+```text
+[HUMAN] Read the 6-digit code from the SMS received on the test phone [A2] and type it in the "Code" field.
+```
+
+Rules: the `[HUMAN]` step keeps its 4 fields and its inline assertion; the TC keeps every other
+step and its Expected Result; the `Manual-Only Scenarios` category for it is `Human-observed
+step` (`self-review.md` check 5); a `[HUMAN]` step never forces `Automation Candidate: NO`
+(suitability table below); 3b / 3c walk up to it and stop (`draft — not app-validated (human
+step pending)`), skill 5 automates up to it (`partial (human step: n)`), skill 4 publishes it
+verbatim.
+
 ## Data oracle requirement
 
 MANDATORY for any test case asserting on rendered data (counts, identifiers, percentages,
@@ -196,10 +244,25 @@ server-loaded content):
 
 Every TC states its data needs in `Preconditions`, `Data Oracle` and `Shared data`. While
 drafting, keep ONE running list of **data items** for the story — this list becomes
-`TEST-DATA-{feature}.md` at delivery (`deliverables.md` §2b). For each item record:
+`TEST-DATA-{feature}.md` at delivery (`deliverables.md` §2b). Assign the IDs **while you draft**
+and write the reference into the TC the moment you need the thing:
 
-- a **plain name** (e.g. `an approved KPI with 12 monthly values`, `a user with the Approver
-  role`, `an empty strategy with no objectives`), never a table, fixture-function or class name;
+| ID | What | Written in the TC as |
+|---|---|---|
+| `E{n}` | an environment row — `E1` is always the application base URL; `E2`, `E3`… one per service the TCs reach (mail sandbox, SMS test provider, admin portal…). `Value` is `unknown — asked by 3b/3c` when the learning file has no `[type: env]` line for it | `Open the portal [E1]`, `Open the mail sandbox [E2]` |
+| `A{n}` | an account — one row per account, never per role (a role may own several accounts; the ID, never the role, identifies one). Username from the learning file or "unknown"; never a password | `Login as Administrator [A1]`, `the SMS received on the test phone [A2]` |
+| `D{n}` | a data item (below) | `Data Oracle: price list "Sample" [D2]`, `Shared data: order "Sample" [D3]` |
+
+The form is always **name + token** — a bare `[A1]` with no name, or a name with no token, is a
+check-12 finding. Each token means *that row and nothing else*: `[E{n}]` is never "the URL",
+`[A{n}]` is never "whoever has the role". A TC value that deliberately equals a configuration
+value (typing the portal URL into a "Website" field, for instance) is marked `(intentional
+input)` on the same line so the renderer's `data-literal` check skips it.
+
+For each data item record:
+
+- a **plain name** (e.g. `an approved order with 12 line items`, `a user with the Approver
+  role`, `an empty product with no orders`), never a table, fixture-function or class name;
 - the **exact values** the TCs need (fields, counts, identifiers, states — the Data Oracle values);
 - the **TC-IDs** that use it, and whether several TCs use the **same** item (say "these TCs use
   the same data item"; mention execution order only when one TC really depends on the result of
@@ -261,12 +324,14 @@ or drop one. The **shape** is frozen too (the renderer parses by it, legacy docu
 - **Automation Candidate:** YES | NO
 - **Data effect:** {read-only | creates | modifies | deletes | —}
 - **Shared data:** {plain words | —}
+- **Tags:** {comma-separated, e.g. uat, regression | —}
 - **Validation:** draft — not app-validated
 ```
 
 One bullet per field in this order; `Preconditions` and `Steps` as 2-space-indented ordered
 sub-lists; an empty optional value is `—`, never blank and never omitted. A `<!-- tc-evidence -->`
-comment after the block belongs to 3b / 3c — never write or edit one here.
+comment after the block belongs to 3b / 3c — never write or edit one here. A step or
+expected-result line that needs a person starts with `[HUMAN] ` ("Out-of-browser outcomes").
 
 | Field | Description |
 |-------|-------------|
@@ -276,19 +341,26 @@ comment after the block belongs to 3b / 3c — never write or edit one here.
 | Requirement | Verified requirement IDs from the requirements source |
 | Stage | `@positive` for happy-path and edge-case; `@negative` for a TC that asserts a rejection, a guard, a validation error or a blocked role (whatever its Type). Written per TC so skill 5 never derives it |
 | Description | One-sentence summary |
-| Preconditions | Page-load state, language, user role (exact username from the learning file; "username: to be confirmed" when unknown — an open question), data state |
+| Preconditions | Page-load state, language, the environment and the account by reference (`Open the portal [E1]`, `Logged in as Administrator [A1]` — the username lives only in `TEST-DATA` §1, "unknown" there when the learning file has none, with an open question), data state (`[D{n}]`) |
 | Steps | Numbered — action + element label + value + inline assertion |
 | Expected Result | Final outcome — specific, assertable, labels in every required locale |
 | Data Oracle | MANDATORY if the TC asserts on data values |
 | Smoke | YES / NO — YES only for the critical happy-path journeys that prove the feature is alive (login works, screen reachable, core flow functions). Keep the smoke set small: roughly 10–20% of TCs, at least 1 per screen. Skill 5 runs `Smoke: YES` TCs FIRST behind a failure gate. Mark deliberately — never default everything to YES. |
 | Automation Candidate | YES / NO — see automation suitability below |
 | Data effect | OPTIONAL — `read-only` / `creates` / `modifies` / `deletes`. Tells skill 5 whether this TC may run in parallel with others (read-only) or must run one after another (it changes data). Leave blank to let skill 5 infer it from the steps. |
-| Shared data | OPTIONAL — the fixture, record, or account this TC shares with other TCs, in plain words (e.g. `KPI "Revenue" yearly values`, `single-session admin account`). TCs naming the same shared data run one after another. |
+| Shared data | OPTIONAL — the fixture, record, or account this TC shares with other TCs, in plain words plus its token (e.g. `price list "Sample" yearly values [D2]`, `single-session admin account [A1]`). TCs naming the same shared data run one after another. |
+| Tags | OPTIONAL, design-owned — comma-separated tags the reviewer wants on the Azure DevOps work item (e.g. `uat`, `regression`); `—` when none. Skill 4 publishes them (with its own owned tags); 3b / 3c / 5 never edit them. A project-wide tag every TC carries goes in the `**Tag convention:**` header line instead (`deliverables.md` §2). |
 | Validation | Always `draft — not app-validated` at design time (or `not-implemented — pending implementation` per `entry-cases.md` §4). The other states are set only by 3b — `validation-states.md`. |
 
-Do NOT include: selectors, code, attribute names, framework-specific assertions, or any
-password. `Data effect` / `Shared data` are plain words only — never table names, fixture
-function names, or identifiers from the code.
+Do NOT include as literals — **configuration is externalized**: environment URLs / hosts /
+service endpoints, account usernames, and reusable datasets shared by several TCs appear only
+as references to their `TEST-DATA` rows (`[E{n}]` / `[A{n}]` / `[D{n}]`). Intentional inputs
+and expected outputs **stay inline**: a typed test input (an invalid URL, a boundary value, a
+51-character name), an exact expected output (a validation message, a computed total), a label,
+a one-off value of this TC's scenario. A value that deliberately equals a configuration value is
+written `… (intentional input)` on the same line. Never: selectors, code, attribute names,
+framework-specific assertions, or any password. `Data effect` / `Shared data` are plain words
+only — never table names, fixture function names, or identifiers from the code.
 
 **Type → run-stage mapping (contract with skill 5):** `happy-path` and `edge-case` TCs run in
 skill 5's `@positive` stage; a TC that asserts a rejection, a guard, a validation error or a
@@ -309,6 +381,7 @@ Mark each TC as an Automation Candidate using these heuristics:
 | One-time scenario with no regression value | NO — overhead exceeds value |
 | Exploratory / discovery-oriented scenario | NO — manual preferred |
 | Requirement not implemented yet (`entry-cases.md` §4 — tester's answer or skill-4 report) | Defer — mark YES/NO on merit, but note "pending implementation" |
+| One or more `[HUMAN]` steps ("Out-of-browser outcomes") | Does **not** force NO — decide on the steps around them. `YES` with `[HUMAN]` steps = "partially automatable — human step(s) {n}": skill 5 automates up to the first human step and reports `partial (human step: n)`; the manual-only row (category `Human-observed step`) names the human part |
 
 The human reviewer can flip any marking during review.
 
@@ -318,7 +391,9 @@ The human reviewer can flip any marking during review.
 
 Run the TC writing/normalization phase over the existing set instead of a fresh design. **Every
 rule above applies unchanged** (patterns, 4-field steps, inline assertions, coverage minimums,
-locale coverage, data oracles, format, automation suitability).
+locale coverage, out-of-browser outcomes, data oracles, reference tokens, format, automation
+suitability) — an existing TC that carries a URL or a username as a literal is normalized to the
+reference form and its row added to the data-item list.
 
 1. **Normalize** every existing TC into the format table above. Preserve original IDs where
    possible; record an ID mapping when renumbering is unavoidable.

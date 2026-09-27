@@ -40,14 +40,15 @@ project**, not to this repo. Do not create them here.
       SKILL.md INPUT.txt references/ (9) scripts/ (4 .mjs + selftest.mjs + fixtures/mcp/ + set-azure-devops-pat + set-playwright-secrets .ps1/.sh) assets/ (4 templates)
     link-qc-2-review-requirements/                 story/spec → REQ-*.md + review
     link-qc-3-generate-manual-test-cases/          manual TCs (EN/AR), DESIGN ONLY, rendered HTML review page (human gate)
-      SKILL.md INPUT.txt references/ (8) scripts/ (render-tc-review, selftest, fixtures/) assets/ (1)
+      SKILL.md INPUT.txt references/ (8) scripts/ (render-tc-review, selftest, fixtures/) assets/ (2: tc-review body partial + report-shell — the one general HTML page, shared with skill 5)
     link-qc-3b-validate-manual-test-cases/         OPTIONAL live validation of a TC doc (Playwright MCP), patches in place — the default validator
       SKILL.md INPUT.txt references/ (10) scripts/ + assets/ = byte-identical mirrors of skill 3's
     link-qc-3c-validate-manual-test-cases-cli/     OPTIONAL evaluation twin of 3b on playwright-cli (no MCP); same contracts; NO scope gate (walks every TC); comparison protocol
       SKILL.md INPUT.txt references/ (12) assets/ (template mirror + comparison template) scripts/ = mirrors of skill 3's
-    link-qc-4-publish-test-cases-azure/            beautify approved TCs → Azure DevOps + ADO-MAP.md; --suite-only places published TCs in a Test Plan suite later
-    link-qc-5-test-run-automation/                 Playwright POM generation + phased run + 2 compliance gates
-      SKILL.md INPUT.txt references/ (5: automation-rules, compliance-checkpoints, run-report, validator, code-craft) scripts/ (9 + fixtures/) assets/ (8: run-report template + css, 6 *.template.ts copied into consumer projects)
+    link-qc-4-publish-test-cases-azure/            beautify approved TCs → Azure DevOps + ADO-MAP.md with verified tags / automation status; --suite-only places published TCs in a Test Plan suite later
+      SKILL.md INPUT.txt scripts/ (ado-sync-plan, tc-hash — canonical copy, selftest-ado-sync + fixtures/ado-sync/)
+    link-qc-5-test-run-automation/                 Playwright POM generation (automation inventory first) + phased run + 2 compliance gates
+      SKILL.md INPUT.txt references/ (5: automation-rules, compliance-checkpoints, run-report, validator, code-craft) scripts/ (11 + fixtures/: the 9 below plus tc-hash — mirror of skill 4's — and selftest-tc-hash) assets/ (8: run-report body partial + report-shell mirror, 6 *.template.ts copied into consumer projects)
     link-qc-6-ui-testing/                          visual UI audit of one implemented screen vs its design (Playwright MCP; optional Figma MCP) or, with no design, vs tokens / consistency / WCAG / RTL — beside the chain, gates nothing
       SKILL.md (≈420 lines, orchestrator) INPUT.txt references/ (10: capture-and-files, no-design-audit, measurement-passes, coverage-passes, bug-metadata, annotation, annotation-fallback, report-template, learning-and-coverage-index, second-round) — no scripts
     link-qc-7-sync-tc-status-to-azure/             Azure loop: latest TC outcomes → ONE Test Plan run (cloud test-plan tools; otherwise NOT_RUN) — SKILL.md INPUT.txt references/qc-contract.md (mirror)
@@ -72,7 +73,38 @@ the most complete description of the system and is treated as part of the produc
 ## Scripts
 
 Node ≥ 18, ESM, zero dependencies, read-only, result returned as a JSON payload (`--pretty` for
-human output). Skill 1 owns the project-setup scripts; skill 5 owns the automation-code validator.
+human output). Skill 1 owns the project-setup scripts; skill 4 owns the Azure sync decision script
+and the canonical TC hash; skill 5 owns the automation-code validator.
+
+### `skills/link-qc-4-publish-test-cases-azure/scripts/`
+
+```bash
+node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/ado-sync-plan.mjs plan   --tc <approved doc> [--beautified <doc>] --data <TEST-DATA md> [--map <ADO-MAP.md>] --remote <json> --feature <name> [--convention-tags a,b] --pretty
+node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/ado-sync-plan.mjs verify --plan <plan.json> --readback <json> [--write-map <ADO-MAP.md>] [--strict] --pretty
+node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/tc-hash.mjs --tc <TEST-CASES md> [--data <TEST-DATA md>] [--ids a,b] [--canonical] --pretty
+node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/selftest-ado-sync.mjs --pretty
+```
+
+- `tc-hash.mjs` is the **canonical TC hash** (`tc-hash/1`): the behaviour fields (Locale,
+  Requirement, Preconditions, Steps, Expected Result, Data Oracle, Data effect, Shared data) with
+  quoted literals kept byte-for-byte and only the text outside quotes normalised, plus a
+  fingerprint of the referenced TEST-DATA rows (account role + note, item name + "Must look
+  like", environment "What") — usernames, URL values, statuses, `Validation`, the evidence stamp,
+  `Smoke`, `Automation Candidate`, `Tags` and `Description` never enter it. Byte-identical copy in
+  skill 5 (`MIRROR` banner); both harnesses assert one golden hash for the same fixture.
+- `ado-sync-plan.mjs` **decides, MCP does the I/O**: `plan` turns the document, the previous map
+  and the remote fields (fetched through MCP and passed as JSON) into per-TC tag adds / removes /
+  preserves, the AutomationStatus action (`write` / `keep` / `unknown` / `conflict`) and the
+  per-TC "Test data" description block; `verify` compares the read-back with the plan
+  (`verified` / `MISMATCH` / `NOT_RUN`), derives the outcome (`PUBLISHED AND VERIFIED` ·
+  `PUBLISHED, NOT VERIFIED` · `PUBLISHED WITH MISMATCHES` · `PUBLICATION INCOMPLETE` · `BLOCKED`,
+  precedence high → low, counts on the line) and writes the new `ADO-MAP.md` (`published_tc_sha256`,
+  `automated_tc_sha256` copied through untouched, `Tags (introduced)` persisted only from verified
+  writes). The skill never hard-codes `Planned`, never assumes ownership of a pre-existing tag and
+  never keeps `Automated` without a matching `automated_tc_sha256`.
+- `selftest-ado-sync.mjs` exits non-zero on mismatch by design: tag preservation, the four-run
+  ownership case, conflicts, unknown candidacy, mismatch / retry / `NOT_RUN`, the legacy map, the
+  canonical-hash same-vs-different set and the incomplete-publication outcome.
 
 ### `skills/link-qc-1-generate-update-testing-structure/scripts/`
 
@@ -82,7 +114,7 @@ the harness and exits non-zero on mismatch.
 ```bash
 node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/preflight.mjs      --root <project> --pretty
 node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/validate-setup.mjs --root <project> --pretty [--mcp k=PASS,…] [--sync-report x.json]
-node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs --check|--apply --pretty [--target <dir>] [--only <skill>]… [--force] [--no-mcp] [--tools] [--branch main]
+node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs --check|--apply --pretty [--target <dir>] [--only <skill>]… [--replace --yes | --force] [--no-mcp] [--tools] [--branch main]
 node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest.mjs --pretty
 ```
 
@@ -92,6 +124,14 @@ node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest
 - `sync-qa-skills.mjs` **refuses to run when the git origin is this repo** — use `git pull` here.
   It is the single implementation of sync; `sync-skills.md` must stay a wrapper and never
   re-describe the algorithm in prose.
+- **Clean replace** (`--apply --replace --yes`): deletes each of OUR skill folders (`SKILLS` + legacy
+  `SKILL_RENAMES`) and re-downloads it whole (staged, old folder restored on failure), and overwrites
+  `sync-skills.md`; local edits and extra files in those folders are lost. `planReplace()` in `lib.mjs` is
+  the only decider — any other skill folder is `keep`, a folder missing in the source is `refused`. The
+  script refuses `--replace` without `--yes`; `/sync-skills` and skill 1 (Mode B / C / new) ask ONCE with
+  `replace.confirmText` (`REPLACE_WARNING`) from `--check` — Replace / Update only / Cancel. Scope is the
+  skill folders + the command only: `.mcp.json`, `.gitignore`, tools and every other file keep the normal
+  sync behaviour.
 - `set-azure-devops-pat.ps1` / `.sh` are run by the *user* in their own terminal; one prompt
   stores BOTH `AZURE_DEVOPS_PAT_B64 = base64(":" + PAT)` (cloud server) and `AZURE_DEVOPS_PAT`
   (raw, self-hosted server) as user-level env vars. Never handle the token. A new env var
@@ -108,7 +148,11 @@ node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest
   `applyMcpMigration` is the ONLY .mcp.json mutation the sync performs — never the
   `azure-devops` entry. Templates and fixtures carry placeholders only (`devops.example.com`,
   `{ORG_URL}`, `{PROJECT_NAME}`) — never a project's real host, collection or project.
-- `selftest.mjs` (8 cases over `fixtures/mcp/`) **exits non-zero on mismatch by design**: the
+- `tc-hash.mjs` + `selftest-tc-hash.mjs`: the byte-identical copy of skill 4's canonical hash
+  (see skill 4's section) and its harness — the close-out writes `automated_tc_sha256` with it
+  for every TC that ran `full` coverage with PASS after Checkpoint B PASS, never for a `PARTIAL`
+  TC. Regenerate the golden hash only together with skill 4's.
+- `selftest.mjs` (9 cases over `fixtures/mcp/`, the last one `planReplace` — only our folders replaced / removed) **exits non-zero on mismatch by design**: the
   sync guard (azure-devops byte-identical, cloud and self-hosted), the plan never naming
   azure-devops, `detectAdoHosting`, `scanMcp` inline-token detection, `scanPat` session-vs-machine
   (probe-injected, never the registry) and the template's placeholder-only check. Run it after
@@ -134,8 +178,10 @@ node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest
 ### `skills/link-qc-5-test-run-automation/scripts/`
 
 ```bash
-node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --root <project> --pretty [--files a,b] [--tc-ids <csv|file>] [--req-ids <csv|file>] [--require-steps] [--strict]
+node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --root <project> --pretty [--files a,b] [--tc-ids <csv|file>] [--req-ids <csv|file>] [--inventory <automation-inventory.md>] [--require-steps] [--strict]
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/tc-hash.mjs --tc <TEST-CASES md> [--data <TEST-DATA md>] [--ids a,b] --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-tc-hash.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs --report <TEST-RUN-REPORT-{feature}.md> [--bugs <BUG-REPORT-{feature}.md>] [--runs <dir>] [--out <html>] [--write] [--force] [--strict] [--pretty]
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-report.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/watchdog.mjs --plan <group-or-run-plan.json> [--group <name>] --heartbeat <jsonl> [--results <jsonl>] [--now <ISO>] [--grace <ms>] [--out <watchdog.json>] [--write] [--strict] [--pretty]
@@ -152,7 +198,14 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-config-invent
   token scan cannot decide is emitted at severity `review` and left to semantic review, never
   guessed. Default exit 0; `--strict` maps the gate (FAIL 1 · BLOCKED 2 · NOT_RUN 3) for CI.
   Rule ids, the exemptible/non-exemptible split and the documented limits live in
-  `references/validator.md` — change them together.
+  `references/validator.md` — change them together. `pom-duplicate-page` (severity `review`)
+  reports two page classes that look like the same page (normalised class name, identical
+  `goto` / URL literal, or ≥ 2 identical locator strings) across the WHOLE automation root; with
+  `--inventory <automation-inventory.md>` a pair covered by a decision row becomes
+  `pom-duplicate-page-decided` (info). Matching only produces candidates — the decision table is
+  the verdict. An undecided pair is the ONE review item that moves the scanner gate itself to
+  BLOCKED (`--strict` exit 2; documented in `validator.md`), so an unaddressed candidate can never
+  pass Checkpoint A / B.
 - `selftest.mjs` **exits non-zero on mismatch by design** (it is a harness, not a reporting
   script). Run it after any validator change. Its seventeen cases include the false-PASS guards
   and, for the three timing rules (`wait-network-idle`, `positional-unscoped`, `step-missing`
@@ -186,9 +239,17 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-config-invent
   BLOCKED 2 · NOT_RUN 3. Screenshots are linked by RELATIVE path (thumbnail + "View screenshot"
   viewer in the template's own `<dialog>` + inline script); a `data:` URI BLOCKs, a missing file
   only warns. Legacy artifacts (`phase-N.*`, `merged-results.json`, …) are listed, never
-  rendered. It copies skill 3's template engine and never imports it (sync copies one folder).
-  The contract lives in `references/run-report.md`.
-- `selftest-run-report.mjs` exits non-zero on mismatch by design; its 22 cases run on a temporary
+  rendered. It copies skill 3's template engine and the "report-shell kit" block (between its
+  BEGIN / END markers: comments parser, comment boxes, shell strings, `renderShell`) and never
+  imports them (sync copies one folder). Two passes: the body partial
+  `assets/run-report.template.html`, then `assets/report-shell.template.html` around it — the one
+  general page (one stylesheet, one script: theme toggle, viewer, filter bars, reviewer comments),
+  byte-identical with skills 3 / 3b / 3c. Reviewer comments: every bug and phase card and one
+  general box take a comment; the page saves `REVIEW-COMMENTS-{feature}.md` beside itself (the
+  reviewer's file, the only extra entry in the story-folder whitelist); `--comments` overrides;
+  the provenance line gains an optional `comments=` hash (v1.0 pages still verify). The contract
+  lives in `references/run-report.md` (§9b comments, §10 templates).
+- `selftest-run-report.mjs` exits non-zero on mismatch by design; its 26 cases (23 PARTIAL rows, 24 reviewer comments, 25 one shell per page, 26 shell + kit mirror with 3 / 3b / 3c) run on a temporary
   copy of `scripts/fixtures/run-report/automation/` (a story with two phases, two bugs and PNG
   stubs) and compare against `scripts/fixtures/run-report/golden/`. Regenerate the golden only for
   a deliberate change (command in the fixture README).
@@ -196,7 +257,7 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-config-invent
 ### `skills/link-qc-3-generate-manual-test-cases/scripts/` = `skills/link-qc-3b-validate-manual-test-cases/scripts/` = `skills/link-qc-3c-validate-manual-test-cases-cli/scripts/`
 
 ```bash
-node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/render-tc-review.mjs --tc <TEST-CASES-{feature}.md> [--data <TEST-DATA.md>] [--out <html>] [--lang en|ar] [--strings <json>] [--write] [--write-skeleton] [--emit-keys] [--force] [--strict] [--pretty]
+node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/render-tc-review.mjs --tc <TEST-CASES-{feature}.md> [--data <TEST-DATA.md>] [--out <html>] [--lang en|ar] [--strings <json>] [--comments <md>] [--write] [--write-skeleton] [--emit-keys] [--force] [--strict] [--pretty]
 node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/selftest.mjs --pretty
 ```
 
@@ -209,17 +270,38 @@ node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/selftest.mjs --
   the page wrong (out-of-vocabulary enum, broken row, missing frozen field, password-shaped
   literal, leftover placeholder), stamps a provenance comment with a self-hash and refuses to
   overwrite a hand-edited page without `--force`. Same inputs → same bytes; nothing depends on
-  the clock. `--strict` maps the gate (PASS 0 · MISMATCH 1 · BLOCKED 2 · NOT_RUN 3).
+  the clock. `--strict` maps the gate (PASS 0 · MISMATCH 1 · BLOCKED 2 · NOT_RUN 3). Three
+  `warnings[]` kinds the skills must clear before delivery (they never change the gate):
+  `data-literal` (a TEST-DATA environment host / value or account username repeated in a TC
+  text — matched against TEST-DATA, never by shape; `(intentional input)` at the end of a line
+  opts out), `data-ref-unresolved` (a `[A/E/D{n}]` token with no row) and
+  `narrative-not-english` (Arabic-script narrative on an English page, quoted labels ignored).
+  **Language is `--lang` or English** — the document's `Review page language:` line is a record
+  of the last render (`document.reviewLangHeader`, `review-lang-header-stale` warning), never an
+  input. `[HUMAN]` steps are counted and badged (`counts.humanSteps`); the optional `Tags` field
+  renders as chips and is never a translation key. Two passes: the body partial
+  `assets/tc-review.template.html`, then the shared `assets/report-shell.template.html` (also in
+  skill 5). Reviewer comments (`references/html-page.md` §7b): every TC / PB / Q card and one general
+  box take a comment; the page saves `REVIEW-COMMENTS-{feature}.md` beside itself; the renderer
+  pre-fills open entries, shows handled ones (`applied` / `answered` / `declined` + Response) as
+  history, lists unknown ids, never translates comment text; an optional `Reviewer comment` TC
+  field is shown and is not in the TC hash. Typing in the page never changes the page file, so the
+  hand-edit guard stays valid.
 - `--write-skeleton` **merges** the sidecar and never resets a translation (unchanged `en` keeps
   its `ar`; changed → `stale` with the old `ar` kept; new → `ar: null`; removed → `orphan`). A
   page rendered with missing / stale keys is a preview (`arabicComplete: false`).
-- `selftest.mjs` exits non-zero on mismatch by design; its 21 cases cover the golden EN / AR /
+- `selftest.mjs` exits non-zero on mismatch by design; its 28 cases cover the golden EN / AR /
   legacy pages, the merge rule, the false-PASS guards, exit codes, provenance, **case 20 (run
   metadata — the `by 3c … , tool cli` header, the `tool` / `outcome-check` stamp keys and the
-  `screenshot` pb-meta key are parsed into the payload and never rendered)** and **case 0, the
-  mirror check** (sha256 of every mirrored path against every sibling skill folder present —
-  `MIRROR_SKILLS` = 3, 3b, 3c; `skipped` only when none is present). Regenerate a golden only for a
-  deliberate change (`scripts/fixtures/MIRROR.md`).
+  `screenshot` pb-meta key are parsed into the payload and never rendered)**, **cases 21-22
+  (configuration literals warn, typed inputs / boundary values / `(intentional input)` never do;
+  unresolved tokens warn; no TEST-DATA → unchecked; legacy TEST-DATA → compatibility)**, **case 23
+  (language precedence L1-L4: the header line and the sidecar never decide, `--lang ar` does, the
+  narrative check flags Arabic narrative and ignores quoted labels)**, **case 24 (`[HUMAN]` count
+  and badge, `Tags` chips, Tags optional)**, **case 25 (reviewer comments: pre-fill, badges, history, orphans, stale revision, other page, secret, `--comments`, Arabic)**, **case 26 (one shell per page)**, **case 27 (shell + kit byte-identical with skill 5 when installed)** and **case 0, the mirror check** (sha256 of every
+  mirrored path against every sibling skill folder present — `MIRROR_SKILLS` = 3, 3b, 3c;
+  `skipped` only when none is present). Regenerate a golden only for a deliberate change
+  (`scripts/fixtures/MIRROR.md`).
 - The renderer reads both validators' header stamps (`by 3b on …` / `by 3c on …, tool cli`) and
   picks the matching chrome string; `document.stamp.by` / `.tool`, `document.evidence[]` and
   `document.potentialBugs[]` carry the run metadata for the 3b-vs-3c comparison.
@@ -229,7 +311,9 @@ node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/selftest.mjs --
 `/sync-skills` copies one skill folder at a time, so the three skills never import from each other;
 what they share is duplicated **byte-for-byte** and must be edited in all three places:
 `references/learning-file.md`, `references/html-page.md`, `references/validation-states.md`,
-`references/open-questions.md`, `assets/tc-review.template.html`, `scripts/render-tc-review.mjs`,
+`references/open-questions.md`, `assets/tc-review.template.html`, `assets/report-shell.template.html`
+(also byte-identical in skill 5, with the renderers' "report-shell kit" block — skill 3 case 27 and
+skill 5 run-report case 26 check it), `scripts/render-tc-review.mjs`,
 `scripts/selftest.mjs`, `scripts/fixtures/**`. Each file carries a `MIRROR` banner in its own
 comment syntax (JSON / HTML goldens are listed in `scripts/fixtures/MIRROR.md` instead); self-test
 case 0 enforces it against every sibling present. Prose blocks that must say the same thing in the
@@ -246,6 +330,15 @@ CUSTOM, one question) and its cross-validator question (`patch-rules.md` §1b); 
 on every run — and its `patch-rules.md` §1b is the no-question variant (3b evidence is
 re-validated and replaced, never asked about). Do not "re-mirror" either direction without an
 explicit instruction.
+
+## Mirrored files — skills 4 and 5
+
+`scripts/tc-hash.mjs` is byte-identical in `link-qc-4-publish-test-cases-azure` (canonical copy)
+and `link-qc-5-test-run-automation`; its MIRROR banner says so. Both harnesses
+(`selftest-ado-sync.mjs`, `selftest-tc-hash.mjs`) assert the same golden hash for the same fixture
+TC, so drift fails a test. Change the canonical form only deliberately, bump `HASH_VERSION`, and
+regenerate both goldens together — an old `automated_tc_sha256` then reads as a conflict, which is
+the intended effect.
 
 ## Mirrored files — skills 7, 8 and 9
 
@@ -295,17 +388,21 @@ per-action `audit-log.md` (written as the audit runs; Coverage counts derive fro
 contracts shared by `measurement-passes.md`, `capture-and-files.md`, `bug-metadata.md` and
 `report-template.md` — change them together.
 
-**When changing the TC document contract** (header lines, frozen anchors, the per-TC shape, the
-six validation states, the PB / Q shapes, the stamp metadata keys `tool` / `outcome-check` /
-`screenshot`), keep in step: skill 3 `references/deliverables.md` + `tc-design.md`, 3b **and 3c**
-`references/tc-format-contract.md` + `patch-rules.md`, the mirrored
+**When changing the TC document contract** (header lines incl. `Tag convention`, frozen anchors,
+the per-TC shape incl. the optional `Tags` field, the `[A{n}]` / `[E{n}]` / `[D{n}]` reference
+tokens and the `(intentional input)` escape, the `[HUMAN]` step marker, the six validation states
+and their draft reasons (incl. `human step pending`), the PB / Q shapes, the stamp metadata keys
+`tool` / `outcome-check` / `screenshot`, the TEST-DATA `## 0. Environment` / `## 1. Accounts`
+tables), keep in step: skill 3 `references/deliverables.md` + `tc-design.md` + `self-review.md`,
+3b **and 3c** `references/tc-format-contract.md` + `patch-rules.md`, the mirrored
 `html-page.md` / `validation-states.md`, the renderer's parser, the sample fixture and the
-goldens (regenerated deliberately), and skills 4 / 5 where they parse the field.
+goldens (regenerated deliberately), skill 4's `tc-hash.mjs` (+ skill 5's copy) and
+`ado-sync-plan.mjs` where they parse the field, and skill 5 where it resolves the tokens.
 
 **When changing skill 5's run report contract** (the two markdown shapes, the `skill6-run/1` run
 file, the folder whitelist, the renderer's gates or the viewer), keep in step:
 `references/run-report.md`, the parser and view model in `scripts/render-run-report.mjs`,
-`assets/run-report.template.html`, the fixture markdown / run files / golden page (regenerated
+`assets/run-report.template.html`, `assets/report-shell.template.html` + the report-shell kit (a change there is also a skill 3 / 3b / 3c change: copy both, regenerate all four goldens), the fixture markdown / run files / golden page (regenerated
 deliberately), `selftest-run-report.mjs`, the `<result_organization>` / `<second_run>` /
 `<checkpoint_b>` / `<bug_report_format>` blocks and the checklist in `SKILL.md`, `INPUT.txt`,
 skill 1's `references/testing-layout.md` and `README.md`.
@@ -349,7 +446,8 @@ a SKILL.md.
   copies, measured tokens / time / states / PBs / compatibility, no recommendation). Replacing 3b,
   changing a default or retiring either skill needs an explicit user instruction — never a
   conclusion drawn inside a skill or this repo. 3b got exactly one addition for 3c: the
-  cross-validator check and the `tool: mcp` stamp key.
+  cross-validator check and the `tool: mcp` stamp key. The only other stamp key 3b writes is
+  `outcome-check: human step pending` (shared with 3c for a `[HUMAN]` step).
 - **Cross-validator check (3b):** before execution and before any automatic exclusion, every
   in-scope TC's own stamp is inspected; evidence written by 3c is asked about once (current vs
   stale; recommend skip current, re-validate stale), never silently reused or dropped; a skipped
@@ -379,7 +477,40 @@ a SKILL.md.
   and re-queued; enhancement-log and Potential-Bug history is appended, never replaced; a PB is
   resolved only after an actual successful retest.
 - **The review page is rendered**, never hand-written; an Arabic page with missing / stale keys
-  is a preview, never the deliverable.
+  is a preview, never the deliverable. Both HTML pages are one general page (the shared report
+  shell); the reviewer's channel back is `REVIEW-COMMENTS-{feature}.md`, saved from the page. A
+  skill never creates, rewords, reorders or drops a comment — it only sets a handled entry's
+  Status (`applied` / `answered` / `declined {date}`) and Response; a comment is never a status
+  source (a bug is resolved only by a passing retest) and never a design change outside skill 3
+  `--revision`.
+- **Output language is English unless the current run asks otherwise** (skills 2, 3, 3b, 3c):
+  `--lang ar` or an explicit sentence in the task input decides; the source language, a saved
+  learning-file answer (no longer written), the document's `Review page language:` line (a
+  record, rewritten after every render) and an existing sidecar never do. Narrative English,
+  application labels in the application's language.
+- **Configuration by reference, inputs inline** (skill 3 → 3b / 3c / 4 / 5): environment
+  URLs / hosts, account usernames and shared datasets live only in TEST-DATA (`E{n}` / `A{n}` /
+  `D{n}` rows) and a TC names them by token beside the plain name; each token resolves to its
+  OWN row (never role → account, never "E1 = the URL"); typed test inputs and exact expected
+  outputs stay inline. The tokens survive into Azure (skill 4's per-TC "Test data" block makes
+  the item executable from Azure alone).
+- **Tool limits never reduce coverage** (skill 3): an out-of-browser outcome gets a complete TC;
+  the interface check (task input → learning file → ONE question) decides whether a step is
+  ordinary (`[E{n}]` mail sandbox / SMS provider / OTP hook / job trigger) or `[HUMAN]`. Four
+  separate axes: design coverage, automation candidacy, execution coverage (skill 5 `partial
+  (human step: n)` / `PARTIAL — human step pending`, never PASS, never `Automated`), validation
+  status (3b / 3c `draft — not app-validated (human step pending)`, never `validated`).
+- **Page-object reuse is decided, not guessed** (skill 5): the automation inventory scans the
+  whole automation root before any file is written; every screen gets a `reuse` / `extend` /
+  `create` row naming each surfaced candidate; `pom-duplicate-page` is closed only by that row.
+- **Azure sync is verified, owned and safe** (skill 4): field values come from the document and
+  the decision script, never from a hard-coded default; pre-existing tags are never owned;
+  `Automated` is kept only with a matching `automated_tc_sha256`; missing candidacy is `unknown`;
+  every write is read back; the outcome word never claims more than the read-back proved; a
+  supplementary snapshot `NOT_RUN` never blocks `PUBLISHED AND VERIFIED` when every required
+  per-TC block was verified.
+- **No project, product or customer name and no real host in any skill**: neutral examples
+  (`Administrator`, `admin.user`, `Open Products`), placeholders in templates and fixtures.
 - Skill 5 enforces **two machine gates**: `<checkpoint_a>` before execution and `<checkpoint_b>`
   on the final code, both of which must PASS for the delivered scope. The scanner gate is not the
   compliance gate — open `review[]` / `notRun[]` items must be closed by semantic review or the
@@ -421,10 +552,10 @@ a SKILL.md.
 
 Branch `main`; commit and push only when asked. Projects pick changes up on their next
 `/sync-skills`, so a push here is effectively a release — make sure `SKILL.md`, `INPUT.txt`,
-`lib.mjs` and `README.md` are consistent, and that all eight self-test harnesses pass (skill 1's
-`selftest.mjs`, skill 5's
-validator, run-report, watchdog and config-inventory harnesses, and the mirrored one in skills 3,
-3b and 3c including its mirror case), before committing.
+`lib.mjs` and `README.md` are consistent, and that all ten self-test harnesses pass (skill 1's
+`selftest.mjs`, skill 4's `selftest-ado-sync.mjs`, skill 5's validator, run-report, watchdog,
+config-inventory and tc-hash harnesses, and the mirrored one in skills 3, 3b and 3c including its
+mirror case), before committing.
 
 ## Azure loop conventions (skills 7 to 9)
 

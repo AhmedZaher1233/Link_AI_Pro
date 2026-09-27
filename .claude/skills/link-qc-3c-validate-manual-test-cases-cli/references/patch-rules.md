@@ -66,6 +66,13 @@ the freshness pass (§1) and before the first browser command:
    stamp (with `tool: cli` and the `outcome-check` line — `tc-format-contract.md`,
    `walk-rules.md` §6a), label corrections and inserted steps in `Preconditions` / `Steps` /
    `Expected Result`; a locale-variant TC gets its captured secondary-locale labels.
+   **References stay references**: an `enhanced` step keeps `Open the portal [E1]` / `Login as
+   Administrator [A1]` / `[D2]` exactly as written — the URL, the username or the dataset you
+   resolved through `TEST-DATA` is never written into the TC as a literal, and an inserted step
+   that needs one uses the same token (a new account or service the app requires gets a new
+   `TEST-DATA` row and its token, §3). A `[HUMAN]` step is kept verbatim; the TC's state is
+   `draft — not app-validated (human step pending)` and its stamp carries `outcome-check: human
+   step pending` (`walk-rules.md` §6a).
 2. **Header**: `Implementation status` with its source (`probe {date} · answer · report {path}`),
    `MCP validation` six counts + `— by 3c on {YYYY-MM-DD}, env {name}, scope full[, re-run {n}],
    tool cli`, `App validation progress: {observed}/{N} TCs observed live ({pct}%)`
@@ -123,7 +130,8 @@ use the item — never create, edit or delete anything to find out):
 |---|---|
 | exact values, counts or identifiers the item really has | §2 `Must look like` + §3 `Exact values needed` (and the TC's Data Oracle stays — a mismatch is a `Q-{n}` or a PB, never an edit) |
 | a state the item must be in that the design did not name | same |
-| an additional account / role the screens require | §1 Accounts row (username only), mapped to the TCs |
+| an additional account / role the screens require | §1 Accounts row with the next free `A{n}` ID (username only), mapped to the TCs; the inserted step references it as `{role} [A{n}]` |
+| the base URL or another environment value you asked for at intake (§0 row was `unknown — asked by 3b/3c`) | that row's `Value` + `Status: READY` — the TC keeps `[E{n}]`; a service the walk needed that had no row (a mail sandbox reached for an OTP) gets a new `E{n}` row, never a literal in a step |
 | a creation screen / setting that makes an `e2e scenario` or `set directly` way available | §5 row `available — seen live {date}`; never `api` / `db` from observation (those need confirmation, `tc-design.md` rules) |
 | an item that cannot be reached or created in this environment | §4 Problems row, status `IMPOSSIBLE` only after the ways were considered |
 | a problem row now solved (item exists) | row marked `closed {date}` |
@@ -136,12 +144,21 @@ records the final outcome.
 ## 4. Render the page — `html-page.md`
 
 Dry-run first and read the payload: a `MISMATCH` means a count you patched disagrees with the
-tables — fix the header, not the page; a `BLOCKED` names the markdown line to fix. Then
-`--write`. Arabic (`Review page language: Arabic` or `--lang ar`): `--lang ar --write-skeleton`
-(the merge keeps every unchanged translation; only your corrected strings and new PB / Q entries
-come back `null` or `stale`) → fill only those `ar` values → `--lang ar --write`.
-`arabicComplete: false` → say "preview — {n} strings outstanding", never "Arabic page delivered".
-A hand-edited page is refused by the renderer — tell the user what would be lost before `--force`.
+tables — fix the header, not the page; a `BLOCKED` names the markdown line to fix; a
+`data-literal` / `data-ref-unresolved` warning on a line you patched means your patch broke the
+reference form — fix the step, never the page. Then `--write`.
+
+**Language.** *"The output language of a run is English unless this run's task input asks for
+another language (`--lang ar` or an explicit sentence). Nothing else decides it: not the source
+language, not a saved learning-file answer, not the document's `Review page language:` line, not
+an existing Arabic sidecar."* So: no `--lang ar` this run → English page, the `Review page
+language:` line rewritten to `English`, and — when an Arabic sidecar is on disk — one sentence in
+the final message: "an Arabic sidecar exists — pass `--lang ar` to render it". `--lang ar` →
+`--lang ar --write-skeleton` (the merge keeps every unchanged translation; only your corrected
+strings and new PB / Q entries come back `null` or `stale`) → fill only those `ar` values →
+`--lang ar --write`, line rewritten to `Arabic`. `arabicComplete: false` → say "preview — {n}
+strings outstanding", never "Arabic page delivered". A hand-edited page is refused by the
+renderer — tell the user what would be lost before `--force`.
 
 ## 5. Learning file — `learning-file.md`
 
@@ -159,6 +176,9 @@ Never a credential, never a secret name paired with a value, never an unanswered
 2. The walk: all `N` executable TCs walked (no scope gate), and **exactly which TC-IDs still
    ended unobserved** (`inferred`, `draft`, `not-implemented`) and the reason the application
    gave for each.
+2b. **Needs a human run:** every TC with a `[HUMAN]` step — walked up to that step, now
+   `draft — not app-validated (human step pending)`; name the step and the interface it lacks.
+   These are never validated by this skill and never enhanced away.
 3. Implementation status established live, with evidence.
 4. States before → after (six counts) and App validation progress; the coverage score,
    unchanged (or changed because of a recorded gap / authorized update — say which).
@@ -184,6 +204,7 @@ Never a credential, never a secret name paired with a value, never an unanswered
 **Browser tool:** playwright-cli {version} ({global | project-local}) · sessions closed · snapshot files removed · **Environment:** {name} ({base URL recorded as [type: env]}) · **Build:** {version | unknown} · **Login:** {attended | secrets file} per role
 **Implementation status:** {Implemented | Partially implemented | Not implemented | Cannot be validated} — {probe · answer · report}
 **Walk:** all {N} executable TCs (no scope gate) · {F} common flows once · not observed: {TC-IDs with reason | none}
+**Needs a human run:** {n} — {TC-IDs (human step pending) | none}
 **Freshness:** {n} stale at intake ({reasons}) · {n} fresh at intake · all re-stamped this run
 **3b evidence at intake:** {none | {n} — {TC-IDs} ({c} current, {s} stale) — all re-validated, stamps replaced}
 **Data changes:** {authorized | not authorized} · {n} made · {n} cleaned up · {n} left ({record identities | none})
@@ -193,7 +214,7 @@ Never a credential, never a secret name paired with a value, never an unanswered
 **Potential bugs:** {n} open ({PB-ids}) · {n} resolved this run · {n} not checked this run · screenshots under evidence/
 **Test data:** ready {a}→{b} · missing {a}→{b} · impossible {a}→{b} · unknown {a}→{b} · advanced facts added: {n}
 **Open questions:** {N} — {Q-ids with the recommended answer, or "none"}
-**Files patched:** TEST-CASES {TC-IDs + header} · TEST-DATA {items} · page re-rendered (gate {PASS | preview}) · summary {columns | n/a} — or "none (read-only)"
+**Files patched:** TEST-CASES {TC-IDs + header} · TEST-DATA {items} · page re-rendered ({English | Arabic}, gate {PASS | preview}{; Arabic sidecar on disk — pass --lang ar to render it}) · summary {columns | n/a} — or "none (read-only)"
 **Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}
 **Open findings for the reviewer:** {gaps / defects / pending / blockers / unclear, or "None"}
 **Next step:** {from §6}
@@ -228,7 +249,10 @@ Never a credential, never a secret name paired with a value, never an unanswered
 - [ ] Every discrepancy has its screenshot under `evidence/` and the `pb-meta` `screenshot:` key; no screenshot for a matching TC
 - [ ] Every session this run opened is closed (`list` confirms) and the run's `.playwright-cli/` files are deleted, before the final message and before any BLOCKED
 - [ ] Secondary-locale labels for every in-scope element captured live — none guessed; "(Arabic label: to be captured live)" notes replaced
-- [ ] Every correction in the enhancement log (appended, dated); design fields diffed before/after and identical; TC set unchanged
+- [ ] Every correction in the enhancement log (appended, dated); design fields (incl. `Tags`) diffed before/after and identical; TC set unchanged
+- [ ] Every `[E{n}]` / `[A{n}]` / `[D{n}]` token resolved through its own `TEST-DATA` row (no role → account or "E1 = the URL" shortcut; secret names `A{n}_USER` / `A{n}_PASSWORD` follow the account ID); no URL, username or dataset identifier written into a TC as a literal; `enhanced` and inserted steps keep the reference form; asked-for environment values and usernames filled in their rows
+- [ ] Every TC with a `[HUMAN]` step walked up to that step and stopped — `draft — not app-validated (human step pending)`, `outcome-check: human step pending`, marker untouched, listed under "Needs a human run"; never validated, never enhanced away
+- [ ] Page language English unless this run passed `--lang ar` / said so; `Review page language:` line rewritten to what was rendered; an Arabic sidecar on disk mentioned once, never used without the flag
 - [ ] Every discrepancy has a PB entry: five lines, stable id, requirement-based expected result copied not rewritten, meta with status; resolved only after a successful retest; not retested → "not checked in this run"
 - [ ] Gaps / defects / pending / blockers / unclear in five separate buckets; coverage gaps handed to skill 3, never fixed here
 - [ ] Coverage score, traceability, manual-only tables untouched (or recomputed only for a recorded gap / authorized update, stated)

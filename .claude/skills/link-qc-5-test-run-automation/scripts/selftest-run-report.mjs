@@ -9,11 +9,12 @@
 // Every case works on a temporary copy of scripts/fixtures/run-report/automation/ so the fixture
 // and the relative screenshot links stay untouched. Run: node selftest-run-report.mjs [--pretty]
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { render, renderHtml, parseReport, parseBugReport, buildModel, pageState, selfHash, escapeHtml, TEMPLATE_PATH } from './render-run-report.mjs';
+import { render, renderHtml, parseReport, parseBugReport, buildModel, pageState, selfHash, escapeHtml, TEMPLATE_PATH, SHELL_PATH } from './render-run-report.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fx = (...p) => path.join(here, 'fixtures', 'run-report', ...p);
@@ -59,13 +60,13 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   const r = render({ reportPath: REPORT, root: here });
   const d = r.payload.document; const p = [];
   const c1 = JSON.stringify(d.phases[0].counts); const c2 = JSON.stringify(d.phases[1].counts);
-  if (c1 !== JSON.stringify({ passed: 2, failed: 1, incomplete: 0, skipped: 1, notrun: 0, total: 4 })) p.push('phase 1 counts ' + c1);
-  if (c2 !== JSON.stringify({ passed: 2, failed: 0, incomplete: 1, skipped: 1, notrun: 0, total: 4 })) p.push('phase 2 counts ' + c2);
+  if (c1 !== JSON.stringify({ passed: 2, failed: 1, incomplete: 0, skipped: 1, notrun: 0, partial: 0, total: 4 })) p.push('phase 1 counts ' + c1);
+  if (c2 !== JSON.stringify({ passed: 2, failed: 0, incomplete: 1, skipped: 1, notrun: 0, partial: 1, total: 5 })) p.push('phase 2 counts ' + c2);
   if (d.phases[0].outcome !== 'FAILURES' || d.phases[1].outcome !== 'INCOMPLETE' || d.status !== 'INCOMPLETE') p.push('outcomes ' + d.phases.map((x) => x.outcome).join('/') + ' status ' + d.status);
-  if (d.phases[1].coverage.total.join('|') !== 'Total|4|3|1|0|87.5') p.push('phase 2 coverage total row ' + d.phases[1].coverage.total.join('|'));
+  if (d.phases[1].coverage.total.join('|') !== 'Total|5|3|2|0|80') p.push('phase 2 coverage total row ' + d.phases[1].coverage.total.join('|'));
   if (d.bugs.total !== 2 || d.bugs.open !== 1 || d.bugs.resolved !== 1) p.push('bug counts ' + JSON.stringify(d.bugs));
   if (d.phases[0].assumptions !== 1 || d.phases[0].heals !== 1 || d.phases[1].heals !== 0) p.push('assumptions/heals ' + d.phases.map((x) => x.assumptions + '/' + x.heals).join(' '));
-  if (!/<b>87\.5%<\/b><span>Static coverage · PASS<\/span>/.test(r.html || '')) p.push('coverage tile or verdict wrong');
+  if (!/<b>80%<\/b><span>Static coverage · PASS<\/span>/.test(r.html || '')) p.push('coverage tile or verdict wrong');
   if (!/<b>2<\/b><span>Passed<\/span>/.test(r.html || '') || !/<b>1<\/b><span>Incomplete<\/span>/.test(r.html || '')) p.push('tiles do not show the latest counts');
   check('2 derived numbers', p, { latest: d.phases[1].counts, bugs: d.bugs.total });
 }
@@ -87,7 +88,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
 
 /* 4 — run-history row mismatch (counts and outcome) and a declared Outcome that disagrees with the Results table. */
 {
-  const t = tmpCopy((s) => s.replace('| 1 | 2026-09-20 | FAILURES | 2 | 1 | 0 | 1 | 0 | 4 |', '| 1 | 2026-09-20 | GREEN | 3 | 0 | 0 | 1 | 0 | 4 |').replace('- **Outcome:** INCOMPLETE', '- **Outcome:** GREEN'));
+  const t = tmpCopy((s) => s.replace('| 1 | 2026-09-20 | FAILURES | 2 | 1 | 0 | 1 | 0 | 0 | 4 |', '| 1 | 2026-09-20 | GREEN | 3 | 0 | 0 | 1 | 0 | 0 | 4 |').replace('- **Outcome:** INCOMPLETE', '- **Outcome:** GREEN'));
   try {
     const r = render({ reportPath: t.report, root: t.dir }); const p = [];
     if (r.payload.gate !== 'MISMATCH') p.push('gate ' + r.payload.gate);
@@ -134,12 +135,12 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   const mk = [
     ['unknown-enum', (s) => s.replace('| PASS | parallel | 00:00:39 |', '| PASSED | parallel | 00:00:39 |')],
     ['unknown-enum', (s) => s.replace('**Status:** INCOMPLETE', '**Status:** DONE')],
-    ['unknown-enum', (s) => s.replace('**Smoke gate:** passed — fail% 0% — no action needed\n\n### Run plan\n| Group | Mode | Workers | TCs | Reason |\n|---|---|---|---|---|\n| parallel | parallel | 3 | TC-001, TC-007, TC-020 | read-only or independent data |\n| serial:orders | serial | 1 | TC-010 | deletes the shared draft order |\n\n**Decisions:** 2 field · 1 inferred · 0 fail-safe\n\n### Coverage\n| Stage | Total TCs | Fully | Partially | Not | Weighted % |\n|---|---|---|---|---|---|\n| Smoke | 1 | 1 | 0 | 0 | 100 |\n| Positive | 2 | 2 |', '**Smoke gate:** maybe\n\n### Run plan\n| Group | Mode | Workers | TCs | Reason |\n|---|---|---|---|---|\n| parallel | parallel | 3 | TC-001, TC-007, TC-020 | read-only or independent data |\n| serial:orders | serial | 1 | TC-010 | deletes the shared draft order |\n\n**Decisions:** 2 field · 1 inferred · 0 fail-safe\n\n### Coverage\n| Stage | Total TCs | Fully | Partially | Not | Weighted % |\n|---|---|---|---|---|---|\n| Smoke | 1 | 1 | 0 | 0 | 100 |\n| Positive | 2 | 2 |')],
+    ['unknown-enum', (s) => s.replace('**Smoke gate:** passed — fail% 0% — no action needed\n\n### Run plan\n| Group | Mode | Workers | TCs | Reason |\n|---|---|---|---|---|\n| parallel | parallel | 4 |', '**Smoke gate:** maybe\n\n### Run plan\n| Group | Mode | Workers | TCs | Reason |\n|---|---|---|---|---|\n| parallel | parallel | 4 |')],
     ['broken-row', (s) => s.replace('| TC-001 | REQ-01 | Create an order with valid data | PASS | parallel | 00:00:39 |', '| TC-001 | REQ-01 | Create an order with valid data | PASS | parallel |')],
     ['phase-duplicate', (s) => s.replace('## Phase 2 — 2026-09-21', '## Phase 1 — 2026-09-21')],
     ['section-missing', (s) => s.replace('## Phase 2 — 2026-09-21\n\n### Run\n', '## Phase 2 — 2026-09-21\n\n### Facts\n')],
     ['section-missing', (s) => s.replace(/### Results\n\| TC-ID \| REQ \| Name \| Status \| Group \| Duration \| Classification \| Evidence \|\n\|---\|---\|---\|---\|---\|---\|---\|---\|\n\| TC-001 \| REQ-01 \| Create an order with valid data \| PASS \| parallel \| 00:00:39 \|[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*\n/, '')],
-    ['header-missing', (s) => s.replace('**Latest results:** 2 passed · 0 failed · 1 incomplete · 1 skipped · 0 not run of 4 TCs\n', '')],
+    ['header-missing', (s) => s.replace('**Latest results:** 2 passed · 0 failed · 1 incomplete · 1 skipped · 0 not run · 1 partial of 5 TCs\n', '')],
     ['title-missing', (s) => s.replace('# Test Run Report — create-order', '# Run report')],
   ];
   const p = [];
@@ -289,7 +290,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   if (r2.payload.gate !== 'BLOCKED' || !kinds(r2).includes('placeholder-left')) p.push('leftover placeholder did not BLOCK the pipeline: ' + r2.payload.gate);
   const r3 = render({ reportPath: REPORT, root: here, template: '<!DOCTYPE html>\n<!-- {{#if phases}} -->x' });
   if (r3.payload.gate !== 'BLOCKED' || !kinds(r3).includes('template-error')) p.push('unclosed block did not BLOCK the pipeline: ' + r3.payload.gate);
-  const tpl = read(TEMPLATE_PATH); if (!/<dialog class="viewer"/.test(tpl) || !/data-act="fit"/.test(tpl)) p.push('template lost the viewer dialog');
+  const tpl = read(SHELL_PATH); if (!/<dialog class="viewer"/.test(tpl) || !/data-act="fit"/.test(tpl)) p.push("report shell lost the viewer dialog");
   check('14 template placeholders round-trip; leftovers BLOCK', p, {});
 }
 
@@ -326,8 +327,8 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
 /* 17 — a BLOCKED-outcome phase with no Results table: PASS, tiles fall back to the last phase with results, no `0` invented for the blocked phase. */
 {
   const t = tmpCopy((s) => s
-    .replace('**Latest phase:** 2', '**Latest phase:** 3').replace('**Status:** INCOMPLETE', '**Status:** BLOCKED').replace('**Latest results:** 2 passed · 0 failed · 1 incomplete · 1 skipped · 0 not run of 4 TCs', '**Latest results:** —')
-    .replace('| 2 | 2026-09-21 | INCOMPLETE | 2 | 0 | 1 | 1 | 0 | 4 | 00:05:12 | BUG-1, BUG-2 |', '| 2 | 2026-09-21 | INCOMPLETE | 2 | 0 | 1 | 1 | 0 | 4 | 00:05:12 | BUG-1, BUG-2 |\n| 3 | 2026-09-22 | BLOCKED | — | — | — | — | — | — | — | — |')
+    .replace('**Latest phase:** 2', '**Latest phase:** 3').replace('**Status:** INCOMPLETE', '**Status:** BLOCKED').replace('**Latest results:** 2 passed · 0 failed · 1 incomplete · 1 skipped · 0 not run · 1 partial of 5 TCs', '**Latest results:** —')
+    .replace('| 2 | 2026-09-21 | INCOMPLETE | 2 | 0 | 1 | 1 | 0 | 1 | 5 | 00:05:12 | BUG-1, BUG-2 |', '| 2 | 2026-09-21 | INCOMPLETE | 2 | 0 | 1 | 1 | 0 | 1 | 5 | 00:05:12 | BUG-1, BUG-2 |\n| 3 | 2026-09-22 | BLOCKED | — | — | — | — | — | — | — | — | — |')
     + '\n## Phase 3 — 2026-09-22\n\n### Run\n- **Outcome:** BLOCKED — test-data readiness: the QC chose to stop until the customer fixture exists\n- **Environment:** UAT\n- **Run file:** .runs/phase-3.json\n', (s) => s.replace('**Latest phase:** 2', '**Latest phase:** 3'));
   try {
     const r = render({ reportPath: t.report, root: t.dir }); const p = [];
@@ -338,7 +339,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     if (!/<a href="#phase-3">Phase 3<\/a><\/td><td>2026-09-22<\/td><td><span class="badge s-blocked">BLOCKED<\/span><\/td><td>—<\/td><td>—<\/td>/.test(r.html || '')) p.push('run-history row for the blocked phase does not show —');
     if (!/class="banner env-blocked"><b>BLOCKED<\/b>/.test(r.html || '') || !/the QC chose to stop/.test(r.html || '')) p.push('blocked banner with the reason not rendered');
     if (!/<b>2<\/b><span>Passed<\/span>/.test(r.html || '')) p.push('tiles did not fall back to the last phase with results');
-    if (!/<details class="phase" id="phase-3" open>/.test(r.html || '') || /<details class="phase" id="phase-2" open>/.test(r.html || '')) p.push('only the latest phase should be open');
+    if (!/<details class="card phase" id="phase-3" open>/.test(r.html || '') || /<details class="card phase" id="phase-2" open>/.test(r.html || '')) p.push('only the latest phase should be open');
     check('17 blocked outcome renders — for its counts, never 0', p, {});
   } finally { t.cleanup(); }
 }
@@ -350,7 +351,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   const links = [...html.matchAll(/<a class="view-link" href="([^"]+)" data-viewer data-group="([^"]+)"[^>]*>View screenshot<\/a>/g)];
   if (!thumbs.length || thumbs.length !== links.length) p.push('thumbnails ' + thumbs.length + ' != view links ' + links.length);
   thumbs.forEach((m, i) => { if (m[1] !== m[3] || !links[i] || links[i][1] !== m[1]) p.push('href mismatch at evidence ' + i); if (!/^\.\.\//.test(m[1]) || /^data:|^[a-zA-Z]:/.test(m[1])) p.push('non-relative href ' + m[1]); });
-  if (thumbs.length !== r.payload.counts.evidenceLinks - 5) p.push('rendered thumbnails ' + thumbs.length + ' vs evidence links ' + r.payload.counts.evidenceLinks + ' (single-attempt attempts are not rendered twice)');
+  if (thumbs.length !== r.payload.counts.evidenceLinks - 6) p.push('rendered thumbnails ' + thumbs.length + ' vs evidence links ' + r.payload.counts.evidenceLinks + ' (single-attempt attempts are not rendered twice)');
   if ((html.match(/<dialog class="viewer"/g) || []).length !== 1) p.push('exactly one viewer dialog expected');
   if (!/<a class="open-original" id="viewer-original" href="#" target="_blank" rel="noopener">Open original in new tab<\/a>/.test(html)) p.push('open-original anchor missing');
   if (!thumbs.some((m) => m[2] === 'bugs') || !thumbs.some((m) => m[2] === 'phase-1')) p.push('viewer groups for bugs / phases missing');
@@ -368,7 +369,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
 /* 19 — bug file parsed: cards in file order, counts, status badges, TC anchors, phase cross-references, two separate sections. */
 {
   const r = render({ reportPath: REPORT, root: here }); const html = r.html || ''; const p = [];
-  const ids = [...html.matchAll(/<article class="bug-card ([a-z-]+)" id="(BUG-\d+)"/g)].map((m) => m[2] + ':' + m[1]);
+  const ids = [...html.matchAll(/<article class="item-card bug ([a-z-]+)" id="(BUG-\d+)"/g)].map((m) => m[2] + ':' + m[1]);
   if (ids.join(',') !== 'BUG-1:resolved,BUG-2:open') p.push('bug cards ' + ids.join(','));
   if (!/<a href="#tc-1-TC-010">TC-010<\/a> · found in phase 1/.test(html)) p.push('BUG-1 does not link to TC-010 in phase 1');
   if (!/<a href="#BUG-1">BUG-1<\/a><\/td><td>TC-010<\/td><td>High<\/td><td><span class="badge b-resolved">resolved \(phase 2\)/.test(html)) p.push('phase-2 bug cross-reference row not linked to the card');
@@ -429,6 +430,147 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     if (!/the change event is not wired/.test(read(e.out))) p.push('re-rendered page does not carry the edited bug text');
     check('22 bug shape errors BLOCK; bug-file edits re-render cleanly', p, {});
   } finally { a.cleanup(); b.cleanup(); c.cleanup(); d.cleanup(); e.cleanup(); }
+}
+
+/* 23 — PARTIAL (human step pending): its own bucket, never passed; distinct badge; the phase is never GREEN; a header that counts it as passed is a MISMATCH; a bare PARTIAL warns; an unknown reason BLOCKs. */
+{
+  const r = render({ reportPath: REPORT, root: here }); const html = r.html || ''; const p = [];
+  const ph2 = r.payload.document.phases[1];
+  if (!ph2 || ph2.counts.partial !== 1 || ph2.counts.passed !== 2 || ph2.counts.total !== 5) p.push('phase 2 counts must hold partial=1, passed=2, total=5: ' + JSON.stringify(ph2 && ph2.counts));
+  if (r.payload.counts.latest.partial !== 1) p.push('counts.latest.partial != 1');
+  if (!/<span class="badge s-partial">PARTIAL — human step pending<\/span>/.test(html)) p.push('PARTIAL badge with the frozen wording not rendered');
+  if (!/<td>TC-030<\/td><td>REQ-05<\/td>[^\n]*human step: 4<\/td>/.test(html)) p.push('TC-030 row / classification not rendered');
+  if (!/<div class="tile t-partial"><b>1<\/b><span>Partial · human step pending<\/span>/.test(html)) p.push('partial tile missing');
+  if (!/<b>2<\/b><span>Passed<\/span>/.test(html)) p.push('the partial TC leaked into the Passed tile');
+  if (!/<th>Not run<\/th><th>Partial<\/th><th>Total<\/th>/.test(html) || !/<td>0<\/td><td>1<\/td><td>5<\/td><td>00:05:12<\/td>/.test(html)) p.push('run-history Partial column not rendered');
+  if (!/passed \/ failed \/ incomplete \/ skipped \/ not run \/ partial · 2 \/ 0 \/ 1 \/ 1 \/ 0 \/ 1 of 5/.test(html)) p.push('phase summary counts do not carry the partial bucket');
+  // (a) a phase whose only non-PASS row is PARTIAL is INCOMPLETE, never GREEN
+  const a = tmpCopy((s) => s.replace('| TC-007 | REQ-02 | Order total recalculates | INCOMPLETE | parallel | 00:00:58 | incomplete: chromium--variation-b--r0 |', '| TC-007 | REQ-02 | Order total recalculates | PASS | parallel | 00:00:58 | — |'));
+  try {
+    const ra = render({ reportPath: a.report, root: a.dir });
+    if (ra.payload.document.phases[1].outcome !== 'INCOMPLETE') p.push('a phase holding a PARTIAL row derived ' + ra.payload.document.phases[1].outcome + ' instead of INCOMPLETE');
+    if (ra.payload.document.status !== 'INCOMPLETE') p.push('header status with a PARTIAL row: ' + ra.payload.document.status);
+  } finally { a.cleanup(); }
+  // (b) the header counting the partial TC as passed → MISMATCH on Latest results; the stage Total row too
+  const b = tmpCopy((s) => s.replace('**Latest results:** 2 passed · 0 failed · 1 incomplete · 1 skipped · 0 not run · 1 partial of 5 TCs', '**Latest results:** 3 passed · 0 failed · 1 incomplete · 1 skipped · 0 not run of 5 TCs').replace('| **Total** | 5 | 2 | 0 | 1 | 1 | 0 | 1 |', '| **Total** | 5 | 3 | 0 | 1 | 1 | 0 | 0 |'));
+  try {
+    const rb = render({ reportPath: b.report, root: b.dir });
+    if (rb.payload.gate !== 'MISMATCH') p.push('counting a PARTIAL TC as passed was not a MISMATCH: ' + rb.payload.gate);
+    if (!mm(rb, 'header').some((m) => m.field === 'Latest results' && /1 partial of 5/.test(m.computed))) p.push('Latest results mismatch must state the computed partial count: ' + JSON.stringify(mm(rb, 'header')));
+    const st = mm(rb, 'stages').map((m) => m.field).sort().join(',');
+    if (st !== 'Partial,Passed') p.push('stage Total mismatches ' + st + ' != Partial,Passed');
+    if (!/<b>2<\/b><span>Passed<\/span>/.test(rb.html || '')) p.push('the computed passed count (2) must win over the written 3');
+  } finally { b.cleanup(); }
+  // (c) a Stages / Run history table WITHOUT a Partial column while a PARTIAL row exists → MISMATCH (written —)
+  const c = tmpCopy((s) => s.replace('| Phase | Date | Outcome | Passed | Failed | Incomplete | Skipped | Not run | Partial | Total | Duration | Bugs |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n| 1 | 2026-09-20 | FAILURES | 2 | 1 | 0 | 1 | 0 | 0 | 4 | 00:06:41 | BUG-1 |\n| 2 | 2026-09-21 | INCOMPLETE | 2 | 0 | 1 | 1 | 0 | 1 | 5 | 00:05:12 | BUG-1, BUG-2 |', '| Phase | Date | Outcome | Passed | Failed | Incomplete | Skipped | Not run | Total | Duration | Bugs |\n|---|---|---|---|---|---|---|---|---|---|---|\n| 1 | 2026-09-20 | FAILURES | 2 | 1 | 0 | 1 | 0 | 4 | 00:06:41 | BUG-1 |\n| 2 | 2026-09-21 | INCOMPLETE | 2 | 0 | 1 | 1 | 0 | 5 | 00:05:12 | BUG-1, BUG-2 |'));
+  try {
+    const rc = render({ reportPath: c.report, root: c.dir });
+    const h = mm(rc, 'run-history');
+    if (rc.payload.gate !== 'MISMATCH' || !h.some((m) => m.phase === 2 && m.field === 'Partial' && m.written === '—' && m.computed === 1)) p.push('a run-history table without a Partial column must mismatch for the phase that holds one: ' + JSON.stringify(h));
+    if (h.some((m) => m.phase === 1 && m.field === 'Partial')) p.push('phase 1 (no PARTIAL row) must not require the column');
+  } finally { c.cleanup(); }
+  // (d) a bare `PARTIAL` warns (partial-without-reason) and still renders the frozen wording; `PARTIAL — something else` warns too; `PASS — reason` BLOCKs
+  const d = tmpCopy((s) => s.replace('| PARTIAL — human step pending |', '| PARTIAL |'));
+  const e = tmpCopy((s) => s.replace('| PARTIAL — human step pending |', '| PARTIAL — waiting |').replace('| human step: 4 |', '| — |'));
+  const f = tmpCopy((s) => s.replace('| TC-001 | REQ-01 | Create an order with valid data | PASS | parallel | 00:00:39 |', '| TC-001 | REQ-01 | Create an order with valid data | PASS — human step pending | parallel | 00:00:39 |'));
+  try {
+    const rd = render({ reportPath: d.report, root: d.dir });
+    if (rd.payload.gate !== 'PASS' || !wkinds(rd).includes('partial-without-reason')) p.push('bare PARTIAL: ' + rd.payload.gate + ' ' + wkinds(rd).join(','));
+    if (!/<span class="badge s-partial">PARTIAL — human step pending<\/span>/.test(rd.html || '')) p.push('bare PARTIAL must still render the frozen wording');
+    if (rd.payload.document.phases[1].counts.partial !== 1) p.push('bare PARTIAL not counted as partial');
+    const re = render({ reportPath: e.report, root: e.dir });
+    if (!wkinds(re).includes('partial-without-reason') || !wkinds(re).includes('partial-without-step')) p.push('another reason / no step must warn: ' + wkinds(re).join(','));
+    const rf = render({ reportPath: f.report, root: f.dir });
+    if (rf.payload.gate !== 'BLOCKED' || !kinds(rf).includes('unknown-enum')) p.push('a reason on a non-PARTIAL status must BLOCK: ' + rf.payload.gate + ' ' + kinds(rf).join(','));
+  } finally { d.cleanup(); e.cleanup(); f.cleanup(); }
+  // (e) the run file's PARTIAL status and totals cross-check; a run file that calls it PASS mismatches
+  const g = tmpCopy();
+  try {
+    const rfPath = path.join(g.runs, 'phase-2.json'); const data = JSON.parse(read(rfPath));
+    const tc = data.results.find((x) => x.tc_id === 'TC-030'); tc.status = 'PASS'; data.totals.passed = 3; data.totals.partial = 0;
+    fs.writeFileSync(rfPath, JSON.stringify(data));
+    const rg = render({ reportPath: g.report, root: g.dir });
+    const rfm = mm(rg, 'run-file').map((m) => m.field).sort().join(',');
+    if (rg.payload.gate !== 'MISMATCH' || rfm !== 'Partial,Passed,TC-030 status') p.push('run-file PASS for a PARTIAL TC must mismatch on Passed, Partial and the TC status: ' + rfm);
+  } finally { g.cleanup(); }
+  check('23 PARTIAL — human step pending is its own bucket, never passed, never GREEN', p, { latest: r.payload.counts.latest });
+}
+
+/* 24 — reviewer comments: REVIEW-COMMENTS-{feature}.md beside the report pre-fills bug / phase / general boxes, shows handled ones as history,
+      lists unknown ids, feeds provenance + payload; missing is silent; a comment from another page is ignored; the inline `Reviewer comment`
+      field of a bug and of a phase `### Run` is shown in the box, never as a phase fact. */
+{
+  const p = [];
+  const t = tmpCopy(
+    (s) => s.replace(/(## Phase 2 — [^\n]*\n\n### Run\n)/, '$1- **Reviewer comment:** Re-run TC-007 after the data fix.\n'),
+    (s) => s.replace('- **Severity:** High', '- **Severity:** High\n- **Reviewer comment:** Confirmed with the developer.'));
+  try {
+    const r0 = render({ reportPath: t.report, root: t.dir }); const h0 = r0.html || '';
+    if (r0.payload.gate !== 'PASS') p.push('inline comments changed the gate: ' + r0.payload.gate + ' ' + r0.payload.gateReason);
+    if (r0.payload.hashes.comments !== 'none' || r0.payload.comments.file !== null || wkinds(r0).some((k) => /^comment/.test(k))) p.push('absent comments file is not silent');
+    if (!/ · comments=none · page=/.test(h0)) p.push('provenance lacks comments=none');
+    if (!/<p class="comment-note"><b>Reviewer comment \(in the markdown\):<\/b> Confirmed with the developer\.<\/p>/.test(h0)) p.push('bug inline comment not shown');
+    if (!/<p class="comment-note"><b>Reviewer comment \(in the markdown\):<\/b> Re-run TC-007 after the data fix\.<\/p>/.test(h0)) p.push('phase inline comment not shown');
+    if (/<dt>Reviewer comment<\/dt>/.test(h0)) p.push('phase Reviewer comment rendered as a fact');
+    const rev = crypto.createHash('sha256').update(read(t.report), 'utf8').digest('hex').slice(0, 12);
+    const cf = path.join(t.story, 'REVIEW-COMMENTS-create-order.md');
+    const C = ['# Review comments — create-order', '**Page:** TEST-RUN-REPORT-create-order.html', '**Source:** TEST-RUN-REPORT-create-order.md', '**Source revision:** ' + rev, '**Reviewer:** —', '**Saved:** 2026-09-27 12:46', '**Comments:** 3 open · 1 handled of 4', '',
+      '## General', 'Please add the Arabic run next time.', '- **Status:** open', '', '## BUG-2', 'Not a bug — the spec allows it.', '- **Status:** declined 2026-09-27', '- **Response:** The spec (AC-4) requires the toast; kept open.', '',
+      '## phase-2', 'Why is TC-007 incomplete?', '- **Status:** open', '', '## BUG-9', 'Old bug.', '- **Status:** open', ''].join('\n');
+    fs.writeFileSync(cf, C);
+    const r = render({ reportPath: t.report, root: t.dir }); const html = r.html || '';
+    if (r.payload.gate !== 'PASS') p.push('gate with comments ' + r.payload.gate + ' ' + r.payload.gateReason);
+    if (r.payload.comments.open !== 3 || r.payload.comments.handled !== 1) p.push('counts ' + r.payload.comments.open + '/' + r.payload.comments.handled);
+    if (r.payload.comments.unknownIds.join(',') !== 'BUG-9' || !wkinds(r).includes('comment-unknown-id')) p.push('unknown bug id not reported');
+    if (!/ · comments=[0-9a-f]{64} · page=/.test(html) || r.payload.hashes.comments === 'none') p.push('comments hash missing');
+    if (!/data-comment-id="phase-2"[^>]*data-entry="phase-2"[^>]*>Why is TC-007 incomplete\?<\/textarea>/.test(html)) p.push('phase-2 comment not pre-filled');
+    if (!/<div class="comment-entry cm-declined"><p class="comment-text">Not a bug — the spec allows it\.<\/p>/.test(html) || /data-entry="BUG-2"/.test(html)) p.push('declined BUG-2 comment not rendered as history');
+    if (!/data-comment-id="General"[^>]*data-entry="General"[^>]*>Please add the Arabic run next time\.<\/textarea>/.test(html)) p.push('general comment not pre-filled');
+    if (!/<div class="comments-orphans">[\s\S]*BUG-9/.test(html)) p.push('orphan BUG-9 not listed');
+    const island = (html.match(/<script type="application\/json" id="report-data">([^<]*)<\/script>/) || [])[1];
+    let data = null; try { data = JSON.parse(island); } catch { p.push('JSON island does not parse'); }
+    if (data && (data.pageKind !== 'run-report' || data.page !== 'TEST-RUN-REPORT-create-order.html' || data.comments.entries.length !== 4 || data.sourceRev !== rev)) p.push('JSON island identity / entries wrong');
+    fs.writeFileSync(cf, C.replace('**Page:** TEST-RUN-REPORT-create-order.html', '**Page:** TC-REVIEW-create-order.html'));
+    const rp = render({ reportPath: t.report, root: t.dir });
+    if (!wkinds(rp).includes('comments-page-mismatch') || /data-entry=/.test(rp.html || '')) p.push('comments from the TC page were attached to the run page');
+  } finally { t.cleanup(); }
+  check('24 reviewer comments: file pre-fills, history, orphans, provenance; inline field in the box, never a fact', p, {});
+}
+
+/* 25 — one shell per page: one stylesheet, one script + JSON island, one viewer, one toolbar; one comment box per bug / phase + the general box; no chrome in the body partial. */
+{
+  const p = [];
+  const r = render({ reportPath: REPORT, root: here }); const html = r.html || '';
+  const count = (re) => (html.match(re) || []).length;
+  if (count(/<style>/g) !== 1 || count(/<script>/g) !== 1 || count(/<script type="application\/json" id="report-data">/g) !== 1) p.push('style / script / island count');
+  if (count(/data-theme-toggle/g) !== 1 || count(/id="comments-save"/g) !== 1 || count(/class="filter-bar"/g) !== 1) p.push('toolbar / filter bar not exactly once');
+  const want = r.model.phases.length + (r.model.bugs ? r.model.bugs.entries.length : 0) + 1;
+  if (count(/data-comment-kind="/g) !== want) p.push('comment boxes ' + count(/data-comment-kind="/g) + ' != ' + want);
+  const body = read(TEMPLATE_PATH);
+  if (/<html|<head|<style|<script|<dialog|<footer/i.test(body)) p.push('body partial carries document chrome');
+  if (!/<body data-page-kind="run-report">/.test(html)) p.push('page kind missing');
+  const rb = render({ reportPath: REPORT, root: here, shell: '<!DOCTYPE html>\n{{{body}}}{{no_such_shell_key}}' });
+  if (rb.payload.gate !== 'BLOCKED' || !kinds(rb).includes('placeholder-left')) p.push('a shell leftover did not BLOCK');
+  check('25 one shell per page: one style, one script, one viewer, one comment box per item', p, { boxes: want });
+}
+
+/* 26 — MIRROR: assets/report-shell.template.html and the renderer kit are byte-identical with skills 3 / 3b / 3c where installed. */
+{
+  const skillDir = path.resolve(here, '..');
+  const sibs = ['link-qc-3-generate-manual-test-cases', 'link-qc-3b-validate-manual-test-cases', 'link-qc-3c-validate-manual-test-cases-cli'].map((s) => path.join(skillDir, '..', s)).filter((d) => fs.existsSync(d));
+  if (!sibs.length) cases.push({ case: '26 shell mirror with skills 3 / 3b / 3c', ok: true, skipped: true, problems: [], detail: 'no sibling installed — nothing to compare' });
+  else {
+    const p = [];
+    const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+    const kit = (f) => { const s = read(f); const i = s.indexOf('/* ==== report-shell kit — BEGIN'); const j = s.indexOf('/* ==== report-shell kit — END ==== */'); return i >= 0 && j > i ? s.slice(i, j) : null; };
+    const mine = kit(SCRIPT); if (!mine) p.push('report-shell kit markers missing in render-run-report.mjs');
+    for (const d of sibs) {
+      const n = path.basename(d); const b = path.join(d, 'assets', 'report-shell.template.html');
+      if (!fs.existsSync(b)) p.push(n + ': no assets/report-shell.template.html'); else if (sha(b) !== sha(SHELL_PATH)) p.push(n + ': report shell differs');
+      const k = kit(path.join(d, 'scripts', 'render-tc-review.mjs')); if (mine && k !== mine) p.push(n + ': renderer kit differs');
+    }
+    check('26 shell mirror with skills 3 / 3b / 3c', p, { siblings: sibs.map((d) => path.basename(d)) });
+  }
 }
 
 const out = {

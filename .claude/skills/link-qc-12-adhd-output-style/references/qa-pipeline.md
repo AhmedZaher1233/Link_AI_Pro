@@ -10,11 +10,11 @@ changes only how the CHAT around the skill reads.
 |---|---|---|---|
 | 1 | `link-qc-1-generate-update-testing-structure` | `Testing/` layout, `project-learning.md` | none — report only |
 | 2 | `link-qc-2-review-requirements` | `Testing/Requirements/[SPEC-*/]US-{id}-{name}/REQ-*.md`, Full Review Template | Intake gate: one open question at a time, after `project-learning.md` was consulted |
-| 3 | `link-qc-3-generate-manual-test-cases` | `Testing/Manual_Test/TestCases/[SPEC-*/]US-*/TEST-CASES*.md` (every TC `draft — not app-validated`), `TEST-DATA*.md`, rendered HTML review page | Reviewer opens the HTML page, answers the open questions, then sets `Status: APPROVED` in the .md |
+| 3 | `link-qc-3-generate-manual-test-cases` | `Testing/Manual_Test/TestCases/[SPEC-*/]US-*/TEST-CASES*.md` (every TC `draft — not app-validated`; URLs / accounts / shared data as `[E1]` / `[A1]` / `[D2]` tokens; `[HUMAN]` steps where no test interface exists; optional `Tags:`), `TEST-DATA*.md` (§0 Environment, §1 Accounts, data items), rendered HTML review page (English unless `--lang ar`) | Reviewer opens the HTML page, answers the open questions, then sets `Status: APPROVED` in the .md. The one extra ask: an out-of-browser interface (mail sandbox / SMS provider) only when nothing recorded answers it |
 | 3b | `link-qc-3b-validate-manual-test-cases` (optional, before or after approval) | the same three files patched in place (validation states, corrected steps, Potential Bugs, test-data statuses) | none — not a gate. Scope choice (FULL / SHARED / CUSTOM) is the one question; an APPROVED document is read-only until the reviewer authorizes the revision, and goes back to `PENDING HUMAN REVIEW` only if something changed |
 | 3c | `link-qc-3c-validate-manual-test-cases-cli` (optional, evaluation twin of 3b through playwright-cli) | the same files patched in place, plus `evidence/` screenshots for potential bugs | none — not a gate, and NO scope gate: every TC is walked on every run (no scope choice, no cross-validator choice — 3b evidence is re-validated). Its only asks: attended login (one "done" per role), the data-changes yes/no, and the revision authorization on an APPROVED document. Not installed CLI → BLOCKED with `/sync-skills --tools` |
-| 4 | `link-qc-4-publish-test-cases-azure` | beautified upload doc, `ADO-MAP.md`, ADO Test Case work items | Entry: `Status: APPROVED` present |
-| 5 | `link-qc-5-test-run-automation` | Playwright specs + POM, run plan, progress log, screenshots, bug drafts, AUTOMATION COMPLETE report | Entry: `Status: APPROVED` (ADO publishing optional) · Checkpoint A compliance gate · PHASE 2.6 test-data readiness · 30% smoke failure gate · Checkpoint B compliance gate |
+| 4 | `link-qc-4-publish-test-cases-azure` | beautified upload doc, `ADO-MAP.md`, ADO Test Case work items (tokens and `[HUMAN]` kept verbatim, tags = feature + smoke + automation/manual + human-step + the TC's `Tags:`), one outcome line of five | Entry: `Status: APPROVED` present |
+| 5 | `link-qc-5-test-run-automation` | `automation-inventory.md` (page-object reuse / extend / create decisions) before any code, Playwright specs + POM, run plan, progress log, screenshots, bug drafts, AUTOMATION COMPLETE report (`partial (human step: n)` for `[HUMAN]` TCs) | Entry: `Status: APPROVED` (ADO publishing optional) · Checkpoint A compliance gate (an undecided duplicate page object blocks it) · PHASE 2.6 test-data readiness · 30% smoke failure gate · Checkpoint B compliance gate |
 | 6 | `link-qc-6-ui-testing` (beside the chain, per screen, any time) | `Testing/UI-Testing/Reports/UI-Visual-QA-<page>.md` + evidence crops, `Learning-UI.md`, `Coverage-Index.md` | none — not a gate. One combined ask before the browser opens (languages, role, credentials, environment); Open Questions answered by the product owner become bugs or rules |
 | 7 | `link-qc-7-sync-tc-status-to-azure` (optional) | one Azure test run with the latest phase's outcomes; no local file | none — not a gate. NOT_RUN when the attached server has no test-plan tools is a complete outcome |
 | 8 | `link-qc-8-sync-bugs-azure` (optional) | `ADO-BUG-MAP.md` beside `ADO-MAP.md`, Azure Bug items, BUG-REPORT Status/History (Azure → md only) | Direction gate: ONE question (md → Azure / Azure → md / both) unless `--direction`; missing bug fields asked as one list |
@@ -24,6 +24,19 @@ changes only how the CHAT around the skill reads.
 
 Rule: the gate is the message's first line, with the path. The skill's own report follows,
 complete.
+
+### 1a. Five facts that stay short in chat (SKILL.md section C2)
+
+- **Reference tokens** — say `[A1]`, `[E1]`, `[D2]`, never the value behind them. Missing row →
+  one gate line: `Add row E2 (mail sandbox) to TEST-DATA-{feature}.md, then re-run skill 3 --revision.`
+- **`[HUMAN]` steps** — one count per message: `2 TCs stop at a [HUMAN] step — needs a human run.`
+  Never "skipped", never "N/A". 3b / 3c: `draft (human step pending)`. Skill 5: `partial (human step: n)`, never PASS.
+- **English default** — the page / review is English unless this run passed `--lang ar`. No
+  language question, no "saved preference". If a sidecar exists: `Arabic sidecar exists — pass --lang ar to render it.`
+- **Automation inventory** — `Inventory: {screens} screens — {reuse} reuse, {extend} extend, {create} create (automation-inventory.md).`
+  An undecided duplicate: `Decide TC page for /orders: reuse OrdersPage or create — add the row to automation-inventory.md.`
+- **Publish outcome** — copy the one line: `PUBLISHED AND VERIFIED (14 verified)` · `PUBLISHED, NOT VERIFIED (2 not verified)` ·
+  `PUBLISHED WITH MISMATCHES (2 mismatch · 1 conflict)` · `PUBLICATION INCOMPLETE (1 not created)` · `BLOCKED`. Never "all items published".
 
 ## 2. Turn opener — one line, always
 
@@ -57,7 +70,7 @@ Open Testing/Manual_Test/TestCases/SPEC-leave/US-1234-yearly-leave/TC-REVIEW-yea
 answer Q-1 and Q-2 (recommended answers inside), then set "Status: APPROVED" in TEST-CASES-yearly-leave.md.
 
 Skill 3 · done · US-1234 Yearly leave · 27 TCs (9 smoke / 11 positive / 7 negative), coverage 91.7% (design), all draft — not app-validated, 3 pending implementation.
-The 3 pending ones: TC-YLVL-021, -022, -026 (carry-over rules not deployed yet — tester's answer).
+The 3 pending ones: TC-ORD-021, -022, -026 (carry-over rules not deployed yet — tester's answer).
 
 Optional before approval: /link-qc-3b-validate-manual-test-cases on that document (about 1 min per flow + 1 per TC walked).
 Next after approval: /link-qc-5-test-run-automation (and /link-qc-4-publish-test-cases-azure if you publish — optional).
@@ -78,8 +91,9 @@ Recommended FULL because the set spans two roles and carries 9 smoke TCs.
 ```
 Re-review Testing/Manual_Test/TestCases/SPEC-leave/US-1234-yearly-leave/TC-REVIEW-yearly-leave.html and set "Status: APPROVED" again in the .md (it was changed with your authorization, so it is PENDING HUMAN REVIEW now). ADO-MAP.md exists → also re-run /link-qc-4-publish-test-cases-azure --republish.
 
-Skill 3b · done · US-1234 Yearly leave · scope FULL · 22 validated / 2 enhanced / 0 inferred / 1 discrepancy / 3 not-implemented / 0 draft · progress 25/27
-Potential bugs: PB-1 open (TC-YLVL-014, balance rounds to whole days). Test data: unknown 3 → 0, missing 0 → 1 (D4 — see Problems).
+Skill 3b · done · US-1234 Yearly leave · scope FULL · 22 validated / 2 enhanced / 0 inferred / 1 discrepancy / 3 not-implemented / 1 draft · progress 25/27
+Potential bugs: PB-1 open (TC-ORD-014, balance rounds to whole days). Test data: unknown 3 → 0, missing 0 → 1 (D4 — see Problems).
+Needs a human run: TC-ORD-030 (OTP from the test phone [A2] — no SMS test provider on UAT). Page: English (no --lang ar).
 ```
 
 ### Skill 3c — CLI missing / attended login / plan line (no scope gate)
@@ -133,7 +147,7 @@ endpoint — 500 after submit) or continue to positive/negative anyway.
 
 Skill 5 · PHASE 3 smoke gate · US-1234 Yearly leave · 9/9 run, 4 failed, 44% > 30%
 Failure classes: application 4 · automation 0 · environment 0
-Failed: TC-YLVL-001, -003, -005, -008 (same endpoint). Screenshots: screenshots/SPEC-leave/YearlyLeave/phase-1/…
+Failed: TC-ORD-001, -003, -005, -008 (same endpoint). Screenshots: screenshots/SPEC-leave/YearlyLeave/phase-1/…
 ```
 
 ### Skill 11 export ready
@@ -178,8 +192,8 @@ Optional: a second round measures how complete this one was (about 10 min).
 One line per refresh, fixed field order, no prose between refreshes:
 
 ```
-Smoke 4/9 · TC-YLVL-012 running · 03:10 elapsed · ETA 04:00 · 0 failed
-Positive 6/14 · TC-YLVL-031 running · 09:42 elapsed · ETA 11:30 · 1 failed (automation, self-healed)
+Smoke 4/9 · TC-ORD-012 running · 03:10 elapsed · ETA 04:00 · 0 failed
+Positive 6/14 · TC-ORD-031 running · 09:42 elapsed · ETA 11:30 · 1 failed (automation, self-healed)
 ```
 
 Live validation (skill 3b) and discovery (skills 10/11):
@@ -199,9 +213,9 @@ The per-run progress log file keeps the skill's full format; the chat shows the 
 | 2 | Missing / Ambiguous / Untestable / Conflict / Risk | top item per group | total per group, all in REQ review |
 | 3 | smoke / positive / negative (then locale) | pending-implementation TCs and open questions first | total TCs, coverage %, path to .md and .html, "3b optional" |
 | 3b | validated / enhanced / inferred / discrepancy / not-implemented / draft | potential bugs and discrepancies first, then what stayed unvalidated | scope chosen, six counts, progress x/N, PB ids, Status outcome |
-| 3c | same as 3b | same as 3b, then data changes left behind | same as 3b, plus tool cli, kept-from-3b TC-IDs, data changes made / cleaned / left, sessions closed |
-| 4 | Gap / Bug / Repro | bugs first, ranked by severity | total, path to report |
-| 5 | created / updated / unchanged / failed | failed first | counts, ADO-MAP path |
+| 3c | same as 3b | same as 3b, then data changes left behind | same as 3b, plus tool cli, the TC-IDs that carried 3b evidence (all re-validated), data changes made / cleaned / left, sessions closed |
+| 4 (publish) | verified / mismatch / conflict / not verified / not written | not written and mismatches first | the one outcome line with its counts, ADO-MAP path |
+| 5 (automation) | reuse / extend / create (inventory), then full / partial (human step) / manual | undecided duplicate candidates first, then partial TCs | inventory counts, coverage counts, run of record path |
 | 6 | application / automation / environment | application failures first | passed/failed/skipped, run of record path |
 | 7 | Contradicts / Not in spec / Partial / In spec | contradictions first | totals, export path |
 | link-qc-6-ui-testing | Severity 2 / 3 / 4 (then language, then mode: design comparison / heuristic) | Severity 2 first, then Open Questions | bug count per severity, match score or quality verdict, QA verdict, report path, tier used |

@@ -19,13 +19,15 @@ Read every TC (`tc-format-contract.md`) and build the **discovery plan**:
    are not in the learning file, a `discrepancy` from an earlier run, an open `Q-*` naming it.
 6. **Gaps** — missing navigation, preconditions, test data, filters/selections, async waits or
    triggers, ambiguous steps, "(Arabic label: to be captured live)" notes: the discovery targets.
+   A `[HUMAN]` step is not a gap: the tail is walked up to it and stops there (`mcp-pass.md` §3);
+   count those TCs so the recommendation can say they end `draft (human step pending)`.
 7. **Locale-sensitive points** — every element label referenced in any step, plus screens whose
    secondary-locale behaviour must be walked live (`mcp-pass.md` §4).
 
 ## 2. An explicit instruction is respected — no question
 
 `--scope full`, `--scope shared`, `--scope TC-…,TC-…`, `--full`, or an equivalent sentence in the
-task ("validate everything", "only the shared flows", "just TC-KPI-03 and 04") settles the scope.
+task ("validate everything", "only the shared flows", "just TC-ORD-03 and 04") settles the scope.
 Apply it, state it in one line with what it leaves unvalidated, and move on. An explicit scope
 given earlier in the same run is never re-asked.
 

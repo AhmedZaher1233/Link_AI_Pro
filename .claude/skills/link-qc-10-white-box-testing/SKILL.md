@@ -373,7 +373,7 @@ automation skills:
 
 - `### White-Box Model (skill 10) → #### Knowledge`: which business area the feature belongs
   to; every rule or validation the code enforces, stated as behaviour with the story as
-  source (`- [module: KPI] [page: KPI Details] [type: rule] The server rejects a yearly value above the KPI target, even if the screen allows typing it. (source: US-1031475)`);
+  source (`- [module: Orders] [page: Order Details] [type: rule] The server rejects a line discount above the line total, even if the screen allows typing it. (source: US-1234)`);
   where each check happens (browser only / server / both, in words); recurring bug patterns;
   scenarios the code does not cover at all.
 - `## Automation Tricks`: behaviour automation must know — saves that finish in the

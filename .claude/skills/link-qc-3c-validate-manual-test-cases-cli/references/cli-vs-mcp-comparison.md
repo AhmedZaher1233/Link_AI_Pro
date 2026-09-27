@@ -9,12 +9,12 @@ be retired.** Those are later, explicit user instructions after the report has b
 
 | Input | Rule |
 |---|---|
-| Story | one story, one `TEST-CASES-{feature}.md` + `TEST-DATA-{feature}.md` (+ Arabic sidecar when the page language is Arabic) |
+| Story | one story, one `TEST-CASES-{feature}.md` + `TEST-DATA-{feature}.md` (+ Arabic sidecar when both runs are given `--lang ar`; without the flag both render English whatever the header line or the sidecar says) |
 | Starting revision | a recorded git revision of the story folder **and** `Testing/project-learning.md` in which **no TC carries a validation stamp from either skill** (the cross-validator check must never fire). If the story was validated before: use the revision from before that run, or strip the stamps, the header stamp, the Enhancement Log rows and the PB entries on a working copy and commit that copy as the baseline — say which |
 | Application state | the same seeded data, reset before each run by a documented procedure (what is reset, how, by whom). Record the build the app shows |
 | Model | the same model for both sessions (name it) |
 | Scope | `--full` on both invocations: 3c always walks every TC (it has no scope gate), so 3b is given `--full` to walk the same set — never the scope question |
-| Login | the same method for both: **attended** (3b asks for credentials in chat today, so a 3c run that also uses attended login keeps the comparison about the browser tool, not about the login path). Note the method in the report |
+| Login | the same method for both: **attended** (3b asks for credentials in chat today, so a 3c run that also uses attended login keeps the comparison about the browser tool, not about the login path). Both resolve every `[A{n}]` / `[E{n}]` / `[D{n}]` token through the same `TEST-DATA` rows. Note the method in the report |
 | Data changes | the same answer for both runs ("yes" only when the reset procedure covers it) |
 | Session | a **fresh Claude Code session** per run, nothing else done in it; the invocation names the comparison explicitly ("compare 3b and 3c — run {skill} on {document} --full") so 3b asks no cross-validator or repeat question (3c never asks one) |
 | Order | run 3b first or 3c first — state the order; the reset between runs makes it irrelevant |
@@ -79,6 +79,8 @@ row: the TC-IDs, the expected outcome, the 3b result, the 3c result, a verdict.
 | 10 | APPROVED document with `--authorize-revision` | `PENDING HUMAN REVIEW` only when something changed; `--republish` mentioned only with `ADO-MAP.md` |
 | 11 | Existing PB retest | `resolved` only after the reproduction was rerun and the expected result confirmed; otherwise `not-checked-this-run` |
 | 12 | Stale evidence (a step edited after a first run) | the TC is re-queued as `draft (stale — content)` and re-validated; history kept |
+| 13 | `[HUMAN]` step (an OTP read from a test phone, no test interface) | both walk up to the step and stop: `draft — not app-validated (human step pending)`, `outcome-check: human step pending`, listed under "Needs a human run"; never `validated`, marker untouched |
+| 14 | Reference tokens (`[E1]`, `[A1]`, `[D2]`) | both resolve each token through its own `TEST-DATA` row; no literal URL / username written into a TC by either; an `enhanced` step keeps the token |
 
 Rows 9-12 need a second pass on each side (an approved copy, an edited step); they are run after
 rows 1-8, with the same reset discipline, and their outputs go into the same prefixed copies with

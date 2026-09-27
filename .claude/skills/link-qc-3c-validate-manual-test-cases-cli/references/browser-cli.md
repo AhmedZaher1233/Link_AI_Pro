@@ -27,10 +27,12 @@ when a flag below does not exist in the installed version — never guess a flag
 
 ## 2. Sessions — one per role, opened once, always closed
 
-- Name: `qa3c-{storyId}-{role}` (e.g. `qa3c-1234-admin`); multi-story runs reuse the role session
-  across stories. Open: `{pw} -s=qa3c-{storyId}-{role} open {baseUrl}` — add `--headed` when the
-  role logs in attended (§3 A) or when the user asked to watch. Every later command for that role
-  carries the same `-s=…`.
+- Name: `qa3c-{storyId}-{accountId}` (e.g. `qa3c-1234-A1` for the account the TCs reference as
+  `[A1]`); multi-story runs reuse the account's session across stories. Open:
+  `{pw} -s=qa3c-{storyId}-{accountId} open {baseUrl}` — `{baseUrl}` is the `Value` of the
+  `TEST-DATA` §0 row the TC references (`[E1]` for the portal; another `[E{n}]` opens that
+  service) — add `--headed` when the account logs in attended (§3 A) or when the user asked to
+  watch. Every later command for that account carries the same `-s=…`.
 - Never `--persistent`, never `--profile`, never `state-save` / `state-load`, never `attach` to a
   user's own browser: the session's cookies live in memory for this run only.
 - A headless session shuts down after an hour idle; if a command fails with "no session" after
@@ -42,26 +44,32 @@ when a flag below does not exist in the installed version — never guess a flag
 
 ## 3. Login — attended, or by secret name; never a password from you
 
-The combined ask (`intake.md` §3) chose a method **per role**:
+The combined ask (`intake.md` §3) chose a method **per account** the TCs reference (`[A{n}]` —
+role and username from `TEST-DATA` §1; the role alone never identifies an account):
 
-**A. Attended login.** `open {loginUrl} --headed` for that role's session, then ONE
-`AskUserQuestion`: "A browser window is open for role {role}. Log in there yourself, then answer
-*done*." (One question per role; with two roles, two windows, two answers — one at a time.) On
+**A. Attended login.** `open {loginUrl} --headed` for that account's session, then ONE
+`AskUserQuestion`: "A browser window is open for {role} [A{n}]. Log in there yourself, then
+answer *done*." (One question per account; with two accounts, two windows, two answers — one at
+a time.) On
 *done*: `find` a post-login marker the TC document or the learning file names (user menu, the
 landing screen's heading); not found → report exactly what the page shows, ask once more, then the
 failure rule (`walk-rules.md` §7). Works with SSO / MFA; the model never sees a credential.
 
-**B. Secrets file.** The user ran skill 1's `set-playwright-secrets.ps1` / `.sh` once; it stores
-`{ROLE}_USER` / `{ROLE}_PASSWORD` entries in a dotenv file outside the repository and points the
-user-level variable `PLAYWRIGHT_MCP_SECRETS_FILE` at it (the CLI shares that setting with the
-Playwright MCP backend, which substitutes a secret NAME typed into a field with its value and masks
-the value in every output). You type only the names:
-`{pw} -s=… fill <username-ref> {ROLE}_USER` then `{pw} -s=… fill <password-ref> {ROLE}_PASSWORD
---submit`. Then verify the login marker as in A.
-**Probe on the first login:** login failed → `{pw} -s=… eval "el => el.value === '{ROLE}_PASSWORD'"
+**B. Secrets file.** The user ran skill 1's `set-playwright-secrets.ps1` / `.sh` once (the script
+is skill 1's and is never edited here); it stores `{NAME}_USER` / `{NAME}_PASSWORD` entries in a
+dotenv file outside the repository and points the user-level variable
+`PLAYWRIGHT_MCP_SECRETS_FILE` at it (the CLI shares that setting with the Playwright MCP backend,
+which substitutes a secret NAME typed into a field with its value and masks the value in every
+output). **Secret names follow the account ID** the TC references: `A1_USER` / `A1_PASSWORD` for
+`[A1]`, `A2_USER` / `A2_PASSWORD` for `[A2]` — the user chose those names when running the
+script, and the combined ask confirms them per account. You type only the names:
+`{pw} -s=… fill <username-ref> A{n}_USER` then `{pw} -s=… fill <password-ref> A{n}_PASSWORD
+--submit`. Then verify the login marker as in A. A name the file does not hold is a login
+failure (report it, never guess another name).
+**Probe on the first login:** login failed → `{pw} -s=… eval "el => el.value === 'A{n}_PASSWORD'"
 <password-ref>` (compares the field to the literal key name; it never reads the value out). `true`
 → substitution is not supported by the installed version: stop using B for the run, say so, offer
-A for that role (ONE question), and note the finding under Environment blockers so the comparison
+A for that account (ONE question), and note the finding under Environment blockers so the comparison
 report can record it. `false` → the credentials themselves were rejected: report, re-ask once
 (`walk-rules.md` §7). Never retry a secret name blindly, never ask for the password in chat, never
 write a value anywhere.
@@ -90,9 +98,12 @@ secrets file" — a name, never a value — under `### CLI Validation Model (ski
 | dialogs (confirm / alert) | `dialog-accept` / `dialog-dismiss` exactly as the step says |
 | screenshot (only for a potential bug) | `screenshot --filename={tc_output_folder}/evidence/PB-{n}-{date}.png` (§7) |
 
-Values come from the TC step and the `TEST-DATA` file, never invented. A step you cannot map to
-one of these is either a missing step to insert (`walk-rules.md` §5.2) or an open question — never
-an improvised sequence.
+Values come from the TC step and the `TEST-DATA` file, never invented: a typed input is in the
+step; a `[E{n}]` / `[A{n}]` / `[D{n}]` token is resolved through **its own** `TEST-DATA` row
+(`walk-rules.md` §3) and the resolved value goes into the command, never back into the TC. A step
+starting with `[HUMAN]` maps to no command — the walk stops there (`walk-rules.md` §6a). A step
+you cannot map to one of these is either a missing step to insert (`walk-rules.md` §5.2) or an
+open question — never an improvised sequence.
 
 ## 5. Reading the page — small, targeted, never the whole tree
 
@@ -104,7 +115,7 @@ an improvised sequence.
   screen already understood, unless its state materially changed.
 - **Prefer a locator over a ref** for an element whose verbatim label is already known:
   `click "getByRole('button', { name: 'Save' })"`, `fill "getByLabel('Email')" …`,
-  `click "getByText('Strategies')"`. Locators survive re-renders, work in both locales with the
+  `click "getByText('Products')"`. Locators survive re-renders, work in both locales with the
   captured label, and cost no snapshot. They are still code: they never enter the TC document, the
   page or the learning file's deliverable sections (SKILL.md invariant 10 — describe the element
   in words there).

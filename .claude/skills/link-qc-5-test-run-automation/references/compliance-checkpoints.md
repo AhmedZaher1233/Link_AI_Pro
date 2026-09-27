@@ -78,7 +78,7 @@ Items marked `M+S` need both — a clean grep does not prove compliance.
 | 2 | Nothing chained off an exposed page-object locator — returning a `Locator` must not let a spec bypass the rule | M (`pom-chained-locator`) + S | A, B |
 | 3 | Composite UI flows live in the layer this project actually uses (page object / fixture / its own equivalent) — **not moved into an arbitrary helper just to make a grep clean** | S | A, B |
 | 4 | No spec-local function drives the screen; the one-line delegating fixture alias is allowed | M (`pom-spec-helper`) + S | A, B |
-| 5 | Existing page objects reused or extended rather than duplicated; new files in the Placement Manifest | S | A, B |
+| 5 | Existing page objects reused or extended rather than duplicated: the WHOLE automation root was scanned before writing (`<automation_inventory>`), `{reports_folder}/automation-inventory.md` holds one decision row per screen (`reuse` / `extend` / `create`) naming every candidate with the reason, the validator ran with `--inventory` and reports **no open `pom-duplicate-page`** (every candidate pair is `pom-duplicate-page-decided`); a `create` row with an unaddressed candidate, or a candidate pair with no row, is a **failure of this checkpoint**; new files in the Placement Manifest | M (`pom-duplicate-page`) + S | A, B |
 | 6 | Constants have one source of truth; no tolerance/timeout/threshold redeclared in a spec | S | A, B |
 
 ### Assertions and expected behaviour
@@ -172,11 +172,14 @@ Runs after generation and before anything is executed. It is the first gate in
    objects, fixtures, helpers, the shared configuration, `timeouts.ts` and evidence/reporting code
    they touch.
 2. **Run the mechanical checks.** `validate-automation.mjs` over the in-scope files — specs AND the
-   page objects / helpers they touch, with `--require-steps` for generated or updated specs — plus
-   `config-inventory.mjs` and the project's own lint/typecheck where it exists. Report `gate`,
-   `counts`, `review[]`, `notRun[]` and `exceptions[]` together — never just "clean".
+   page objects / helpers they touch, with `--require-steps` for generated or updated specs and
+   `--inventory {reports_folder}/automation-inventory.md` so every page-class candidate pair is
+   checked against a decision row — plus `config-inventory.mjs` and the project's own
+   lint/typecheck where it exists. Report `gate`, `counts`, `review[]`, `notRun[]`, `exceptions[]`
+   and `pageScan` together — never just "clean".
 3. **Run the semantic review** for every `S` item above. A clean grep proves nothing about items 3,
-   7, 10, 11, 16, 39, 43, 44 or 47.
+   5, 7, 10, 11, 16, 39, 43, 44 or 47 — for item 5 the scanner only surfaces candidates; the
+   inventory row's reason is what the review judges.
 4. **Fix confirmed automation-code violations immediately.** They are repairs, not recommendations:
    do not defer them, do not list them for the user to approve, do not ask anyone to say "fix 1".
    Routine repairs need no approval. Only an unresolved *business* decision — one that changes what

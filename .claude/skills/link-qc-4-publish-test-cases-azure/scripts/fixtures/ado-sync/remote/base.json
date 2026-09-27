@@ -1,0 +1,6 @@
+{
+  "TC-SYNC-01": { "id": 101, "tags": ["manual-review", "sync"], "automationStatus": "Planned", "descriptionHasTestData": null },
+  "TC-SYNC-02": { "id": 102, "tags": ["sync", "regression", "automation"], "automationStatus": "Planned", "descriptionHasTestData": null },
+  "TC-SYNC-03": null,
+  "TC-SYNC-04": { "id": 104, "tags": ["sync"], "automationStatus": "Planned", "descriptionHasTestData": null }
+}

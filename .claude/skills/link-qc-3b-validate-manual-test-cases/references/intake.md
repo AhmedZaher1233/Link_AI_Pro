@@ -18,8 +18,11 @@ while a `SPEC-*/US-*` twin exists) is reported and never written to.
 
 Companion files in the same folder, read when present: `TEST-DATA-{feature}.md` (the test-data
 inventory you patch — missing → validate the TCs, put data findings under Open Findings, tell the
-user to re-run skill 3; never author the file), `TC-REVIEW-STRINGS-{feature}.ar.json` (Arabic
-sidecar — reused by the renderer), `ADO-MAP.md` (only to know whether a publication exists).
+user to re-run skill 3; never author the file — its `## 0. Environment` / `## 1. Accounts` /
+`## 2.` rows are what every `[E{n}]` / `[A{n}]` / `[D{n}]` token in the TCs resolves to),
+`TC-REVIEW-STRINGS-{feature}.ar.json` (Arabic sidecar — used by the renderer only under
+`--lang ar`; its presence decides nothing), `ADO-MAP.md` (only to know whether a publication
+exists).
 
 ## 2. Document state — decides the run mode before anything else
 
@@ -35,9 +38,11 @@ Read the header block (`html-page.md` §3) and the frozen anchors, then classify
 | Frozen fields missing inside a TC (`Type`, `Steps`, `Expected Result`), or not a skill-3 document at all | invalid | BLOCKED — "not a skill-3 TC document"; never repair it |
 | `Implementation status:` says `not yet checked live` | status unknown | the combined ask includes the implementation question; §1 of `mcp-pass.md` establishes it live either way |
 
-Also note: `Review page language` (drives the re-render; `--lang` overrides and updates the
-line), the existing `PB-*` and `Q-*` ids (reused, never reallocated), and the current per-TC
-`Validation` values with their evidence stamps.
+Also note: the `Review page language:` line — a **record** of what the last run rendered, never
+this run's decision (the page is English unless this run passes `--lang ar` or says so; you
+rewrite the line to what you render), the existing `PB-*` and `Q-*` ids (reused, never
+reallocated), the TCs carrying a `[HUMAN]` step (walked up to it, never past it), and the current
+per-TC `Validation` values with their evidence stamps.
 
 ## 3. Playwright probe, then the ONE combined ask
 
@@ -51,15 +56,16 @@ both skills' Q&A (`open-questions.md` §1) and stating what you reuse:
 
 | Item | Ask when | Never |
 |---|---|---|
-| Application base URL | not recorded as `[type: env]` for the target environment, or the user names another environment | auto-detected |
-| Username + password per role used in the TCs' Preconditions | always (credentials are asked fresh every run) | written anywhere; a username is recorded in the steps only |
+| Application base URL — the `[E1]` row of `TEST-DATA` §0 | not recorded as `[type: env]` for the target environment (the row says `unknown — asked by 3b/3c`), or the user names another environment; the answer fills that row's `Value` / `Status`. Any other `[E{n}]` row still `unknown` (mail sandbox, SMS test provider…) is asked in the same message — each is its own service, never "the URL" | auto-detected; written into a TC as a literal |
+| Password per account the TCs reference (`[A{n}]` — role and username from `TEST-DATA` §1; a username still `unknown` there is asked too and filled in that row) | always (passwords are asked fresh every run) | written anywhere; a username never enters a step — the TC keeps `Login as {role} [A{n}]` |
 | Implementation status (implemented / partially / not implemented / not sure) | the header says `not yet checked live` and no skill-4 report answers it | trusted over the live probe — both are recorded |
 | Environment notes | always, one line: VPN / tenant / where the build number shows / anything that blocks screens | — |
 | Revision authorization (approved document, changes expected) | `Status: APPROVED` and no `--authorize-revision`; list the concrete changes you expect | re-asked in the same run |
 | Scope | never here — it has its own step and its own shape (`scope-gate.md` §2-§3), and only when no explicit instruction was given | — |
 
-Record every answer except credentials before navigating: base URL → learning file `[type: env]`
-(project-wide); implementation status → header + return; environment notes → header stamp
+Record every answer except credentials before navigating: base URL → the `[E1]` row of
+`TEST-DATA` §0 and the learning file `[type: env]` (project-wide); other environment rows and
+usernames → their `TEST-DATA` rows; implementation status → header + return; environment notes → header stamp
 (`env {name}`) and learning file when project-wide; the authorization → the run only.
 
 ## 4. Multi-story input — a SPEC folder or several IDs

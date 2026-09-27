@@ -78,6 +78,17 @@ wait for (`patch-rules.md` §1b).
   discrepancies hide; never skip one. A tail this run could not drive (§7) but that a fresh
   earlier observation confirms on that exact screen is `inferred`, never `validated`; a tail
   nothing confirms stays `draft` with the reason.
+- **Resolve every token through its own row.** `Open the portal [E1]` → the `E1` row's `Value`
+  (the base URL you asked for), `Open the mail sandbox [E2]` → the `E2` row — never "E1 = the
+  URL" for every `[E{n}]`; `Login as Administrator [A1]` → the `A1` row's username and that
+  account's login method (secret names `A1_USER` / `A1_PASSWORD`, or attended) — never "whoever
+  has the role"; `[D2]` → that data item. A token with no row → a `data-ref-unresolved` finding
+  for skill 3, never a guess. The TC keeps the token; the resolved value never enters a step.
+- **Stop at a `[HUMAN]` step.** Walk the TC up to the first step or expected-result line that
+  starts with `[HUMAN]`, confirm the steps before it, then stop: the TC ends `draft — not
+  app-validated (human step pending)` with `outcome-check: human step pending` in its stamp
+  (§6a); it is never `validated`, `enhanced` or `inferred`, the marker is never reworded away,
+  and the TC is listed under "Needs a human run" in the final message.
 - **Observing, and executing only what the TC says.** Do not write code, selectors, or JSON into
   any deliverable. You may read element identifiers incidentally and record them in the learning
   file's `## Automation Tricks` section, explained in words — but NEVER in the TC deliverables.
@@ -149,7 +160,8 @@ locales.
    state the requirement implies but no TC covers) is a **requirement / coverage gap** for skill 3
    `--revision` — recorded under Open Findings, never added as a TC here (SKILL.md invariant 2).
 6. **Design fields are never touched**: `ID`, `Type`, `Locale`, `Requirement`, `Stage`, `Smoke`,
-   `Automation Candidate`, `Data effect`, `Shared data`, `Description`, the coverage tables.
+   `Automation Candidate`, `Data effect`, `Shared data`, `Tags`, `Description`, the coverage
+   tables. Reference tokens and `[HUMAN]` markers stay as written (§3).
 
 ## 6. Validation states — every TC gets exactly one
 
@@ -158,8 +170,9 @@ matched, outcome observed) · `enhanced` (corrected / extended from observation 
 changed) · `inferred` (prefix seen, tail could not be driven this run but fresh prior evidence
 confirms it — not witnessed) · `discrepancy` (app contradicts spec — PB recorded) ·
 `not-implemented — pending implementation` (§1) · `draft — not app-validated` (not walked: app
-unreachable, data changes not authorized, screen could not be driven, or stale and unreachable —
-reason in parentheses; never "scope excluded" — this skill has no scope).
+unreachable, data changes not authorized, screen could not be driven, stale and unreachable, or
+**human step pending** — reason in parentheses; never "scope excluded" — this skill has no
+scope).
 Never mark a TC `validated` on the strength of its prefix alone — that is `inferred`. Every
 observed TC gets its evidence stamp (`patch-rules.md` §2) with `tool: cli` and its
 `outcome-check`.
@@ -182,6 +195,11 @@ returned without error only says the action was issued. Before a TC becomes `val
    (environment); data needed for the check missing → `draft` + the `MISSING` data item; the
    expectation itself ambiguous ("the total updates" — which total?) → a `Q-{n}` in the
    `open-questions.md` shape, the TC stays as it was, nothing acted on until answered.
+4. **A `[HUMAN]` step is the end of the walk for that TC** (§3): the steps before it are
+   confirmed, the state is `draft — not app-validated (human step pending)` and the stamp's
+   `outcome-check` line reads exactly `human step pending` — the outcome behind a human step is
+   never observed by this tool, so the TC is never `validated` or `enhanced`; it is listed under
+   "Needs a human run".
 
 ## 7. Failure rule
 

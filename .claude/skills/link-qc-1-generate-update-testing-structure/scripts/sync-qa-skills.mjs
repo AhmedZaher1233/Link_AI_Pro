@@ -4,6 +4,7 @@
 //
 //   node sync-qa-skills.mjs --check   [--target <projectRoot>] [--branch main] [--only <skill>]... [--no-mcp] [--pretty]
 //   node sync-qa-skills.mjs --apply   [--target <projectRoot>] [--branch main] [--only <skill>]... [--force] [--no-mcp] [--tools] [--pretty]
+//   node sync-qa-skills.mjs --apply --replace --yes [...same options]
 //
 // --check  : read-only. Reports NEW / UPDATED / CURRENT / LOCAL-ONLY / SKIPPED(local edits) per file, plus the
 //            planned .mcp.json migration (`mcp.actions`). Never writes.
@@ -20,13 +21,19 @@
 //            `pip install pillow numpy` (link-qc-6-ui-testing's static-image annotation fallback). --check always reports the tool
 //            status and the planned actions (`tools.actions`); without --tools nothing is installed — none of it is
 //            a prerequisite for 3b or any other skill.
+//            Clean replace (--replace, needs --yes = the user confirmed): each of OUR skill folders (lib.mjs SKILLS, plus
+//            legacy SKILL_RENAMES folders) is DELETED and re-downloaded whole, and the /sync-skills command is overwritten —
+//            local edits and extra files inside those folders are lost. Every other folder under .claude/skills/ and every
+//            other file (.mcp.json, .gitignore, Testing/, docs/, settings, other commands) is never deleted by it; the
+//            .mcp.json migration and --tools keep their normal behaviour. --check always reports the plan under `replace`
+//            (what would be deleted, what would be lost, what is kept, and `confirmText` for the question).
 //            If the apply updated the sync implementation itself (this script, lib.mjs, the /sync-skills command),
 //            it re-runs ONCE with the new code (internal flag --rerun) and reports both passes — one run is enough.
 // Exit code is always 0; the JSON payload carries the result (and `error` when the source is unreachable).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseArgs, print, run, isDir, isFile, read, actualName, planMcpMigration, applyMcpMigration, resolveUvx, planTools, SKILLS, SKILL_RENAMES, SOURCE_REPO, DOCX_SERVER, PLAYWRIGHT_CLI_PACKAGE, PLAYWRIGHT_CLI_BIN, PLAYWRIGHT_CLI_IGNORE, PYTHON_PACKAGES } from './lib.mjs';
+import { parseArgs, print, run, isDir, isFile, read, actualName, planMcpMigration, applyMcpMigration, resolveUvx, planTools, planReplace, REPLACE_WARNING, SYNC_COMMAND, SKILLS, SKILL_RENAMES, SOURCE_REPO, DOCX_SERVER, PLAYWRIGHT_CLI_PACKAGE, PLAYWRIGHT_CLI_BIN, PLAYWRIGHT_CLI_IGNORE, PYTHON_PACKAGES } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const mode = args.apply ? 'apply' : 'check';
@@ -37,12 +44,15 @@ const wanted = only.length ? SKILLS.filter((s) => only.includes(s)) : SKILLS;
 const OWNED = ['.claude/skills', '.claude/commands/sync-skills.md', `.mcp.json (${DOCX_SERVER} entry + legacy word entries only)`, `with --tools: the global ${PLAYWRIGHT_CLI_PACKAGE} package, its chromium browser, the ${PLAYWRIGHT_CLI_IGNORE} line of .gitignore, and the Python packages ${PYTHON_PACKAGES.join(' + ')} when a Python interpreter exists (link-qc-6-ui-testing annotation fallback)`];
 const migrateMcp = !args['no-mcp'];
 const installTools = Boolean(args.tools);
+const replaceMode = Boolean(args.replace);
 
 function fail(error, extra = {}) { print({ tool: 'sync-qa-skills', mode, target, source: { repo: SOURCE_REPO, branch }, error, ...extra }, args); process.exit(0); }
 
 // Guard: never sync the canonical repo onto itself.
 const remote = run('git remote get-url origin', target);
 if (remote.ok && /AhmedZaher1233\/Link_AI_Pro(\.git)?$/i.test(remote.out)) fail('target is the canonical repository — run git pull there instead');
+// Guard: a clean replace deletes our skill folders — only after the user confirmed (the caller asks, then passes --yes).
+if (mode === 'apply' && replaceMode && !args.yes) fail('replace needs confirmation — show replace.confirmText from --check, ask the user, and re-run with --replace --yes only after they agreed; nothing changed');
 
 // 1. Fetch the source into a temp folder (sparse clone, fallback to raw download).
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-skills-'));
@@ -108,7 +118,27 @@ if (isFile(cmdSrc)) {
 const targetSkillDirs = existingName ? fs.readdirSync(path.join(targetClaude, existingName)).filter((e) => isDir(path.join(targetClaude, existingName, e))) : [];
 const localOnlySkills = targetSkillDirs.filter((e) => !SKILLS.includes(e) && !(e in SKILL_RENAMES));
 // Folders from before the link-qc-N naming (or merged into another skill): removed by --apply once the replacement is synced.
+const sourceSkillDirs = fs.readdirSync(srcSkills).filter((e) => isDir(path.join(srcSkills, e)));
 const legacySkills = targetSkillDirs.filter((e) => e in SKILL_RENAMES).map((e) => ({ folder: e, replacement: SKILL_RENAMES[e], action: mode === 'apply' ? 'removed by --apply' : 'legacy (removed by --apply)' }));
+
+// 3a. Plan the clean replace (reported on every run; executed only by --apply --replace --yes).
+const replacePlan = planReplace({ targetDirs: targetSkillDirs, wanted, sourceDirs: sourceSkillDirs });
+const replace = buildReplaceReport();
+function buildReplaceReport() {
+  const affected = new Set(replacePlan.replace);
+  const lost = files.filter((f) => (affected.has(f.skill) && (f.status === 'LOCAL-ONLY' || f.localEdits)) || (f.skill === 'commands' && f.localEdits))
+    .map((f) => ({ skill: f.skill, file: f.file, kind: f.status === 'LOCAL-ONLY' ? 'extra file (deleted)' : 'local edit (overwritten)' }));
+  const edited = lost.filter((l) => l.kind.startsWith('local edit')).length, extra = lost.length - edited;
+  const confirmText = REPLACE_WARNING.replace('{repo}', SOURCE_REPO).replace('{branch}', branch).replace('{edited}', edited).replace('{extra}', extra)
+    .replace('{kept}', replacePlan.keep.length ? replacePlan.keep.join(', ') : 'none');
+  return {
+    requested: replaceMode, confirmed: Boolean(args.yes),
+    deleteAndRedownload: replacePlan.replace.map((s) => `.claude/skills/${s}`), installNew: replacePlan.install.map((s) => `.claude/skills/${s}`),
+    legacyRemoved: replacePlan.remove.map((l) => `.claude/skills/${l.folder}`), command: SYNC_COMMAND,
+    keptUntouched: replacePlan.keep.map((s) => `.claude/skills/${s}`), refused: replacePlan.refused,
+    lost, edited, extra, needsConfirmation: replacePlan.replace.length + replacePlan.remove.length > 0, confirmText,
+  };
+}
 
 // 3b. Plan the .mcp.json migration (legacy word -> docx). Read-only here; applied in step 4.
 const mcp = planMcp();
@@ -172,8 +202,10 @@ if (mode === 'apply') {
     else { fs.renameSync(from, viaTmp); fs.renameSync(viaTmp, targetSkills); }
     applied.push({ action: 'renamed', from: `.claude/${existingName}`, to: '.claude/skills', via: useGit ? 'git mv' : 'fs.rename' });
   }
+  if (replaceMode) applied.push(...applyReplace());
   for (const f of files) {
-    if (!['NEW', 'UPDATED'].includes(f.status)) continue;
+    if (replaceMode && f.skill !== 'commands') continue; // skill folders were replaced whole above
+    if (!['NEW', 'UPDATED'].includes(f.status) && !(replaceMode && f.status === 'SKIPPED')) continue;
     const dst = path.join(target, f.file);
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.copyFileSync(f.src, dst);
@@ -197,11 +229,16 @@ cleanup();
 //    /sync-skills command), the NEW code may sync differently — re-run it ONCE (--rerun guards the loop) so the
 //    user never has to run /sync-skills twice. Both passes are reported in one payload.
 const SELF_FILES = ['.claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs', '.claude/skills/link-qc-1-generate-update-testing-structure/scripts/lib.mjs', '.claude/commands/sync-skills.md'];
-const selfUpdated = applied.filter((a) => SELF_FILES.includes(a.file)).map((a) => a.file);
+const replacedSkill1 = applied.some((a) => a.action === 'replaced' && a.folder === '.claude/skills/link-qc-1-generate-update-testing-structure');
+const selfUpdated = [...new Set([
+  ...applied.filter((a) => SELF_FILES.includes(a.file)).map((a) => a.file),
+  ...(replacedSkill1 ? files.filter((f) => SELF_FILES.includes(f.file) && ['NEW', 'UPDATED', 'SKIPPED'].includes(f.status)).map((f) => f.file) : []),
+])];
 let rerunFailed = null;
 if (mode === 'apply' && !args.rerun && selfUpdated.length) {
   const q = (s) => (/[\s"]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s);
-  const argv = process.argv.slice(2).map(q).join(' ');
+  // pass 2 is a plain --apply: the folders are already fresh, so it only re-checks with the new code
+  const argv = process.argv.slice(2).filter((a) => a !== '--replace' && a !== '--yes').map(q).join(' ');
   const second = run(`node ${q(path.join(target, SELF_FILES[0]))} ${argv} --rerun`, target, 300000);
   let pass2 = null;
   try { pass2 = JSON.parse(second.out); } catch {}
@@ -219,7 +256,7 @@ if (mode === 'apply' && !args.rerun && selfUpdated.length) {
 }
 
 const summary = files.reduce((a, f) => ((a[f.status.toLowerCase().replace('-', '_')] = (a[f.status.toLowerCase().replace('-', '_')] || 0) + 1), a), {});
-const skillMdChanged = applied.some((a) => /SKILL\.md$|sync-skills\.md$/.test(a.file || ''));
+const skillMdChanged = applied.some((a) => /SKILL\.md$|sync-skills\.md$/.test(a.file || '') || ['replaced', 'installed'].includes(a.action));
 const mcpChanged = applied.some((a) => String(a.action).startsWith('mcp-'));
 const { json: _j, plan: _p, ...mcpReport } = mcp;
 const toolsReport = { ...tools, after: mode === 'apply' && installTools ? planTools(target) : null };
@@ -227,7 +264,11 @@ const toolFailed = applied.filter((a) => a.action === 'tool-failed');
 const hints = [];
 if (legacySkills.length) hints.push(`legacy skill folder(s) ${legacySkills.map((l) => l.folder).join(', ')} — renamed in this release; --apply removes each one once its replacement is in place`);
 if (mode === 'check') hints.push('read-only check — nothing copied' + (mcp.actions.length ? `; .mcp.json migration planned: ${mcp.actions.join(', ')} (skip with --no-mcp)` : ''));
-if (mode === 'apply' && files.some((f) => f.status === 'SKIPPED')) hints.push('some files skipped (local edits) — re-run with --force to overwrite');
+if (mode === 'check' && replace.needsConfirmation) hints.push(`clean replace available: --apply --replace --yes deletes and re-downloads ${replace.deleteAndRedownload.length} Link skill folder(s)${replace.lost.length ? `, losing ${replace.edited} local edit(s) and ${replace.extra} extra file(s)` : ''} — ask the user with replace.confirmText first`);
+const replaced = applied.filter((a) => ['replaced', 'installed'].includes(a.action)), replaceFailed = applied.filter((a) => a.action === 'replace-failed');
+if (replaced.length) hints.push(`${replaced.length} Link skill folder(s) deleted and re-downloaded fresh; other skills untouched`);
+if (replaceFailed.length) hints.push(`replace failed for ${replaceFailed.map((a) => a.folder).join(', ')} (${replaceFailed.map((a) => a.error).join(' | ')}) — the old folder was kept where possible; close editors watching it and re-run /sync-skills`);
+if (mode === 'apply' && !replaceMode && files.some((f) => f.status === 'SKIPPED')) hints.push('some files skipped (local edits) — re-run with --force to overwrite');
 if (mcp.error) hints.push(`.mcp.json: ${mcp.error}`);
 if (mcp.uvxFound === false) hints.push('uv not found — the docx entry uses command "uvx"; install uv (powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  or  pip install uv), then re-run so the absolute uvx path is written');
 if (!mcp.exists && migrateMcp && mode === 'apply' && mcpChanged) hints.push('.mcp.json created with the docx entry only — run /link-qc-1-generate-update-testing-structure for playwright and azure-devops');
@@ -241,12 +282,42 @@ if (rerunFailed) hints.push(rerunFailed);
 print({
   tool: 'sync-qa-skills', mode, target, source, owned: OWNED, skillsChecked: wanted,
   uppercaseDir: uppercaseDir ? `.claude/${existingName}` : null,
-  files: files.map(({ src, ...rest }) => rest), summary, localOnlySkills, legacySkills, mcp: mcpReport, tools: toolsReport, applied,
+  files: files.map(({ src, ...rest }) => rest), summary, localOnlySkills, legacySkills, replace, mcp: mcpReport, tools: toolsReport, applied,
   reloadRequired: skillMdChanged || mcpChanged,
   hint: hints.length ? hints.join(' | ') : null,
 }, args);
 
 /* ---------------- helpers ---------------- */
+// Clean replace of OUR skill folders only (planReplace decides which). The new copy is staged first; the old
+// folder is moved aside, the new one moved in, then the old one deleted. Any failure restores the old folder.
+function applyReplace() {
+  const out = [];
+  const stage = path.join(targetClaude, '.sync-replace');
+  fs.mkdirSync(targetSkills, { recursive: true });
+  fs.rmSync(stage, { recursive: true, force: true });
+  fs.mkdirSync(stage, { recursive: true });
+  for (const skill of [...replacePlan.replace, ...replacePlan.install]) {
+    const final = path.join(targetSkills, skill), fresh = path.join(stage, `${skill}.new`), old = path.join(stage, `${skill}.old`);
+    const existed = isDir(final);
+    try {
+      fs.cpSync(path.join(srcSkills, skill), fresh, { recursive: true });
+      if (existed) moveDir(final, old);
+      moveDir(fresh, final);
+      if (existed) fs.rmSync(old, { recursive: true, force: true });
+      out.push({ action: existed ? 'replaced' : 'installed', folder: `.claude/skills/${skill}` });
+    } catch (e) {
+      try { if (existed && !isDir(final) && isDir(old)) moveDir(old, final); } catch {}
+      out.push({ action: 'replace-failed', folder: `.claude/skills/${skill}`, error: e.message, kept: isDir(final) ? 'old folder kept' : 'folder missing — re-run /sync-skills' });
+    }
+  }
+  fs.rmSync(stage, { recursive: true, force: true });
+  return out;
+}
+// rename, with a copy + delete fallback (Windows can refuse a rename while an editor watches the folder).
+function moveDir(from, to) {
+  try { fs.renameSync(from, to); }
+  catch { fs.cpSync(from, to, { recursive: true }); fs.rmSync(from, { recursive: true, force: true }); }
+}
 function walk(dir) { const out = []; for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name); if (e.isDirectory()) out.push(...walk(p)); else out.push(p); } return out; }
 function cleanup() { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} }
 async function rawDownload(dest) {

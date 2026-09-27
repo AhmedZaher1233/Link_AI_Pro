@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // render-run-report.mjs — deterministic renderer for skill 5's per-story run report page.
 //   TEST-RUN-REPORT-{feature}.md (+ BUG-REPORT-{feature}.md, + .runs/phase-N.json)
-//   → TEST-RUN-REPORT-{feature}.html, from assets/run-report.template.html.
+//   (+ REVIEW-COMMENTS-{feature}.md, the reviewer's comments saved from the page)
+//   → TEST-RUN-REPORT-{feature}.html, from assets/run-report.template.html (the body partial) inside
+//   assets/report-shell.template.html (the one general report page, mirrored with skills 3, 3b and 3c).
 //
 // Node >= 18, ESM, zero dependencies. DEFAULT MODE IS DRY-RUN: parse, compute, validate, print
 // the JSON payload, write nothing. Writing happens only behind --write, and the rendered HTML is
@@ -19,14 +21,14 @@
 //
 // Usage:
 //   node render-run-report.mjs --report <TEST-RUN-REPORT-{feature}.md> [--bugs <BUG-REPORT-{feature}.md>]
-//        [--runs <dir>] [--out <path>] [--write] [--force] [--strict] [--pretty]
+//        [--runs <dir>] [--comments <path>] [--out <path>] [--write] [--force] [--strict] [--pretty]
 // Exit: 0 always, unless --strict: PASS 0 · MISMATCH 1 · BLOCKED 2 · NOT_RUN 3.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, print, sha256, isFile } from './scan-lib.mjs';
 
-export const SCHEMA_VERSION = '1.0';
+export const SCHEMA_VERSION = '1.1';
 export const TOOL = 'render-run-report';
 export const RUN_SCHEMA = 'skill6-run/1';
 
@@ -38,12 +40,18 @@ const readText = (p) => fs.readFileSync(p, 'utf8').replace(/\r\n?/g, '\n');
  * ========================================================================================== */
 export const OUTCOMES = ['GREEN', 'FAILURES', 'INCOMPLETE', 'SMOKE GATE FAILED', 'ENVIRONMENT_BLOCKED', 'BLOCKED'];
 export const EXECUTED_OUTCOMES = ['GREEN', 'FAILURES', 'INCOMPLETE', 'SMOKE GATE FAILED'];
-export const RESULT_STATES = ['PASS', 'FAIL', 'INCOMPLETE', 'SKIP', 'NOT_RUN'];
+// PARTIAL = the automated part ran and passed up to a `[HUMAN]` step; the Status cell reads
+// `PARTIAL — human step pending`. It is never counted as passed and never lets a phase be GREEN.
+export const RESULT_STATES = ['PASS', 'FAIL', 'INCOMPLETE', 'SKIP', 'NOT_RUN', 'PARTIAL'];
+export const PARTIAL_REASON = 'human step pending';
 export const CLASSIFICATIONS = ['app_bug', 'selector_failure', 'assertion_failure', 'environment_failure', 'data_missing', 'timeout_failure', 'evidence_failure', 'unverified_assumption'];
 export const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 export const BUG_STATUSES = ['open', 'resolved', 'not-checked'];
-const COUNT_KEYS = ['passed', 'failed', 'incomplete', 'skipped', 'notrun', 'total'];
-const COUNT_LABEL = { passed: 'Passed', failed: 'Failed', incomplete: 'Incomplete', skipped: 'Skipped', notrun: 'Not run', total: 'Total' };
+// `partial` is an OPTIONAL column of the Stages / Run history tables and an optional ` · {n} partial`
+// of the Latest results line — required only when a phase holds a PARTIAL row.
+const COUNT_KEYS = ['passed', 'failed', 'incomplete', 'skipped', 'notrun', 'partial', 'total'];
+const COUNT_LABEL = { passed: 'Passed', failed: 'Failed', incomplete: 'Incomplete', skipped: 'Skipped', notrun: 'Not run', partial: 'Partial', total: 'Total' };
+const STATUS_BUCKET = { PASS: 'passed', FAIL: 'failed', INCOMPLETE: 'incomplete', SKIP: 'skipped', NOT_RUN: 'notrun', PARTIAL: 'partial' };
 const SMOKE_RE = /^(passed|healed-then-passed|FAILED-STOPPED)\b/;
 const SECRET_RE = /\b(password|passcode|secret|token|pat|api[- ]?key)\b\s*(?:[:=]|is)\s*["'`]?[^\s"'`]{3,}/i;
 const LINK_RE = /!?\[([^\]]*)\]\(([^)\s]+)\)/g;
@@ -57,6 +65,8 @@ export const LIMITS = [
   'A password-shaped literal ("password: x", "token = y") anywhere in either document BLOCKs; a secret written any other way is not detected.',
   'Rendering is deterministic: same inputs → same bytes. Nothing in the page depends on the clock.',
   'Screenshots are linked by relative path and shown only while the report and the screenshots keep their relative positions; a data: URI BLOCKs.',
+  'A PARTIAL row (`PARTIAL — human step pending`) counts in its own bucket, never as passed; a phase holding one is INCOMPLETE at best. Whether the human step was later performed is outside this page.',
+  'Reviewer comments come from REVIEW-COMMENTS-{feature}.md beside the report (or --comments): each `## {item-id}` entry is attached to the bug card (BUG-n) or phase card (phase-N) with that id, "General" to the general box; an id not on the page is listed, never dropped (comment-unknown-id). The file belongs to the reviewer: the renderer only reads it. Typing in the page never changes the page file, so its self-hash stays valid.',
 ];
 
 /* ============================================================================================
@@ -205,12 +215,18 @@ export function parseReport(text) {
         const tc = stripMd(cell(r, ci.tc)); if (!tc) continue;
         if (ids.has(tc)) errors.push({ kind: 'broken-row', line: rt.line, detail: 'phase ' + n + ' lists ' + tc + ' twice — one row per TC' });
         ids.add(tc);
-        const status = stripMd(cell(r, ci.status)).toUpperCase();
-        if (!RESULT_STATES.includes(status)) errors.push({ kind: 'unknown-enum', line: rt.line, detail: 'phase ' + n + ' ' + tc + ' Status "' + status + '" is not one of ' + RESULT_STATES.join(' / ') });
+        const statusRaw = stripMd(cell(r, ci.status));
+        // `PARTIAL — human step pending` is the one status that carries a reason; every other cell is the bare state.
+        const sm = statusRaw.match(/^([A-Za-z_]+)\s*(?:[—–-]\s*(.*))?$/);
+        const status = (sm ? sm[1] : statusRaw).toUpperCase();
+        const statusReason = sm && sm[2] ? sm[2].trim() : '';
+        if (!RESULT_STATES.includes(status) || (statusReason && status !== 'PARTIAL')) errors.push({ kind: 'unknown-enum', line: rt.line, detail: 'phase ' + n + ' ' + tc + ' Status "' + statusRaw + '" is not one of ' + RESULT_STATES.join(' / ') + ' (only PARTIAL carries a reason: `PARTIAL — ' + PARTIAL_REASON + '`)' });
+        if (status === 'PARTIAL' && !new RegExp('^' + PARTIAL_REASON + '$', 'i').test(statusReason)) warnings.push({ kind: 'partial-without-reason', phase: n, id: tc, detail: 'PARTIAL row should read `PARTIAL — ' + PARTIAL_REASON + '`' + (statusReason ? ' (found "' + statusReason + '")' : '') });
         const cls = stripMd(cell(r, ci.cls));
-        if (cls && cls !== DASH && !/^incomplete:/i.test(cls) && !CLASSIFICATIONS.includes(cls)) warnings.push({ kind: 'unknown-classification', phase: n, id: tc, detail: 'classification "' + cls + '" is not in the catalogue' });
+        if (cls && cls !== DASH && !/^incomplete:/i.test(cls) && !/^human step/i.test(cls) && !CLASSIFICATIONS.includes(cls)) warnings.push({ kind: 'unknown-classification', phase: n, id: tc, detail: 'classification "' + cls + '" is not in the catalogue' });
         if (status === 'INCOMPLETE' && !/^incomplete:\s*\S/i.test(cls)) warnings.push({ kind: 'incomplete-without-variants', phase: n, id: tc, detail: 'INCOMPLETE row should name the missing variants as `incomplete: {slugs}`' });
-        results.push({ tc, req: stripMd(cell(r, ci.req)) || DASH, name: stripMd(cell(r, ci.name)), status, group: stripMd(cell(r, ci.group)) || DASH, duration: stripMd(cell(r, ci.duration)) || DASH, classification: cls || DASH, evidenceRaw: cell(r, ci.ev), line: rt.line });
+        if (status === 'PARTIAL' && !/^human step:\s*\S/i.test(cls)) warnings.push({ kind: 'partial-without-step', phase: n, id: tc, detail: 'PARTIAL row should name the pending step in Classification as `human step: {n}`' });
+        results.push({ tc, req: stripMd(cell(r, ci.req)) || DASH, name: stripMd(cell(r, ci.name)), status, statusReason, group: stripMd(cell(r, ci.group)) || DASH, duration: stripMd(cell(r, ci.duration)) || DASH, classification: cls || DASH, evidenceRaw: cell(r, ci.ev), line: rt.line });
       }
     }
     const covSec = sub(/^coverage$/i); const covTables = tablesOf(covSec);
@@ -275,7 +291,7 @@ export function parseBugReport(text) {
       const steps = stepsF ? (stepsF.items.length ? stepsF.items : stepsF.value.split(/\s(?=\d+[.)]\s)/).map((s) => s.replace(/^\d+[.)]\s*/, '').trim()).filter(Boolean)) : [];
       const histF = fieldOf(fields, 'History');
       const found = toNum(v('Found in phase'));
-      entries.push({ id: b.id, title: b.title, line: b.line, tc: v('TC-ID') || DASH, req: v('Requirement') || DASH, severity: sev || DASH, environment: v('Environment') || DASH, browser: v('Browser') || DASH, language: v('Language') || DASH, build: v('Build') || DASH, foundIn: found, foundInRaw: v('Found in phase') || DASH, status, statusRaw: st, resolvedPhase, rootCause: v('Root cause') || DASH, steps, expected: v('Expected') || DASH, actual: v('Actual') || DASH, screenshotRaw: fieldOf(fields, 'Screenshot') ? fieldOf(fields, 'Screenshot').value : '', evidence: v('Evidence') || DASH, history: histF ? histF.items.map(stripMd) : [] });
+      entries.push({ id: b.id, title: b.title, line: b.line, tc: v('TC-ID') || DASH, req: v('Requirement') || DASH, severity: sev || DASH, environment: v('Environment') || DASH, browser: v('Browser') || DASH, language: v('Language') || DASH, build: v('Build') || DASH, foundIn: found, foundInRaw: v('Found in phase') || DASH, status, statusRaw: st, resolvedPhase, rootCause: v('Root cause') || DASH, steps, expected: v('Expected') || DASH, actual: v('Actual') || DASH, screenshotRaw: fieldOf(fields, 'Screenshot') ? fieldOf(fields, 'Screenshot').value : '', evidence: v('Evidence') || DASH, history: histF ? histF.items.map(stripMd) : [], note: bare(v('Reviewer comment')) });
     }
     if (!entries.length && !isNone(sec.lines.filter((l) => !/^###/.test(l)))) warnings.push({ kind: 'bug-section-unparsed', detail: '`## Bugs` has content but no `### BUG-n — title` entry was recognised' });
   }
@@ -286,7 +302,15 @@ export function parseBugReport(text) {
  * Model — recompute, compare, enrich
  * ========================================================================================== */
 const outcomeClass = (o) => 's-' + String(o || 'notrun').toLowerCase().replace(/[^a-z]+/g, '-');
-const resultClass = (s) => ({ PASS: 's-pass', FAIL: 's-fail', INCOMPLETE: 's-incomplete', SKIP: 's-skip', NOT_RUN: 's-notrun' }[s] || 's-notrun');
+const resultClass = (s) => ({ PASS: 's-pass', FAIL: 's-fail', INCOMPLETE: 's-incomplete', SKIP: 's-skip', NOT_RUN: 's-notrun', PARTIAL: 's-partial' }[s] || 's-notrun');
+const statusText = (status, reason) => (status === 'PARTIAL' ? 'PARTIAL — ' + (reason || PARTIAL_REASON) : status);
+/** `{p} passed · {f} failed · {i} incomplete · {s} skipped · {n} not run[ · {x} partial] of {t} TCs` — read by label, never by position. */
+const formatLatest = (c) => c.passed + ' passed · ' + c.failed + ' failed · ' + c.incomplete + ' incomplete · ' + c.skipped + ' skipped · ' + c.notrun + ' not run' + (c.partial ? ' · ' + c.partial + ' partial' : '') + ' of ' + c.total + ' TCs';
+function latestMatches(line, c) {
+  const pick = (re) => { const m = String(line).match(re); return m ? Number(m[1]) : null; };
+  const got = { passed: pick(/(\d+)\s*passed/i), failed: pick(/(\d+)\s*failed/i), incomplete: pick(/(\d+)\s*incomplete/i), skipped: pick(/(\d+)\s*skipped/i), notrun: pick(/(\d+)\s*not run/i), partial: pick(/(\d+)\s*partial/i) ?? 0, total: pick(/of\s*(\d+)/i) };
+  return COUNT_KEYS.every((k) => got[k] === c[k]);
+}
 const num = (v) => (v === null || v === undefined || Number.isNaN(v) ? DASH : String(v));
 const isAbsolute = (p) => /^(?:[a-zA-Z]:[\\/]|\/|\\|[a-z][a-z0-9+.-]*:)/i.test(p);
 
@@ -316,11 +340,12 @@ export function buildModel(doc, bugDoc, opts) {
 
   // ---- phases: counts, outcome, evidence, stage totals
   const phases = doc.phases.map((p) => {
-    const counts = p.hasResultsTable ? { passed: 0, failed: 0, incomplete: 0, skipped: 0, notrun: 0, total: 0 } : null;
-    for (const r of p.results) { if (!counts) break; counts.total++; const k = { PASS: 'passed', FAIL: 'failed', INCOMPLETE: 'incomplete', SKIP: 'skipped', NOT_RUN: 'notrun' }[r.status]; if (k) counts[k]++; }
+    const counts = p.hasResultsTable ? { passed: 0, failed: 0, incomplete: 0, skipped: 0, notrun: 0, partial: 0, total: 0 } : null;
+    for (const r of p.results) { if (!counts) break; counts.total++; const k = STATUS_BUCKET[r.status]; if (k) counts[k]++; }
     let outcome = p.declared;
     if (counts) {
-      const derived = /^FAILED-STOPPED/.test(p.smokeGate || '') ? 'SMOKE GATE FAILED' : counts.failed ? 'FAILURES' : counts.incomplete ? 'INCOMPLETE' : 'GREEN';
+      // a PARTIAL row (human step pending) never lets the phase be GREEN
+      const derived = /^FAILED-STOPPED/.test(p.smokeGate || '') ? 'SMOKE GATE FAILED' : counts.failed ? 'FAILURES' : (counts.incomplete || counts.partial) ? 'INCOMPLETE' : 'GREEN';
       if (p.declared && p.declared !== derived) mm({ kind: 'outcome', phase: p.n, field: 'Outcome', written: p.declared, computed: derived, source: 'phase' });
       outcome = derived;
     }
@@ -329,7 +354,7 @@ export function buildModel(doc, bugDoc, opts) {
       const ci = { stage: col(p.stages, /^stage$/i) };
       const tot = p.stages.rows.find((r) => /^total$/i.test(stripMd(cell(r, ci.stage))));
       if (!tot) model.warnings.push({ kind: 'stages-total-missing', phase: p.n, detail: '`### Stages` has no Total row — nothing to cross-check' });
-      else for (const k of COUNT_KEYS) { const idx = col(p.stages, new RegExp('^' + COUNT_LABEL[k] + '$', 'i')); if (idx < 0) continue; const w = toNum(cell(tot, idx)); if (w !== null && w !== counts[k]) mm({ kind: 'stages', phase: p.n, field: COUNT_LABEL[k], written: w, computed: counts[k], source: 'stages' }); }
+      else for (const k of COUNT_KEYS) { const idx = col(p.stages, new RegExp('^' + COUNT_LABEL[k] + '$', 'i')); if (idx < 0) { if (k === 'partial' && counts.partial) mm({ kind: 'stages', phase: p.n, field: COUNT_LABEL[k], written: DASH, computed: counts[k], source: 'stages' }); continue; } const w = toNum(cell(tot, idx)); if (w !== null && w !== counts[k]) mm({ kind: 'stages', phase: p.n, field: COUNT_LABEL[k], written: w, computed: counts[k], source: 'stages' }); }
     }
     // secret screen over every cell and bullet of the phase
     const scan = [];
@@ -351,7 +376,7 @@ export function buildModel(doc, bugDoc, opts) {
       if (!row) { mm({ kind: 'run-history', phase: p.n, field: 'row', written: DASH, computed: 'phase ' + p.n, source: 'run-history' }); continue; }
       if (row.outcome !== p.outcome) mm({ kind: 'run-history', phase: p.n, field: 'Outcome', written: row.outcome, computed: p.outcome, source: 'run-history' });
       if (row.date && row.date !== p.date) mm({ kind: 'run-history', phase: p.n, field: 'Date', written: row.date, computed: p.date, source: 'run-history' });
-      for (const k of COUNT_KEYS) { const idx = col(t, new RegExp('^' + COUNT_LABEL[k] + '$', 'i')); if (idx < 0) continue; const w = toNum(cell(row.cells, idx)); const c = p.counts ? p.counts[k] : null; if ((w === null) !== (c === null) || (w !== null && w !== c)) mm({ kind: 'run-history', phase: p.n, field: COUNT_LABEL[k], written: w === null ? stripMd(cell(row.cells, idx)) || DASH : w, computed: c === null ? DASH : c, source: 'run-history' }); }
+      for (const k of COUNT_KEYS) { const idx = col(t, new RegExp('^' + COUNT_LABEL[k] + '$', 'i')); if (idx < 0) { if (k === 'partial' && p.counts && p.counts.partial) mm({ kind: 'run-history', phase: p.n, field: COUNT_LABEL[k], written: DASH, computed: p.counts[k], source: 'run-history' }); continue; } const w = toNum(cell(row.cells, idx)); const c = p.counts ? p.counts[k] : null; if ((w === null) !== (c === null) || (w !== null && w !== c)) mm({ kind: 'run-history', phase: p.n, field: COUNT_LABEL[k], written: w === null ? stripMd(cell(row.cells, idx)) || DASH : w, computed: c === null ? DASH : c, source: 'run-history' }); }
     }
     for (const r of rows) if (r.phase !== null && !phases.some((p) => p.n === r.phase)) mm({ kind: 'run-history', phase: r.phase, field: 'row', written: 'phase ' + r.phase, computed: 'no `## Phase ' + r.phase + '` section', source: 'run-history' });
     model.history = rows;
@@ -398,9 +423,8 @@ export function buildModel(doc, bugDoc, opts) {
     const lr = h['Latest results'];
     if (lr !== undefined) {
       const c = latest.counts;
-      const computed = c ? c.passed + ' passed · ' + c.failed + ' failed · ' + c.incomplete + ' incomplete · ' + c.skipped + ' skipped · ' + c.notrun + ' not run of ' + c.total + ' TCs' : DASH;
-      const ns = numsIn(lr); const want = c ? [c.passed, c.failed, c.incomplete, c.skipped, c.notrun, c.total] : [];
-      const same = c ? ns.length >= 6 && want.every((x, i) => ns[i] === x) : bare(lr) === '';
+      const computed = c ? formatLatest(c) : DASH;
+      const same = c ? latestMatches(lr, c) : bare(lr) === '';
       if (!same) mm({ kind: 'header', phase: latest.n, field: 'Latest results', written: lr, computed, source: 'header' });
     }
   }
@@ -494,6 +518,158 @@ function renderNodes(nodes, ctxs) {
   return out;
 }
 
+/* ==== report-shell kit — BEGIN ==============================================================
+ * Copied verbatim between scripts/render-tc-review.mjs (skills 3 / 3b / 3c) and
+ * scripts/render-run-report.mjs (skill 5): /sync-skills copies one skill folder at a time, so neither
+ * imports the other. Both harnesses compare this block between BEGIN and END against every sibling
+ * present. Relies on escapeHtml, compile, renderNodes, sha256 and SECRET_RE, defined identically in
+ * both scripts. It feeds assets/report-shell.template.html (the one general page) and owns the
+ * reviewer-comments file REVIEW-COMMENTS-{feature}.md: parse, attach to page items, render the boxes.
+ * ========================================================================================== */
+export const COMMENT_STATUSES = ['open', 'applied', 'answered', 'declined'];
+export const SHELL_STRINGS = {
+  en: {
+    c_toolbar: 'Reviewer comments', c_reviewer: 'Reviewer', c_save: 'Save comments', c_copy: 'Copy for chat', c_theme: 'Theme',
+    c_general_title: 'Reviewer comments', c_general_note: 'type in any comment box on this page, then Save comments (the file goes beside this page) or Copy for chat — then tell the chat "read my comments"',
+    c_title: 'Reviewer comment', c_note: 'Reviewer comment (in the markdown):', c_open: 'open comment', c_stale: 'written on an earlier revision',
+    c_response: 'Response:', c_orphans: 'Comments on items no longer on this page', c_placeholder: 'Type a comment for the QA skill…',
+    cm_open: 'open', cm_applied: 'applied', cm_answered: 'answered', cm_declined: 'declined',
+    c_viewer: 'Screenshot viewer', c_prev: 'Previous screenshot', c_next: 'Next screenshot', c_zoom_in: 'Zoom in', c_zoom_out: 'Zoom out',
+    c_actual: 'Actual size', c_fit: 'Fit to width', c_open_original: 'Open original in new tab', c_close: 'Close viewer',
+    js: {
+      theme: 'Theme', theme_auto: 'auto', theme_light: 'light', theme_dark: 'dark', viewer: 'Screenshot',
+      drafts: '{n} unsaved comment(s)', saved: 'Saved — {n} open comment(s). Tell the chat: "read my comments".',
+      downloaded: 'Downloaded — {n} open comment(s). Move the file from Downloads beside this page, then tell the chat: "read my comments".',
+      copied: 'Copied — paste it into the chat.', copy_failed: 'Copy failed — use Save comments instead.',
+      no_storage: 'This browser does not keep drafts for local files — save before closing the page.', file_title: 'Review comments',
+    },
+  },
+  ar: {
+    c_toolbar: 'تعليقات المراجع', c_reviewer: 'المراجع', c_save: 'حفظ التعليقات', c_copy: 'نسخ للمحادثة', c_theme: 'المظهر',
+    c_general_title: 'تعليقات المراجع', c_general_note: 'اكتب في أي مربع تعليق في هذه الصفحة ثم اضغط حفظ التعليقات (يُحفظ الملف بجوار الصفحة) أو نسخ للمحادثة — ثم اكتب في المحادثة "read my comments"',
+    c_title: 'تعليق المراجع', c_note: 'تعليق المراجع (في ملف الماركداون):', c_open: 'تعليق مفتوح', c_stale: 'كُتب على نسخة سابقة',
+    c_response: 'الرد:', c_orphans: 'تعليقات على عناصر لم تعد في هذه الصفحة', c_placeholder: 'اكتب تعليقًا لمهارة الجودة…',
+    cm_open: 'مفتوح', cm_applied: 'طُبِّق', cm_answered: 'أُجيب', cm_declined: 'رُفض',
+    c_viewer: 'عارض لقطات الشاشة', c_prev: 'اللقطة السابقة', c_next: 'اللقطة التالية', c_zoom_in: 'تكبير', c_zoom_out: 'تصغير',
+    c_actual: 'الحجم الفعلي', c_fit: 'ملاءمة العرض', c_open_original: 'فتح الأصل في علامة تبويب جديدة', c_close: 'إغلاق العارض',
+    js: {
+      theme: 'المظهر', theme_auto: 'تلقائي', theme_light: 'فاتح', theme_dark: 'داكن', viewer: 'لقطة شاشة',
+      drafts: '{n} تعليق غير محفوظ', saved: 'تم الحفظ — {n} تعليق مفتوح. اكتب في المحادثة: "read my comments".',
+      downloaded: 'تم التنزيل — {n} تعليق مفتوح. انقل الملف من مجلد التنزيلات بجوار هذه الصفحة ثم اكتب في المحادثة: "read my comments".',
+      copied: 'تم النسخ — الصقه في المحادثة.', copy_failed: 'فشل النسخ — استخدم حفظ التعليقات.',
+      no_storage: 'هذا المتصفح لا يحتفظ بالمسودات للملفات المحلية — احفظ قبل إغلاق الصفحة.', file_title: 'Review comments',
+    },
+  },
+};
+/** Reviewer text is escaped and its braces neutralised, so a comment can never look like a template placeholder. */
+const escText = (s) => escapeHtml(s).replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
+
+/** REVIEW-COMMENTS-{feature}.md → { header, entries[{ key, id, seq, text, status, statusDate, response, tail, line }], warnings }. */
+export function parseReviewComments(text) {
+  const lines = String(text).replace(/\r\n?/g, '\n').split('\n');
+  const header = {}; const raw = []; const warnings = [];
+  let i = 0;
+  for (; i < lines.length; i++) { if (/^## /.test(lines[i])) break; const m = lines[i].match(/^\*\*([^*]+?):\*\*\s*(.*)$/); if (m) header[m[1].trim().toLowerCase()] = m[2].trim(); }
+  let cur = null;
+  for (; i < lines.length; i++) {
+    const l = lines[i]; const h = l.match(/^## +(.+?)\s*$/);
+    if (h) { cur = { key: h[1].trim(), line: i + 1, text: [], tail: [], inTail: false }; raw.push(cur); continue; }
+    if (!cur) continue;
+    if (!cur.inTail && /^- \*\*Status:\*\*/i.test(l)) cur.inTail = true;
+    (cur.inTail ? cur.tail : cur.text).push(l);
+  }
+  const entries = raw.map((e) => {
+    const km = e.key.match(/^(.+?)(?:\s+\((\d+)\))?$/);
+    const text = e.text.join('\n').replace(/^\s*\n/, '').replace(/\s+$/, '');
+    const tail = e.tail.join('\n').replace(/\s+$/, '');
+    const sm = tail.match(/^- \*\*Status:\*\*\s*(\S+)(?:\s+(\d{4}-\d{2}-\d{2}))?/i);
+    let status = sm ? sm[1].toLowerCase() : 'open';
+    if (!COMMENT_STATUSES.includes(status)) { warnings.push({ kind: 'comment-status-unknown', id: e.key, detail: 'comment "' + e.key + '" has Status "' + (sm ? sm[1] : '') + '" — treated as open' }); status = 'open'; }
+    const tl = tail.split('\n'); const ri = tl.findIndex((x) => /^- \*\*Response:\*\*/i.test(x)); let response = '';
+    if (ri >= 0) { const parts = [tl[ri].replace(/^- \*\*Response:\*\*\s*/i, '')]; for (let j = ri + 1; j < tl.length && !/^- \*\*/.test(tl[j]); j++) parts.push(tl[j].trim()); response = parts.join('\n').trim(); }
+    return { key: e.key, id: km[1].trim(), seq: km[2] ? Number(km[2]) : 1, text: text === '—' ? '' : text, status, statusDate: sm && sm[2] ? sm[2] : '', response, tail: tail || '- **Status:** open', line: e.line };
+  });
+  return { header, entries, warnings };
+}
+
+/**
+ * Attach the comments file to the page's items.
+ * opts: { text (file content or null), file (relative path for the payload), page (this page's file name),
+ *         sourceRev (first 12 of the source sha256), known (Map id → kind; 'General' is always known) }.
+ */
+export function commentsModel({ text, file, page, sourceRev, known }) {
+  const out = { file: text === null || text === undefined ? null : file, fileRev: text ? sha256(text).slice(0, 12) : 'none', page: null, sourceRev: null, reviewer: '', stale: false, ignored: false, entries: [], byId: new Map(), orphans: [], open: 0, handled: 0, warnings: [], errors: [] };
+  if (text === null || text === undefined) return out;
+  const p = parseReviewComments(text);
+  out.warnings.push(...p.warnings);
+  out.page = p.header.page || null; out.sourceRev = p.header['source revision'] || null; out.reviewer = p.header.reviewer || '';
+  if (out.page && out.page !== page) { out.ignored = true; out.warnings.push({ kind: 'comments-page-mismatch', detail: file + ' was saved from ' + out.page + ', not from ' + page + ' — its comments are not shown on this page' }); return out; }
+  out.stale = !!(out.sourceRev && sourceRev && out.sourceRev !== sourceRev);
+  if (out.stale) out.warnings.push({ kind: 'comments-stale-revision', detail: file + ' was written on source revision ' + out.sourceRev + '; the source is now ' + sourceRev + ' — the comments are shown marked "written on an earlier revision"' });
+  for (const en of p.entries) {
+    if (SECRET_RE.test(en.text) || SECRET_RE.test(en.response)) { out.errors.push({ kind: 'secret-literal', line: en.line, detail: 'comment "' + en.key + '" contains a password-shaped literal — remove it from ' + file }); continue; }
+    if (en.id === 'General' && !en.text && en.status === 'open') continue; // the always-present empty General section
+    out.entries.push(en);
+    if (en.status === 'open') out.open++; else out.handled++;
+    if (en.id !== 'General' && !known.has(en.id)) { out.orphans.push(en); out.warnings.push({ kind: 'comment-unknown-id', id: en.id, detail: 'comment "' + en.key + '" names ' + en.id + ', which is not on this page — shown under "' + SHELL_STRINGS.en.c_orphans + '"' }); continue; }
+    if (!out.byId.has(en.id)) out.byId.set(en.id, []);
+    out.byId.get(en.id).push(en);
+  }
+  const hc = (p.header.comments || '').match(/(\d+)\s*open\s*·\s*(\d+)\s*handled\s*of\s*(\d+)/i);
+  if (p.header.comments && (!hc || Number(hc[1]) !== out.open || Number(hc[2]) !== out.handled || Number(hc[3]) !== out.open + out.handled)) out.warnings.push({ kind: 'comments-header-count', detail: file + ' header says "' + p.header.comments + '" but the file holds ' + out.open + ' open · ' + out.handled + ' handled — the page counts the entries' });
+  return out;
+}
+
+/** One comment box: markdown note, handled history, then a textarea per open entry (or one empty textarea). */
+export function commentBoxHtml(id, kind, cm, lang, note) {
+  const S = SHELL_STRINGS[lang] || SHELL_STRINGS.en;
+  const list = cm.byId.get(id) || [];
+  const open = list.filter((e) => e.status === 'open'); const done = list.filter((e) => e.status !== 'open');
+  const attrs = ' data-comment-id="' + escapeHtml(id) + '"';
+  let h = '<div class="comment-box"' + attrs + ' data-comment-kind="' + escapeHtml(kind) + '">\n';
+  h += '  <p class="comment-label">' + escapeHtml(S.c_title) + (open.length ? ' <span class="badge cm-open">' + escapeHtml(S.c_open) + '</span>' : '') + (list.length && cm.stale ? ' <span class="badge cm-stale">' + escapeHtml(S.c_stale) + '</span>' : '') + '</p>\n';
+  const noteText = String(note || '').trim();
+  if (noteText && noteText !== '—' && !list.some((e) => e.text.trim() === noteText)) h += '  <p class="comment-note"><b>' + escapeHtml(S.c_note) + '</b> ' + escText(noteText) + '</p>\n';
+  for (const e of done) h += '  <div class="comment-entry cm-' + e.status + '"><p class="comment-text">' + escText(e.text || '—') + '</p><p class="comment-meta"><span class="badge cm-' + e.status + '">' + escapeHtml(S['cm_' + e.status]) + (e.statusDate ? ' <span class="ltr">' + escapeHtml(e.statusDate) + '</span>' : '') + '</span>' + (e.response ? ' <span class="resp"><b>' + escapeHtml(S.c_response) + '</b> ' + escText(e.response) + '</span>' : '') + '</p></div>\n';
+  const ta = (entryKey, value) => '  <textarea class="comment-input" data-comment-input' + attrs + (entryKey ? ' data-entry="' + escapeHtml(entryKey) + '"' : '') + ' rows="2" aria-label="' + escapeHtml(S.c_title + ' · ' + id) + '" placeholder="' + escapeHtml(S.c_placeholder) + '">' + escText(value) + '</textarea>\n';
+  if (open.length) for (const e of open) h += ta(e.key, e.text); else h += ta(null, '');
+  return h + '</div>';
+}
+
+/** Entries whose item is no longer on the page — shown read-only, never dropped (Save keeps them). */
+export function orphansHtml(cm, lang) {
+  if (!cm.orphans.length) return '';
+  const S = SHELL_STRINGS[lang] || SHELL_STRINGS.en;
+  let h = '<div class="comments-orphans">\n  <h3 class="sub-head">' + escapeHtml(S.c_orphans) + '</h3>\n';
+  for (const e of cm.orphans) h += '  <div class="comment-entry cm-' + e.status + '"><p class="comment-meta"><span class="badge"><span class="ltr">' + escapeHtml(e.key) + '</span></span> <span class="badge cm-' + e.status + '">' + escapeHtml(S['cm_' + e.status]) + '</span></p><p class="comment-text">' + escText(e.text || '—') + '</p></div>\n';
+  return h + '</div>';
+}
+
+/** JSON island for the shell script: page identity, strings, and the saved entries verbatim (Save re-emits them). */
+export function reportJson({ pageKind, feature, page, source, sourceRev, commentsFile, cm, lang }) {
+  const S = SHELL_STRINGS[lang] || SHELL_STRINGS.en;
+  const data = { pageKind, feature, page, source, sourceRev, commentsFile, strings: S.js,
+    comments: { fileRev: cm.fileRev, reviewer: cm.reviewer, entries: cm.ignored ? [] : cm.entries.map((e) => ({ key: e.key, id: e.id, seq: e.seq, text: e.text, status: e.status, tail: e.tail })) } };
+  return JSON.stringify(data).replace(/</g, '\\u003c').replace(/\{\{/g, '{\\u007b');
+}
+
+/**
+ * Second pass: the shell around the rendered body. d: { lang, dir, pageKind, pageTitle, eyebrow, title, sub (HTML | ''),
+ * meta [{label, html}], banners [{cls, html}], tiles [{value, label_html, cls}], body, footer (HTML), cm, feature, page, source, sourceRev, commentsFile }.
+ */
+export function renderShell(shellTpl, d) {
+  const S = SHELL_STRINGS[d.lang] || SHELL_STRINGS.en;
+  const { js, ...labels } = S;
+  const vm = {
+    ...labels, lang: d.lang, dir: d.dir, page_kind: d.pageKind, page_title: d.pageTitle, eyebrow: d.eyebrow, title: d.title,
+    has_sub: !!d.sub, sub: d.sub || '', meta_items: d.meta, banners: d.banners, has_tiles: d.tiles.length > 0, tiles: d.tiles,
+    body: d.body, footer: d.footer, general_box: commentBoxHtml('General', 'general', d.cm, d.lang, ''), orphans_html: orphansHtml(d.cm, d.lang),
+    report_json: reportJson({ pageKind: d.pageKind, feature: d.feature, page: d.page, source: d.source, sourceRev: d.sourceRev, commentsFile: d.commentsFile, cm: d.cm, lang: d.lang }),
+  };
+  return renderNodes(compile(shellTpl), [vm]);
+}
+/* ==== report-shell kit — END ==== */
+
 /* ============================================================================================
  * View model
  * ========================================================================================== */
@@ -519,10 +695,10 @@ function covView(p) {
   return out;
 }
 
-function viewModel(model, files) {
+function viewModel(model, files, cm) {
   const latest = model.latest; const c = latest ? latest.counts : null; const h = model.header;
   const hv = (k) => bare(h[k] || '') || DASH;
-  const countsLine = (x) => (x ? x.passed + ' / ' + x.failed + ' / ' + x.incomplete + ' / ' + x.skipped + ' / ' + x.notrun + ' of ' + x.total : DASH);
+  const countsLine = (x) => (x ? x.passed + ' / ' + x.failed + ' / ' + x.incomplete + ' / ' + x.skipped + ' / ' + x.notrun + ' / ' + x.partial + ' of ' + x.total : DASH);
   const lastWithResults = [...model.phases].reverse().find((p) => p.counts) || null;
   const tilesFrom = lastWithResults && (!latest || !latest.counts) ? lastWithResults : latest;
   const tc = tilesFrom ? tilesFrom.counts : null;
@@ -539,12 +715,12 @@ function viewModel(model, files) {
   const covVerdict = tilesFrom && tilesFrom.covTarget ? ((stripMd(tilesFrom.covTarget).match(/[—–-]\s*([^·]+?)\s*(?:·|$)/) || [])[1] || DASH) : (run && run.coverage_snapshot ? run.coverage_snapshot.verdict || DASH : DASH);
   const bugs = model.bugs;
   const phases = model.phases.map((p) => {
-    const runFields = p.runFields.order.filter((k) => !/^outcome$/i.test(k)).map((k) => ({ name: k, value: bare(p.runFields.fields[k].value) || DASH }));
-    const stages = p.stages ? (() => { const t = p.stages; const ci = { stage: col(t, /^stage$/i) }; const get = (r, k) => { const i = col(t, new RegExp('^' + COUNT_LABEL[k] + '$', 'i')); return i < 0 ? DASH : bare(cell(r, i)) || DASH; }; return t.rows.map((r) => { const name = stripMd(cell(r, ci.stage)); return { name, total: get(r, 'total'), passed: get(r, 'passed'), failed: get(r, 'failed'), incomplete: get(r, 'incomplete'), skipped: get(r, 'skipped'), notrun: get(r, 'notrun'), row_class: /^total$/i.test(name) ? 'is-total' : '' }; }); })() : [];
+    const runFields = p.runFields.order.filter((k) => !/^(outcome|reviewer comment)$/i.test(k)).map((k) => ({ name: k, value: bare(p.runFields.fields[k].value) || DASH }));
+    const stages = p.stages ? (() => { const t = p.stages; const ci = { stage: col(t, /^stage$/i) }; const get = (r, k) => { const i = col(t, new RegExp('^' + COUNT_LABEL[k] + '$', 'i')); return i < 0 ? DASH : bare(cell(r, i)) || DASH; }; return t.rows.map((r) => { const name = stripMd(cell(r, ci.stage)); return { name, total: get(r, 'total'), passed: get(r, 'passed'), failed: get(r, 'failed'), incomplete: get(r, 'incomplete'), skipped: get(r, 'skipped'), notrun: get(r, 'notrun'), partial: get(r, 'partial'), row_class: /^total$/i.test(name) ? 'is-total' : '' }; }); })() : [];
     const sg = p.smokeGate ? stripMd(p.smokeGate) : '';
     const sgm = sg.match(/^(passed|healed-then-passed(?:\s*\([^)]*\))?|FAILED-STOPPED)\s*(.*)$/);
     const results = p.results.map((r) => ({
-      tc: r.tc, anchor: 'tc-' + p.n + '-' + r.tc, req: r.req, name: r.name || DASH, status: r.status, status_class: resultClass(r.status), row_class: r.status === 'FAIL' ? 'gap' : '',
+      tc: r.tc, anchor: 'tc-' + p.n + '-' + r.tc, req: r.req, name: r.name || DASH, status: statusText(r.status, r.statusReason), status_class: resultClass(r.status), row_class: r.status === 'FAIL' ? 'gap' : '',
       group: r.group, duration: r.duration, classification: r.classification, evidence: r.evidence || [], has_evidence: (r.evidence || []).length > 0,
       has_attempts: !!(r.attempts && (r.attempts.length > 1 || (r.missingVariants && r.missingVariants.length))), attempts: (r.attempts || []).map((a) => ({ ...a, status_class: resultClass(a.status), error: a.error || DASH })),
       missing_note: r.missingVariants && r.missingVariants.length ? ' · missing required variants: ' + r.missingVariants.join(', ') : '',
@@ -552,7 +728,7 @@ function viewModel(model, files) {
     const cv = covView(p);
     return {
       n: p.n, date: p.date, outcome: p.outcome || DASH, outcome_class: outcomeClass(p.outcome), is_latest: latest && p.n === latest.n, open_attr: latest && p.n === latest.n ? ' open' : '',
-      summary_counts: p.counts ? 'passed / failed / incomplete / skipped / not run · ' + countsLine(p.counts) : 'no results table', reason: p.reason, has_reason: !!p.reason,
+      summary_counts: p.counts ? 'passed / failed / incomplete / skipped / not run / partial · ' + countsLine(p.counts) : 'no results table', reason: p.reason, has_reason: !!p.reason,
       run_fields: runFields, has_stages: stages.length > 0, stages, has_smoke: !!sg, smoke_verdict: sgm ? sgm[1] : sg, smoke_rest: sgm ? sgm[2] : '', smoke_class: /^FAILED/.test(sg) ? 's-fail' : /^healed/.test(sg) ? 's-incomplete' : 's-pass',
       has_plan: !!p.plan, plan: table(p.plan), has_plan_decisions: !!p.planDecisions, plan_decisions: p.planDecisions ? 'Decisions: ' + stripMd(p.planDecisions) : '',
       ...cv,
@@ -564,6 +740,7 @@ function viewModel(model, files) {
       has_questions: !!(p.questions && p.questions.rows.length), questions: table(p.questions),
       has_readiness: !!(p.readinessVerdict || p.readiness), readiness_verdict: p.readinessVerdict ? 'Verdict: ' + stripMd(p.readinessVerdict) : DASH, has_readiness_rows: !!(p.readiness && p.readiness.rows.length), readiness: table(p.readiness),
       has_deviations: p.deviations.length > 0, deviations: p.deviations.map((d) => ({ text: d })),
+      comment_box: commentBoxHtml('phase-' + p.n, 'phase', cm, 'en', bare(fieldValue(p.runFields.fields, 'Reviewer comment'))),
     };
   });
   const bugCards = bugs ? bugs.entries.map((b) => {
@@ -576,6 +753,7 @@ function viewModel(model, files) {
       steps: b.steps.map((s) => ({ text: s })), expected: b.expected, actual: b.actual,
       screenshot: b.screenshot, has_screenshot: b.screenshot.length > 0, screenshot_text: bare(b.screenshotRaw) || 'none captured',
       evidence_text: b.evidence, history: b.history.map((x) => ({ text: x })), has_history: b.history.length > 0,
+      comment_box: commentBoxHtml(b.id, 'bug', cm, 'en', b.note),
     };
   }) : [];
   const vm = {
@@ -586,12 +764,12 @@ function viewModel(model, files) {
     has_legacy: model.legacyFiles.length > 0, legacy_list: model.legacyFiles.join(', '),
     has_mismatch: model.mismatches.length > 0, mismatch_count: String(model.mismatches.length),
     gate_failed: !!latest && latest.outcome === 'SMOKE GATE FAILED', env_blocked: !!latest && (latest.outcome === 'ENVIRONMENT_BLOCKED' || latest.outcome === 'BLOCKED'), blocked_reason: latest && latest.reason ? ' — ' + latest.reason : '',
-    n_passed: tc ? String(tc.passed) : DASH, n_failed: tc ? String(tc.failed) : DASH, n_incomplete: tc ? String(tc.incomplete) : DASH, n_skipped: tc ? String(tc.skipped) : DASH, n_notrun: tc ? String(tc.notrun) : DASH, n_total: tc ? String(tc.total) : DASH,
+    n_passed: tc ? String(tc.passed) : DASH, n_failed: tc ? String(tc.failed) : DASH, n_incomplete: tc ? String(tc.incomplete) : DASH, n_skipped: tc ? String(tc.skipped) : DASH, n_notrun: tc ? String(tc.notrun) : DASH, n_partial: tc ? String(tc.partial) : DASH, n_total: tc ? String(tc.total) : DASH,
     variants_tile: vt ? num(vt.passed) + ' / ' + num(vt.failed) + ' / ' + num(vt.skipped) + ' / ' + num(vt.not_run) : DASH,
     duration_tile: durMain, planned_tile: durRest, coverage_tile: covTile, coverage_verdict: covVerdict || DASH,
     bugs_tile: bugs ? bugs.counts.open + ' / ' + bugs.counts.resolved + ' / ' + bugs.counts.notChecked : DASH,
     n_assumptions: tilesFrom && tilesFrom.assumptions ? String(tilesFrom.assumptions.rows.length) : (tilesFrom ? '0' : DASH),
-    history: model.phases.map((p) => { const row = model.history.find((r) => r.phase === p.n); return { phase: String(p.n), date: p.date, outcome: p.outcome || DASH, outcome_class: outcomeClass(p.outcome), passed: p.counts ? String(p.counts.passed) : DASH, failed: p.counts ? String(p.counts.failed) : DASH, incomplete: p.counts ? String(p.counts.incomplete) : DASH, skipped: p.counts ? String(p.counts.skipped) : DASH, notrun: p.counts ? String(p.counts.notrun) : DASH, total: p.counts ? String(p.counts.total) : DASH, duration: durationOf(p).replace(/\s*\(.*$/, '') || (row ? row.duration : DASH), bugs: row ? row.bugs : DASH }; }),
+    history: model.phases.map((p) => { const row = model.history.find((r) => r.phase === p.n); return { phase: String(p.n), date: p.date, outcome: p.outcome || DASH, outcome_class: outcomeClass(p.outcome), passed: p.counts ? String(p.counts.passed) : DASH, failed: p.counts ? String(p.counts.failed) : DASH, incomplete: p.counts ? String(p.counts.incomplete) : DASH, skipped: p.counts ? String(p.counts.skipped) : DASH, notrun: p.counts ? String(p.counts.notrun) : DASH, partial: p.counts ? String(p.counts.partial) : DASH, total: p.counts ? String(p.counts.total) : DASH, duration: durationOf(p).replace(/\s*\(.*$/, '') || (row ? row.duration : DASH), bugs: row ? row.bugs : DASH }; }),
     ...cov,
     phases,
     bugs_present: !!bugs, has_bug_entries: bugCards.length > 0, bugs: bugCards,
@@ -600,21 +778,45 @@ function viewModel(model, files) {
   return vm;
 }
 
+/** The shell's generic header data for this page — meta line, banners, tiles, footer — built from the body view model. */
+function shellParts(vm) {
+  const e = escapeHtml; const code = (x) => '<code>' + e(x) + '</code>';
+  const meta = [
+    ['Spec', e(vm.spec)], ['Environment', e(vm.environment)], ['Latest phase', e(vm.latest_phase) + ' (' + e(vm.latest_run) + ')'],
+    ['Status', '<span class="badge ' + e(vm.status_class) + '">' + e(vm.status) + '</span>'], ['Compliance', e(vm.compliance)], ['Azure DevOps', e(vm.ado_mode)],
+    ['Run file', e(vm.run_file)], ['Screenshots', e(vm.screenshots_dir)], ['Progress log', e(vm.progress_log)], ['Bug report', e(vm.bug_file)], ['Earlier phases', e(vm.earlier_phases)],
+  ].map(([label, html]) => ({ label, html }));
+  const banners = [];
+  if (vm.has_legacy) banners.push({ cls: 'legacy', html: 'Legacy files in this folder (read-only history, not rendered): ' + e(vm.legacy_list) });
+  if (vm.has_mismatch) banners.push({ cls: 'warn-strip', html: e(vm.mismatch_count) + ' value(s) written in the markdown disagree with what the tables say — this page shows the values computed from the tables. Fix the header, run-history or bug-report lines and re-render.' });
+  if (vm.gate_failed) banners.push({ cls: 'banner gate-failed', html: '<b>Smoke gate failed</b><br>The latest run stopped at the smoke gate because of application errors. Positive and negative test cases did not run; every one of them is listed as NOT_RUN below.' });
+  if (vm.env_blocked) banners.push({ cls: 'banner env-blocked', html: '<b>' + e(vm.status) + '</b><br>The latest invocation did not execute the test cases' + e(vm.blocked_reason) + '. The counts below belong to the last phase that has results, if any.' });
+  const tiles = [
+    [vm.n_passed, 'Passed', 't-pass'], [vm.n_failed, 'Failed', 't-fail'], [vm.n_incomplete, 'Incomplete', 't-incomplete'], [vm.n_partial, 'Partial · human step pending', 't-partial'],
+    [vm.n_skipped, 'Skipped', ''], [vm.n_notrun, 'Not run', ''], [vm.n_total, 'Test cases · phase ' + vm.latest_phase, ''], [vm.variants_tile, 'Variants · passed / failed / skipped / not run', ''],
+    [vm.duration_tile, 'Duration · ' + vm.planned_tile, ''], [vm.coverage_tile, 'Static coverage · ' + vm.coverage_verdict, ''], [vm.bugs_tile, 'Bugs · open / resolved / not checked', ''], [vm.n_assumptions, 'Unverified assumptions', ''],
+  ].map(([value, label, cls]) => ({ value, label_html: e(label), cls }));
+  const footer = 'Sources of truth: ' + code(vm.report_file) + ' and ' + code(vm.bug_file) + ' — this page is rendered from them by ' + code('scripts/render-run-report.mjs') + ' and adds nothing. To change it, edit the markdown and re-render. Screenshots are linked by relative path into the screenshots folder; the page shows them only while both keep their relative positions.';
+  const sub = '<span class="lbl">Feature</span> <b>' + e(vm.feature) + '</b> · source <b>' + e(vm.source_doc) + '</b> · revision <b>' + e(vm.source_rev) + '</b>';
+  return { meta, banners, tiles, footer, sub };
+}
+
 /* ============================================================================================
  * Provenance + self-hash
  * ========================================================================================== */
-const PROV_RE = /<!-- render-run-report v[^ ]+ · report=([0-9a-f]{64}) · bugs=([0-9a-f]{64}|none) · runs=([0-9a-f]{64}|none) · page=([0-9a-f]{64}) -->/;
+// v1.1 adds `comments=`; the group is optional so a v1.0 page still verifies and is re-rendered without --force.
+const PROV_RE = /<!-- render-run-report v[^ ]+ · report=([0-9a-f]{64}) · bugs=([0-9a-f]{64}|none) · runs=([0-9a-f]{64}|none)(?: · comments=([0-9a-f]{64}|none))? · page=([0-9a-f]{64}) -->/;
 const BLANK = '0'.repeat(64);
 export function selfHash(html) { return sha256(html.replace(PROV_RE, (m) => m.replace(/page=[0-9a-f]{64}/, 'page=' + BLANK))); }
 function stampProvenance(html, hashes) {
-  const line = '<!-- render-run-report v' + SCHEMA_VERSION + ' · report=' + hashes.report + ' · bugs=' + hashes.bugs + ' · runs=' + hashes.runs + ' · page=' + BLANK + ' -->';
+  const line = '<!-- render-run-report v' + SCHEMA_VERSION + ' · report=' + hashes.report + ' · bugs=' + hashes.bugs + ' · runs=' + hashes.runs + ' · comments=' + hashes.comments + ' · page=' + BLANK + ' -->';
   const withBlank = html.replace(/^(<!DOCTYPE html>\n)/, '$1' + line + '\n');
   return withBlank.replace('page=' + BLANK, 'page=' + selfHash(withBlank));
 }
 export function pageState(existingHtml) {
   const m = existingHtml.match(PROV_RE);
   if (!m) return { provenance: false, handEdited: false };
-  return { provenance: true, handEdited: selfHash(existingHtml) !== m[4], recorded: { report: m[1], bugs: m[2], runs: m[3] } };
+  return { provenance: true, handEdited: selfHash(existingHtml) !== m[5], recorded: { report: m[1], bugs: m[2], runs: m[3], comments: m[4] || null } };
 }
 
 /* ============================================================================================
@@ -623,15 +825,23 @@ export function pageState(existingHtml) {
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const TEMPLATE_PATH = path.join(here, '..', 'assets', 'run-report.template.html');
 
-export function renderHtml(model, { template, files = {} } = {}) {
+export const SHELL_PATH = path.join(here, '..', 'assets', 'report-shell.template.html');
+const NO_COMMENTS = () => commentsModel({ text: null, known: new Map() });
+
+/** Two passes: the page's body partial, then the shared report shell around it. */
+export function renderHtml(model, { template, shell, files = {}, cm = NO_COMMENTS(), sourceRev = '' } = {}) {
   const tpl = template ?? readText(TEMPLATE_PATH);
-  const vm = viewModel(model, { report: files.report || 'TEST-RUN-REPORT-' + (model.feature || '') + '.md', bugs: files.bugs || null });
-  const html = renderNodes(compile(tpl), [vm]);
+  const shellTpl = shell ?? readText(SHELL_PATH);
+  const feature = model.feature || '';
+  const vm = viewModel(model, { report: files.report || 'TEST-RUN-REPORT-' + feature + '.md', bugs: files.bugs || null }, cm);
+  const body = renderNodes(compile(tpl), [vm]).replace(/\n+$/, '');
+  const html = renderShell(shellTpl, { lang: 'en', dir: 'ltr', pageKind: 'run-report', pageTitle: 'Test Run Report — ' + (model.feature || DASH), eyebrow: 'Test run report · automation evidence', title: vm.user_story, ...shellParts(vm), body, cm,
+    feature, page: 'TEST-RUN-REPORT-' + feature + '.html', source: files.report || 'TEST-RUN-REPORT-' + feature + '.md', sourceRev, commentsFile: 'REVIEW-COMMENTS-' + feature + '.md' });
   const leftovers = [...new Set((html.match(/\{\{[^}]*\}\}/g) || []))];
   return { html, leftovers };
 }
 
-export function render({ reportPath, bugsPath = null, runsDir = null, template, root = process.cwd() }) {
+export function render({ reportPath, bugsPath = null, runsDir = null, commentsPath = null, template, shell, root = process.cwd() }) {
   if (!reportPath || !isFile(reportPath)) return { payload: base({ gate: 'NOT_RUN', gateReason: reportPath ? 'run report not found: ' + reportPath : 'no --report given', input: { report: reportPath || null } }), html: null, model: null };
   const text = readText(reportPath);
   const doc = parseReport(text);
@@ -643,8 +853,18 @@ export function render({ reportPath, bugsPath = null, runsDir = null, template, 
   const rd = runsDir || path.join(dir, '.runs');
   const model = buildModel(doc, bugDoc, { mdDir: dir, runsDir: rd });
   if (bugText === null) model.warnings.push({ kind: 'bug-report-missing', detail: 'no bug report at ' + path.relative(root, bp) + ' — the Bugs section is empty' });
+  // Reviewer comments — REVIEW-COMMENTS-{feature}.md beside the report, or --comments. Absent is normal and silent.
+  const cp = commentsPath || path.join(dir, 'REVIEW-COMMENTS-' + feature + '.md');
+  const commentsText = isFile(cp) ? readText(cp) : null;
+  if (commentsPath && commentsText === null) model.warnings.push({ kind: 'comments-file-missing', detail: 'comments file not found: ' + path.relative(root, commentsPath) });
+  const sourceRev = sha256(text).slice(0, 12);
+  const known = new Map([...(model.bugs ? model.bugs.entries.map((b) => [b.id, 'bug']) : []), ...model.phases.map((p) => ['phase-' + p.n, 'phase'])]);
+  const cm = commentsModel({ text: commentsText, file: path.relative(root, cp), page: 'TEST-RUN-REPORT-' + feature + '.html', sourceRev, known });
+  model.errors.push(...cm.errors); model.warnings.push(...cm.warnings);
+  const notes = [...(model.bugs ? model.bugs.entries.map((b) => ({ id: b.id, text: b.note, line: b.line })) : []), ...model.phases.map((p) => ({ id: 'phase-' + p.n, text: bare(fieldValue(p.runFields.fields, 'Reviewer comment')), line: p.line }))].filter((x) => x.text);
+  for (const x of notes) if (SECRET_RE.test(x.text)) model.errors.push({ kind: 'secret-literal', line: x.line, detail: x.id + ' has a password-shaped literal in its Reviewer comment field' });
   let html = null; let leftovers = [];
-  try { const r = renderHtml(model, { template, files: { report: path.basename(reportPath), bugs: path.basename(bp) } }); html = r.html; leftovers = r.leftovers; } catch (e) { model.errors.push({ kind: 'template-error', detail: e.message }); }
+  try { const r = renderHtml(model, { template, shell, cm, sourceRev, files: { report: path.basename(reportPath), bugs: path.basename(bp) } }); html = r.html; leftovers = r.leftovers; } catch (e) { model.errors.push({ kind: 'template-error', detail: e.message }); }
   if (leftovers.length) model.errors.push({ kind: 'placeholder-left', detail: leftovers.slice(0, 10).join(' ') });
 
   let gate; let gateReason;
@@ -654,21 +874,24 @@ export function render({ reportPath, bugsPath = null, runsDir = null, template, 
   if (gate === 'BLOCKED') html = null;
 
   const runsHash = model.runFiles.length ? sha256(model.runFiles.map((r) => r.phase + ':' + r.sha256).join('\n')) : 'none';
-  const hashes = { report: sha256(text), bugs: bugText !== null ? sha256(bugText) : 'none', runs: runsHash };
+  const hashes = { report: sha256(text), bugs: bugText !== null ? sha256(bugText) : 'none', runs: runsHash, comments: commentsText !== null ? sha256(commentsText) : 'none' };
   if (html) html = stampProvenance(html, hashes);
   const latest = model.latest;
   const evidenceLinks = model.phases.reduce((n, p) => n + p.results.reduce((m, r) => m + (r.evidence || []).length + (r.attempts || []).reduce((k, a) => k + a.evidence.length, 0), 0), 0) + (model.bugs ? model.bugs.entries.reduce((n, b) => n + b.screenshot.length, 0) : 0);
   const payload = base({
     gate, gateReason,
-    input: { report: path.relative(root, reportPath) || reportPath, bugs: bugText !== null ? path.relative(root, bp) : null, runs: fs.existsSync(rd) ? path.relative(root, rd) : null, feature, template: path.relative(root, TEMPLATE_PATH) },
+    input: { report: path.relative(root, reportPath) || reportPath, bugs: bugText !== null ? path.relative(root, bp) : null, runs: fs.existsSync(rd) ? path.relative(root, rd) : null, comments: commentsText !== null ? path.relative(root, cp) : null, feature, template: path.relative(root, TEMPLATE_PATH), shell: path.relative(root, SHELL_PATH) },
     hashes,
+    comments: { file: cm.file, page: cm.page, sourceRev: cm.sourceRev, stale: cm.stale, ignored: cm.ignored, open: cm.open, handled: cm.handled,
+      items: cm.entries.map((x) => ({ key: x.key, id: x.id, kind: x.id === 'General' ? 'general' : known.get(x.id) || null, status: x.status, statusDate: x.statusDate || null })),
+      unknownIds: [...new Set(cm.orphans.map((x) => x.id))], notes: notes.map((x) => ({ id: x.id, text: x.text })) },
     document: {
       feature, userStory: bare(model.header['User Story'] || '') || null, spec: bare(model.header['Spec'] || '') || null, latestPhase: latest ? latest.n : null, status: latest ? latest.outcome : null,
       compliance: bare(model.header['Compliance'] || '') || null, adoMode: bare(model.header['Azure DevOps'] || '') || null, earlierPhases: bare(model.header['Earlier phases'] || '') || null, legacyFiles: model.legacyFiles,
       phases: model.phases.map((p) => ({ phase: p.n, date: p.date, outcome: p.outcome, declared: p.declared, counts: p.counts, smokeGate: p.smokeGate ? stripMd(p.smokeGate) : null, coverage: p.covStages ? { target: p.covTarget ? stripMd(p.covTarget) : null, total: (p.covStages.rows.find((r) => /^total$/i.test(stripMd(r[0]))) || []).map(stripMd) } : null, bugRefs: p.bugRefs.map((b) => b.id), assumptions: p.assumptions ? p.assumptions.rows.length : 0, heals: p.heals ? p.heals.rows.length : 0, runFile: p.run ? { present: true, status: p.run.status || null, schema: p.run.schema } : { present: false, status: null, schema: null } })),
       bugs: model.bugs ? { present: true, ...model.bugs.counts, entries: model.bugs.entries.map((b) => ({ id: b.id, tcId: b.tc, severity: b.severity, status: b.status, foundInPhase: b.foundIn, historyLength: b.history.length, screenshot: b.screenshot.map((s) => s.href) })) } : { present: false, total: null, open: null, resolved: null, notChecked: null, entries: [] },
     },
-    counts: { phases: model.phases.length, latest: latest ? latest.counts : null, evidenceLinks, evidenceMissing: model.warnings.filter((w) => w.kind === 'evidence-file-missing').length, bugs: model.bugs ? model.bugs.counts.total : null, assumptions: latest && latest.assumptions ? latest.assumptions.rows.length : 0 },
+    counts: { phases: model.phases.length, latest: latest ? latest.counts : null, evidenceLinks, evidenceMissing: model.warnings.filter((w) => w.kind === 'evidence-file-missing').length, bugs: model.bugs ? model.bugs.counts.total : null, comments: { open: cm.open, handled: cm.handled }, assumptions: latest && latest.assumptions ? latest.assumptions.rows.length : 0 },
     mismatches: model.mismatches, warnings: model.warnings, errors: model.errors,
   });
   return { payload, html, model, feature, dir };
@@ -685,7 +908,7 @@ export function main(argv) {
   const args = parseArgs(argv);
   const root = process.cwd();
   const reportPath = typeof args.report === 'string' ? path.resolve(root, args.report) : null;
-  const r = render({ reportPath, bugsPath: typeof args.bugs === 'string' ? path.resolve(root, args.bugs) : null, runsDir: typeof args.runs === 'string' ? path.resolve(root, args.runs) : null, root });
+  const r = render({ reportPath, bugsPath: typeof args.bugs === 'string' ? path.resolve(root, args.bugs) : null, runsDir: typeof args.runs === 'string' ? path.resolve(root, args.runs) : null, commentsPath: typeof args.comments === 'string' ? path.resolve(root, args.comments) : null, root });
   const p = r.payload;
   p.writes = [];
   if (args.write && r.html && p.gate !== 'BLOCKED') {

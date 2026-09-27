@@ -16,11 +16,13 @@
 //   6    scanPat(): the referenced variable is the one checked; both names when there is no entry;
 //        `sessionMissing` when the variable is persisted but absent from this process.
 //   7    The template ships both entries with placeholders only and the self-hosted block has the four env keys.
+//   8    planReplace(): only OUR folders (SKILLS + SKILL_RENAMES) can be replaced / removed; every other skill folder
+//        is kept; a wanted folder missing in the source is refused (never deleted); --only narrows the set.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, print, planMcpMigration, applyMcpMigration, detectAdoHosting, scanMcp, scanPat, inspectAdoEntry, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, PAT_VARS, DOCX_SERVER, DOCX_ARGS } from './lib.mjs';
+import { parseArgs, print, planMcpMigration, applyMcpMigration, detectAdoHosting, scanMcp, scanPat, inspectAdoEntry, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, PAT_VARS, DOCX_SERVER, DOCX_ARGS, planReplace, SKILLS } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -138,6 +140,24 @@ for (const [id, fixture, expectDocxAction] of [[1, 'cloud.mcp.json', 'mcp-added'
   const noData = !/nupco|linkdev|link-dev|dev\.azure\.com\/[a-z]/i.test(text);
   const bothInspect = inspectAdoEntry(cloud).package === 'cloud' && inspectAdoEntry(self).package === 'self-hosted' && !inspectAdoEntry(cloud).inlinePat && !inspectAdoEntry(self).inlinePat;
   check(7, 'mcp.template.json ships the cloud entry and the self-hosted block with placeholders only', Boolean(cloudOk && selfOk && noData && bothInspect), { cloudOk: Boolean(cloudOk), selfOk: Boolean(selfOk), noData, bothInspect });
+}
+
+// ---- 8. planReplace: our folders only ----
+{
+  const ours = ['link-qc-1-generate-update-testing-structure', 'link-qc-5-test-run-automation', 'link-qc-6-ui-testing'];
+  const targetDirs = [...ours, 'i-have-adhd', 'qc-ui', 'find-skills', 'my-own-skill'];
+  const sourceDirs = SKILLS.filter((x) => x !== 'link-qc-6-ui-testing');         // source lacks skill 6
+  const a = planReplace({ targetDirs, wanted: SKILLS, sourceDirs });
+  const b = planReplace({ targetDirs, wanted: ['link-qc-5-test-run-automation', 'not-a-skill'], sourceDirs: SKILLS });
+  const touched = [...a.replace, ...a.remove.map((r) => r.folder), ...b.replace, ...b.remove.map((r) => r.folder)];
+  const ok = stable(a.replace) === stable(ours.slice(0, 2))
+    && stable(a.remove.map((r) => r.folder)) === stable(['i-have-adhd'])                // qc-ui's replacement (skill 6) is missing in source
+    && stable(a.keep) === stable(['find-skills', 'my-own-skill'])
+    && stable(a.refused.map((r) => r.folder)) === stable(['link-qc-6-ui-testing'])
+    && a.install.length === SKILLS.length - 3 && !a.install.includes('link-qc-6-ui-testing')
+    && stable(b.replace) === stable(['link-qc-5-test-run-automation']) && b.remove.length === 0 && b.install.length === 0
+    && !touched.some((x) => ['find-skills', 'my-own-skill', 'not-a-skill'].includes(x));
+  check(8, 'planReplace deletes only our skill folders, keeps every other skill, refuses a folder missing in the source, honours --only', ok, { a, b });
 }
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}

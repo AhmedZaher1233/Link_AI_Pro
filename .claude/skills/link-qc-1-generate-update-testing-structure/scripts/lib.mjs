@@ -43,6 +43,25 @@ export const SKILL_RENAMES = {
   'i-have-adhd': 'link-qc-12-adhd-output-style',
 };
 export const SYNC_COMMAND = '.claude/commands/sync-skills.md';
+
+// Clean replace (sync-qa-skills.mjs --apply --replace --yes): delete OUR skill folders and re-download them.
+// Pure planning, no I/O. Only folders in SKILLS / SKILL_RENAMES can ever land in `replace` / `remove`;
+// every other folder under .claude/skills/ is in `keep`. A wanted folder the source lacks is `refused`, never deleted.
+// The scope is the skill folders + the /sync-skills command only — .mcp.json, .gitignore, tools and every
+// other file keep the normal (non-destructive) sync behaviour.
+export function planReplace({ targetDirs = [], wanted = SKILLS, sourceDirs = [] }) {
+  const want = wanted.filter((s) => SKILLS.includes(s));
+  const replace = want.filter((s) => targetDirs.includes(s) && sourceDirs.includes(s));
+  const install = want.filter((s) => !targetDirs.includes(s) && sourceDirs.includes(s));
+  const refused = want.filter((s) => !sourceDirs.includes(s)).map((s) => ({ folder: s, reason: 'MISSING-IN-SOURCE — kept as it is' }));
+  const remove = targetDirs.filter((e) => e in SKILL_RENAMES && want.includes(SKILL_RENAMES[e]) && sourceDirs.includes(SKILL_RENAMES[e]))
+    .map((e) => ({ folder: e, replacement: SKILL_RENAMES[e] }));
+  const keep = targetDirs.filter((e) => !SKILLS.includes(e) && !(e in SKILL_RENAMES));
+  return { replace, install, remove, keep, refused };
+}
+export const REPLACE_WARNING = 'This sync DELETES the Link QA skill folders listed below and downloads fresh copies from {repo} ({branch}), together with .claude/commands/sync-skills.md. '
+  + 'If you enhanced or edited any Link skill, those changes are removed and replaced with the new version ({edited} edited files, {extra} extra files — listed below). '
+  + 'Only these skill folders and the command are affected; your other skills ({kept}) and every other file are not touched. Continue?';
 export const SOURCE_REPO = 'https://github.com/AhmedZaher1233/Link_AI_Pro';
 
 export const TESTING_FOLDERS = {

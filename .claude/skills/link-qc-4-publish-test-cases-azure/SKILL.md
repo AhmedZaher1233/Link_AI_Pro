@@ -8,9 +8,15 @@ description: >
   every "as TC-…" delegation expanded inline, every step confirmed from page objects / app
   source / Playwright MCP as a last resort, meaning-preservation gate), then publishes THAT
   document to Azure DevOps as Test Case work items linked to the User Story with Tested-By,
-  idempotently (re-runs update, never duplicate), AutomationStatus = Planned, and writes
-  ADO-MAP.md (TC-ID → work item ID), which link-qc-5-test-run-automation uses to detect that this story
-  is already published and to close the loop in DevOps — it is NOT that skill's entry gate.
+  idempotently (re-runs update, never duplicate), AutomationStatus from the document's candidacy
+  (YES → Planned, NO → Not Automated, absent → unknown, an existing Automated kept only with
+  skill 5's matching hash), tags it OWNS added / removed and every other tag preserved, a per-TC
+  "Test data" block with the referenced TEST-DATA rows, then READS EVERY ITEM BACK and reports
+  one of five outcomes (PUBLISHED AND VERIFIED · PUBLISHED, NOT VERIFIED · PUBLISHED WITH
+  MISMATCHES · PUBLICATION INCOMPLETE · BLOCKED) with counts, and writes ADO-MAP.md (TC-ID →
+  work item ID, published hash, owned tags), which link-qc-5-test-run-automation uses to detect
+  that this story is already published and to close the loop in DevOps — it is NOT that skill's
+  entry gate. The decisions come from scripts/ado-sync-plan.mjs; MCP does the I/O.
   Never edits the approved source document, never changes the meaning of a TC, never writes
   credentials into the published steps. Runs AFTER human approval of skill 3's document and
   before or after link-qc-5-test-run-automation, or not at all. Trigger on: "publish TCs to Azure DevOps", "upload test
@@ -20,17 +26,20 @@ description: >
   re-publishing — trigger on "add the TCs to the suite", "place the published test cases in
   a Test Plan suite", "sync approved test cases to the Test Plan".
 argument-hint: "[<approved TC document path>] [<User Story ID or title>] [--beautify-only] [--republish] [--suite-only <suite URL | planId suiteId>]"
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash, mcp__azure-devops, mcp__playwright
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Bash(node *ado-sync-plan.mjs*), Bash(node *selftest-ado-sync.mjs*), mcp__azure-devops, mcp__playwright
 ---
 
 <role>
 You are the **publishing step** of the QA pipeline. You take over AFTER a human has approved
-the test case document produced by `link-qc-3-generate-manual-test-cases`, and you own exactly two
+the test case document produced by `link-qc-3-generate-manual-test-cases`, and you own exactly three
 things:
 
 1. **Beautify** the approved TCs into a SEPARATE, standalone-readable upload document
 2. **Publish** that document to Azure DevOps as Test Case work items linked to the User
-   Story, and persist the TC-ID → work-item map (`ADO-MAP.md`)
+   Story — tags, automation status and the per-TC test-data block exactly as
+   `scripts/ado-sync-plan.mjs` planned them from what MCP read
+3. **Verify** by reading every item back, report one of five outcomes with counts, and persist
+   the map (`ADO-MAP.md`: TC-ID → work item ID, published hash, owned tags)
 
 `link-qc-5-test-run-automation` is INDEPENDENT of this skill and does not wait for it. Its only document
 gate is `Status: APPROVED`. When `ADO-MAP.md` and the beautified document happen to exist for the
@@ -62,8 +71,14 @@ You do NOT:
 - **open a browser to re-verify what is already confirmed in source or a page object**
 - write a credential, env-var name or auth mechanism into a step — role names only
 - create duplicate work items — publishing is idempotent
-- set `AutomationStatus = Automated` (rejected by the template) or `Custom.TestAutomated`
-  (that is skill 5's close-out, once automation exists)
+- write `AutomationStatus = Automated`, `Custom.TestAutomated` or `automated_tc_sha256` — all
+  three are skill 5's close-out; an existing `Automated` is kept only when skill 5's
+  `automated_tc_sha256` equals the current TC's canonical hash, otherwise it is a CONFLICT
+- decide a tag, a status or a description block yourself — the script decides from what MCP
+  read (`plan`), you apply it through MCP, and `verify` judges the read-back
+- remove a tag you did not introduce, or assume `Planned` for a TC whose candidacy is unknown
+- report anything as published or verified without a read-back — a value you sent is not a
+  value you observed
 
 If any required input is missing → BLOCKED. Azure DevOps unreachable → BLOCKED with the
 restart instruction from PHASE 0 (never ask for the token in chat).
@@ -167,13 +182,15 @@ run skips detection. Resolve:
 | `ado_hosting` | `.mcp.json` azure-devops package → the attached server's tool names (`wit_*` = cloud, `get_work_item` = self-hosted) → learning file `[type: env]` | `cloud` — recorded once |
 | `ado_suite` | task input only: a test plan ID + suite ID (or a suite URL `…/_testPlans/execute?planId=…&suiteId=…`), given with the publish or through `--suite-only` — never asked | none → suite placement reported as skipped |
 | `tc_output_folder` | folder containing the approved TC doc — per the structure `Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{UserStoryName}/` (skill 3 nests stories that came from a spec file under a `SPEC-*` folder) | same; given only a story ID, locate the doc with glob `Testing/Manual_Test/TestCases/**/US-{id}-*/TEST-CASES-*.md` (legacy docs may sit in `docs/test-design/{feature}/`) |
-| `source_tc_doc` | the approved input — **read-only** | `{tc_output_folder}/TEST-CASES-{feature}.md` |
+| `source_tc_doc` | the approved input — **read-only**; the file both hash columns of `ADO-MAP.md` are computed from | `{tc_output_folder}/TEST-CASES-{feature}.md` |
+| `test_data_doc` | skill 3's TEST-DATA file beside it — the rows the `[A|E|D]` tokens resolve to; its name + sha256 go into every published description | `{tc_output_folder}/TEST-DATA-{feature}.md` |
 | `beautified_tc_doc` | PHASE 1 output — **ADO publishes this** | `{tc_output_folder}/{stem}-beautified.md` |
-| `ado_map` | PHASE 2 output — what skill 5 reads to detect `ado_mode = linked` (not a gate) | `{tc_output_folder}/ADO-MAP.md` |
+| `ado_map` | PHASE 2 output — what skill 5 reads to detect `ado_mode = linked` (not a gate); also the previous map this run reconciles against (tag ownership, hashes) | `{tc_output_folder}/ADO-MAP.md` |
+| `tag_convention` | task input → learning file `[type: env]` "tag convention" line (tags every TC of this project carries) — an INPUT, never invented, never asked | none |
 | `automation_root` | an EXISTING Playwright project (search for `playwright.config.ts`); else `Testing/Automation/` — used ONLY to read page objects for step confirmation | `Testing/Automation/` |
 | `login_page_object` | scan `{automation_root}/pages/` for the auth page object | none |
 | `app_source_roots` | UI templates, `data-testid` attributes, i18n files (`en.json` / `ar.json`) per the repo layout | auto |
-| `tc_template_quirks` | learning file `[type: env]` lines about the ADO process template (e.g. which AutomationStatus values are accepted) | see PHASE 2 step 3 |
+| `tc_template_quirks` | learning file `[type: env]` lines about the ADO process template (which AutomationStatus values it accepts — a recorded fact, written once after a rejection) | see PHASE 2 step 3 |
 | `qa_standards` | glob `docs/steering/*` | L1/L2/L3 |
 
 **Mandatory reading before writing anything:** `./CLAUDE.md` + the `qa_standards` files.
@@ -202,12 +219,14 @@ add it (`#### Knowledge`, `#### Questions and Answers`) without touching anythin
 *Ask second:* anything still missing → ask the user in ONE combined message and WAIT. Never
 re-ask what the file answers; state what you are reusing. PATs are NEVER written to the file.
 
-*Write back (mandatory before PUBLISH COMPLETE):*
+*Write back (mandatory before the outcome line):*
 - Every answered question → `- [module: X] [type: qa] **Q (skill 4, {YYYY-MM-DD}):** … — **A:** …`
   under this skill's Q&A; project-wide answers also under `## Project Knowledge`.
 - ADO facts → `[type: env]` lines in this skill's `#### Knowledge`: organisation and project
-  names, which AutomationStatus values the template accepts, custom fields that exist, the
-  Tested-By relation used, tags convention.
+  names, custom fields that exist, the Tested-By relation used, and — recorded once, after a
+  rejection — which AutomationStatus values the template accepts.
+- The **tag convention** is an INPUT (`[type: env]` "tag convention: a, b" line — task input or
+  already in the file): read it, never derive or write one from what a work item happens to carry.
 - Navigation confirmed while beautifying (how a screen is reached, in words) →
   `## Common Flows`; a `data-testid` or label confirmed via MCP → `## Automation Tricks`,
   explained in words. Grep first; update or dedupe instead of appending twins.
@@ -217,7 +236,7 @@ re-ask what the file answers; state what you are reusing. PATs are NEVER written
 names, no selectors, no code, no secrets. `data-testid` values and URLs are the only
 technical tokens allowed, each explained in words on the same line.
 
-*Report:* the `PUBLISH COMPLETE` return ends with
+*Report:* every published outcome return ends with
 `**Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}`.
 </project_learning_file>
 
@@ -256,15 +275,15 @@ unresolved `as TC-…` delegation. Detect by inspection; add no marker fields to
 ### Delegation expansion — MANDATORY
 
 A large share of TC corpora delegates instead of stating content
-(`- **Steps:** as TC-YLVL-020 with the Arabic control labels`; whole TCs can be nothing
+(`- **Steps:** as TC-ORD-020 with the Arabic control labels`; whole TCs can be nothing
 but references):
 
 ```
-### TC-YLVL-020b — Panel rehydration [AR]
-- **Preconditions:** as TC-YLVL-020 with Arabic set.
-- **Steps:** as TC-YLVL-020 with the Arabic control labels and banner; additionally assert
+### TC-ORD-020b — Panel rehydration [AR]
+- **Preconditions:** as TC-ORD-020 with Arabic set.
+- **Steps:** as TC-ORD-020 with the Arabic control labels and banner; additionally assert
   the rehydrated publish-date value renders with the Arabic month name.
-- **Expected result:** as TC-YLVL-020 in Arabic.
+- **Expected result:** as TC-ORD-020 in Arabic.
 ```
 
 **Azure DevOps has no cross-reference resolution.** Published as-is, that work item tells a
@@ -327,7 +346,7 @@ no browser at all.** Blanket re-walking of already-confirmed steps is a rule vio
   reconciliation matches on the `[TC-ID]` prefix and the ADO title is `[TC-ID] {description}`.
   Changing either breaks idempotency and creates duplicate work items.
 - Requirement / edge tokens keep their slot before the verb:
-  `### TC-YLVL-027 — EC-Y01: Validate that multi-year cumulative differs from the single year [EN]`
+  `### TC-ORD-027 — EC-Y01: Validate that multi-year cumulative differs from the single year [EN]`
 - Bare noun-phrase titles (common on AR `b`-variants — `— Panel rehydration [AR]`) expand to
   full sentences.
 - `Validate that` for behaviour/outcome · `Check that` for presence/state.
@@ -353,17 +372,29 @@ Remap from what the documents contain today:
 `Select` and `Wait for` are deliberately distinct from `Click on` and `Check`: choosing from
 a dropdown is not a click, and waiting for a loader is not an assertion.
 
+**The `[HUMAN]` prefix is exempt from the verb rule.** A step or expected-result line that starts
+`[HUMAN] ` (a human-observed step skill 3 wrote because no authorized test interface exists —
+SMS, a physical device, a printed document) is copied **verbatim**: the marker stays first, the
+text after it is not re-verbed, not split, not softened. It reaches the Azure step text as-is
+and makes the work item carry the `human-step` tag (PHASE 2).
+
 Further rules:
 
 - **One action per step.** Split chained steps (`… → … → …`, `…; …`).
-- **Every Steps block opens with the journey**: `Login with <role>` → `Go to <route>` → the
-  hops needed to land on the target surface. Lift the route out of Preconditions into a real
-  step. Each hop confirmed per the rule above.
-- **Login wording is ALWAYS `Login with <role>` — never a mechanism.** A test case
+- **Every Steps block opens with the journey**: `Login with <role> [A{n}]` → `Go to <surface>
+  [E{n}]` → the hops needed to land on the target surface. Lift the route out of
+  Preconditions into a real step. Each hop confirmed per the rule above.
+- **Reference tokens survive verbatim.** `[A1]`, `[E1]`, `[D2]` (skill 3's TEST-DATA references:
+  account, environment row, data item) stay exactly where the source put them, next to the name
+  they qualify — `Login as Administrator [A1]` becomes `Login with Administrator [A1]`, never
+  `Login with Administrator`. Never resolve a token to its value, never drop or renumber one:
+  the published description lists what each token means (PHASE 2 step 3b).
+- **Login wording is ALWAYS `Login with <role> [A{n}]` — never a mechanism.** A test case
   describes what a tester does, so how the automation authenticates stays out of the
   document and all TC families read identically.
-- **Credentials: role name only.** `Login with a Strategy Owner user`. Never an env var name,
-  never a literal credential — this file is published to Azure DevOps.
+- **Credentials: role name + account token only.** `Login with Administrator [A1]`. Never a
+  username in the step, never an env var name, never a literal credential — this file is
+  published to Azure DevOps; the username lives in the description's "Test data" block.
 - **Simplify.** Short plain sentences. Keep i18n keys, API paths and pattern tags
   (`(P1 applied)`, `*(O-3)*`) but move them to a trailing `— ref:` note so the step itself
   reads cleanly.
@@ -375,15 +406,24 @@ Beautify is format-only. Before writing the file, assert and report:
 
 - TC **count** identical to the source
 - TC-**ID set** identical — no adds, drops, merges, splits, or renumbering
-- `Expected result` · `Requirement` · `Data Oracle` · `Type` · `Smoke` · locale variants
-  unchanged in substance
+- `Expected result` · `Requirement` · `Data Oracle` · `Type` · `Smoke` · `Automation
+  Candidate` · `Tags` · `Shared data` · locale variants unchanged in substance
 - every assertion present in the source still present
+- every `[HUMAN]` marker and every `[A{n}]` / `[E{n}]` / `[D{n}]` token present in the source
+  still present, same TC, same line (count per TC identical)
+
+A `- **Reviewer comment:**` bullet in a source TC is the reviewer's note to the QA skills, never
+TC content: it is not beautified, not published, not part of the TC hash, and not a
+meaning-preservation field. Open reviewer comments on the approved document (the bullet, or open
+entries in `REVIEW-COMMENTS-{feature}.md` beside it) are listed once in the final message as "open
+reviewer comments — route to skill 3 `--revision` before publishing if they change a TC"; this
+skill never applies them, never edits the comments file, and still publishes the approved text.
 
 Any of these failing → **discard the beautified file and return `BLOCKED`.** A rewrite that
 changes meaning would invalidate the human approval this run depends on.
 
-`--beautify-only` → stop here and return `PUBLISH COMPLETE` with the ADO section marked
-`skipped (--beautify-only)`.
+`--beautify-only` → stop here and return the `## BEAUTIFIED — NOT PUBLISHED` section of
+the structured returns (nothing was written to Azure DevOps, no outcome is claimed).
 </beautify>
 
 ---
@@ -392,96 +432,144 @@ changes meaning would invalidate the human approval this run depends on.
 
 <ado_publish>
 Publish from `{beautified_tc_doc}` — the PHASE 1 output, NOT the approved source document.
-For EVERY test case in it (all of them — not only automation candidates):
+For EVERY test case in it (all of them — not only automation candidates). **The script decides,
+MCP does the I/O, the read-back proves it.** Read `references/sync-contract.md` before the
+first write of a run — it holds the JSON shapes, the tag-ownership formula, the description
+block, the outcome precedence and the map columns; this block only orders the steps.
 
-1. **Create a Test Case work item** in `{ado_project}`:
+0. **Self-test, read, plan.** Run
+   `node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/selftest-ado-sync.mjs`
+   once per run (non-zero exit → BLOCKED "decision script self-test failed — {case}"). Read,
+   through MCP, the current tags, `Microsoft.VSTS.TCM.AutomationStatus` and description of
+   every work item already linked to the story (matched on the `[TC-ID]` title prefix — step
+   5) into `{run_dir}/remote.json` (contract §2; `null` for a TC with no work item yet;
+   `{run_dir}` is a scratch folder outside the story folder). Then:
+   `node …/scripts/ado-sync-plan.mjs plan --tc {source_tc_doc} --data {test_data_doc} --beautified {beautified_tc_doc} --map {ado_map} --remote {run_dir}/remote.json --feature {feature} [--convention-tags {tag_convention}] --story {US id} --project {ado_project} --hosting {ado_hosting} --out {run_dir}/plan.json --strict`
+   Per TC the plan names the work item id or `create`, `tagsAdd` / `tagsRemove` /
+   `tagsPreserve`, the status decision (`write` / `keep` / `unknown` / `conflict` + reason),
+   the "Test data" block, `published_tc_sha256` and `changes[]`. `gate: BLOCKED` → stop.
+1. **Create or update the Test Case work item** in `{ado_project}`:
    - Title: `[TC-ID] {description}`
-   - Steps: map each numbered step → ADO test step (action + expected result from
-     the inline assertion); final Expected Result → last step's expected result. The steps
-     live in the field `Microsoft.VSTS.TCM.Steps` as ADO's steps XML — one `<step>` per
-     numbered step, HTML-escaped text:
+   - Steps: one ADO test step per numbered step (action + expected result from the inline
+     assertion; the final Expected Result → last step). Field `Microsoft.VSTS.TCM.Steps`, ADO's
+     steps XML, HTML-escaped:
      `<steps id="0" last="{N}"><step id="{i}" type="ValidateStep"><parameterizedString isformatted="true">{action}</parameterizedString><parameterizedString isformatted="true">{expected}</parameterizedString><description/></step>…</steps>`
-     (cloud: the test-case tools accept plain steps and write that field for you; self-hosted:
-     `create_work_item` with `workItemType: "Test Case"` and the XML in
-     `Microsoft.VSTS.TCM.Steps` via `additionalFields`, then `update_work_item` on re-runs).
-   - Description: REQ-IDs, locale, preconditions, Data Oracle
-   - Tags: `{feature}`; add `smoke` for TCs marked `Smoke: YES` in the document
+     (cloud: the test-case tools accept plain steps and write that field; self-hosted:
+     `create_work_item` with `workItemType: "Test Case"` + the XML via `additionalFields`,
+     `update_work_item` on re-runs). `[HUMAN]` markers and `[A|E|D]` tokens go in verbatim.
+   - Description: REQ-IDs, locale, preconditions, Data Oracle, the review notes of step 4,
+     then the **"Test data" block** of step 3b — required on every TC.
+   - Tags: `tagsPreserve` + `tagsAdd` − `tagsRemove`, exactly as planned (step 5).
 2. **Link it to the User Story** with the **Tested By** relation
-   (`Microsoft.VSTS.Common.TestedBy-Forward` from the story's side — the Test Case
-   appears under the story's "Tested By" links; self-hosted: `manage_work_item_link` with
-   `sourceWorkItemId` = the story, `targetWorkItemId` = the Test Case, that relation type).
-3. **Automation status at publish time.**
-   ⚠️ Do NOT look for an `Automation Candidate: YES` field in legacy documents —
-   older TC documents don't have one. At publish time the automation does not exist yet,
-   so candidacy is not yet knowable:
-   - Set `Microsoft.VSTS.TCM.AutomationStatus` = `Planned` on every TC (self-hosted:
-     `update_work_item` `additionalFields`)
-   - Add tag `automation`
-   - **Skill 5 sets `Custom.TestAutomated` = `true`** in its close-out once the generated
-     code exists. Never set it here.
-   ⚠️ Some process templates (e.g. SMO) accept ONLY `Not Automated` and `Planned` for
-   `Automation status`; `Automated` is rejected with a 400. Check the learning file
-   `[type: env]` lines first; on a rejection record the accepted values there.
+   (`Microsoft.VSTS.Common.TestedBy-Forward` from the story's side; self-hosted:
+   `manage_work_item_link`, `sourceWorkItemId` = the story, `targetWorkItemId` = the Test Case).
+3. **Automation status — from the document's candidacy, never assumed.** Apply the plan's
+   `status.action` to `Microsoft.VSTS.TCM.AutomationStatus` (self-hosted: `update_work_item`
+   `additionalFields`):
+
+   | Document `Automation Candidate` | Intended status | Plan action |
+   |---|---|---|
+   | `YES` | `Planned` | `write` (or `keep` when already there) |
+   | `NO` | `Not Automated` | `write` (or `keep`) |
+   | field absent (legacy document) | — | `unknown` — nothing written; row `unknown (no candidacy field)` |
+   | already `Automated`, previous map's `automated_tc_sha256` = current canonical hash | `Automated` kept | `keep` |
+   | already `Automated`, no provenance or a different hash | untouched | `conflict` — `CONFLICT — automation may not cover the current TC; re-run skill 5` (row flagged) |
+
+   `Automated`, `Custom.TestAutomated` and `automated_tc_sha256` are skill 5's close-out —
+   never written here. A process template may reject a value (a 400 on `Not Automated`, for
+   instance): check the learning file `[type: env]` lines first; on a rejection record the
+   accepted values there **once** as a per-project `[type: env]` fact and count the TC under
+   `not written (template rejects {value})`. No project is named in this skill.
+3b. **Test data in Azure — the per-TC block is the executable unit.** Write the plan's
+   `descriptionBlock.text` into every TC's description: each referenced `[A|E|D]` row (id,
+   role / plain name, username or value — never a password) plus `TEST-DATA-{feature}.md` and
+   its sha256 (contract §5). A TC whose block could not be written is **not published**
+   (`PUBLICATION INCOMPLETE`). Then, once per story, the supplementary full-file snapshot:
+   attach the TEST-DATA file to the User Story → else a work-item comment `TEST-DATA snapshot
+   {sha256}` with its content → else `NOT_RUN`. Remember which for step 3c; a snapshot
+   `NOT_RUN` is reported and never blocks a verified outcome.
+3c. **Read-back, one retry, verdict.** After ALL writes, read every work item again through
+   MCP — a fresh read, never the values you sent — into `{run_dir}/readback.json` (contract
+   §6: `null` where the read failed, `{ "writeError": "…" }` where the write failed, a
+   `current` TC's `remote.json` entry copied through). Then:
+   `node …/scripts/ado-sync-plan.mjs verify --plan {run_dir}/plan.json --readback {run_dir}/readback.json --snapshot {attached|comment|NOT_RUN} [--suite {suiteId}] --write-map {ado_map} --strict`
+   Per TC: `verified` · `MISMATCH (field, intended, actual)` · `CONFLICT` · `NOT_RUN` ·
+   `NOT_WRITTEN`. On a `MISMATCH`: rewrite exactly the fields `retry.tcs[]` names, read back
+   again, `verify --attempt 2` — **one** retry, what still differs stays a mismatch. The
+   payload's `outcome` and `line` are the run's result; `--write-map` writes `ADO-MAP.md`
+   (step 7) — it is never hand-written.
 4. **Carry review notes across.** A TC marked `> Needs human review: …` by `<beautify>`
    keeps that note in its ADO description, so nobody treats an unverified step as verified.
-5. **Idempotency — never duplicate.** Before creating anything, fetch the User
-   Story's existing Tested-By links (self-hosted: `get_work_item` on the story with
-   `expand: "relations"`, or a `search_work_items` / WIQL query for Test Cases linked to it)
-   and match titles on the `[TC-ID]` prefix:
-   - Match found → UPDATE that work item (steps, description, tags, status) in place
-   - No match → create new
-   Re-running this skill on the same document must produce zero duplicates.
-   The beautified title keeps the `TC-<ID> —` prefix precisely so this keeps working.
-   Without `--republish`, items whose beautified content is unchanged since the last
-   publish (same `source_sha256` recorded in `ADO-MAP.md`) are left untouched and reported
-   as `current`.
-6. **Suite placement — only when `ado_suite` was given.** Nothing here is asked for; without
-   a plan + suite the summary says `suite placement skipped (no suite given)` and that is a
-   complete outcome, not a failure (it can be done later with `--suite-only`).
+5. **Idempotency and owned tags — update in place, never duplicate, never strip.** Before
+   creating anything, fetch the User Story's existing Tested-By links (self-hosted:
+   `get_work_item` with `expand: "relations"`, or a WIQL query) and match titles on the
+   `[TC-ID]` prefix: match → UPDATE that work item (steps, description, status per the plan,
+   tags = preserve + add − remove); no match → create (`workItemId: create`). Intended tags:
+   `{feature}`, `smoke`, `automation` / `manual`, `human-step`, the TC's `Tags:` values, the
+   `tag_convention` tags. **add** = intended − current; **remove** = introduced by this skill
+   earlier (the map's `Tags (introduced)` column) and no longer intended; **preserve** = every
+   other tag — a tag already on the work item is never owned, never removed (contract §4).
+   Ownership is persisted only after read-back: a failed or `NOT_RUN` addition is retried next
+   run, never recorded. Without `--republish`, a TC with `changes: []` (content hash, tags,
+   status and block all current) is left untouched and reported `current`; `--republish`
+   rewrites every TC. Zero duplicates on every re-run — the `TC-<ID> —` prefix exists for that.
+6. **Suite placement — only when `ado_suite` was given.** Never asked; without a plan + suite
+   the summary says `suite placement skipped (no suite given)` — a complete outcome, not a
+   failure (`--suite-only` does it later).
    - cloud → add the work items to the suite with the test-plan tools.
-   - self-hosted → the server has no suite tools; use ONE REST call per batch through the
-     project's shell: `POST {ado_org_url}/{ado_project}/_apis/testplan/Plans/{planId}/Suites/{suiteId}/TestCase?api-version=7.1`
+   - self-hosted → no suite tools; ONE REST call per batch through the project's shell:
+     `POST {ado_org_url}/{ado_project}/_apis/testplan/Plans/{planId}/Suites/{suiteId}/TestCase?api-version=7.1`
      with body `[{"workItem":{"id":<id>}}, …]` (older TFS: `POST …/_apis/test/Plans/{planId}/suites/{suiteId}/testcases/{id,id}?api-version=5.0`).
-     Authorization is `Basic` with the value of the environment variable `AZURE_DEVOPS_PAT_B64`
-     **read by name inside the command** (PowerShell `$env:AZURE_DEVOPS_PAT_B64`, bash
-     `"$AZURE_DEVOPS_PAT_B64"`) — never pasted, never printed, never written to a file, never
-     echoed in the output. The variable missing from the session → `suite placement skipped
-     (PAT variable not in this session — fully quit VS Code and relaunch)`.
+     Authorization `Basic` with the environment variable `AZURE_DEVOPS_PAT_B64` **read by name
+     inside the command** (PowerShell `$env:AZURE_DEVOPS_PAT_B64`, bash `"$AZURE_DEVOPS_PAT_B64"`)
+     — never pasted, printed, written to a file or echoed. Variable missing from the session →
+     `suite placement skipped (PAT variable not in this session — fully quit VS Code and relaunch)`.
    - Any failure → `suite placement skipped ({http status / reason})`; the work items stay
-     published and linked. Record the outcome in the `Suite` column of `ADO-MAP.md`.
-7. **Persist the map** to `{ado_map}` (`{tc_output_folder}/ADO-MAP.md`):
+     published and linked. Pass the result to `verify --suite {suiteId}` (else `skipped`).
+7. **The map** `{ado_map}` (`{tc_output_folder}/ADO-MAP.md`) is written by `verify --write-map`:
 
    ```markdown
    <!-- source_sha256: {hash of the approved document this publish reflects} -->
    <!-- published_on: {ISO-8601} · story: {US id} · project: {ado_project} · hosting: {ado_hosting} -->
-   | TC-ID | ADO Work Item ID | Automation candidate | AutomationStatus | Suite |
-   |-------|------------------|----------------------|------------------|-------|
+   <!-- ado-sync: {outcome line} · schema ado-sync/1 · hash tc-hash/1 -->
+   | TC-ID | ADO Work Item ID | published_tc_sha256 | automated_tc_sha256 | Automation candidate | AutomationStatus | Tags (introduced) | Suite |
    ```
 
-   `Suite` is `{suiteId}` or `skipped` (never blank). An earlier map without the column is
-   read as-is and rewritten with it.
+   `published_tc_sha256` is skill 4's (every publish); `automated_tc_sha256` is **skill 5's**
+   (never for a `PARTIAL` TC) and is copied through untouched; `Tags (introduced)` = the tags
+   this skill owns, after read-back; `Suite` = `{suiteId}` or `skipped`, never blank. Column
+   values and the legacy-map rule: contract §8. Rows are never dropped — a TC that left the
+   document keeps its row as `removed from document — work item left in place`. Skill 5 reads
+   `source_sha256` (`ado_mode = linked`) and `published_tc_sha256`; neither is its entry gate.
 
-   Skill 5 reads this file to detect that the story is already published, and later fills the
-   `Automation candidate` and `AutomationStatus` columns (the `Suite` column is skill 4's). It is not skill 5's entry gate — that is `Status: APPROVED`. If it
-   already exists from a previous run, reconcile against it first (never drop a row for a
-   TC that still exists in the document; mark rows for TCs removed from the document as
-   `removed from document — work item left in place`).
-
-Any ADO write failure → report the exact item and error; finish the remaining
-items; list failures in the output. Total auth failure → stop with the restart
-instruction from PHASE 0 (full quit + relaunch of VS Code, never "reconnect").
+Any ADO write failure → the exact item and error (`writeError` → `NOT_WRITTEN` →
+`PUBLICATION INCOMPLETE`); finish the remaining items; list failures in the output. Total auth
+failure → stop with the restart instruction from PHASE 0 (full quit + relaunch, never "reconnect").
 </ado_publish>
 
 ---
 
 <structured_returns>
 
-## PUBLISH COMPLETE
+## {OUTCOME LINE}
+
+One of — highest applicable wins, and the line always carries the counts:
+
+| Outcome | When |
+|---|---|
+| `BLOCKED` | gate / auth failure before or during publish (see the BLOCKED section) |
+| `PUBLICATION INCOMPLETE ({n} not written · …)` | ≥ 1 TC not created / updated / linked, or its "Test data" block not written — each listed with the error |
+| `PUBLISHED WITH MISMATCHES ({n} mismatch · {n} conflict · …)` | all written; ≥ 1 `MISMATCH` or `CONFLICT` after the one retry |
+| `PUBLISHED, NOT VERIFIED ({n} not verified · …)` | all written; no mismatch known; ≥ 1 read-back `NOT_RUN` |
+| `PUBLISHED AND VERIFIED ({N} of {N} verified · snapshot {attached / comment / NOT_RUN})` | all written; every TC read back equal to the plan, test-data block included |
+
+Take the heading verbatim from `verify`'s `line`, e.g.
+`## PUBLISHED WITH MISMATCHES (2 mismatch · 1 conflict · 1 not verified · 0 of 4 verified · snapshot NOT_RUN)`.
 
 **Feature:** {name} · **User Story:** {ID — title}
 **Approved TC document (source, unchanged):** {path}
 **Beautified document (ADO source):** {path} · source revision `{source_sha256 short}`
-**ADO project:** {org}/{project}
+**ADO project:** {org}/{project} · **Test data:** `TEST-DATA-{feature}.md` sha256 `{short}` · snapshot on the story: {attached / comment / NOT_RUN}
 
 ### Beautify
 **Reshaped:** {n} of {N} TCs ({N-n} already in shape, copied through unchanged)
@@ -494,6 +582,7 @@ instruction from PHASE 0 (full quit + relaunch of VS Code, never "reconnect").
 **Step verb remap:** {Assert→Check n} · {Click→Click on n} · {Navigate→Go to n} · …
 **Journeys added:** {n} TCs gained explicit `Login with` + navigation steps
 **Delegations expanded:** {n} `as TC-…` references resolved inline — 0 remain in the output
+**Kept verbatim:** {n} `[HUMAN]` steps · {n} `[A|E|D]` reference tokens
 
 **Step confirmation sources:** page objects {n} · learning file {n} · app source {n} · Playwright MCP {n}
 {For each MCP use: the step, and the gap that made static resolution impossible.
@@ -502,28 +591,40 @@ instruction from PHASE 0 (full quit + relaunch of VS Code, never "reconnect").
 **Needs human review:** {TC-IDs + what could not be confirmed — or "None"}
 
 **Meaning-preservation:** TC count {N}={N} · TC-ID set identical · expected results,
-requirements, Data Oracle, type, smoke and locale unchanged — PASS
+requirements, Data Oracle, type, smoke, candidacy, Tags, locale, `[HUMAN]` markers and
+reference tokens unchanged — PASS
 
 ### ADO Publishing
-| TC-ID | Work item | Result (created / updated / current) | AutomationStatus |
-|---|---|---|---|
-{rows}
-{failures, or "All items published"} · Tested-By links verified on the story: {n}/{N}
-**Map:** {ado_map path} — `link-qc-5-test-run-automation` will detect this publish and close the loop
+| TC-ID | Work item | Result (created / updated / current / not written) | Tags (intended → read back) | AutomationStatus (intended → read back) | Test data (block) | Verdict |
+|---|---|---|---|---|---|---|
+{one row per TC from `verify`'s `results[]` — Tags `+a +b −c → {read-back set}`; AutomationStatus `Planned → Planned` / `unknown (no candidacy field) → {read back}` / `Automated (kept | CONFLICT)`; Test data `{n} rows, sha current` / `MISMATCH: missing D1` / `not written`; Verdict verified / MISMATCH ({field}) / CONFLICT / NOT_RUN / NOT_WRITTEN}
+
+**Unverified:** {verify's `unverified[]`: NOT_RUN / NOT_WRITTEN TCs and every tag addition not confirmed by read-back (retried next run) — or "None"}
+**Retry:** {"not needed" | "1 retry on {TC-IDs}: {fields} → {result}"}
+**Tested-By links read back on the story:** {n}/{N} · **Suite:** {suiteId — n added | skipped (reason)}
+**Map:** {ado_map path} — written by `verify --write-map`; `link-qc-5-test-run-automation` will detect this publish and close the loop
 
 ### Next
 Run `link-qc-5-test-run-automation` with the same approved document and User Story — it can also be run
 before this skill, or without it. If `ADO-MAP.md` does not match the current source revision it
 simply runs locally and skips the DevOps close-out; re-run this skill after any change to the
-approved document to keep the loop closed.
+approved document to keep the loop closed. A `CONFLICT` row means skill 5's evidence no longer
+covers the TC — re-run skill 5 before trusting `Automated`.
 
 **Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}
 
 ---
 
+## BEAUTIFIED — NOT PUBLISHED
+
+`--beautify-only`: the Beautify section above, then
+**ADO Publishing:** skipped (--beautify-only) — nothing written, nothing read back, no outcome claimed.
+
+---
+
 ## BLOCKED
 
-**Reason:** {unapproved TC doc | missing User Story | ambiguous US name | ADO auth | meaning-preservation gate failed}
+**Reason:** {unapproved TC doc | missing User Story | ambiguous US name | ADO auth | meaning-preservation gate failed | decision script self-test failed | plan BLOCKED ({reason})}
 **Details:** {exact item and what was observed}
 **Completed before blocking:** {phases/items}
 **Required from the user:** {the exact input or action needed}
@@ -533,7 +634,7 @@ approved document to keep the loop closed.
 ---
 
 <quality_checklist>
-Before returning PUBLISH COMPLETE:
+Before returning any published outcome:
 
 - [ ] TC document verified `Status: APPROVED` — gate respected, status never flipped
 - [ ] User Story resolved to a confirmed work item ID (asked on ambiguity, never guessed)
@@ -541,17 +642,21 @@ Before returning PUBLISH COMPLETE:
 - [ ] **Beautified file emitted; approved source document NOT modified**
 - [ ] **`source_sha256` stamped and verified; hand-edits to the beautified file overwritten and reported**
 - [ ] **Every beautified title starts `Validate that` / `Check that`; `TC-<ID> —` prefix and `[locale]` suffix preserved**
-- [ ] **Every step starts with one of the nine canonical verbs; one action per step**
+- [ ] **Every step starts with one of the nine canonical verbs — except `[HUMAN]` lines, copied verbatim; one action per step**
 - [ ] **Every `as TC-…` delegation expanded inline — zero references remain; each beautified
       TC is standalone-readable without the source document**
-- [ ] **Every Steps block opens with `Login with <role>` + navigation to the target surface**
-- [ ] **No auth mechanism and no credential/env-var name in any step — role name only**
+- [ ] **Every Steps block opens with `Login with <role> [A{n}]` + navigation to the target surface**
+- [ ] **Every `[A|E|D]` token and every `[HUMAN]` marker of the source present in the output, same TC — never resolved to a value, never dropped**
+- [ ] **No auth mechanism, no username and no credential/env-var name in any step — role name + account token only**
 - [ ] **Every step confirmed (page object → learning file → source → MCP); MCP used only for genuine gaps and each use logged**
 - [ ] **Unconfirmable steps kept original wording + marked `Needs human review`, run continued**
-- [ ] **Meaning-preservation gate passed — TC count, TC-ID set, expected results all identical**
-- [ ] Every TC published/updated in ADO — idempotent, zero duplicates, Tested-By linked
-- [ ] AutomationStatus = `Planned` at publish; `Custom.TestAutomated` untouched (skill 5's job)
-- [ ] `ADO-MAP.md` written with `source_sha256`, one row per TC, reconciled with the previous map
-- [ ] Learning file searched (Index + tag grep) before every ask; answers and ADO template facts
-      written back as plain-English tagged lines — no PATs, no code identifiers
+- [ ] **Meaning-preservation gate passed — TC count, TC-ID set, expected results, candidacy, Tags, tokens all identical**
+- [ ] `selftest-ado-sync.mjs` exit 0 this run; `plan` gate PASS; every write applied exactly as the plan said — nothing decided by hand
+- [ ] Every TC created / updated in ADO — idempotent, zero duplicates, Tested-By linked
+- [ ] **AutomationStatus from candidacy (YES → Planned · NO → Not Automated · absent → unknown, nothing written); `Automated` kept only on a matching `automated_tc_sha256`, else CONFLICT; `Custom.TestAutomated` untouched (skill 5's job)**
+- [ ] **Tags: added = intended − current; removed = introduced earlier − intended; every other tag preserved; a pre-existing tag never owned**
+- [ ] **"Test data" block on every TC (referenced rows, file name + sha256, never a password); story snapshot attempted and its result named**
+- [ ] **Every work item read back after writing (fresh read); one retry on MISMATCH; outcome line taken from `verify` with its counts — "published" never claimed for a NOT_RUN or NOT_WRITTEN TC**
+- [ ] `ADO-MAP.md` written by `verify --write-map` with the eight columns, `source_sha256`, one row per TC, reconciled with the previous map; `Tags (introduced)` only from verified writes; `automated_tc_sha256` copied through untouched
+- [ ] Learning file searched (Index + tag grep) before every ask; tag convention read as an input, never invented; template rejections recorded once as a `[type: env]` fact — no PATs, no code identifiers, no project name in the skill
 </quality_checklist>

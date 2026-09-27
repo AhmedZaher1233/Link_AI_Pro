@@ -47,14 +47,14 @@ OPTIONAL:
   - "all" — review every spec under specs/ and every story under test/User stories/
   - --lang ar|en — language of the review files (US-{id}-review.md, SPEC-REVIEW-SUMMARY.md)
 
-REVIEW LANGUAGE: --lang or a saved project preference is applied without asking (a saved
-Arabic preference applies even to an English source). An Arabic requirement with nothing
-saved → you are asked ONCE (Arabic / English) inside the same intake message, and the answer
-is saved to the learning file. English source, nothing saved → English, no question.
-REQ-*.md is ALWAYS English (skill 3 reads it).
+REVIEW LANGUAGE: English unless THIS run asks for another language (--lang ar or an explicit
+sentence). Nothing else decides it — not the source language, not a saved learning-file
+answer. An Arabic requirement gets an English review unless you ask for Arabic; you are never
+asked which language you want, and the choice is never saved. Quoted application text (labels,
+messages) stays in the application's language. REQ-*.md is ALWAYS English (skill 3 reads it).
 
 IF YOU GIVE NOTHING: the skill first checks Testing/project-learning.md (recorded spec
-locations, Azure DevOps project, glossary, saved review language); only what is still
+locations, Azure DevOps project, glossary); only what is still
 missing is asked. It never guesses. Your answers are saved to the file's "Requirements
 Review Model" section.
 

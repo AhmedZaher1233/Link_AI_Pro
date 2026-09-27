@@ -15,8 +15,9 @@ then patch the files. There is no separate reviewer agent — the next gate is t
    implementation, environment blockers and unclear requirements appear in five distinct
    buckets — never mixed; a coverage gap is recorded for skill 3, never closed by adding a TC.
 3. **No design field changed** — diff `ID`, `Type`, `Locale`, `Requirement`, `Stage`,
-   `Description`, `Smoke`, `Automation Candidate`, `Data effect`, `Shared data`, `Data Oracle`
-   and the TC set before vs after your patch: identical, or your patch is wrong.
+   `Description`, `Smoke`, `Automation Candidate`, `Data effect`, `Shared data`, `Tags`,
+   `Data Oracle`, every `[HUMAN]` marker, every `[E{n}]` / `[A{n}]` / `[D{n}]` token and the TC
+   set before vs after your patch: identical, or your patch is wrong.
 4. **Coverage untouched** — `Requirement coverage (weighted)`, the per-AC table, the traceability
    matrix and the manual-only table are byte-identical before vs after, unless a recorded design
    gap or an authorized case update changed the evidence — then the change is named in the final
@@ -29,10 +30,16 @@ then patch the files. There is no separate reviewer agent — the next gate is t
 7. **Potential bugs are concise** — five visible lines each (title, TC, numbered reproduction
    steps, requirement-based expected result copied from the TC, actual result); no analysis, no
    suspected cause; no PB for a gap, a blocker or an unclear requirement.
-8. **Secrets and code** — no password, token, selector, locator, element ref, attribute name,
-   code snippet or file identifier in the TC document, the test-data file, the page, the sidecar
-   or the learning file; usernames and role names only; the base URL only as `[type: env]`; **no
-   password on any command line this run issued** (secret names only, or attended login).
+8. **Secrets, code and references** — no password, token, selector, locator, element ref,
+   attribute name, code snippet or file identifier in the TC document, the test-data file, the
+   page, the sidecar or the learning file; roles and `[A{n}]` references in the TCs, the username
+   only in `TEST-DATA` §1; no URL, username or dataset identifier written into a TC as a
+   literal — every token you resolved was looked up through its own `TEST-DATA` row; the base
+   URL in the `[E1]` row and as `[type: env]`; **no password on any command line this run
+   issued** (secret names `A{n}_USER` / `A{n}_PASSWORD` only, or attended login).
+8b. **Human steps honest** — every TC with a `[HUMAN]` step ends `draft — not app-validated
+   (human step pending)` with `outcome-check: human step pending`, never `validated`, `enhanced`
+   or `inferred`; the marker is untouched; each is listed under "Needs a human run".
 9. **Counts** — the six `MCP validation` numbers, `App validation progress`, the test-data header
    counts and the PB counts equal the tables they summarize; the renderer's dry run reports no
    `MISMATCH` (fix the header, never the page).

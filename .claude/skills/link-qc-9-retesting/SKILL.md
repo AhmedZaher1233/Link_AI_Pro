@@ -32,6 +32,7 @@ Bug IDs plus their source document, a bug document, a story ID, or `--awaiting-r
 Second table for incidental defects: | New Bug ID | Source | Related TC | Title | ADO ID | Result |
 
 ## Hard rules
+- A reviewer comment on a bug (a `Reviewer comment` bullet in `BUG-REPORT-{feature}.md`, or an open `BUG-{n}` entry in `REVIEW-COMMENTS-{feature}.md` beside it) is reviewer input, never a status source and never pushed to Azure as a state. Report open ones in the final message; mark one `answered` / `declined {date}` with a one-line `Response` only when this run actually addressed it (skill 5 `references/run-report.md` §9b). Never edit the reviewer's text.
 - Never request/read/store a PAT or use direct REST; never a password in chat, a log or a file.
 - Resolved in Azure never proves a fix; only your positive observation does. Passing one bug never implies its whole TC passed.
 - Never a fixed selector, role, path or language label — the language-switch flow comes from the learning file or the ask.

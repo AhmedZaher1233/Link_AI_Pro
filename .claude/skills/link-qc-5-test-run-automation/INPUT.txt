@@ -43,11 +43,23 @@ OPTIONAL:
 COMPLIANCE GATES: the run passes through TWO mandatory compliance checkpoints, and BOTH must
   pass before the skill claims the automation is compliant.
     - Checkpoint A, before anything executes: a read-only static validator
-      (scripts/validate-automation.mjs) plus a semantic review of every test in scope and the
-      page objects, fixtures, helpers and config it touches. Confirmed automation-code defects
-      are FIXED THERE AND THEN — you are never asked to approve a routine repair. Only the
-      compliant scope runs; anything still blocked is isolated and reported against the
-      original scope, never quietly dropped.
+      (scripts/validate-automation.mjs, run with --inventory <automation-inventory.md>) plus a
+      semantic review of every test in scope and the page objects, fixtures, helpers and config
+      it touches. Confirmed automation-code defects are FIXED THERE AND THEN — you are never
+      asked to approve a routine repair. Only the compliant scope runs; anything still blocked
+      is isolated and reported against the original scope, never quietly dropped.
+      Before any page object is written the skill scans the WHOLE automation root (every folder,
+      whatever wrote the files) and records one decision per screen — reuse / extend / create,
+      with every look-alike class named and the reason — in automation-inventory.md; the
+      validator's pom-duplicate-page rule keeps the gate BLOCKED for any look-alike pair that
+      has no decision row, so a second "OrderPage" or a "4-ListingPage.ts" twin cannot ship.
+      A TC step marked [HUMAN] (skill 3: no authorized test interface for an SMS code, an email,
+      a printed letter …) bounds the automation: the TC is generated up to that step, listed as
+      partial (human step: n) and reported PARTIAL — human step pending — never PASS, never
+      Automated in Azure DevOps.
+      Test-data references resolve per ID: [E1] / [E2] are their own environment rows, [A1] is
+      that account (credentials by account ID from env vars A1_USER / A1_PASSWORD — never by
+      role), [D1] that data item — through helpers/test-data.ts, no literal and no default.
     - Checkpoint B, after the final run and all debugging: the same review repeated on the
       FINAL code, plus proof that the screenshots, reports and logs were actually produced and
       match it. If a defect is found it is repaired, the affected tests are rerun, and the
@@ -129,7 +141,19 @@ OUTPUT — WHAT YOU GET
                                          "Test Results" and "Bugs" sections, screenshot thumbnails
                                          with a "View screenshot" viewer (zoom, scroll, open the
                                          original in a new tab) — relative links, never base64,
-                                         never hand-written
+                                         never hand-written; a PARTIAL — human step pending TC
+                                         has its own badge and column, never counted as passed.
+                                         Every bug and phase has a comment box, plus one general
+                                         box: type, "Save comments" beside the page (or "Copy for
+                                         chat"), then say "read my comments on the run report"
+      REVIEW-COMMENTS-{feature}.md     ← YOURS, optional: the comments you saved from the page;
+                                         the skill marks each one applied / answered / declined
+                                         with a one-line response and never changes a bug's
+                                         status because of a comment alone
+      automation-inventory.md          ← the page-object decision table: one row per screen
+                                         (reuse / extend / create), every look-alike class named
+                                         with the reason; rewritten each run; read by the
+                                         validator's --inventory flag
       .runs/phase-N.json               ← ALL machine data of phase N: run plan, open questions,
                                          test-data readiness, coverage snapshot, compliance gates,
                                          merged stage results per variant / attempt, per-TC results,
@@ -154,13 +178,24 @@ OUTPUT — WHAT YOU GET
   + a "Timeout policy" section in the final report: initial values, first-run events, adjustments
     with reasons and evidence, the watchdog probe result — each NOT_RUN with the reason when no run happened
   Azure DevOps (ONLY when already published): automation flag + automated-test metadata on the
-                TC work items, summary comment on the story; {Story}/ADO-MAP.md updated with
-                the final status. Not published → this output simply does not appear.
+                TC work items, summary comment on the story; {Story}/ADO-MAP.md (columns
+                TC-ID | ADO Work Item ID | published_tc_sha256 | automated_tc_sha256 |
+                Automation candidate | AutomationStatus | Tags (introduced) | Suite) updated in
+                exactly two columns — AutomationStatus and automated_tc_sha256, the semantic
+                hash from scripts/tc-hash.mjs written only for a TC that ran full coverage with
+                PASS after Checkpoint B PASS (never for a PARTIAL TC); skill 4 keeps Automated on
+                a later publish only while that hash still matches the TC. Not published → this
+                output simply does not appear.
   Compliance gate record (in the final report): Checkpoint A + Checkpoint B, each with its
                 scope, the code hash it was taken against, the checks run, findings with file
                 and line, repairs and their verification, and PASS / FAIL / BLOCKED
   + live progress in the chat (counts, current TC, elapsed, estimated remaining)
-  Testing/project-learning.md  ← updated: automation tricks, element identification, env fixes, Q&A
+  Testing/project-learning.md  ← updated: automation tricks (one line per page-object decision),
+                                  element identification, env fixes, Q&A
+  Self-test harnesses the skill runs before trusting its scripts (each exits non-zero on mismatch):
+    scripts/selftest.mjs (validator, 18 cases incl. the page-object duplicate rule) ·
+    selftest-run-report.mjs (23) · selftest-watchdog.mjs · selftest-config-inventory.mjs ·
+    selftest-tc-hash.mjs (the canonical TC hash — same golden as skill 4's harness)
 
 WHEN TO RUN: after a human set Status: APPROVED on skill 3's output. Publishing to Azure
 DevOps (skill 4) is a separate, optional step — run it before or after this skill, or not

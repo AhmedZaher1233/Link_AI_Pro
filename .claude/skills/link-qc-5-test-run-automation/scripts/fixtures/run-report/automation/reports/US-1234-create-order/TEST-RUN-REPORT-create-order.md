@@ -9,7 +9,7 @@
 **Latest phase:** 2
 **Latest run:** 2026-09-21 14:05
 **Status:** INCOMPLETE
-**Latest results:** 2 passed · 0 failed · 1 incomplete · 1 skipped · 0 not run of 4 TCs
+**Latest results:** 2 passed · 0 failed · 1 incomplete · 1 skipped · 0 not run · 1 partial of 5 TCs
 **Compliance:** Checkpoint A PASS · Checkpoint B PASS
 **Azure DevOps:** local
 **Bug report:** BUG-REPORT-create-order.md
@@ -20,10 +20,10 @@
 
 ## Run history
 
-| Phase | Date | Outcome | Passed | Failed | Incomplete | Skipped | Not run | Total | Duration | Bugs |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | 2026-09-20 | FAILURES | 2 | 1 | 0 | 1 | 0 | 4 | 00:06:41 | BUG-1 |
-| 2 | 2026-09-21 | INCOMPLETE | 2 | 0 | 1 | 1 | 0 | 4 | 00:05:12 | BUG-1, BUG-2 |
+| Phase | Date | Outcome | Passed | Failed | Incomplete | Skipped | Not run | Partial | Total | Duration | Bugs |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2026-09-20 | FAILURES | 2 | 1 | 0 | 1 | 0 | 0 | 4 | 00:06:41 | BUG-1 |
+| 2 | 2026-09-21 | INCOMPLETE | 2 | 0 | 1 | 1 | 0 | 1 | 5 | 00:05:12 | BUG-1, BUG-2 |
 
 ## Phase 1 — 2026-09-20
 
@@ -127,7 +127,7 @@
 - **Environment:** UAT
 - **Build:** 4.12.1
 - **Run command:** cd Testing/Automation && npx playwright test --project=chromium
-- **Headed / workers:** yes / parallel ×3, serial ×1
+- **Headed / workers:** yes / parallel ×4, serial ×1
 - **Started:** 2026-09-21 13:45
 - **Duration:** 00:05:12 (planned ~00:07:00 · serial-only ~00:14:00)
 - **Run file:** .runs/phase-2.json
@@ -138,32 +138,32 @@
 - **Previous phase:** .runs/phase-1.json
 
 ### Stages
-| Stage | Total | Passed | Failed | Incomplete | Skipped | Not run |
-|---|---|---|---|---|---|---|
-| Smoke | 1 | 1 | 0 | 0 | 0 | 0 |
-| Positive | 2 | 1 | 0 | 1 | 0 | 0 |
-| Negative | 1 | 0 | 0 | 0 | 1 | 0 |
-| **Total** | 4 | 2 | 0 | 1 | 1 | 0 |
+| Stage | Total | Passed | Failed | Incomplete | Skipped | Not run | Partial |
+|---|---|---|---|---|---|---|---|
+| Smoke | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| Positive | 3 | 1 | 0 | 1 | 0 | 0 | 1 |
+| Negative | 1 | 0 | 0 | 0 | 1 | 0 | 0 |
+| **Total** | 5 | 2 | 0 | 1 | 1 | 0 | 1 |
 
 **Smoke gate:** passed — fail% 0% — no action needed
 
 ### Run plan
 | Group | Mode | Workers | TCs | Reason |
 |---|---|---|---|---|
-| parallel | parallel | 3 | TC-001, TC-007, TC-020 | read-only or independent data |
+| parallel | parallel | 4 | TC-001, TC-007, TC-020, TC-030 | read-only or independent data |
 | serial:orders | serial | 1 | TC-010 | deletes the shared draft order |
 
-**Decisions:** 2 field · 1 inferred · 0 fail-safe
+**Decisions:** 3 field · 1 inferred · 0 fail-safe
 
 ### Coverage
 | Stage | Total TCs | Fully | Partially | Not | Weighted % |
 |---|---|---|---|---|---|
 | Smoke | 1 | 1 | 0 | 0 | 100 |
-| Positive | 2 | 2 | 0 | 0 | 100 |
+| Positive | 3 | 2 | 1 | 0 | 83.3 |
 | Negative | 1 | 0 | 1 | 0 | 50 |
-| **Total** | 4 | 3 | 1 | 0 | 87.5 |
+| **Total** | 5 | 3 | 2 | 0 | 80 |
 
-**Target:** 80% (default, soft block) — **PASS** · **Δ vs phase 1:** +12.5 pts — improved TC-007
+**Target:** 80% (default, soft block) — **PASS** · **Δ vs phase 1:** +5 pts — improved TC-007 · TCs added +1 (TC-030, partial: human step)
 
 | Requirement | Outcome | Asserted by |
 |---|---|---|
@@ -171,6 +171,7 @@
 | REQ-02 | Assumed | TC-007 |
 | REQ-03 | Full | TC-010 |
 | REQ-04 | Missing | — |
+| REQ-05 | Partial | TC-030 |
 
 ### Results
 | TC-ID | REQ | Name | Status | Group | Duration | Classification | Evidence |
@@ -179,6 +180,7 @@
 | TC-007 | REQ-02 | Order total recalculates | INCOMPLETE | parallel | 00:00:58 | incomplete: chromium--variation-b--r0 | [attempt-1.png](../../screenshots/US-1234-create-order/phase-2/TC-007/chromium--variation-a--r0/attempt-1.png) |
 | TC-010 | REQ-03 | Delete a draft order | PASS | serial:orders | 00:00:50 | — | [attempt-1.png](../../screenshots/US-1234-create-order/phase-2/TC-010/chromium--none--r0/attempt-1.png) |
 | TC-020 | REQ-04 | Reject an order without a customer | SKIP | parallel | — | data_missing | — |
+| TC-030 | REQ-05 | Confirm the order by the code sent by SMS | PARTIAL — human step pending | parallel | 00:00:47 | human step: 4 | [attempt-1.png](../../screenshots/US-1234-create-order/phase-2/TC-030/chromium--none--r0/attempt-1.png) |
 
 ### Unverified assumptions
 | TC-ID | Ambiguity | Interpretation encoded | Evidence | Result |
@@ -211,3 +213,4 @@ none
 
 ### Deviations
 - variation B of TC-007 did not execute: the parametrised title lost its label after the retest edit; re-queued for phase 3
+- TC-030 ran up to its `[HUMAN]` step 4 (read the code from the SMS on the test phone) — no test SMS provider is authorized in this environment; the automated part passed, the TC stays PARTIAL until a human performs step 4

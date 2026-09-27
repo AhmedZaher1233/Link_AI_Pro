@@ -20,8 +20,8 @@
       "ar": "تصفية شبكة المؤشر حسب السنة"
     },
     "tc.TC-KPI-01.precondition.1": {
-      "en": "Logged in as Strategy Super Admin (username strategy.admin); page language English.",
-      "ar": "تسجيل الدخول بدور Strategy Super Admin (اسم المستخدم strategy.admin)؛ لغة الصفحة الإنجليزية."
+      "en": "Logged in as Administrator [A1] on the portal [E1]; page language English.",
+      "ar": "تسجيل الدخول بدور Administrator [A1] على البوابة [E1]؛ لغة الصفحة الإنجليزية."
     },
     "tc.TC-KPI-01.precondition.2": {
       "en": "Strategy \"Growth 2026\" exists with KPI \"Revenue\" holding 12 monthly values.",
@@ -56,8 +56,8 @@
       "ar": "تعرض الشبكة 12 صفًا بالضبط لسنة 2026 وتقرأ شارة السنة \"2026\"."
     },
     "tc.TC-KPI-01.oracle": {
-      "en": "KPI \"Revenue\" 2026 — expected count: 12, identifiers: Jan…Dec",
-      "ar": "المؤشر \"Revenue\" 2026 — العدد المتوقع: 12، المعرّفات: يناير…ديسمبر"
+      "en": "KPI \"Revenue\" 2026 [D1] — expected count: 12, identifiers: Jan…Dec",
+      "ar": "المؤشر \"Revenue\" 2026 [D1] — العدد المتوقع: 12، المعرّفات: يناير…ديسمبر"
     },
     "tc.TC-KPI-01.effect": {
       "en": "read-only",
@@ -68,8 +68,8 @@
       "ar": "تصفية شبكة المؤشر حسب السنة (العربية)"
     },
     "tc.TC-KPI-01b.precondition.1": {
-      "en": "Logged in as Strategy Super Admin (username strategy.admin); page language Arabic, direction right-to-left.",
-      "ar": "تسجيل الدخول بدور Strategy Super Admin (اسم المستخدم strategy.admin)؛ لغة الصفحة العربية، الاتجاه من اليمين إلى اليسار."
+      "en": "Logged in as Administrator [A1] on the portal [E1]; page language Arabic, direction right-to-left.",
+      "ar": "تسجيل الدخول بدور Administrator [A1] على البوابة [E1]؛ لغة الصفحة العربية، الاتجاه من اليمين إلى اليسار."
     },
     "tc.TC-KPI-01b.step.1": {
       "en": "Confirm the page is Arabic and right-to-left.",
@@ -96,8 +96,8 @@
       "ar": "تعرض الشبكة 12 صفًا لسنة 2026 بأسماء الأشهر العربية."
     },
     "tc.TC-KPI-01b.oracle": {
-      "en": "KPI \"Revenue\" 2026 — expected count: 12",
-      "ar": "المؤشر \"Revenue\" 2026 — العدد المتوقع: 12"
+      "en": "KPI \"Revenue\" 2026 [D1] — expected count: 12",
+      "ar": "المؤشر \"Revenue\" 2026 [D1] — العدد المتوقع: 12"
     },
     "tc.TC-KPI-01b.effect": {
       "en": "read-only",
@@ -124,8 +124,8 @@
       "ar": "تعرض الشبكة كل الصفوف الـ 36 عبر 2024-2026."
     },
     "tc.TC-KPI-02.oracle": {
-      "en": "KPI \"Revenue\" all years — expected count: 36",
-      "ar": "المؤشر \"Revenue\" كل السنوات — العدد المتوقع: 36"
+      "en": "KPI \"Revenue\" all years [D2] — expected count: 36",
+      "ar": "المؤشر \"Revenue\" لكل السنوات [D2] — العدد المتوقع: 36"
     },
     "tc.TC-KPI-02.effect": {
       "en": "read-only",
@@ -136,8 +136,8 @@
       "ar": "يُمنع التطبيق دون اختيار سنة"
     },
     "tc.TC-KPI-03.precondition.1": {
-      "en": "Logged in as Strategy Super Admin (username strategy.admin); KPI Details open for \"Revenue\".",
-      "ar": "تسجيل الدخول بدور Strategy Super Admin (اسم المستخدم strategy.admin)؛ تفاصيل المؤشر \"Revenue\" مفتوحة."
+      "en": "Logged in as Administrator [A1]; KPI Details open for \"Revenue\".",
+      "ar": "تسجيل الدخول بدور Administrator [A1]؛ تفاصيل المؤشر \"Revenue\" مفتوحة."
     },
     "tc.TC-KPI-03.step.1": {
       "en": "Open the Filter panel and set Display Type to \"Year\" without selecting a year.",
@@ -172,8 +172,8 @@
       "ar": "يُنزَّل ملف Excel يحوي 12 صفًا."
     },
     "tc.TC-KPI-04.oracle": {
-      "en": "KPI \"Revenue\" 2026 — expected count: 12",
-      "ar": "المؤشر \"Revenue\" 2026 — العدد المتوقع: 12"
+      "en": "KPI \"Revenue\" 2026 [D1] — expected count: 12",
+      "ar": "المؤشر \"Revenue\" 2026 [D1] — العدد المتوقع: 12"
     },
     "tc.TC-KPI-04.effect": {
       "en": "creates",
@@ -348,8 +348,8 @@
       "ar": "REQ-1234-03 لا يسمّي دورًا؛ ملف التعلّم لا يحوي مدخلًا لصلاحيات التصدير."
     },
     "q.Q-1.recommended": {
-      "en": "Strategy Super Admin only — matches the other KPI actions (similar module: Objectives export).",
-      "ar": "Strategy Super Admin فقط — يطابق بقية إجراءات المؤشر (وحدة مشابهة: تصدير الأهداف)."
+      "en": "Administrator only — matches the other KPI actions (similar module: Objectives export).",
+      "ar": "Administrator فقط — يطابق بقية إجراءات المؤشر (وحدة مشابهة: تصدير الأهداف)."
     },
     "q.Q-1.alternatives": {
       "en": "All roles with read access.",
@@ -374,6 +374,10 @@
     "finding.unclear.1": {
       "en": "Q-1 — export permissions.",
       "ar": "Q-1 — صلاحيات التصدير."
+    },
+    "tc.TC-KPI-04.step.2": {
+      "en": "[HUMAN] Open the downloaded file in a spreadsheet application and confirm it holds the 12 monthly rows [D1].",
+      "ar": "[HUMAN] افتح الملف المنزَّل في تطبيق جداول بيانات وتأكد أنه يحوي صفوف الأشهر الاثني عشر [D1]."
     }
   }
 }

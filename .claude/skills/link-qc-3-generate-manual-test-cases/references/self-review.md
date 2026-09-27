@@ -7,7 +7,11 @@ gate is the human.
 1. **Traceability matrix** — every acceptance criterion ↔ REQ-ID ↔ covering TC-IDs. Any AC with
    no TC → coverage gap: fix it (add the TC) before delivering. Every TC must cite a REQ-ID that
    exists verbatim in the requirements source.
-2. **Negative coverage table** — all L1 §4 categories present or justified N/A.
+2. **Negative coverage table** — all L1 §4 categories present or justified N/A. An N/A is
+   justified only by the requirement (it defines no such outcome or input) — never by what a
+   browser tool can observe: an email, SMS / OTP, notification, download or background-job
+   outcome the requirement defines is a TC, with a `[HUMAN]` step where no authorized interface
+   exists (`tc-design.md` "Out-of-browser outcomes"), not an N/A row.
 3. **Standards alignment** — map the set against the functional checklist in the L2 standards
    document (`{qa_standards}` → `steering.L2`): COVERED / GAP / N/A per item, with TC-IDs.
 4. **Requirement coverage score** — the traceability matrix is binary (an AC has a TC or not);
@@ -36,10 +40,13 @@ gate is the human.
    `Category · TC-ID · Scenario · Why manual · Priority`. Categories: `Permission /
    Unauthorized`, `Empty State`, `System / Background-Job Triggered`, `Display / Field
    Presence`, `Cross-Role Specific`, `Per-Row Enumeration & Identity`, `Visual / UX judgement`,
-   `Data setup not reproducible`, `Pending implementation`. Priority: **High** = security /
-   permission, empty state, pending implementation; **Medium** = background jobs, field display,
-   cross-role; **Low** = redundant per-row enumeration. This is the list skill 5 later confirms
-   against the real specs — keep the wording plain English.
+   `Data setup not reproducible`, `Human-observed step`, `Pending implementation`. Priority:
+   **High** = security / permission, empty state, pending implementation; **Medium** =
+   background jobs, field display, cross-role, human-observed step; **Low** = redundant per-row
+   enumeration. A `Human-observed step` row also lists every `Automation Candidate = YES` TC
+   that carries a `[HUMAN]` step ("partially automatable — human step(s) {n}"), naming the
+   human part. This is the list skill 5 later confirms against the real specs — keep the
+   wording plain English.
 6. **Independence** — every TC runnable in isolation; all preconditions explicit; no TC assumes
    state from another TC.
 7. **Redundancy** — merge or remove TCs that cover identical scenarios under different names.
@@ -56,14 +63,22 @@ gate is the human.
 11. **Gap-vs-defect separation** — requirement/coverage gaps, application defects
     (discrepancies — "none — not app-validated" from this skill), pending-implementation items,
     environment blockers and unclear requirements appear in five distinct buckets — never mixed.
-12. **Secrets and code** — no password, token, selector, attribute name, code snippet or file
-    identifier anywhere in any deliverable (TC document, test-data file, HTML page). Usernames
-    and role names only.
+12. **Secrets, code and references** — no password, token, selector, attribute name, code
+    snippet or file identifier anywhere in any deliverable (TC document, test-data file, HTML
+    page). Externalized values — environment URLs / hosts / endpoints, account usernames,
+    shared datasets — appear in the TC document **only as references** (`[E{n}]` / `[A{n}]` /
+    `[D{n}]`, name + token) and every reference resolves to a row of `TEST-DATA-{feature}.md`;
+    the username itself lives only in `TEST-DATA` §1. Intentional inputs and expected outputs
+    stay inline; a deliberate collision carries `(intentional input)`. The renderer's dry run
+    reports no `data-literal`, `data-ref-unresolved` or `narrative-not-english` warning — each
+    must be cleared before delivery.
 13. **Case 1 only** — the Existing-TC Analysis table accounts for every original TC exactly once
     (kept / updated / merged / removed).
 14. **Test-data consistency** (`TEST-DATA-{feature}.md`, `deliverables.md` §2b) — every
     `Preconditions` / `Data Oracle` / `Shared data` sentence and every role used maps to a data
-    item, and every data item maps back to real TC-IDs; every `MISSING` / `IMPOSSIBLE` item has
+    item, and every data item maps back to real TC-IDs; every `## 0. Environment` (`E{n}`) and
+    `## 1. Accounts` (`A{n}`) row is referenced by ≥ 1 TC and `E1` is the application base URL;
+    every `MISSING` / `IMPOSSIBLE` item has
     at least one **available** way or a row in the Problems table; no item is `MISSING` without
     a recorded check (unchecked = `UNKNOWN`); no `api` / `db` way is shown as available without
     confirmation from the learning file or the user; the header counts equal the table rows;
@@ -90,6 +105,15 @@ gate is the human.
     reason; a missing expected behaviour produces a question, not a skip. No E-item TC asserts a
     behaviour (disabled button, redirect, preserved data, retry, request count) the requirement
     does not state; E1 TCs assert the business outcome, not a request count.
+18. **Out-of-browser outcomes** (`tc-design.md` "Out-of-browser outcomes") — every
+    requirement-defined outcome that leaves the browser (email, SMS / OTP, push, notification
+    centre, download, background job) has a complete TC; for each channel the interface was
+    resolved task input → learning file `[type: env]` / other `TEST-DATA` files → one question
+    (its answer written back as `[type: env]`, "none available" included); an available
+    interface is an Environment row the step references, and `[HUMAN]` prefixes only the steps
+    no authorized interface can perform; no TC was dropped, marked N/A or forced to
+    `Automation Candidate: NO` because of a tool limit; every `[HUMAN]` TC has its
+    `Human-observed step` row.
 
 Anything you cannot fix yourself (spec ambiguity, missing fixture, unclear requirement) is listed
 under **Open Findings for the Human Reviewer** — never silently resolved. Header counts you

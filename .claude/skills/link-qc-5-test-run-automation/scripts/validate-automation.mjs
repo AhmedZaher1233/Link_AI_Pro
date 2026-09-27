@@ -57,6 +57,7 @@ export const RULES = {
   'trace-unknown-reqid':         { severity: 'warning',   exemptible: true,  title: 'Suite title references a requirement ID that is not in the resolved sources' },
   'trace-title-dynamic':         { severity: 'warning',   exemptible: false, title: 'Title is built at runtime — its IDs cannot be read statically' },
   'manifest-unreadable':         { severity: 'warning',   exemptible: false, title: 'qa-manifest.json could not be parsed — fallback paths used' },
+  'pom-inventory-unreadable':    { severity: 'warning',   exemptible: false, title: 'automation-inventory.md could not be read or holds no decision table — no candidate pair counts as decided' },
   'exception-malformed':         { severity: 'warning',   exemptible: false, title: 'qa-allow is malformed or its source does not resolve — not honoured' },
   'exception-expired':           { severity: 'warning',   exemptible: false, title: 'Allow-list entry has expired — not honoured' },
   'exception-unused':            { severity: 'info',      exemptible: false, title: 'Allow-list entry matched nothing in scope' },
@@ -65,7 +66,9 @@ export const RULES = {
   'evidence-call-found':         { severity: 'info',      exemptible: false, title: 'Evidence call site found on a straight-line path (execution not proven)' },
   'modifier-declared':           { severity: 'info',      exemptible: false, title: 'Declared modifier with a reason' },
   'trace-uncovered-id':          { severity: 'info',      exemptible: false, title: 'Known TC-ID has no test referencing it' },
+  'pom-duplicate-page-decided':  { severity: 'info',      exemptible: false, title: 'Page-class candidate pair covered by a decision row of the automation inventory' },
 
+  'pom-duplicate-page':          { severity: 'review',    exemptible: false, title: 'Two page classes look like the same page — decide reuse / extend / create in the automation inventory' },
   'assertions-conditional':      { severity: 'review',    exemptible: false, title: 'Assertion reached only through a branch, loop, callback or early return' },
   'assertions-unresolved':       { severity: 'review',    exemptible: false, title: 'Assertion could not be traced — a call hop was unfollowable' },
   'evidence-conditional':        { severity: 'review',    exemptible: false, title: 'Evidence reached only through a branch, loop, callback or early return' },
@@ -92,6 +95,7 @@ export const LIMITS = [
   'Steps are recognised only in the scanned file: test.step() and a step wrapper IMPORTED into the spec. A step inside a page-object method does not count for the spec that calls it, and step-missing runs only behind --require-steps.',
   'Positional scoping (first/last/nth) is judged on the receiver chain of that call: a filter() segment, or a named getByRole / getByTestId root narrowed by a further getBy*, counts as scoped. An array .filter on a different receiver in the same statement does not; a locator scoped by an earlier assignment is a false positive to justify with a comment.',
   'networkidle detection reads string literals next to waitForLoadState( or waitUntil: only; a readiness helper that hides the literal behind a constant is invisible.',
+  'Page-class duplicate detection (pom-duplicate-page) only produces CANDIDATES: a class is a page when its constructor takes a Page or it extends a page class; two classes in two files match on a normalized name (case, a trailing "s" / "Page", a numeric file prefix ignored), on an identical goto / gotoAppPath / navigate or url-field literal, or on two or more identical locator call literals. A route or locator built at runtime is invisible; a base-class route is not inherited; whether a match is a duplicate is decided by the inventory row, never here.',
 ];
 
 const NON_RECEIVERS = new Set(['page', 'this', 'expect', 'test', 'Promise', 'Object', 'JSON', 'Math', 'console', 'process', 'Array', 'String', 'Number', 'Date', 'await']);
@@ -713,6 +717,11 @@ export function analyze(opts) {
   const uncoveredTcIds = tcIds ? [...tcIds].filter((id) => !referencedTcIds.has(id)) : [];
   for (const id of uncoveredTcIds) push('trace-uncovered-id', tcIdSource || 'supplied list', 1, id + ' has no test referencing it in the scanned scope.');
 
+  /* --- page-class pass: the WHOLE automation root, whatever folder a page class lives in --- */
+  const inventoryArg = opts.inventory !== undefined ? opts.inventory : str((opts.args || {}).inventory);
+  const pageScan = scanPageClasses({ root, automationDir, files, cache, inventoryArg, push, addNotRun });
+  for (const f of pageScan.classes) if (!fileHashes[f.file]) fileHashes[f.file] = f.sha256;
+
   /* --- fingerprint --- */
   for (const f of supportFilesRead) {
     const r = rel(root, f);
@@ -746,6 +755,12 @@ export function analyze(opts) {
   } else if (counts.violation > 0) {
     gate = 'FAIL';
     gateReason = counts.violation + ' violation(s) in ' + Object.keys(counts.byFile).length + ' file(s)';
+  } else if (pageScan.undecided > 0) {
+    // The one review item that moves the scanner gate: Checkpoint A cannot open until every
+    // candidate pair has a decision row, and the row IS the documented semantic review —
+    // pass it back through --inventory and the item closes mechanically.
+    gate = 'BLOCKED';
+    gateReason = pageScan.undecided + ' page-class duplicate candidate(s) without an automation-inventory decision (pom-duplicate-page) — record one decision row naming both classes in automation-inventory.md and re-run with --inventory <file>';
   } else {
     gate = 'PASS';
     gateReason = counts.files + ' file(s), ' + counts.tests + ' test(s), 0 violations, ' + counts.warning + ' warning(s), ' + counts.review + ' item(s) needing review, ' + counts.exceptions + ' declared exception(s)';
@@ -761,10 +776,15 @@ export function analyze(opts) {
       manifest: paths.manifestFile, manifestState: paths.manifestState,
       paths: { tests: paths.tests, pages: paths.pages, automationRoot: paths.automationRoot },
       layersDeclared: !!paths.layers, scopeMode, evidenceFn, requireSteps,
-      allowFile: allow.file,
+      allowFile: allow.file, inventoryFile: pageScan.inventory.file,
       idSources: { tcIds: tcIdSource, tcIdCount: tcIds ? tcIds.size : 0, reqIds: reqIdSource, reqIdCount: reqIds ? reqIds.size : 0 },
     },
     scope: { filesScanned, supportFilesRead: [...supportFilesRead].map((f) => rel(root, f)), unreadable, parseFailures },
+    pageScan: {
+      note: 'Every page class under the automation root (constructor takes a Page, or extends a page class), wherever it lives. Candidate pairs are evidence for the automation inventory, never a verdict; an undecided pair keeps the scanner gate BLOCKED until its inventory row is passed with --inventory.',
+      root: rel(root, automationDir), filesScanned: pageScan.filesScanned, classes: pageScan.classes.map((c) => ({ file: c.file, line: c.line, name: c.name, extends: c.extends, routes: c.routes, locators: c.locators.length })),
+      candidates: pageScan.candidates, decided: pageScan.decided, undecided: pageScan.undecided, inventory: pageScan.inventory,
+    },
     fingerprint: { scopeDigest: fp.scopeDigest, fileCount: fp.fileCount, files: fileHashes, excludes: ['reports/', 'screenshots/', 'automation-logs/', 'coverage/'] },
     findings,
     review,
@@ -873,6 +893,153 @@ function configFiles(root, automationDir, allowFile, manifestFile, cache) {
   return out;
 }
 
+/* ---------------- page-class duplicate candidates (pom-duplicate-page) ---------------- */
+
+const LOCATOR_CALL = /\.\s*(locator|getByTestId|getByRole|getByLabel|getByPlaceholder|getByText|getByTitle|getByAltText|frameLocator)\s*\(/g;
+const ROUTE_CALL = /\.\s*(goto|gotoAppPath|navigate)\s*\(/g;
+const ROUTE_FIELD = /\b(url|path|route|pageUrl|pagePath|relativeUrl|baseRoute)\s*(?::\s*string)?\s*=\s*$/i;
+const CLASS_HEAD = /\bclass\s+([A-Za-z_$][\w$]*)(?:\s+extends\s+([A-Za-z_$][\w$.]*))?[^{;]*\{/g;
+
+/** Case, separators, a trailing "s" and a trailing "Page" ignored — the same normalization for class names and file stems. */
+function pageNameNorm(name) {
+  let n = String(name).toLowerCase().replace(/[^a-z0-9]/g, '');
+  n = n.replace(/page$/, '').replace(/s$/, '').replace(/page$/, '');
+  return n;
+}
+function stemNorm(file) {
+  return pageNameNorm(path.basename(file).replace(/\.[^.]+$/, '').replace(/\.(page|po|pageobject)$/i, '').replace(/^\d+[-_. ]*/, ''));
+}
+const routeNorm = (v) => String(v).replace(/^(\$\{[^}]*\})+/, '').trim().replace(/\/+$/, '').toLowerCase();
+
+/** The page classes of one stripped module: name, base, routes and locator keys (string literals inside the class body only). */
+function pageClassesOf(s, relFile) {
+  const out = [];
+  for (const m of s.code.matchAll(CLASS_HEAD)) {
+    const brace = m.index + m[0].length - 1;
+    const end = matchDelim(s.code, brace);
+    if (end < 0) continue;
+    const body = s.code.slice(brace + 1, end);
+    const strings = s.strings.filter((t) => t.start > brace && t.end < end);
+    const inRange = (a, b) => strings.filter((t) => t.start >= a && t.end <= b).map((t) => t.value);
+    let takesPage = false;
+    const ctor = /\bconstructor\s*\(/.exec(body);
+    if (ctor) {
+      const open = brace + 1 + ctor.index + ctor[0].length - 1;
+      const close = matchDelim(s.code, open);
+      const params = close > 0 ? s.code.slice(open + 1, close) : '';
+      takesPage = /:\s*Page\b/.test(params) || /(^|[,(\s])page\s*(?:[,)]|$)/.test(params.replace(/\s+/g, ' ').trim() + ')');
+    }
+    const locators = new Set();
+    for (const c of body.matchAll(LOCATOR_CALL)) {
+      const open = brace + 1 + c.index + c[0].length - 1;
+      const close = matchDelim(s.code, open);
+      if (close < 0) continue;
+      const lits = inRange(open, close);
+      if (lits.length) locators.add(c[1] + ':' + lits.join('|'));
+    }
+    const routes = new Set();
+    for (const c of body.matchAll(ROUTE_CALL)) {
+      const open = brace + 1 + c.index + c[0].length - 1;
+      const close = matchDelim(s.code, open);
+      if (close < 0) continue;
+      const lits = inRange(open, close);
+      if (lits.length && routeNorm(lits[0])) routes.add(routeNorm(lits[0]));
+    }
+    for (const t of strings) {
+      const before = s.code.slice(Math.max(brace + 1, t.start - 48), t.start);
+      if (ROUTE_FIELD.test(before) && routeNorm(t.value)) routes.add(routeNorm(t.value));
+    }
+    out.push({ file: relFile, line: s.lineOf(m.index), name: m[1], extends: m[2] || null, takesPage, routes: [...routes].sort(), locators: [...locators].sort(), nameNorm: pageNameNorm(m[1]), stemNorm: stemNorm(relFile) });
+  }
+  return out;
+}
+
+/** The decision table of automation-inventory.md: rows with the identifiers and file tokens their Class / Candidates cells mention. */
+function loadInventory(root, inventoryArg, push) {
+  if (!inventoryArg) return { file: null, rows: [], state: 'not-supplied' };
+  const abs = path.resolve(root, String(inventoryArg));
+  const relFile = rel(root, abs);
+  const text = read(abs);
+  if (text === null) { push('pom-inventory-unreadable', relFile, 1, 'automation-inventory.md not found or unreadable — no candidate pair is decided.'); return { file: relFile, rows: [], state: 'unreadable' }; }
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.replace(/\*\*|`/g, '').trim());
+  const rows = [];
+  for (let i = 0; i + 1 < lines.length; i++) {
+    if (!/^\s*\|/.test(lines[i]) || !/^\s*\|?\s*:?-+/.test(lines[i + 1])) continue;
+    const header = cells(lines[i]).map((h) => h.toLowerCase());
+    const ci = { screen: header.findIndex((h) => /^screen/.test(h)), decision: header.findIndex((h) => /^decision/.test(h)), cls: header.findIndex((h) => /^class/.test(h)), cand: header.findIndex((h) => /^candidates?/.test(h)), reason: header.findIndex((h) => /^reason/.test(h)) };
+    if (ci.decision < 0 || ci.cls < 0 || ci.cand < 0) continue;
+    for (let j = i + 2; j < lines.length && /^\s*\|/.test(lines[j]); j++) {
+      const c = cells(lines[j]);
+      const mention = [c[ci.cls] || '', c[ci.cand] || ''].join(' ');
+      rows.push({
+        line: j + 1, screen: c[ci.screen] || '', decision: c[ci.decision] || '', cls: c[ci.cls] || '', candidates: c[ci.cand] || '', reason: ci.reason >= 0 ? c[ci.reason] || '' : '',
+        ids: new Set((mention.match(/[A-Za-z_$][\w$]*/g) || []).map((x) => x.toLowerCase())),
+        files: new Set((mention.match(/[\w./\\-]+\.(?:ts|tsx|mts|js|mjs|cjs|jsx)\b/g) || []).map((x) => x.replace(/\\/g, '/').toLowerCase())),
+      });
+    }
+    i += 1;
+  }
+  if (!rows.length) push('pom-inventory-unreadable', relFile, 1, 'automation-inventory.md holds no decision table (columns Screen | Decision | Class | Candidates considered | Reason) — no candidate pair is decided.');
+  return { file: relFile, rows, state: rows.length ? 'used' : 'no-table' };
+}
+
+/** A row covers a pair when it names BOTH classes (or, for two classes of the same name, both files with a folder component). */
+function rowCovers(row, a, b) {
+  const fileHit = (c) => [...row.files].some((tok) => tok.includes('/') ? c.file.toLowerCase().endsWith(tok) : path.basename(c.file).toLowerCase() === tok);
+  if (a.name.toLowerCase() !== b.name.toLowerCase() && row.ids.has(a.name.toLowerCase()) && row.ids.has(b.name.toLowerCase())) return true;
+  return fileHit(a) && fileHit(b) && (a.file !== b.file);
+}
+
+function scanPageClasses({ root, automationDir, files, cache, inventoryArg, push, addNotRun }) {
+  const seen = new Set();
+  const targets = [];
+  const consider = (f) => { const abs = path.resolve(f); if (!seen.has(abs) && isCodeFile(abs) && !isSpecFile(abs)) { seen.add(abs); targets.push(abs); } };
+  for (const f of walk(automationDir, (p) => isCodeFile(p) && !isSpecFile(p), 12)) consider(f);
+  for (const f of files || []) consider(f);
+  const classes = [];
+  let filesScanned = 0;
+  for (const abs of targets) {
+    const relFile = rel(root, abs);
+    const s = loadStripped(abs, cache);
+    if (!s) continue;
+    if (s.parseError) { addNotRun('pom-duplicate-page', relFile + ' could not be scanned (' + s.parseError + ') — its page classes were not compared', relFile); continue; }
+    filesScanned++;
+    if (!/\bclass\s+[A-Za-z_$]/.test(s.code)) continue;
+    for (const c of pageClassesOf(s, relFile)) classes.push({ ...c, sha256: sha256(s.src) });
+  }
+  // A class that extends a qualifying class (by simple name) qualifies too — one extra pass, no deeper.
+  const qualifies = (c) => c.takesPage || (c.extends && /page$/i.test(c.extends.split('.').pop()));
+  const qualified = new Set(classes.filter(qualifies).map((c) => c.name));
+  const pages = classes.filter((c) => qualifies(c) || (c.extends && qualified.has(c.extends.split('.').pop())))
+    .sort((x, y) => (x.file < y.file ? -1 : x.file > y.file ? 1 : x.line - y.line));   // deterministic pair order, independent of the walk
+  const inventory = loadInventory(root, inventoryArg, push);
+  let decided = 0; let undecided = 0; let candidates = 0;
+  for (let i = 0; i < pages.length; i++) for (let j = i + 1; j < pages.length; j++) {
+    const a = pages[i]; const b = pages[j];
+    if (a.file === b.file) continue;
+    const kinds = []; const detail = {};
+    if (a.nameNorm && (a.nameNorm === b.nameNorm || a.stemNorm === b.stemNorm)) { kinds.push('name'); detail.name = a.nameNorm === b.nameNorm ? 'normalized class names both "' + a.nameNorm + '"' : 'normalized file stems both "' + a.stemNorm + '"'; }
+    const routes = a.routes.filter((r) => b.routes.includes(r));
+    if (routes.length) { kinds.push('route'); detail.route = routes; }
+    const shared = a.locators.filter((l) => b.locators.includes(l));
+    if (shared.length >= 2) { kinds.push('locators'); detail.locators = shared; }
+    if (!kinds.length) continue;
+    candidates++;
+    const pair = { a: { file: a.file, line: a.line, class: a.name }, b: { file: b.file, line: b.line, class: b.name } };
+    const row = inventory.rows.find((r) => rowCovers(r, a, b));
+    const evidenceText = kinds.map((k) => k + (k === 'name' ? ' — ' + detail.name : ' — ' + detail[k].join(', '))).join('; ');
+    if (row) {
+      decided++;
+      push('pom-duplicate-page-decided', a.file, a.line, a.name + ' (' + a.file + ':' + a.line + ') and ' + b.name + ' (' + b.file + ':' + b.line + ') are a candidate pair (' + evidenceText + ') decided by ' + inventory.file + ':' + row.line + ' — screen "' + row.screen + '": ' + row.decision + '.', { pair, evidence: kinds[0], evidenceKinds: kinds, detail, decision: row.decision, screen: row.screen, inventoryFile: inventory.file, inventoryLine: row.line });
+    } else {
+      undecided++;
+      push('pom-duplicate-page', a.file, a.line, a.name + ' (' + a.file + ':' + a.line + ') and ' + b.name + ' (' + b.file + ':' + b.line + ') look like the same page (evidence: ' + evidenceText + '). This is a candidate, not a verdict: decide reuse / extend / create in automation-inventory.md — one row naming both classes with the reason — and pass it with --inventory. Until then the scanner gate stays BLOCKED and Checkpoint A cannot open.', { pair, evidence: kinds[0], evidenceKinds: kinds, detail });
+    }
+  }
+  return { filesScanned, classes: pages, candidates, decided, undecided, inventory: { file: inventory.file, state: inventory.state, rows: inventory.rows.length } };
+}
+
 /* ---------------- receiver-chain analysis for positional selectors ---------------- */
 
 /**
@@ -928,12 +1095,13 @@ function isScopedChain(chain) {
 
 const HELP = {
   tool: 'validate-automation',
-  usage: 'node validate-automation.mjs [--root <dir>] [--pretty] [--files a,b] [--tests-path <dir>] [--pages-path <dir>] [--tc-ids <csv|file>] [--req-ids <csv|file>] [--allow-file <path>] [--evidence-fn <name>] [--require-steps] [--strict]',
+  usage: 'node validate-automation.mjs [--root <dir>] [--pretty] [--files a,b] [--tests-path <dir>] [--pages-path <dir>] [--automation-root <dir>] [--tc-ids <csv|file>] [--req-ids <csv|file>] [--allow-file <path>] [--evidence-fn <name>] [--inventory <automation-inventory.md>] [--require-steps] [--strict]',
   notes: [
     'Read-only. Default exit code is 0; the verdict lives in the JSON payload.',
     '--strict exits 1 on FAIL, 2 on BLOCKED, 3 on NOT_RUN.',
     'The scanner gate is not the compliance gate: review[] and notRun[] items must be closed separately.',
     '--require-steps also reports step-missing (warning) for every test with no test.step() / imported step() — pass it for specs this run generated or updated.',
+    'Every page class under the automation root is compared (pom-duplicate-page); --inventory <automation-inventory.md> turns a candidate pair covered by a decision row into pom-duplicate-page-decided (info). An undecided pair keeps the gate BLOCKED.',
   ],
   rules: Object.fromEntries(Object.entries(RULES).map(([k, v]) => [k, { severity: v.severity, exemptible: v.exemptible, title: v.title }])),
   limits: LIMITS,

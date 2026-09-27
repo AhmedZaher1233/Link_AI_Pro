@@ -75,8 +75,9 @@ publishing (skill 4) stays optional for skill 5.
    scenario the app reveals that the design missed is a **coverage gap** for skill 3
    (`--revision`), recorded under Open Findings — you never add a TC and never change a design
    field (`ID`, `Type`, `Locale`, `Requirement`, `Stage`, `Smoke`, `Automation Candidate`,
-   `Data effect`, `Shared data`, `Description`). Corrections touch step wording, preconditions
-   and expected-result label text only.
+   `Data effect`, `Shared data`, `Tags`, `Description`). Corrections touch step wording,
+   preconditions and expected-result label text only; a `[HUMAN]` step is never reworded away
+   and never observed by you — you walk up to it and stop.
 3. **Never claim what you did not observe.** A TC is `validated` only when its own unique tail
    was seen live this run; a tail this run could not drive but fresh earlier evidence confirms is
    `inferred`; unobservable stays `draft — not app-validated`
@@ -113,10 +114,17 @@ publishing (skill 4) stays optional for skill 5.
    `playwright-cli` call is a Bash command that lands in the transcript, so a password you typed
    would be logged. Login is therefore **attended** (the user logs in themselves in the headed
    browser you opened) or through the **secrets file** skill 1 set up (you type only the secret
-   NAME, e.g. `ADMIN_PASSWORD`; the tool substitutes the value — `references/browser-cli.md` §3).
+   NAME; names follow the account ID the TC references — `A1_USER` / `A1_PASSWORD` for `[A1]`;
+   the tool substitutes the value — `references/browser-cli.md` §3).
    Passwords, tokens and PATs never enter the TC document, the test-data file, the page, the
-   strings sidecar, the learning file, the chat log or a command line. Usernames may appear in
-   the steps; the base URL is stored only as `[type: env]`.
+   strings sidecar, the learning file, the chat log or a command line. The TCs name
+   configuration by reference — `[E{n}]` an environment row, `[A{n}]` an account, `[D{n}]` a
+   data item — and you resolve **every token through its own row** of `TEST-DATA-{feature}.md`:
+   `[E1]` is the base URL you ask for (fill that row's `Value` when it was `unknown`), `[E2]` may
+   be a mail sandbox, `[A2]` is that account and not "whoever has the role". No username enters
+   a step and no URL, username or dataset identifier is ever written back as a literal; an
+   `enhanced` step keeps the reference form; the base URL is stored only in the `[E1]` row and
+   as `[type: env]`.
 9. **Write scope.** You write only the story folder's `TEST-CASES-{feature}.md`,
    `TEST-DATA-{feature}.md`, `TC-REVIEW-{feature}.html`, `TC-REVIEW-STRINGS-{feature}.ar.json`,
    `evidence/PB-{n}-{date}.png` screenshots, the `comparison/` folder when the comparison
@@ -144,7 +152,12 @@ publishing (skill 4) stays optional for skill 5.
     reach (not implemented, data changes not authorized, screen could not be driven) — with the
     reason, listed.
 13. **The page is rendered, never written by hand** — `scripts/render-tc-review.mjs` per
-    `references/html-page.md`; an Arabic page with untranslated strings is a preview.
+    `references/html-page.md`; an Arabic page with untranslated strings is a preview. Language
+    rule, verbatim in skills 2, 3, 3b and 3c: *"The output language of a run is English unless
+    this run's task input asks for another language (`--lang ar` or an explicit sentence).
+    Nothing else decides it: not the source language, not a saved learning-file answer, not the
+    document's `Review page language:` line, not an existing Arabic sidecar."* You rewrite that
+    header line to what this run rendered.
 14. **No playwright-cli → BLOCKED.** Unlike skill 3 you have nothing to deliver without the
     application, and you have exactly one browser tool. Probe first (`references/browser-cli.md`
     §1); absent → BLOCKED with the hint "run `/sync-skills --tools` (installs playwright-cli and
@@ -156,7 +169,9 @@ publishing (skill 4) stays optional for skill 5.
     text found, control state read, value compared — and that observation is written to the
     stamp's `outcome-check` line. Missing data, an ambiguous expectation or an environment
     failure keeps the TC `draft` with the reason (or raises a `Q-{n}` when the expectation is
-    unclear); it is never rounded up to `validated`.
+    unclear); it is never rounded up to `validated`. A TC with a `[HUMAN]` step is walked up to
+    that step and stops: `draft — not app-validated (human step pending)`, stamp
+    `outcome-check: human step pending`, listed under "Needs a human run".
 16. **Data changes only when authorized for this run, always reconciled.** The combined ask
     includes "may this run create / modify / delete data on {env}?". A TC whose `Data effect` is
     not read-only runs only on "yes"; every record you create or change is identified before the
@@ -177,16 +192,16 @@ publishing (skill 4) stays optional for skill 5.
 |---|------|------|
 | 1 | **Intake** — locate the document(s) (path / feature / story id / SPEC folder), read the header (`Status`, `Implementation status`, `MCP validation` stamp, `Review page language`), classify the document state (pending / approved / already validated / validated by 3b / legacy / not a TC document), resolve the profile; state `tc_output_folder`. | `references/intake.md` §1-2 |
 | 2 | **Learning file + previous answers** — Index + tag grep (`[type: env]`, `[type: trick]`, `[type: data]`, `## Common Flows`, `## Locale Knowledge`), the model sections' Q&A (3, 3b, 3c). | `references/learning-file.md`, `references/open-questions.md` §1 |
-| 3 | **Probe playwright-cli FIRST** — absent → BLOCKED (`/sync-skills --tools`). Then ONE combined ask: base URL (unless recorded), username per role, login method per role (attended / secrets file), implementation status (only when the header says not yet checked), environment notes, data changes allowed (yes / no), and the revision authorization when the document is APPROVED and you expect changes — WAIT. Record every answer except anything secret. | `references/browser-cli.md` §1, `references/intake.md` §3 |
-| 4 | **Parse the set** — TCs and their current `Validation` + evidence stamps (and which validator wrote each), common flows (shared step prefixes) and unique tails, executable count, risk signals (they order the walk, never exclude), data-changing TCs, data items from `TEST-DATA`, open `PB-*` and `Q-*` entries. | `references/discovery-plan.md` §1, `references/tc-format-contract.md` |
+| 3 | **Probe playwright-cli FIRST** — absent → BLOCKED (`/sync-skills --tools`). Then ONE combined ask: base URL — the `[E1]` row (unless recorded), the username of each referenced account still `unknown` in `TEST-DATA` §1, login method per account (attended / secrets file with `A{n}_USER` / `A{n}_PASSWORD` names), implementation status (only when the header says not yet checked), environment notes, data changes allowed (yes / no), and the revision authorization when the document is APPROVED and you expect changes — WAIT. Record every answer except anything secret. | `references/browser-cli.md` §1, `references/intake.md` §3 |
+| 4 | **Parse the set** — TCs and their current `Validation` + evidence stamps (and which validator wrote each), common flows (shared step prefixes) and unique tails, executable count, risk signals (they order the walk, never exclude), data-changing TCs, data items from `TEST-DATA`, open `PB-*` and `Q-*` entries, and the reviewer's open comments (`REVIEW-COMMENTS-{feature}.md` beside the document, `Reviewer comment` lines, or text pasted in chat) — each is a hint for the walk (what to look at, what the reviewer doubts), never a state and never a design change. | `references/discovery-plan.md` §1, `references/tc-format-contract.md` |
 | 5 | **Implementation status** — one targeted entry-point look + the answer + an optional skill-4 report; classify the story and, where they differ, each AC (a classification, not a question — unbuilt parts become `not-implemented`, never defects). | `references/walk-rules.md` §1 |
 | 6 | **Freshness pass** — every previously observed TC: recompute the content and requirement-text hashes, compare env / build / open questions; stale → `draft (stale — …)` and reported; nothing is skipped either way. | `references/patch-rules.md` §1 |
 | 7 | **Plan line** — no gate: state in one line that all `N` executable TCs will be walked (`F` flows once, data-changing TCs per the answer); a narrowing flag or sentence gets the one-line "this skill always walks every TC". No WAIT. | `references/discovery-plan.md` §2-§4 |
 | 7b | **Cross-validator handling** — every TC's own stamp: evidence written by 3b (`tool: mcp` or no `tool` key) is noted (current / stale at intake), re-validated this run and replaced on observation; listed in the final message; never asked about. | `references/patch-rules.md` §1b |
-| 8 | **Walk — every TC** — sessions per role, login per the chosen method, discovery plan, targeted budget (snapshot once per new screen, each common flow once, every TC's unique tail), data-changing rules, secondary-locale policy, correction rules, outcome rule, validation states, failure rule; one progress line per screen. | `references/walk-rules.md` §2-§7, `references/browser-cli.md` §2-§9 |
+| 8 | **Walk — every TC** — sessions per account, login per the chosen method, discovery plan, targeted budget (snapshot once per new screen, each common flow once, every TC's unique tail), every token resolved per ID, stop at a `[HUMAN]` step (`draft — not app-validated (human step pending)`), data-changing rules, secondary-locale policy, correction rules, outcome rule, validation states, failure rule; one progress line per screen. | `references/walk-rules.md` §2-§7, `references/browser-cli.md` §2-§9 |
 | 9 | **Test data** — one read-only look per item on its listing screen → READY / MISSING / UNKNOWN; advanced facts (exact values, required states, extra accounts, creation ways actually available) noted for the patch. | `references/patch-rules.md` §3 |
 | 10 | **Self-review** — the eleven checks; own findings fixed in place. | `references/self-review.md` |
-| 11 | **Write back** — authorization check → `TEST-CASES` patch (states + stamps with `tool: cli` and `outcome-check`, wording, header counts + progress, enhancement log append, PB upsert with screenshots, Q entries, findings) → `TEST-DATA` patch → render (`--write-skeleton` → fill `ar` → `--write` when Arabic) → learning file → close every run session, delete the run's snapshot files → final message + structured return. | `references/patch-rules.md`, `references/html-page.md`, `references/browser-cli.md` §8 |
+| 11 | **Write back** — authorization check → `TEST-CASES` patch (states + stamps with `tool: cli` and `outcome-check`, wording, header counts + progress, enhancement log append, PB upsert with screenshots, Q entries, findings) → `TEST-DATA` patch → comments: each handled entry `answered` / `declined` with a one-line Response (a design change it asks for is `answered` with the route `skill 3 --revision`; `html-page.md` §7b) → render (English by default; under `--lang ar`: `--write-skeleton` → fill `ar` → `--write`) → learning file → close every run session, delete the run's snapshot files → final message (incl. "Needs a human run") + structured return. | `references/patch-rules.md`, `references/html-page.md`, `references/browser-cli.md` §8 |
 
 Load a reference only when its step runs. A default run needs `intake.md`, `browser-cli.md`,
 `learning-file.md`, `discovery-plan.md`, `walk-rules.md`, `patch-rules.md`, `self-review.md` and
@@ -226,9 +241,13 @@ the header lines `Implementation status`, `MCP validation` (counts + the stamp `
 {date}, env {name}, scope {mode}[, re-run {n}], tool cli`) and `App validation progress`; the
 `## Enhancement Log` (append), `## Potential Bugs` (upsert; `pb-meta` gains `screenshot:`),
 `## Open Questions` and the `## Open Findings` buckets; `Status` only per invariant 5. You never
-touch a design field, the summary-table design columns, the coverage / traceability /
-manual-only tables (invariant 6) or the frozen anchors. In `TEST-DATA-{feature}.md`: item
-statuses, `Must look like`, §1 accounts, §4 problems, §5 ways, header counts and `Environment`.
+touch a design field (incl. `Tags`), the summary-table design columns, the coverage /
+traceability / manual-only tables (invariant 6), the frozen anchors, a `[HUMAN]` marker or a
+reference token (`[E{n}]` / `[A{n}]` / `[D{n}]` stay as written; no literal ever replaces one).
+A TC with a `[HUMAN]` step ends `draft — not app-validated (human step pending)` with
+`outcome-check: human step pending`. In `TEST-DATA-{feature}.md`: item statuses, `Must look
+like`, §0 environment `Value` / `Status` (the `[E1]` base URL you asked for), §1 accounts, §4
+problems, §5 ways, header counts and `Environment`.
 Skills 4 and 5 parse the same frozen fields as before (`link-qc-3-generate-manual-test-cases/SKILL.md`
 "Downstream contract"): skill 5 carries your states forward as possibly stale; skill 4 reads
 neither states nor stamps; the shared renderer reads the `by 3c` stamp. A change to an APPROVED

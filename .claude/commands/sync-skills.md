@@ -1,5 +1,5 @@
 ---
-description: Pull the latest QA skills (1-12, 3b and 3c) and this command from the canonical GitHub repo AhmedZaher1233/Link_AI_Pro into the current project's .claude/skills/, migrate .mcp.json from the legacy `word` MCP (office-word-mcp-server) to the `docx` MCP (docx-mcp-server, pinned `--with mcp<2`), and — only with --tools — install playwright-cli + its browser for skill 3c and Pillow + numpy for link-qc-6-ui-testing (when Python exists). Use in ANY project. Args: [skill names…] [--dry-run] [--branch <name>] [--force] [--no-mcp] [--tools]
+description: Pull the latest QA skills (1-12, 3b and 3c) and this command from the canonical GitHub repo AhmedZaher1233/Link_AI_Pro into the current project's .claude/skills/, migrate .mcp.json from the legacy `word` MCP (office-word-mcp-server) to the `docx` MCP (docx-mcp-server, pinned `--with mcp<2`), and — only with --tools — install playwright-cli + its browser for skill 3c and Pillow + numpy for link-qc-6-ui-testing (when Python exists). Use in ANY project. Args: [skill names…] [--dry-run] [--branch <name>] [--force] [--no-mcp] [--tools]. By default it DELETES our Link skill folders and downloads them fresh — only after the user confirms; other skills and files are never deleted.
 argument-hint: "[link-qc-1-generate-update-testing-structure … link-qc-3b-validate-manual-test-cases link-qc-3c-validate-manual-test-cases-cli … link-qc-11-discover-business-rules link-qc-12-adhd-output-style] [--dry-run] [--branch main] [--force] [--no-mcp] [--tools]"
 allowed-tools: Bash(node *sync-qa-skills.mjs*), Bash(curl *), Bash(mkdir *), Read, Glob, Grep
 ---
@@ -20,7 +20,7 @@ Arguments: `$ARGUMENTS`
 - No skill names → every skill in `SKILLS` (1-12, 3b and 3c) + this command.
 - Skill folder names → `--only <name>` for each.
 - `--dry-run` → run the script with `--check` (read-only, nothing copied).
-- `--force` → overwrite files that have local edits.
+- `--force` → overwrite files that have local edits (update-only answer only).
 - `--branch <name>` → passed through.
 - `--no-mcp` → leave `.mcp.json` untouched (skills only).
 - `--tools` → also install the optional tools: playwright-cli for skill 3c, and Pillow + numpy for link-qc-6-ui-testing when a Python interpreter already exists (passed through to `--apply`; `--check` only plans it). Without it nothing is installed — 3b and every other skill need none of it.
@@ -48,29 +48,49 @@ server is ever changed; a `.mcp.json` that does not parse is left alone and repo
 
    If the download fails → report "source unreachable — local skills unchanged" and stop.
 
-2. **Run it** from the project root, passing the mapped arguments:
+2. **Check, then confirm.** Run `--check` (below) and read its `replace` block. When
+   `replace.needsConfirmation` is true, show `replace.deleteAndRedownload`, `replace.legacyRemoved`,
+   `replace.lost` (every local edit / extra file that will disappear) and `replace.keptUntouched`, then ask
+   ONCE (AskUserQuestion) with `replace.confirmText` as the question — it says that any enhancement made to
+   the Link skills is removed and replaced with the new version. Options:
+   - **Replace — delete and download fresh** (recommended) → `--apply --replace --yes`
+   - **Update only — keep my edits** → plain `--apply` (edited files are SKIPPED, extra files kept)
+   - **Cancel** → stop; nothing changes.
+
+   The delete + re-download covers ONLY our skill folders (`lib.mjs` `SKILLS` + legacy `SKILL_RENAMES`
+   names) and this command file. Other skill folders under `.claude/skills/`, other commands, `.mcp.json`,
+   `.gitignore`, `Testing/`, `docs/` and settings are never deleted; the `.mcp.json` migration and
+   `--tools` keep their normal behaviour and are not part of the question. Never pass `--yes` without the
+   user's answer in this run — the script refuses `--replace` without it. When `needsConfirmation` is false
+   (first install, nothing of ours present) run plain `--apply` without asking. `--dry-run` shows the plan
+   and asks nothing.
+
+3. **Run it** from the project root, passing the mapped arguments:
 
    ```bash
    node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs --check --pretty [--branch X] [--only …]
-   node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs --apply --pretty [--force] [--branch X] [--only …]
+   node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs --apply --pretty [--replace --yes | --force] [--branch X] [--only …]
    ```
 
-   Always run `--check` first and show the result; without `--dry-run`, follow with `--apply`.
+   Always run `--check` first and show the result; without `--dry-run`, follow with `--apply` per the
+   user's answer in step 2.
    **Run `--apply` only once.** If that pass updates the sync implementation itself (the script,
    `lib.mjs` or this command), the script re-runs itself once with the new code and returns both
    passes in one payload (`rerun` field) — never ask the user to run `/sync-skills` a second time.
    The script refuses to run inside the canonical repo itself (use `git pull` there), migrates a
-   legacy uppercase `.claude/Skills` folder to `.claude/skills`, skips files with uncommitted
-   local edits unless `--force`, never deletes local-only files (a folder carrying a pre-`link-qc-N` name from an
-   earlier release — `lib.mjs` `SKILL_RENAMES` — is the one exception: `--apply` removes it once its replacement
-   is in place and reports it under `legacy-removed`), and never touches anything
+   legacy uppercase `.claude/Skills` folder to `.claude/skills`; with `--replace --yes` it deletes each
+   of our skill folders and puts the fresh copy in its place (staged first, the old folder restored on any
+   failure — `replace-failed`). Plain `--apply` (update only) skips files with uncommitted
+   local edits unless `--force` and never deletes local-only files (a folder carrying a pre-`link-qc-N` name from an
+   earlier release — `lib.mjs` `SKILL_RENAMES` — is the one exception in both modes: `--apply` removes it once its replacement
+   is in place and reports it under `legacy-removed`). It never touches anything
    outside `.claude/skills/`, this command, the `docx` / legacy `word` entries of `.mcp.json`
    (see the migration note above; `--no-mcp` disables it) and — with `--tools` only — the
    optional tools (`npm install -g @playwright/cli@latest`, `playwright-cli install-browser`,
    the `.playwright-cli/` gitignore line for skill 3c; `pip install pillow numpy` for link-qc-6-ui-testing when
    Python exists). A failed tool step is reported as `tool-failed` and never stops the skills copy.
 
-3. **Report** the script's `summary`, `applied`, `localOnlySkills`, `legacySkills`, `mcp` and `hint` fields as a short
+4. **Report** the script's `summary`, `applied` (`replaced` / `installed` / `legacy-removed` / `replace-failed` per folder), `localOnlySkills`, `legacySkills`, `mcp` and `hint` fields as a short
    table (skill · result · files new/updated/current). When a `rerun` field is present, add one line
    `sync updated itself and re-ran: pass 1 {n} files · pass 2 {m} files` — the table reflects pass 2.
    Then one `.mcp.json` line:

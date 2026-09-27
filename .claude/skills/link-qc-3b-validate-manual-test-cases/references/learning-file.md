@@ -19,7 +19,7 @@ exists to progressively eliminate rediscovery and re-asking across stories.
 
 | Skill | Section | Records |
 |---|---|---|
-| `link-qc-3-generate-manual-test-cases` | `### Manual TC Model (skill 3)` | design-time answers (spec source, review-page language, implementation status as stated), design knowledge |
+| `link-qc-3-generate-manual-test-cases` | `### Manual TC Model (skill 3)` | design-time answers (spec source, implementation status as stated, test interfaces for out-of-browser outcomes), design knowledge |
 | `link-qc-3b-validate-manual-test-cases` | `### Validation Model (skill 3b)` | base URL per environment (`[type: env]`, never a credential), common flows walked live (name + date), screens confirmed locale-independent, build/version location, live answers |
 | `link-qc-3c-validate-manual-test-cases-cli` | `### CLI Validation Model (skill 3c)` | the same facts observed through playwright-cli, plus the login method used per environment (attended / secrets file — names only, never a value); the cross-validator answers |
 
@@ -36,9 +36,15 @@ data, locale differences, tricks) go to the shared sections, not to a model sect
 - Before asking the user anything, grep `#### Questions and Answers` of **both** model sections
   for the question's keywords (e.g. `base URL`, `role`, `environment`, `implemented`) and the
   shared `[type: env]` lines — then follow `open-questions.md` §1.
-- Review-page language: grep `output language` and `لغة` under `## Project Knowledge` and the
-  skill 2 / skill 3 Q&A. A saved answer settles `review_page_language` without asking — even
-  when the `REQ-*.md` you were given is English (skill 2 always writes REQ files in English).
+- Review-page language is **never** read from the learning file: the page is English unless this
+  run's task input asks for another language (`--lang ar` or an explicit sentence). An old
+  "Output language for Arabic requirements" line, if present, is ignored and mentioned once in the
+  final message ("pass `--lang ar` to render Arabic").
+- Test interfaces for out-of-browser outcomes (mail sandbox, SMS test provider, OTP test hook,
+  notification API, job trigger): grep `test interface`, `sandbox`, `OTP`, `SMS`, `mail` in the
+  `[type: env]` lines and the `## 0. Environment` tables of the project's other TEST-DATA files
+  before designing or validating such a step. A recorded "none available for {environment}" is an
+  answer — it settles `[HUMAN]` without a question.
 - Load a whole section only if it is under ~40 lines and the grep found nothing. A file under
   80 lines may be read whole.
 - Anything already answered is NOT re-asked and NOT re-discovered live. State what you are
@@ -51,14 +57,15 @@ data, locale differences, tricks) go to the shared sections, not to a model sect
 - Every question the user answered this run → one tagged line under this skill's
   `#### Questions and Answers`:
   `- [module: X] [type: qa] **Q (skill 3 | skill 3b | skill 3c, {YYYY-MM-DD}):** … — **A:** … (confirmed by user {date})`.
-  Project-wide answers (base URL per environment, roles, module names, implementation status,
-  review-page language) are ALSO added to `## Project Knowledge`. **Credentials are NEVER
-  written.** An unanswered recommendation is never written.
-- The review-page language answer is project-wide: write it under `## Project Knowledge` AND
-  under the skill's Q&A as
-  `- [module: project] [type: qa] **Q (skill 3, {YYYY-MM-DD}):** Output language for Arabic requirements — **A:** Arabic`
-  (update the existing line if skill 2 already wrote one and the user changed the answer).
+  Project-wide answers (base URL per environment, roles, module names, implementation status)
+  are ALSO added to `## Project Knowledge`. **Credentials are NEVER written.** An unanswered
+  recommendation is never written. The review-page language is **not** written — it is decided
+  per run by the task input and recorded only in the document's `Review page language:` line.
   The learning file itself is always English.
+- A test-interface answer (which authorized mail sandbox / SMS provider / OTP hook / notification
+  API / job trigger exists for an environment, or that none does) is written once as a
+  `[type: env]` line under `## Project Knowledge` — the service kind and where it is reached in
+  words, never a credential — so no later run asks again.
 - Every new fact → one tagged line in the matching shared section (`## Common Flows`,
   `## UI Knowledge`, `## Test Data`, `## Locale Knowledge`, `## Automation Tricks`) or this
   skill's `#### Knowledge`. Grep the same tags first; update or dedupe instead of appending twins.
@@ -70,9 +77,9 @@ data, locale differences, tricks) go to the shared sections, not to a model sect
   entries instead of copying text; update the `## Index` row for every module touched.
 - Update any entry contradicted by live observation or by the spec — never leave conflicting or
   duplicate entries. Specs and steering always win.
-- Store learned KNOWLEDGE in your own words, not requirement text. "To open KPI Details: open
-  the strategy → open the objective → select the KPI" belongs here, and so does "A KPI cannot be
-  closed while it has open initiatives (source: US-1234 AC-3)". Never paste "The system shall …"
+- Store learned KNOWLEDGE in your own words, not requirement text. "To open Order Details: open
+  Orders → open the order → select the Details tab" belongs here, and so does "An order cannot be
+  closed while it has open shipments (source: US-1234 AC-3)". Never paste "The system shall …"
   sentences verbatim.
 - Plain English only: never method / class / function / file names, variables, CSS or XPath
   selectors, code snippets, or stack traces. Element identifiers observed incidentally MAY go

@@ -18,9 +18,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const TC = ['TC-01', 'TC-02', 'TC-03'];
 const REQ = ['REQ-014'];
 
+// automationRoot is the folder the page-class pass (case 18) walks; it points at fixtures/pages so
+// the six duplicate roots under fixtures/pom/ never leak into cases 1-17.
 const paths = () => ({
   manifestState: 'absent', manifestFile: null,
-  automationRoot: 'fixtures', tests: 'fixtures', pages: 'fixtures/pages', layers: null,
+  automationRoot: 'fixtures/pages', tests: 'fixtures', pages: 'fixtures/pages', layers: null,
 });
 
 function run(fixture, { req = false, root = here, args = {} } = {}) {
@@ -296,7 +298,7 @@ function check(name, problems, detail) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-validate-cfg-'));
   try {
     fs.cpSync(path.join(here, 'fixtures'), path.join(tmp, 'fixtures'), { recursive: true });
-    const cfgDir = path.join(tmp, 'fixtures');   // paths().automationRoot
+    const cfgDir = path.join(tmp, 'fixtures', 'pages');   // paths().automationRoot
     fs.writeFileSync(path.join(cfgDir, 'playwright.config.ts'),
       "import { defineConfig } from '@playwright/test';\nimport { TIMEOUTS } from './timeouts';\nexport default defineConfig({ timeout: TIMEOUTS.test });\n");
     fs.writeFileSync(path.join(cfgDir, 'timeouts.ts'), 'export const TIMEOUTS = { test: 90_000 };\n');
@@ -323,6 +325,73 @@ function check(name, problems, detail) {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
   check('17 fingerprint follows one hop of the config\'s relative imports', p, {});
+}
+
+/* 18 — page-class duplicate candidates (pom-duplicate-page): one sub-case per row of fixtures/pom/README.md.
+   The rule produces CANDIDATES; the inventory row decides. An undecided pair keeps the gate BLOCKED. */
+{
+  const pomRoot = (name) => 'fixtures/pom/' + name;
+  const pomRun = (name, file, extra = {}) => analyze({
+    root: here, args: {},
+    paths: { manifestState: 'absent', manifestFile: null, automationRoot: pomRoot(name), tests: pomRoot(name) + '/tests', pages: pomRoot(name) + '/pages', layers: null },
+    files: [pomRoot(name) + '/pages/' + file], treatAsSpec: false,
+    tcIds: new Set(TC), reqIds: null, tcIdSource: 'selftest', reqIdSource: null, allowList: { entries: [], file: null }, ...extra,
+  });
+  const dup = (r) => r.findings.filter((f) => f.ruleId === 'pom-duplicate-page');
+  const decided = (r) => r.findings.filter((f) => f.ruleId === 'pom-duplicate-page-decided');
+  const p = [];
+
+  // (1) same class name in two files → review, evidence name, gate BLOCKED
+  const r1 = pomRun('same-name', 'OrderPage.ts');
+  if (dup(r1).length !== 1) p.push('same-name: expected 1 pom-duplicate-page, got ' + dup(r1).length);
+  else { const f = dup(r1)[0]; if (f.severity !== 'review' || f.evidence !== 'name') p.push('same-name: severity/evidence ' + f.severity + '/' + f.evidence); if (!f.pair || !/checkout\/OrderPage\.ts$/.test(f.pair.b.file) || f.pair.a.class !== 'OrderPage' || f.pair.b.class !== 'OrderPage') p.push('same-name: pair does not name both files and classes: ' + JSON.stringify(f.pair)); if (!/candidate, not a verdict/.test(f.message)) p.push('same-name: message claims a verdict'); }
+  if (r1.gate !== 'BLOCKED' || !/pom-duplicate-page/.test(r1.gateReason)) p.push('same-name: gate ' + r1.gate + ' — an undecided candidate must BLOCK the scanner gate');
+  if (!r1.review.some((f) => f.ruleId === 'pom-duplicate-page')) p.push('same-name: the finding is not in review[]');
+  if (r1.pageScan.classes.length !== 2 || r1.pageScan.undecided !== 1 || r1.pageScan.decided !== 0) p.push('same-name: pageScan ' + JSON.stringify({ classes: r1.pageScan.classes.length, undecided: r1.pageScan.undecided, decided: r1.pageScan.decided }));
+  if (!Object.keys(r1.fingerprint.files).some((f) => /checkout\/OrderPage\.ts$/.test(f))) p.push('same-name: the second page file (found by the root walk, not by --files) was not hashed into the fingerprint');
+
+  // (2) different class name, same route → review, evidence route (reuse the existing page under another name)
+  const r2 = pomRun('same-route', 'OrderListPage.ts');
+  if (dup(r2).length !== 1 || dup(r2)[0].evidence !== 'route' || !dup(r2)[0].evidenceKinds.includes('route') || dup(r2)[0].evidenceKinds.includes('name')) p.push('same-route: ' + JSON.stringify(dup(r2).map((f) => f.evidenceKinds)));
+  if (dup(r2).length && (dup(r2)[0].detail.route || []).join() !== '/orders') p.push('same-route: shared route not reported: ' + JSON.stringify(dup(r2)[0].detail));
+
+  // (3) numeric-prefixed / case-variant twin → review, evidence name (false-negative guard)
+  const r3 = pomRun('prefixed-twin', 'ListingPage.ts');
+  if (dup(r3).length !== 1 || dup(r3)[0].evidence !== 'name') p.push('prefixed-twin: ' + JSON.stringify(dup(r3).map((f) => f.evidenceKinds)) + ' — "4-listingpage.ts" / "ListingPages" must match "ListingPage"');
+
+  // (4) legitimately shared route + an inventory row naming both → pom-duplicate-page-decided (info), --strict PASS
+  const r4 = pomRun('shared-route', 'DashboardPage.ts', { inventory: pomRoot('shared-route') + '/automation-inventory.md' });
+  if (dup(r4).length !== 0) p.push('shared-route+inventory: still ' + dup(r4).length + ' undecided pom-duplicate-page');
+  if (decided(r4).length !== 1) p.push('shared-route+inventory: expected 1 pom-duplicate-page-decided, got ' + decided(r4).length);
+  else { const f = decided(r4)[0]; if (f.severity !== 'info' || !/^reuse DashboardPage/.test(f.decision) || f.evidence !== 'route' || !f.inventoryLine) p.push('shared-route+inventory: decided finding lacks the row decision: ' + JSON.stringify({ sev: f.severity, decision: f.decision, evidence: f.evidence, line: f.inventoryLine })); }
+  if (r4.gate !== 'PASS') p.push('shared-route+inventory: gate ' + r4.gate + ' != PASS (' + r4.gateReason + ')');
+  if (r4.config.inventoryFile === null || r4.pageScan.inventory.rows !== 2) p.push('shared-route+inventory: inventory not recorded in the payload: ' + JSON.stringify(r4.pageScan.inventory));
+
+  // (5) the same shared route with NO row → review, --strict BLOCKED (an unaddressed candidate fails the checkpoint)
+  const r5 = pomRun('shared-route', 'DashboardPage.ts');
+  if (dup(r5).length !== 1 || decided(r5).length !== 0 || r5.gate !== 'BLOCKED') p.push('shared-route without inventory: dup ' + dup(r5).length + ' decided ' + decided(r5).length + ' gate ' + r5.gate);
+  const script = path.join(here, 'validate-automation.mjs');
+  const cli = (extra) => spawnSync(process.execPath, [script, '--root', here, '--automation-root', pomRoot('shared-route'), '--tests-path', pomRoot('shared-route') + '/tests', '--pages-path', pomRoot('shared-route') + '/pages', '--files', pomRoot('shared-route') + '/pages/DashboardPage.ts', '--tc-ids', TC.join(','), '--strict', ...extra], { encoding: 'utf8' });
+  const strictPass = cli(['--inventory', pomRoot('shared-route') + '/automation-inventory.md']);
+  if (strictPass.status !== 0) p.push('--strict with the inventory exit ' + strictPass.status + ' != 0');
+  const strictBlocked = cli([]);
+  if (strictBlocked.status !== 2) p.push('--strict without the inventory exit ' + strictBlocked.status + ' != 2 (BLOCKED)');
+  let cliPayload; try { cliPayload = JSON.parse(strictBlocked.stdout); } catch { p.push('CLI stdout is not a single JSON object'); }
+  if (cliPayload && cliPayload.gate !== 'BLOCKED') p.push('CLI gate ' + cliPayload.gate);
+  // an inventory path that does not exist, or a table without the decision columns → warning, nothing decided
+  const r5b = pomRun('shared-route', 'DashboardPage.ts', { inventory: pomRoot('shared-route') + '/missing-inventory.md' });
+  if (!has(r5b, 'pom-inventory-unreadable') || dup(r5b).length !== 1) p.push('missing inventory file must warn and decide nothing');
+
+  // (6) two pages sharing ONE common loader locator → no hit (threshold is 2 — false-positive guard)
+  const r6 = pomRun('common-loader', 'OrderPage.ts');
+  if (dup(r6).length || decided(r6).length) p.push('common-loader: one shared locator raised a candidate: ' + JSON.stringify(dup(r6).map((f) => f.evidenceKinds)));
+  if (r6.gate !== 'PASS') p.push('common-loader: gate ' + r6.gate + ' (' + r6.gateReason + ')');
+  if (r6.pageScan.classes.length !== 2) p.push('common-loader: both page classes must still be listed in pageScan');
+
+  // the existing fixtures (one page class) never raise the rule
+  const r7 = run('valid.fixture.ts');
+  if (has(r7, 'pom-duplicate-page') || has(r7, 'pom-duplicate-page-decided')) p.push('a single page class raised a duplicate finding');
+  check('18 page-class duplicate candidates: name / route / prefixed twin / decided vs undecided shared route / common loader', p, { sameName: dup(r1).length, sameRoute: dup(r2).length, twin: dup(r3).length, decided: decided(r4).length, undecided: dup(r5).length, loader: dup(r6).length });
 }
 
 const out = {

@@ -135,7 +135,7 @@ The rules shape what the reader sees in the conversation. They NEVER change what
 disk or to Azure DevOps: `REQ-*.md`, `TEST-CASES*.md`, `TEST-DATA*.md`, HTML review pages,
 beautified upload documents, `ADO-MAP.md`, `Testing/project-learning.md`, project profiles, run
 progress logs, bug reports, or any template the skill mandates (Full Review Template, AUTOMATION
-COMPLETE, PUBLISH COMPLETE, BLOCKED). Those are downstream contracts; a "cap to 5" or "drop the
+COMPLETE, PUBLISHED AND VERIFIED, BLOCKED). Those are downstream contracts; a "cap to 5" or "drop the
 recap" applied to them breaks the next skill. If a skill's SKILL.md and this overlay disagree
 about a FILE, the skill wins. If they disagree about a CHAT message, the shape here wins and the
 skill's required content stays complete.
@@ -165,6 +165,30 @@ the exact thing the reader must do, with the path, and nothing before it:
 
 Never ask "want me to continue?" in place of the gate line. Never flip a status yourself.
 
+### C2. Five contract facts the chat repeats, never rewrites
+
+- **Reference tokens.** A TC says `Login as Administrator [A1]`, `Open the portal [E1]`,
+  `[D2]` — each token is one row of `TEST-DATA-{feature}.md`. In chat, keep the token; never
+  paste the URL or the username it resolves to. Gate line when a token has no row:
+  `Add row E2 to TEST-DATA-{feature}.md (mail sandbox), then re-run skill 3 --revision.`
+- **`[HUMAN]` steps.** A step starting with `[HUMAN]` needs a person. Say it as one number:
+  `3 TCs stop at a [HUMAN] step (OTP from the test phone) — needs a human run.` They are
+  designed in full, never N/A; 3b / 3c end them `draft (human step pending)`; skill 5 reports
+  `partial (human step: n)` — never PASS.
+- **English default.** Every page and review is English unless THIS run passed `--lang ar` or
+  said so. Never ask "Arabic or English?"; never say "reusing the saved language". One line at
+  most: `Arabic sidecar exists — pass --lang ar to render it.`
+- **Automation inventory (skill 5).** Before skill 5 writes a file it lists every page object
+  in the automation root and decides per screen: reuse / extend / create, in
+  `automation-inventory.md`. Chat shows the decision count, not the list:
+  `Inventory: 4 screens — 2 reuse, 1 extend, 1 create (automation-inventory.md).` An
+  unaddressed duplicate candidate is a Checkpoint A / B blocker — one gate line names the pair.
+- **Five publish outcomes (skill 4).** Exactly one, with its counts, highest wins: `BLOCKED` ·
+  `PUBLICATION INCOMPLETE` · `PUBLISHED WITH MISMATCHES` · `PUBLISHED, NOT VERIFIED` ·
+  `PUBLISHED AND VERIFIED`. The line is copied verbatim
+  (`PUBLISHED WITH MISMATCHES (2 mismatch · 1 conflict · 1 not verified · snapshot NOT_RUN)`);
+  never "all items published".
+
 ### D. BLOCKED / ENVIRONMENT_BLOCKED read as cause -> fix
 
 Keep the skill's BLOCKED block intact (it is a contract). Above it, one line: what is missing and
@@ -174,7 +198,7 @@ Environment failures (VPN, unreachable app, expired credentials) are never phras
 ### E. Long runs: progress lines, not prose
 
 Skill 5 live progress is one line per refresh:
-`Smoke 4/9 · TC-YLVL-012 running · 03:10 elapsed · ETA 04:00 · 0 failed`.
+`Smoke 4/9 · TC-ORD-012 running · 03:10 elapsed · ETA 04:00 · 0 failed`.
 Skill 3b / 3c live validation and skill 10/11 code discovery: `Validated 7/18 · flows 2/3 · 2 pending
 implementation · 1 stale · 0 blocked` (3c appends `· tool cli`) — no narration of each click, command or file.
 link-qc-6-ui-testing measurement: `Regions 8/12 · states 6/11 · widths 3/5 · bugs so far 7 (S2 1 · S3 4 · S4 2)`.

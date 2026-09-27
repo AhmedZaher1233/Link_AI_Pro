@@ -32,10 +32,13 @@ PREREQUISITES (installed for you — the skill never installs anything itself):
   - .playwright-cli/ in .gitignore         — added by the same sync step (snapshots land there).
   - OPTIONAL: a browser secrets file       — run skill 1's scripts/set-playwright-secrets.ps1 (or
                                              .sh) ONCE in your own terminal if you want unattended
-                                             logins; it stores usernames / passwords per role in a
-                                             file outside the repo and points PLAYWRIGHT_MCP_SECRETS_FILE
-                                             at it. The skill only ever types the secret NAMES.
-                                             Without it, you log in yourself (attended login).
+                                             logins; it stores username / password pairs in a file
+                                             outside the repo and points PLAYWRIGHT_MCP_SECRETS_FILE
+                                             at it. Name each pair after the account ID the TCs
+                                             reference — A1_USER / A1_PASSWORD for "[A1]" — so the
+                                             skill can resolve "Login as Administrator [A1]" to
+                                             that account. The skill only ever types the secret
+                                             NAMES. Without it, you log in yourself (attended login).
 
 OPTIONAL FLAGS:
   (no scope flag)                There is no scope gate: every TC is walked on every run —
@@ -49,23 +52,33 @@ OPTIONAL FLAGS:
   --authorize-revision           On an APPROVED document: you already authorize the changes,
                                  so the skill patches without asking (Status becomes PENDING
                                  HUMAN REVIEW only if something actually changed).
-  --lang ar|en                   Language of the re-rendered review page (default: the
-                                 document's "Review page language" line).
+  --lang ar|en                   Language of the re-rendered review page (default: English —
+                                 never the document's "Review page language" line, a saved
+                                 answer or an existing Arabic sidecar; only this run's flag or
+                                 an explicit sentence switches it; the line is rewritten to
+                                 what this run rendered).
   --audit                        Probe playwright-cli and analyse the document only: reports
                                  the document state, the common flows, the executable set
                                  that a run would walk and what it would write. Writes
                                  NOTHING, asks for nothing else.
 
 ASKED DURING THE RUN — ONE message, after the playwright-cli probe:
-  2. Application base URL                  — reused from the learning file when recorded there
-  3. Username PER ROLE                     — for the steps; usernames appear in the steps
-  4. Login method PER ROLE                 — A) attended: the skill opens a visible browser for
-                                             that role and asks you to log in yourself, then
+  2. Application base URL                  — the TEST-DATA "[E1]" row; reused from the learning
+                                             file when recorded there, otherwise asked and written
+                                             into that row (each [E2], [E3]… row is its own
+                                             service — never "the URL")
+  3. Username PER ACCOUNT the TCs reference — the TCs say "Login as Administrator [A1]"; the
+                                             username comes from TEST-DATA §1 and is asked only
+                                             when that row says "unknown" (then filled there).
+                                             No username is ever written into a step
+  4. Login method PER ACCOUNT              — A) attended: the skill opens a visible browser for
+                                             that account and asks you to log in yourself, then
                                              continues (works with SSO / MFA); or
                                              B) secrets file: the skill types the secret NAMES
-                                             from the file the setup script created. A password
-                                             is NEVER typed in chat or on a command line, and
-                                             NEVER written to any file by the skill.
+                                             A{n}_USER / A{n}_PASSWORD for account [A{n}] from
+                                             the file the setup script created. A password is
+                                             NEVER typed in chat or on a command line, and NEVER
+                                             written to any file by the skill.
   5. Is the story implemented?             — only when the document's header says
                                              "not yet checked live"; the skill verifies live
                                              either way
@@ -104,7 +117,10 @@ OUTPUT — WHAT YOU GET (same folder, patched in place)
                                  (date, environment, build, scope, content + requirement hashes,
                                  tool: cli, outcome-check = what was observed for the expected
                                  result); corrected labels and inserted reveal / wait / trigger
-                                 steps; header: Implementation status, MCP validation (+ "by 3c
+                                 steps (reference tokens [E1] / [A1] / [D2] kept — never a
+                                 literal); a TC with a "[HUMAN]" step is walked up to it and
+                                 ends "draft — not app-validated (human step pending)", listed
+                                 under "Needs a human run"; header: Implementation status, MCP validation (+ "by 3c
                                  on {date}, env, scope full, tool cli"), App validation progress;
                                  ## Enhancement Log appended; ## Potential Bugs (PB-n: title,
                                  TC, steps to reproduce, expected, actual; screenshot path in
@@ -115,10 +131,11 @@ OUTPUT — WHAT YOU GET (same folder, patched in place)
                                  UNKNOWN), exact values and states seen, extra accounts,
                                  creation ways confirmed available, problems closed or added,
                                  "Environment: {env} checked {date}"
-    TC-REVIEW-{feature}.html  <- re-rendered by scripts/render-tc-review.mjs (never hand-edited);
-                                 Arabic pages reuse TC-REVIEW-STRINGS-{feature}.ar.json — only
-                                 changed strings need a new translation; an incomplete
-                                 translation is delivered as a clearly marked PREVIEW
+    TC-REVIEW-{feature}.html  <- re-rendered by scripts/render-tc-review.mjs (never hand-edited),
+                                 in English unless you pass --lang ar; Arabic pages reuse
+                                 TC-REVIEW-STRINGS-{feature}.ar.json — only changed strings need
+                                 a new translation; an incomplete translation is delivered as a
+                                 clearly marked PREVIEW
     evidence/PB-{n}-{date}.png <- one screenshot per potential bug (only for discrepancies)
     comparison/               <- only when the 3b-vs-3c comparison protocol runs: the two runs'
                                  output copies (3b-… / 3c-… prefixed) and
@@ -140,6 +157,11 @@ from this run; review "inferred" and "discrepancy" cards with extra care and the
 Potential Bugs (screenshots under evidence/); answer the open questions; then approve the markdown
 (or, if it was approved and changed, re-review and re-approve). Skills 4 and 5 run on the approved
 document as before.
+
+COMMENTS: type in any comment box on the page, click "Save comments" (save
+REVIEW-COMMENTS-{feature}.md beside the page) or "Copy for chat", then say "read my comments".
+The next 3c run reads the open comments as hints for the walk and marks each one answered /
+declined with a one-line response. A change to a test case's design goes to skill 3 --revision.
 
 WHEN TO RUN: after skill 3, whenever the application is reachable — before approval, after
 approval, or again after a new build. Never required. Do not chain it with 3b on the same document

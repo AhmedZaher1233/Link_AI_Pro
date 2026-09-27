@@ -11,7 +11,8 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mj
   --root <project> --pretty \
   [--files a.spec.ts,b.spec.ts] [--tests-path <dir>] [--pages-path <dir>] \
   [--tc-ids <csv|file>] [--req-ids <csv|file>] [--allow-file <path>] \
-  [--evidence-fn captureEvidence] [--treat-as-spec] [--require-steps] [--strict]
+  [--evidence-fn captureEvidence] [--treat-as-spec] [--require-steps] \
+  [--automation-root <dir>] [--inventory <automation-inventory.md>] [--strict]
 
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest.mjs      # exits 1 on mismatch
 node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --help
@@ -31,14 +32,24 @@ under the tests path.
 REQ file — IDs are read out by token). **Without them the ID rules do not run**; they land in
 `notRun[]`, never in a PASS. The script never derives or invents an ID.
 
+`--inventory <automation-inventory.md>` is the story's page-object decision table
+(`{reports_folder}/automation-inventory.md`, written by `<automation_inventory>` before any file is
+generated). The page-class pass runs with or without it — over the **whole automation root**, not
+only `pages/` — and every candidate pair it finds is `pom-duplicate-page` (`review`) until a row of
+the table names both classes, which turns it into `pom-duplicate-page-decided` (`info`, carrying the
+row's decision). Pass the file on every run; an inventory path that does not exist or holds no
+decision table is `pom-inventory-unreadable` (warning) and decides nothing.
+
 **Run the project's own tooling first where it exists** — ESLint with `eslint-plugin-playwright`,
 `tsc`, an existing lint script. This script covers the rules those do not.
 
 ## Output
 
-One JSON object: `{ tool, schemaVersion, readOnly, root, generatedOn, config, scope, fingerprint,
-findings[], review[], exceptions[], notRun[], traceability, counts, gate, gateReason,
-complianceNote, limits[] }`.
+One JSON object: `{ tool, schemaVersion, readOnly, root, generatedOn, config, scope, pageScan,
+fingerprint, findings[], review[], exceptions[], notRun[], traceability, counts, gate, gateReason,
+complianceNote, limits[] }`. `pageScan` lists every page class the root walk found (file, line,
+name, base class, route literals, locator count), the candidate / decided / undecided counts and the
+inventory file used — it is the machine half of the `<automation_inventory>` scan.
 
 Severities: `violation` (moves the gate) · `warning` · `review` (undetermined — blocks a *compliance*
 PASS until closed) · `info`.
@@ -48,12 +59,15 @@ PASS until closed) · `info`.
 | gate | when |
 |---|---|
 | `NOT_RUN` | nothing was analysed — folder missing, no spec matched, scope selector matched nothing |
-| `BLOCKED` | the scan started but its evidence is incomplete — a file in scope was unreadable or unscannable |
+| `BLOCKED` | the scan started but its evidence is incomplete — a file in scope was unreadable or unscannable; **or** a `pom-duplicate-page` candidate pair has no inventory decision (see below) |
 | `FAIL` | scan complete, ≥1 non-excepted violation |
 | `PASS` | scan complete, zero violations — **and nothing more than that** |
 
 A `PASS` with open `review[]` / `notRun[]` items is normal and expected. **The scanner gate is not
-the compliance gate** — see `compliance-checkpoints.md` §1.
+the compliance gate** — see `compliance-checkpoints.md` §1. The one review item that DOES move the
+scanner gate is an undecided `pom-duplicate-page`: Checkpoint A cannot open until every candidate
+pair has a row in `automation-inventory.md`, and that row is the documented semantic review — pass
+it back through `--inventory` and the item closes mechanically (`--strict` exits 2 until then).
 
 **Every `review[]` and `notRun[]` entry is an APPLICABLE check that did not complete.** Each carries
 `applicable: true` and a `resolution` line saying so. Closing one requires supplying the missing
@@ -107,21 +121,50 @@ characters on the line above, or a `qa-allow`; skipped on a line that already pr
 `pom-chained-locator`), `step-missing` (only with `--require-steps`: a test with no `test.step()`
 nested in it and no call to a `step` wrapper the file IMPORTS), `hardcoded-credential`,
 `absolute-url`, `trace-describe-missing-reqid`, `trace-unknown-reqid`, `trace-title-dynamic`,
-`manifest-unreadable`, `exception-malformed`, `exception-expired`.
+`manifest-unreadable`, `exception-malformed`, `exception-expired`, `pom-inventory-unreadable`
+(`--inventory` names a file that is missing or has no `Screen | Decision | Class | Candidates
+considered | Reason` table — nothing is decided).
 
-Warnings never move the gate. The three new ones run in every layer the scan is pointed at — pass
+Warnings never move the gate. The three timing rules run in every layer the scan is pointed at — pass
 page objects and helpers in `--files` or they are never checked.
 
 ### `review` — undetermined, never guessed
 
 `assertions-conditional`, `assertions-unresolved`, `evidence-conditional`, `evidence-unresolved`,
 `evidence-placement-unproven`, `outcome-coverage-unassessed`, `exception-unverified`,
-`pom-architecture-unknown`.
+`pom-architecture-unknown`, `pom-duplicate-page`.
+
+#### `pom-duplicate-page` — candidates, never verdicts (non-exemptible)
+
+The page-class pass walks the **whole automation root** (every `.ts` / `.js` that is not a spec,
+whatever folder or skill wrote it, plus the non-spec files in `--files`) and takes every class whose
+constructor takes a `Page` (`constructor(page: Page)`, or a parameter named `page`) or that extends a
+class whose name ends in `Page` / a page class found in the same scan. Component objects (a scoping
+`Locator` in the constructor) are not pages. Two page classes in two files are a **candidate pair**
+when any of these holds — the finding names both files, both classes, `evidence` (the strongest
+kind) and `evidenceKinds[]` with the matching detail:
+
+| `evidence` | Rule |
+|---|---|
+| `name` | normalized class names equal — case-insensitive, a trailing `s` and a trailing `Page` ignored — or normalized file stems equal, with leading digits + separators ignored (`4-ListingPage.ts` ≡ `ListingPage.ts`, `ListingPages` ≡ `ListingPage`) |
+| `route` | an identical route literal: the first string of `goto(…)` / `gotoAppPath(…)` / `navigate(…)` inside the class body, or a `url` / `path` / `route` field value; a leading `${…}` and a trailing `/` are ignored, case is not significant |
+| `locators` | **two or more** identical locator call literals (`locator('…')`, `getByTestId('…')`, `getByRole('…', { name: '…' })` — every string inside the call joined) — one common loader locator is not a match |
+
+A different class name with the same route is a reuse candidate; a legitimately shared route or
+common locators are closed by the inventory row's justification — **the row decides, the scanner
+never does**. Covered = one row of the `--inventory` table names both classes in its `Class` +
+`Candidates considered` cells (for two classes of the same name: both files, with a folder
+component). Covered → `pom-duplicate-page-decided` (`info`) carrying `decision`, `screen` and
+`inventoryLine`; uncovered → `pom-duplicate-page` (`review`) and the scanner gate is **BLOCKED**
+until the row exists. A page file the scanner cannot strip lands in `notRun[]` under this rule
+(its classes were not compared) — never in a silent PASS. Every page class found is hashed into the
+fingerprint, so a new twin file invalidates a recorded gate.
 
 ### `info`
 
 `assertions-call-found`, `evidence-call-found`, `modifier-declared`, `trace-uncovered-id`,
-`exception-unused`, plus every excepted finding (downgraded, never removed).
+`exception-unused`, `pom-duplicate-page-decided`, plus every excepted finding (downgraded, never
+removed).
 
 ## Call-site resolution — and what a positive result means
 
@@ -230,21 +273,31 @@ These ship in the payload's `limits[]` too, so no one can consume a `PASS` witho
     locator scoped by an earlier assignment is a false positive to justify with a comment.
 15. `networkidle` detection reads string literals next to `waitForLoadState(` or `waitUntil:` only;
     a readiness helper that hides the literal behind a constant is invisible.
+16. Page-class duplicate detection only produces **candidates**: name normalization is a suffix rule
+    (`Address` / `Addresses` do not match), a route or locator built at runtime is invisible, a route
+    inherited from a base class is not seen on the subclass, and whether a match is a duplicate is
+    decided by the inventory row — never here.
 
 The fingerprint (`scopeDigest`) hashes every `playwright*.config.*` in the root and the automation
 root **and one hop of each config's relative imports** (`timeouts.ts`, an env module), so editing
-the shared timeout policy invalidates a recorded gate exactly as editing the config does.
+the shared timeout policy invalidates a recorded gate exactly as editing the config does — and every
+page class the root walk found, so a new twin file does too.
 
 ## Self-test
 
-`selftest.mjs` runs seventeen fixture cases, including the false-PASS guards: evidence in an
+`selftest.mjs` runs eighteen fixture cases, including the false-PASS guards: evidence in an
 uncalled method, an unfollowable hop, a conditional call path, an exception aimed at a
 non-exemptible rule, a linked-but-partially-asserted requirement, unscannable valid code, a post-run
 code change, and — for the timing rules — true positives at known lines (`timing.fixture.ts`),
 false-positive guards (`timing-clean.fixture.ts`: filter-scoped and justified positionals, a
 `networkidle` string constant, a comment, an imported step wrapper), false-negative guards
 (`timing-negative.fixture.ts`: an unrelated `.filter` in the same statement, a local `step`
-function, a step inside the page object) and the config-import fingerprint.
+function, a step inside the page object), the config-import fingerprint and — case 18, over the six
+roots of `fixtures/pom/` — the page-class duplicate candidates: same class name in two files,
+different name + same route, a numeric-prefixed / plural twin (false-negative guard), a shared route
+decided by an inventory row (`pom-duplicate-page-decided`, `--strict` PASS) versus the same route
+with no row (`review`, `--strict` BLOCKED), and two pages sharing one loader locator (no hit —
+false-positive guard).
 
 It **exits non-zero on mismatch** — deliberately. It is a harness, not a reporting script. A failing
 self-test means the validator's verdicts cannot be trusted: record the compliance gate **BLOCKED**

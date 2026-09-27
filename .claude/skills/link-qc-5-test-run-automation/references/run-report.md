@@ -5,11 +5,13 @@ step of PHASE 4 (append, update the bug file, render).
 
 **Never hand-write the HTML. Run the script.** `scripts/render-run-report.mjs` turns the story's
 `TEST-RUN-REPORT-{feature}.md` (test-case status, one section per phase) and
-`BUG-REPORT-{feature}.md` (the defects) plus the machine data in `.runs/phase-N.json` into
-`TEST-RUN-REPORT-{feature}.html` from `assets/run-report.template.html`. It recomputes every
+`BUG-REPORT-{feature}.md` (the defects) plus the machine data in `.runs/phase-N.json` and the
+reviewer's `REVIEW-COMMENTS-{feature}.md` into `TEST-RUN-REPORT-{feature}.html`, from
+`assets/run-report.template.html` (the body partial) inside `assets/report-shell.template.html`,
+the one general report page shared byte-for-byte with skills 3, 3b and 3c. It recomputes every
 number from the tables, refuses to invent one, marks what it cannot supply with `—`, links every
 screenshot by relative path with a "View screenshot" viewer (never base64), and stamps the page
-with a provenance comment (report / bugs / runs sha256 + a self-hash) so a hand-edited page is
+with a provenance comment (report / bugs / runs / comments sha256 + a self-hash) so a hand-edited page is
 detected. Same inputs → same bytes, so a render is always safe to repeat.
 
 ## 1. Commands
@@ -25,12 +27,12 @@ node … --report {run_report_md} --write --force
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-report.mjs --pretty
 ```
 
-`--bugs` and `--runs` override the defaults (`BUG-REPORT-{feature}.md` next to the report and
-`.runs/` in the same folder). `--strict` maps the gate to an exit code for CI (PASS 0 · MISMATCH 1
+`--bugs`, `--runs` and `--comments` override the defaults (`BUG-REPORT-{feature}.md` next to the
+report, `.runs/` in the same folder and `REVIEW-COMMENTS-{feature}.md` next to the report). `--strict` maps the gate to an exit code for CI (PASS 0 · MISMATCH 1
 · BLOCKED 2 · NOT_RUN 3); without it the script always exits 0 and the result is the payload.
 
 Read the payload, never the HTML: `gate`, `gateReason`, `counts`, `mismatches[]`, `warnings[]`,
-`errors[]`, `writes[]`, `document.phases[]`, `document.bugs`, `document.legacyFiles[]`.
+`errors[]`, `writes[]`, `document.phases[]`, `document.bugs`, `document.legacyFiles[]`, `comments`.
 
 ## 2. Gate — what each verdict means for the skill
 
@@ -52,6 +54,8 @@ bug file, a missing run file, a missing screenshot file or a legacy artifact in 
   TEST-RUN-REPORT-{feature}.md      test-case status: header block + ## Run history + one ## Phase N section per run (appended)
   BUG-REPORT-{feature}.md           bugs: header block + one ### BUG-n entry per defect; History appended, never replaced
   TEST-RUN-REPORT-{feature}.html    rendered from BOTH markdown files after every run — never hand-written
+  REVIEW-COMMENTS-{feature}.md      optional — the reviewer's comments, saved from the page (§9b); the skill only updates Status / Response
+  automation-inventory.md           page-object decision table (SKILL.md <automation_inventory>): one row per screen — reuse / extend / create — rewritten each run, read by validate-automation.mjs --inventory
   coverage/                         coverage-summary.csv · coverage-detail.csv · manual-scenarios.csv (replaced each run)
   .runs/phase-{N}.json              ALL machine data of phase N (schema skill6-run/1); immutable once its status is final
   artifacts/stages/{stage}-{group}[-attempt{n}].json   raw Playwright JSON per stage command (emptied at run start)
@@ -66,9 +70,11 @@ bug file, a missing run file, a missing screenshot file or a legacy artifact in 
 - `{feature}` = the stem of `TEST-CASES-{feature}.md`; `{user_story_name}` = the exact leaf of the
   TC folder (`US-{id}-{name}`); `{spec_level}` = its `SPEC-*` parent when it has one.
 - **Top-level whitelist.** The story folder holds exactly `TEST-RUN-REPORT-{feature}.md`,
-  `BUG-REPORT-{feature}.md`, `TEST-RUN-REPORT-{feature}.html`, `coverage/`, `.runs/`, `artifacts/`.
-  Nothing else is ever created there — not a checkpoint record, a fixture cache, a status file, a
-  backup folder, a retest folder or an extra results JSON. Machine data of a run goes into
+  `BUG-REPORT-{feature}.md`, `TEST-RUN-REPORT-{feature}.html`, `automation-inventory.md`,
+  `coverage/`, `.runs/`, `artifacts/`, plus the reviewer's optional `REVIEW-COMMENTS-{feature}.md`
+  (the reviewer creates it; no skill does). Nothing else is ever created there — not a checkpoint
+  record, a fixture cache, a status file, a backup folder, a retest folder or an extra results
+  JSON. The renderer neither reads nor lists `automation-inventory.md`; the validator does. Machine data of a run goes into
   `.runs/phase-{N}.json`; scratch goes under `artifacts/` (replaced each run, safe to gitignore).
 - **Legacy = read-only history.** `reports/US-{id}/`, `reports/{spec_level}US-{id}/`, and any
   `phase-N.json` / `phase-N.html`, `merged-results.json`, `run-plan.json`, `open-questions.json`,
@@ -88,20 +94,22 @@ Header: `# Test Run Report — {feature}` then `**Key:** value` lines before the
 | `**User Story:** US-{id} — {title}` | yes | — |
 | `**Latest phase:** {N}` | yes | the highest `## Phase N` section |
 | `**Status:** GREEN \| FAILURES \| INCOMPLETE \| SMOKE GATE FAILED \| ENVIRONMENT_BLOCKED \| BLOCKED` | yes | the latest phase's computed outcome |
-| `**Latest results:** {p} passed · {f} failed · {i} incomplete · {s} skipped · {n} not run of {t} TCs` (or `—` when the latest phase has no Results table) | yes | the latest phase's Results table |
+| `**Latest results:** {p} passed · {f} failed · {i} incomplete · {s} skipped · {n} not run[ · {x} partial] of {t} TCs` (read by label, not by position; ` · {x} partial` required exactly when the phase holds a `PARTIAL` row; or `—` when the latest phase has no Results table) | yes | the latest phase's Results table |
 | `Feature`, `Spec`, `Source document`, `Source revision`, `Environment`, `Latest run`, `Compliance` (`Checkpoint A … · Checkpoint B …`), `Azure DevOps`, `Bug report`, `Run file`, `Screenshots`, `Progress log`, `Earlier phases` | optional (`—` when empty) | rendered as written |
 
 Frozen `##` anchors, in order: `## Run history` (one table, one row per phase, oldest first:
-`Phase · Date · Outcome · Passed · Failed · Incomplete · Skipped · Not run · Total · Duration · Bugs`)
+`Phase · Date · Outcome · Passed · Failed · Incomplete · Skipped · Not run · [Partial ·] Total · Duration · Bugs`
+— the `Partial` column is found by name and is required only once any phase holds a `PARTIAL` row;
+a table without it while a phase has one is a mismatch, written `—`)
 then `## Phase N — YYYY-MM-DD` sections, ascending. Sub-sections per phase (`###`):
 
 | Sub-section | Shape | Required |
 |---|---|---|
 | `Run` | bullets `- **Field:** value`: **Outcome** (mandatory, Status vocabulary, optional ` — reason`), Environment, Build, Run command, Headed / workers, Timeouts (`test 90 s · step 30 s · action 15 s · navigation 30 s · expect 10 s — {n} calibrated · {n} watchdog events`), Started, Duration (`hh:mm:ss (planned ~… · serial-only ~…)`), Run file, Progress log, Screenshots, Compliance, Azure DevOps, Previous phase | yes |
-| `Stages` | table `Stage · Total · Passed · Failed · Incomplete · Skipped · Not run` (Smoke / Positive / Negative / **Total**) + `**Smoke gate:** passed \| healed-then-passed ({n} cycles) \| FAILED-STOPPED — fail% {x}% — {action}` | when Outcome is executed (GREEN / FAILURES / INCOMPLETE / SMOKE GATE FAILED) |
+| `Stages` | table `Stage · Total · Passed · Failed · Incomplete · Skipped · Not run[ · Partial]` (Smoke / Positive / Negative / **Total**; the `Partial` column required exactly when the phase holds a `PARTIAL` row) + `**Smoke gate:** passed \| healed-then-passed ({n} cycles) \| FAILED-STOPPED — fail% {x}% — {action}` | when Outcome is executed (GREEN / FAILURES / INCOMPLETE / SMOKE GATE FAILED) |
 | `Run plan` | table `Group · Mode · Workers · TCs · Reason` + `**Decisions:** {n} field · {n} inferred · {n} fail-safe` | optional |
 | `Coverage` | table `Stage · Total TCs · Fully · Partially · Not · Weighted %` (+ **Total**) + `**Target:** {t}% ({L3 \| default}, {mechanism}) — **{PASS \| user override \| report-only \| BLOCKED}** · **Δ vs phase {N-1}:** {±d pts — improved … · regressed … \| no prior measurement}` + optional table `Requirement · Outcome · Asserted by` (Full / Partial / Missing / Assumed) | optional |
-| `Results` | table `TC-ID · REQ · Name · Status · Group · Duration · Classification · Evidence`, one row per TC. Status ∈ `PASS \| FAIL \| INCOMPLETE \| SKIP \| NOT_RUN`. Classification from the `<first_run>` catalogue or `—`; an INCOMPLETE row writes `incomplete: {missing slugs}`, or `interrupted: watchdog at step "…" after N s` / `interrupted: collateral (…)` / `cleanup_incomplete` (reason strings on the existing statuses — no new status); a NOT_RUN row may write `not started: watchdog stop`. Evidence = ` · `-separated markdown links **relative to this folder** (`[attempt-2.png](../../screenshots/…/attempt-2.png) · [failed](…/attempt-1-failed.png)`) or `—` | same rule as Stages |
+| `Results` | table `TC-ID · REQ · Name · Status · Group · Duration · Classification · Evidence`, one row per TC. Status ∈ `PASS \| FAIL \| INCOMPLETE \| SKIP \| NOT_RUN \| PARTIAL — human step pending`. **`PARTIAL — human step pending`** is the one status that carries a reason (the frozen wording; a bare `PARTIAL` or another reason warns, a reason on any other status BLOCKs): the candidate TC has `[HUMAN]` steps, the automation ran and passed up to the first one, and its Classification names the pending step as `human step: {n}`; it counts in its own `partial` bucket — **never as passed** — and a phase holding one is `INCOMPLETE` at best. Classification otherwise from the `<first_run>` catalogue or `—`; an INCOMPLETE row writes `incomplete: {missing slugs}`, or `interrupted: watchdog at step "…" after N s` / `interrupted: collateral (…)` / `cleanup_incomplete` (reason strings on the existing statuses — no new status); a NOT_RUN row may write `not started: watchdog stop`. Evidence = ` · `-separated markdown links **relative to this folder** (`[attempt-2.png](../../screenshots/…/attempt-2.png) · [failed](…/attempt-1-failed.png)`) or `—`; a PARTIAL row links the image of its last automated step | same rule as Stages |
 | `Unverified assumptions` | table `TC-ID · Ambiguity · Interpretation encoded · Evidence · Result`, or `none` | optional |
 | `Bugs` | cross-reference table `Bug · TC-ID · Severity · Status` — one row per bug this phase found or retested, ids from `BUG-REPORT-{feature}.md`; or `none`. **Details never live here** | optional |
 | `Heal log` | the nine-column table of `<first_run>` step 5, or `First run fully green` | optional |
@@ -139,6 +147,7 @@ title in the `<bug_report_format>` voice, "The system doesn't … when …"), ea
 | `Screenshot` | one relative link into `{screenshots_root}` (the failure image), or `none captured` | |
 | `Evidence` | the raw assertion text | |
 | `History` | sub-list `- phase {N} — {FAIL \| PASS \| not run}: {note}` — appended every phase that touches the bug, never replaced | |
+| `Reviewer comment` | written by the reviewer only; shown in the bug's comment box, never a status source (§9b). A phase's `### Run` may carry the same bullet; it is shown in that phase's box, never as a fact | |
 
 Rules (the same ones skill 3 applies to potential bugs): a bug is `resolved` **only after an actual
 successful retest** in a later phase (Status names that phase, History gets the line); a bug whose
@@ -152,8 +161,8 @@ when the two files disagree.
 
 | Number on the page | Computed from |
 |---|---|
-| Per-phase passed / failed / incomplete / skipped / not run / total | the `### Results` table, one row per TC-ID |
-| Phase outcome | `SMOKE GATE FAILED` when the smoke-gate line says `FAILED-STOPPED`, else `FAILURES` if any FAIL, else `INCOMPLETE` if any INCOMPLETE, else `GREEN`; a declared `ENVIRONMENT_BLOCKED` / `BLOCKED` with no Results table is accepted as declared |
+| Per-phase passed / failed / incomplete / skipped / not run / partial / total | the `### Results` table, one row per TC-ID (`PARTIAL` rows fill `partial` only) |
+| Phase outcome | `SMOKE GATE FAILED` when the smoke-gate line says `FAILED-STOPPED`, else `FAILURES` if any FAIL, else `INCOMPLETE` if any INCOMPLETE **or any PARTIAL**, else `GREEN`; a declared `ENVIRONMENT_BLOCKED` / `BLOCKED` with no Results table is accepted as declared |
 | Header tiles, Status, Latest phase | the latest phase; when the latest phase has no Results table the tiles fall back to the last phase that has one and the banner says why |
 | Run history | the phase sections; the written rows are compared and a difference is a mismatch |
 | Stage table, coverage bars, target / verdict / delta | the phase's own tables — bars are `full / partial / none` shares of that stage's total; zero total → `—`, never `0%` |
@@ -180,9 +189,11 @@ environment-blocked | blocked`) · `run_id` · `user_story_id` · `user_story` �
 {smoke|positive|negative: {total, full, partial, none, weightedPct}}, tcs {TC-ID: status},
 requirements [{id, short, outcome, assertedBy[]}], manual {total, high, medium, low}, delta
 {against, pctChange, improved[], regressed[], added[], removed[]} }` ·
-`stages {smoke|positive|negative: {total, passed, failed, incomplete, skipped, not_run}}` ·
+`stages {smoke|positive|negative: {total, passed, failed, incomplete, skipped, not_run[, partial]}}` ·
 `smoke_gate { fail_pct, verdict, action_taken, excluded_unverified_assumption, cycles }` ·
-`totals { total, passed, failed, incomplete, skipped, not_run }` · `variant_totals` ·
+`totals { total, passed, failed, incomplete, skipped, not_run[, partial] }` (`partial` present whenever
+a `PARTIAL` result exists; a `results[]` row of a PARTIAL TC carries `status: "PARTIAL"`,
+`classification: "human step: {n}"` and `human_step: {n}`) · `variant_totals` ·
 `merged { stages[], executions[], variants[], tcs[] }` (the `<second_run>` merge, minus its own
 schema / story / phase keys; each `stages[]` entry carries `source: 'json' | 'incremental+watchdog'`
 and, for the latter, `watchdog_path`) · `results[]` (the per-TC rows of `<second_run>` step 3,
@@ -222,26 +233,61 @@ page therefore shows images only while the report and `screenshots/` keep their 
 ## 9. Provenance and hand edits
 
 Line 2 of every rendered page is `<!-- render-run-report v… · report=… · bugs=… · runs=… ·
-page=… -->` (sha256 of the run report, of the bug file or `none`, of the run files read or `none`,
-and a self-hash of the page). On `--write` the script recomputes the existing page's self-hash: a
+comments=… · page=… -->` (sha256 of the run report, of the bug file or `none`, of the run files
+read or `none`, of the comments file or `none`, and a self-hash of the page; a v1.0 line without
+`comments=` still verifies). On `--write` the script recomputes the existing page's self-hash: a
 mismatch means a human edited the HTML, and the write is refused (`gate: BLOCKED`,
 `refused.reason: hand-edited`) until `--force` is given — tell the user what will be lost first. A
 page with no provenance comment (a hand-written `phase-N.html` from an older skill run, saved under
-the new name) is replaced with a `legacy-page-replaced` warning. Reviewer notes belong in the
-markdown, not in the page.
+the new name) is replaced with a `legacy-page-replaced` warning. Typing a comment in the page never
+changes the page file, so the self-hash stays valid and a re-render needs no `--force`.
 
-## 10. Template — `assets/run-report.template.html`
+## 9b. Reviewer comments — `REVIEW-COMMENTS-{feature}.md`
 
-One placeholder scheme (`{{snake_case_key}}`, HTML-escaped; `{{{key}}}` only for the pre-computed
-`open` attribute) and comment block markers (`<!-- {{#each list}} -->` … `<!-- {{/each}} -->`,
-`{{#if flag}}`, `{{#unless flag}}`). The token block, tiles, chips, bars and badges match
-`assets/coverage-dashboard.css` and the skill 3 review page; the viewer dialog and its script are
-static template text. A placeholder the model cannot fill is left in the output and BLOCKs the
+Every bug card and phase card has a comment box, and the page has one general box. The reviewer
+types, clicks **Save comments** (saved beside the page) or **Copy for chat**, then says "read my
+comments". Entry ids are `General`, `BUG-{n}` and `phase-{N}`. The file shape, the page behaviour,
+the renderer's warnings and the handling rules are the same as skill 3's review page
+(`link-qc-3-generate-manual-test-cases/references/html-page.md` §7b, identical because the two pages share
+the shell and the renderer kit):
+
+- the header lines `Page`, `Source`, `Source revision`, `Reviewer`, `Saved`, `Comments`, then one
+  `## {id}` section per comment (`## {id} (2)` for a later one on the same item) holding the
+  reviewer's text and `- **Status:** open`;
+- a skill handles an entry by changing only its Status to `applied {date}`, `answered {date}` or
+  `declined {date}`, adding `- **Response:** {one plain sentence}`, and recomputing the header —
+  never editing, reordering or dropping the reviewer's text, never adding a comment of its own;
+- the renderer pre-fills open entries, shows handled ones as history, lists ids not on the page,
+  and warns `comment-unknown-id`, `comments-stale-revision`, `comments-page-mismatch`,
+  `comment-status-unknown`, `comments-header-count` and `comments-file-missing`; a password-shaped
+  literal in a comment BLOCKs.
+
+A comment is reviewer input, never a status source: "not a bug" on `BUG-2` does not close it. Skill
+5 answers it (`answered` / `declined` + Response); the Status of a bug changes only through the rules
+of §5 (an actual successful retest), and skills 8 and 9 apply the same rule.
+
+## 10. Templates — the body partial and the report shell
+
+Two passes. `assets/run-report.template.html` is the **body partial** (run history, coverage,
+phases, bugs). The renderer renders it, then renders `assets/report-shell.template.html`, the one
+general report page, around it. The shell owns the document, the one stylesheet, the one script
+(theme toggle, screenshot viewer, filter bars, reviewer comments), the header, meta line, banners,
+tiles, the general comment box and the footer; the renderer feeds it data only. The shell and the
+renderer's "report-shell kit" block (between its BEGIN / END markers) are byte-identical with skills
+3, 3b and 3c; harness case 26 compares them with every sibling installed. Body partials use only the
+shell's class vocabulary (`card`, `card-id`, `card-counts`, `card-body`, `item-card`, `item-head`,
+`chip c-*`, `seg seg-*`, `shot`, `sub-head`, `filter-bar`, `comment-box`). Placeholders are
+`{{snake_case_key}}` (HTML-escaped) and `{{{key}}}` only for values the renderer already escaped
+(the `open` attribute, comment boxes), with comment block markers (`<!-- {{#each list}} -->` …
+`<!-- {{/each}} -->`, `{{#if flag}}`, `{{#unless flag}}`). Never write placeholder syntax inside a
+template's own comments. A placeholder the model cannot fill is left in the output and BLOCKs the
 render, so a template edit is always caught. After any template or renderer change run
 `node scripts/selftest-run-report.mjs --pretty` (golden page, derived numbers, mismatch and
 false-PASS guards, evidence and viewer markup, bug cross-checks, provenance, exit codes,
-determinism — 22 cases) and regenerate the golden only for a deliberate change
-(`scripts/fixtures/run-report/README.md`).
+determinism, case 23 — a `PARTIAL — human step pending` row is its own bucket, never passed,
+never GREEN — case 24 reviewer comments, case 25 one shell per page, case 26 the shell mirror —
+26 cases) and regenerate the golden only for a deliberate change
+(`scripts/fixtures/run-report/README.md`). A shell change is copied to skills 3, 3b and 3c.
 
 ## 11. Migration — projects set up before this layout
 

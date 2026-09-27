@@ -9,6 +9,9 @@
 
 ## Project Knowledge
 <!-- system overview, environments + base URLs, roles, modules, business rules learned, glossary -->
+<!-- out-of-browser test interfaces, one [type: env] line per environment and channel, e.g.:
+- [module: Project] [type: env] Test interfaces on UAT: mail sandbox available (reads OTP / notification mail); SMS test provider: none available. (confirmed by user 2026-09-02)
+     Never an output-language line here — the review / page language is a per-run choice (--lang), not a saved preference. -->
 
 ## Common Flows
 <!-- how to reach each screen: sign in → menu → page → panel -->
@@ -19,7 +22,7 @@
 ## Test Data
 <!-- seeded entities, valid / invalid samples, boundaries — no credentials -->
 <!-- one fixture per line, e.g.:
-- [module: KPI] [type: data] Fixture "KPI Revenue 2026 yearly values" — 12 monthly rows, ids 401-412, status Approved; environment UAT; created by api on 2026-09-02, kept.
+- [module: Orders] [type: data] Fixture "Price list Sample 2026" — 12 line items, ids 401-412, status Approved; environment UAT; created by api on 2026-09-02, kept.
 -->
 
 ## Locale Knowledge
@@ -40,7 +43,7 @@
 
 ### Manual TC Model (skill 3)
 #### Knowledge
-<!-- design-time facts: spec sources per module, review-page language, implementation status as stated by the tester -->
+<!-- design-time facts: spec sources per module, implementation status as stated by the tester, tag convention ([type: env]); never the review-page language (a per-run choice) -->
 #### Questions and Answers
 
 ### Validation Model (skill 3b)

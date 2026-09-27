@@ -28,10 +28,14 @@ plus shared sections. Behaviour knowledge lives here; structural paths live in
 
 ## Entry format — one tagged fact per line
 ```markdown
-- [module: Strategy] [page: KPI Details] [element: Year filter] [type: flow] To see yearly KPI numbers: open the strategy, open its objective, pick the KPI, then choose the year at the top right.
-- [module: Strategy] [page: KPI Details] [type: rule] A KPI cannot be closed while it still has open initiatives. (source: US-1234 AC-3)
+- [module: Orders] [page: Order Details] [element: Year filter] [type: flow] To see yearly order totals: open Products, open the product, open Order Details, then choose the year at the top right.
+- [module: Orders] [page: Order Details] [type: rule] An order cannot be closed while it still has open line items. (source: US-1234 AC-3)
 - [module: Login] [type: qa] **Q (skill 3, 2026-09-02):** Which URL is the test environment? — **A:** the UAT site (recorded under Project Knowledge).
+- [module: Project] [type: env] Test interfaces on UAT: mail sandbox available (reads OTP / notification mail); SMS test provider: none available. (confirmed by user 2026-09-02)
 ```
+
+The output / review-page language is never recorded here: it is a per-run choice (`--lang` or
+an explicit sentence in the task input), so no skill reads or writes an "output language" line.
 Tag keys (lowercase, fixed): `module:` (always), `page:`, `element:`, `type:` one of
 `flow | rule | ui | data | locale | trick | qa | env | status | bug`, `similar:` (other
 modules/pages/elements that behave the same), and `(source: …)` in the text when known.

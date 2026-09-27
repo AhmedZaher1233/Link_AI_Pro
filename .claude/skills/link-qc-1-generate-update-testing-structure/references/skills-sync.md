@@ -8,10 +8,22 @@ wrapper around it. Never re-describe the procedure elsewhere — link here.
 | Situation | Command | Writes? |
 |---|---|---|
 | Mode A (audit) | `node ${CLAUDE_SKILL_DIR}/scripts/sync-qa-skills.mjs --check --target <project>` | no |
-| Mode B / C, new project | `node ${CLAUDE_SKILL_DIR}/scripts/sync-qa-skills.mjs --apply --target <project>` | yes — normal permission flow |
+| Mode B / C, new project — after the replace confirmation (below) | `node ${CLAUDE_SKILL_DIR}/scripts/sync-qa-skills.mjs --apply --replace --yes --target <project>` | yes — deletes and re-downloads OUR skill folders + the command; normal permission flow |
+| same, user chose "update only" / nothing of ours present yet | `node ${CLAUDE_SKILL_DIR}/scripts/sync-qa-skills.mjs --apply --target <project>` | yes — normal permission flow |
 | one skill only | add `--only link-qc-5-test-run-automation` | |
-| locally edited skill files | add `--force` (only when the user says so) | |
+| locally edited skill files, update-only | add `--force` (only when the user says so) | |
 | install the optional tools — playwright-cli for skill 3c, Pillow + numpy for link-qc-6-ui-testing (opt-in) | add `--tools` to `--apply` (only after the user said yes) | yes — global `@playwright/cli`, its chromium browser, the `.playwright-cli/` line in `.gitignore`, and `pip install pillow numpy` when a Python interpreter already exists |
+
+**Replace confirmation (Mode B / C / new project).** Run `--check` first. When `replace.needsConfirmation` is
+true, show `replace.deleteAndRedownload`, `replace.legacyRemoved`, `replace.lost` and `replace.keptUntouched`
+and ask ONCE with `replace.confirmText` — it warns that any enhancement made to the Link skills is removed and
+replaced with the new version. Answers: **Replace — delete and download fresh** (recommended) → `--apply --replace --yes` ·
+**Update only — keep my edits** → plain `--apply` · **Cancel** → no sync this run (report it; the rest of the
+mode continues). Asked on every run, never recorded in the learning file; it is the one question a
+new-project run asks (skill 1 itself is always present). Never pass `--yes` without that answer — the script
+refuses `--replace` without it. Scope: ONLY our skill folders (`SKILLS` + `SKILL_RENAMES`) and
+`.claude/commands/sync-skills.md` are deleted and re-downloaded; other skills, other commands, `.mcp.json`,
+`.gitignore`, `Testing/`, `docs/` and settings are never deleted (`planReplace` in `lib.mjs`, self-test case 8).
 
 What the script does:
 1. Refuses to run inside the canonical repository itself (`git pull` there instead).
@@ -20,7 +32,9 @@ What the script does:
    `error: source unreachable — local skills unchanged` and stops. It never invents content.
 3. Classifies every owned file: `NEW`, `UPDATED`, `CURRENT`, `LOCAL-ONLY` (never deleted),
    `SKIPPED` (uncommitted or hand-made local edits, unless `--force`), `MISSING-IN-SOURCE`.
-4. `--apply` copies `NEW` + `UPDATED` into `.claude/skills/<name>/` (sub-folders such as
+4. `--apply --replace --yes` stages a fresh copy of each of our skill folders, moves the old folder aside, moves
+   the new one in and deletes the old one (restored on failure → `replace-failed`), overwrites the command, and
+   reports `replaced` / `installed` per folder. Plain `--apply` copies `NEW` + `UPDATED` into `.claude/skills/<name>/` (sub-folders such as
    `assets/`, `references/`, `scripts/` included) and `.claude/commands/sync-skills.md`. An
    uppercase `.claude/Skills` folder is migrated to `.claude/skills` first (two-step rename,
    `git mv` when tracked).
@@ -40,7 +54,7 @@ What the script does:
    needed by 3b or any other skill, so the flag is never implied.
 7. Owns nothing else: never touches `docs/`, `Testing/`, other `.mcp.json` servers, settings,
    tests, app code, or the browser secrets file (user-run script only).
-8. Emits JSON: `files[]`, `summary`, `applied[]`, `localOnlySkills`, `mcp`, `tools`, `reloadRequired`. Pass the
+8. Emits JSON: `files[]`, `summary`, `applied[]`, `localOnlySkills`, `replace` (the plan + `confirmText`), `mcp`, `tools`, `reloadRequired`. Pass the
    `--check` output file to `validate-setup.mjs --sync-report` so the `Skills current` row is
    measured, not guessed.
 

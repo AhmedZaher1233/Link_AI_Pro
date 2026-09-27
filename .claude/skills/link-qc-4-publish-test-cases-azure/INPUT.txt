@@ -1,9 +1,14 @@
 SKILL: link-qc-4-publish-test-cases-azure — Link (QC) skill 4
 WHAT IT DOES: Takes the HUMAN-APPROVED TC document → BEAUTIFIES it into a separate upload
 document (asserting titles, login-first journeys, canonical step verbs, delegations expanded,
-every step confirmed) → PUBLISHES that document to Azure DevOps as Test Case work items
-linked to the User Story (idempotent, no duplicates) → writes ADO-MAP.md, which lets skill 5
-close the loop in DevOps (it is NOT skill 5's entry gate — that is Status: APPROVED). Works
+every step confirmed; [HUMAN] steps and [A1] / [E1] / [D1] test-data tokens kept verbatim) →
+PUBLISHES that document to Azure DevOps as Test Case work items linked to the User Story
+(idempotent, no duplicates) with the automation status mapped from the document's candidacy,
+the tags it owns added / removed and every other tag preserved, and a per-TC "Test data" block
+in the description → READS EVERY ITEM BACK and reports one of five outcomes with counts →
+writes ADO-MAP.md, which lets skill 5 close the loop in DevOps (it is NOT skill 5's entry gate —
+that is Status: APPROVED). The decisions (tags, status, test-data block, verdicts, the map) come
+from scripts/ado-sync-plan.mjs; the Azure DevOps MCP server does every read and write. Works
 with the cloud server and with a self-hosted Azure DevOps Server (no suite tools there — suite
 placement happens through the REST API only when you name a plan + suite, else it is reported
 as skipped). --suite-only places already-published TCs in a suite later, additively, without
@@ -16,15 +21,23 @@ INPUT — WHAT YOU MUST PROVIDE
 REQUIRED:
   1. Approved TC document path   — Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{Story}/TEST-CASES-*.md
                                    MUST contain "Status: APPROVED" (skill refuses anything
-                                   else — it never flips the status itself)
+                                   else — it never flips the status itself). Its TEST-DATA-*.md
+                                   beside it is read too: the [A|E|D] tokens resolve to its rows
+                                   and its name + sha256 go into every published description.
   2. User Story ID or EXACT title — the Azure DevOps work item the TCs belong to
 
 OPTIONAL FLAGS:
   --beautify-only   — produce the beautified document, publish nothing (dry review)
-  --republish       — update every ADO item even if the beautified content is unchanged
+  --republish       — update every ADO item even if the plan lists no change for it
   --suite-only <suite URL | planId suiteId>
                     — skip beautify + publish; add the work items of ADO-MAP.md to that suite
                       (additive: nothing is edited or removed; needs an existing ADO-MAP.md)
+
+OPTIONAL INPUTS (never asked — absent means none):
+  - Tag convention — tags every TC of this project carries in Azure, given in the task input or
+    already recorded as a "[type: env] tag convention: a, b" line in Testing/project-learning.md.
+    The skill never derives one from what a work item happens to carry.
+  - A test plan ID + suite ID (or suite URL) when the TCs should also be placed in a suite.
 
 ASKED ONLY IF NEEDED:
   - App URL + a role user, when ONE step cannot be confirmed from page objects, the learning
@@ -32,8 +45,9 @@ ASKED ONLY IF NEEDED:
   - Azure DevOps organisation / project, when not derivable from git remote or .mcp.json
 
 BEFORE ASKING: the skill searches Testing/project-learning.md (Publish Model, Common Flows,
-Automation Tricks) for ADO settings, template quirks and how screens are reached. Only what
-is missing is asked; answers are saved there. PATs are never written to it.
+Automation Tricks) for ADO settings, the tag convention, template quirks (which AutomationStatus
+values the template accepts — recorded once after a rejection) and how screens are reached.
+Only what is missing is asked; answers are saved there. PATs are never written to it.
 
 PREREQUISITES (checked, not guessed):
   - Azure DevOps MCP connected with a read/write PAT (Work Items + Test Management) — cloud
@@ -42,8 +56,19 @@ PREREQUISITES (checked, not guessed):
     relaunch — the PAT variable is not in the editor's process yet; a reload or /mcp reconnect
     does not help. Still 401 → re-run skill 1's PAT script and relaunch. 403 → a PAT scope is
     missing. It never asks for the token.
-  - Optional: a test plan ID + suite ID (or suite URL) in the task input when the TCs should
-    also be placed in a suite; never asked — absent → "suite placement skipped".
+  - Node >= 18 for the decision script; its self-test (selftest-ado-sync.mjs) must pass at the
+    start of every run, otherwise the run is BLOCKED before any write.
+
+WHAT THE DOCUMENT DECIDES (per TC, read by the script — never assumed):
+  - Automation Candidate: YES → AutomationStatus "Planned" · NO → "Not Automated" · field absent
+    (legacy document) → unknown, nothing written. An existing "Automated" is kept only when
+    skill 5's automated_tc_sha256 in ADO-MAP.md equals the TC's current canonical hash;
+    otherwise the row is a CONFLICT (status untouched; re-run skill 5).
+  - Tags the skill owns: {feature} · smoke (Smoke: YES) · automation / manual (candidacy) ·
+    human-step (a [HUMAN] step) · the TC's "Tags:" values · the tag convention. Added when
+    missing, removed only when this skill introduced them earlier and the document no longer
+    intends them; every other tag on the work item is preserved and never becomes owned.
+  - Steps keep "Login with Administrator [A1]", "[E1]", "[D2]" and "[HUMAN] …" lines verbatim.
 
 ============================================================
 OUTPUT — WHAT YOU GET
@@ -51,15 +76,45 @@ OUTPUT — WHAT YOU GET
   Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{Story}/
     TEST-CASES-{feature}-beautified.md   ← upload document (build artifact, stamped with the
                                            source hash; regenerated every run, never hand-edit)
-    ADO-MAP.md                           ← TC-ID → work item ID (+ source hash, Suite column) —
-                                           switches skill 5 to "linked"; never its gate
-  Azure DevOps: one Test Case work item per TC, Tested-By linked to the story,
-                AutomationStatus = Planned, tags {feature} / smoke / automation,
-                "Needs human review" notes carried into the description
-  Testing/project-learning.md            ← updated: ADO facts, confirmed navigation, Q&A
+    ADO-MAP.md                           ← written by the script after read-back, never by hand:
+                                           | TC-ID | ADO Work Item ID | published_tc_sha256 |
+                                           automated_tc_sha256 | Automation candidate |
+                                           AutomationStatus | Tags (introduced) | Suite |
+                                           published_tc_sha256 = skill 4, every publish;
+                                           automated_tc_sha256 = skill 5 only (copied through);
+                                           Tags (introduced) = the tags this skill owns, recorded
+                                           only after a verified write; switches skill 5 to
+                                           "linked"; never its gate
+  Azure DevOps: one Test Case work item per TC, Tested-By linked to the story, AutomationStatus
+                per candidacy, owned tags added / obsolete owned tags removed / other tags kept,
+                description = REQ-IDs, locale, preconditions, Data Oracle, "Needs human review"
+                notes and the "Test data" block (every referenced row: ID, role / plain name,
+                username or value — never a password — plus TEST-DATA file name + sha256);
+                the full TEST-DATA file attached to the User Story when the server allows it
+                (else a comment, else reported NOT_RUN — supplementary, never blocking)
+  Outcome (one line, highest applicable wins, always with counts):
+    BLOCKED · PUBLICATION INCOMPLETE (a TC not created / updated / linked or its test-data block
+    not written) · PUBLISHED WITH MISMATCHES (read-back differs after one retry, or a CONFLICT) ·
+    PUBLISHED, NOT VERIFIED (a read-back was unavailable) · PUBLISHED AND VERIFIED (every TC read
+    back equal to the plan). Example: "PUBLISHED WITH MISMATCHES (2 mismatch · 1 conflict ·
+    1 not verified · 0 of 4 verified · snapshot NOT_RUN)". Nothing is ever reported as published
+    or verified without a fresh read-back.
+  Results table per TC: Work item · Result (created / updated / current / not written) ·
+    Tags (intended → read back) · AutomationStatus (intended → read back) · Test data (block) ·
+    Verdict (verified / MISMATCH (field, intended, actual) / CONFLICT / NOT_RUN / NOT_WRITTEN)
+  Testing/project-learning.md            ← updated: ADO facts, accepted AutomationStatus values
+                                           (after a rejection), confirmed navigation, Q&A
   The approved source document is NEVER modified.
+
+SCRIPTS (zero-dependency Node, read-only unless told to write; the skill runs them for you):
+  node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/ado-sync-plan.mjs hash   --tc <TEST-CASES-*.md> [--data <TEST-DATA-*.md>] --pretty
+  node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/ado-sync-plan.mjs plan   --tc <approved doc> --data <TEST-DATA> --map <ADO-MAP.md> --remote <json> --feature <name> [--convention-tags a,b] --out <plan.json> --pretty
+  node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/ado-sync-plan.mjs verify --plan <plan.json> --readback <json> [--snapshot attached|comment|NOT_RUN] [--attempt 2] --write-map <ADO-MAP.md> --pretty [--strict]
+  node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/selftest-ado-sync.mjs --pretty
+  (--strict exit codes: VERIFIED 0 · MISMATCHES 1 · NOT VERIFIED 2 · INCOMPLETE 3 · BLOCKED / NOT_RUN 4)
 
 WHEN TO RUN: after a human set Status: APPROVED on skill 3's output — before or after
 link-qc-5-test-run-automation, or not at all (skill 5 never needs ADO-MAP.md to start; with it, and a
 matching source hash, skill 5 runs "linked" and closes the loop in DevOps).
-Re-run after any change to the approved document — re-runs update, never duplicate.
+Re-run after any change to the approved document — re-runs update, never duplicate; a TC whose
+content, tags, status and test-data block are all current is left untouched ("current").

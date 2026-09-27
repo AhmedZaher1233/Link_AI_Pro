@@ -32,7 +32,7 @@ const LEGACY = fx('legacy', 'TEST-CASES-legacy-login.md');
 const SCRIPT = path.join(here, 'render-tc-review.mjs');
 
 /** Mirrored paths — identical in every mirror skill folder. Keep in step with CLAUDE.md "Mirrored files". */
-export const MIRRORED = ['references/learning-file.md', 'references/html-page.md', 'references/validation-states.md', 'references/open-questions.md', 'assets/tc-review.template.html', 'scripts/render-tc-review.mjs', 'scripts/selftest.mjs', 'scripts/fixtures'];
+export const MIRRORED = ['references/learning-file.md', 'references/html-page.md', 'references/validation-states.md', 'references/open-questions.md', 'assets/tc-review.template.html', 'assets/report-shell.template.html', 'scripts/render-tc-review.mjs', 'scripts/selftest.mjs', 'scripts/fixtures'];
 /** The skill folders that carry the mirrored files. `/sync-skills` copies one folder at a time, so any subset may be installed. */
 export const MIRROR_SKILLS = ['link-qc-3-generate-manual-test-cases', 'link-qc-3b-validate-manual-test-cases', 'link-qc-3c-validate-manual-test-cases-cli'];
 
@@ -114,8 +114,13 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
 {
   const r = render({ tcPath: SAMPLE, root: here });
   const c = r.payload.counts; const p = [];
-  const exp = { total: 5, smoke: 1, auto: 4, observed: 2, progressPct: 40 };
+  const exp = { total: 5, smoke: 1, auto: 4, observed: 2, progressPct: 40, humanSteps: 1, humanTcs: 1 };
   for (const [k, v] of Object.entries(exp)) if (c[k] !== v) p.push(k + ' ' + c[k] + ' != ' + v);
+  if (!c.dataRefs || c.dataRefs.unresolved !== 0 || c.dataRefs.literals !== 0 || c.dataRefs.resolved !== 4) p.push('dataRefs ' + JSON.stringify(c.dataRefs));
+  if (c.testData.environment !== 1 || c.testData.accounts !== 1) p.push('environment/accounts ' + JSON.stringify(c.testData));
+  if (JSON.stringify(r.payload.document.tags) !== JSON.stringify({ 'TC-KPI-01': ['uat', 'regression'] })) p.push('tags ' + JSON.stringify(r.payload.document.tags));
+  if (r.payload.document.humanTcs.join() !== 'TC-KPI-04') p.push('humanTcs ' + r.payload.document.humanTcs.join());
+  if (r.payload.warnings.length) p.push('clean sample raised warnings: ' + r.payload.warnings.map((w) => w.kind).join(','));
   if (JSON.stringify(c.byState) !== JSON.stringify({ validated: 1, enhanced: 0, inferred: 1, discrepancy: 1, 'not-implemented': 1, draft: 1 })) p.push('byState ' + JSON.stringify(c.byState));
   if (c.coverage.weighted !== 66.7 || c.coverage.full !== 1 || c.coverage.partial !== 2) p.push('coverage ' + JSON.stringify([c.coverage.weighted, c.coverage.full, c.coverage.partial]));
   if (c.testData.ready !== 2 || c.testData.unknown !== 1) p.push('testData ' + JSON.stringify(c.testData));
@@ -142,9 +147,9 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
 /* 6 — FALSE PASS GUARD: orphan TCs are never dropped (summary-only and section-only). */
 {
   const t = tmpCopy((s) => s
-    .replace('| TC-KPI-04 | happy-path | en | REQ-1234-03 | @positive | NO | NO | creates | KPI export file | not-implemented — pending implementation | Export the filtered grid |\n', '')
+    .replace('| TC-KPI-04 | happy-path | en | REQ-1234-03 | @positive | NO | NO | creates | KPI export file | — | not-implemented — pending implementation | Export the filtered grid |\n', '')
     .replace('## Summary\n', '## Summary\n')
-    .replace('| TC-KPI-03 | negative |', '| TC-KPI-09 | negative | en | REQ-1234-02 | @negative | NO | YES | read-only | — | draft — not app-validated | Ghost row |\n| TC-KPI-03 | negative |'));
+    .replace('| TC-KPI-03 | negative |', '| TC-KPI-09 | negative | en | REQ-1234-02 | @negative | NO | YES | read-only | — | — | draft — not app-validated | Ghost row |\n| TC-KPI-03 | negative |'));
   try {
     const r = render({ tcPath: t.tc, root: t.dir });
     const p = [];
@@ -271,7 +276,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     const b = r.payload.counts.bugs; const p = [];
     if (r.payload.gate !== 'PASS') p.push('gate ' + r.payload.gate + ': ' + r.payload.gateReason);
     if (b.open !== 1 || b.notChecked !== 1 || b.resolved !== 1 || b.current !== 2) p.push('bug counts ' + JSON.stringify(b));
-    if (!/pb-card resolved/.test(r.html || '') || !/pb-card not-checked/.test(r.html || '')) p.push('PB status classes not rendered');
+    if (!/item-card pb resolved/.test(r.html || '') || !/item-card pb not-checked/.test(r.html || '')) p.push('PB status classes not rendered');
     if (!/not checked in this run/.test(r.html || '')) p.push('not-checked status word missing');
     if (!r.payload.warnings.some((w) => w.kind === 'pb-unknown-tc' && w.id === 'PB-3')) p.push('PB pointing at an unknown TC did not warn');
     if (!/<b>1\/1\/1<\/b><span>Potential bugs/.test(r.html || '')) p.push('bugs tile != 1/1/1');
@@ -283,9 +288,9 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
 {
   const r = render({ tcPath: SAMPLE, root: here });
   const p = [];
-  const card = (id) => ((r.html || '').match(new RegExp('<details class="tc" id="' + id + '">[\\s\\S]*?</details>')) || [''])[0];
-  if (!/class="evidence".*staging.*4\.12\.0.*full-tail/.test(card('TC-KPI-01'))) p.push('TC-KPI-01 evidence line missing or incomplete');
-  if (/class="evidence"/.test(card('TC-KPI-03'))) p.push('TC-KPI-03 (never validated) shows an evidence line');
+  const card = (id) => ((r.html || '').match(new RegExp('<details class="card tc" id="' + id + '">[\\s\\S]*?</details>')) || [''])[0];
+  if (!/class="stamp".*staging.*4\.12\.0.*full-tail/.test(card('TC-KPI-01'))) p.push('TC-KPI-01 evidence line missing or incomplete');
+  if (/class="stamp"/.test(card('TC-KPI-03'))) p.push('TC-KPI-03 (never validated) shows an evidence line');
   if (!/validated by 3b on <span class="ltr">2026-09-25<\/span> · scope <span class="ltr">full<\/span>/.test(r.html || '')) p.push('header stamp not rendered');
   check('13 evidence stamps render only where present', p, {});
 }
@@ -336,7 +341,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     if (!st.provenance || st.handEdited) p.push('freshly written page fails its own provenance check');
     const w2 = JSON.parse(call(['--tc', t.tc, '--write']).stdout);
     if (w2.gate !== 'PASS' || w2.writes.length !== 1) p.push('re-render of an untouched page was refused');
-    fs.writeFileSync(out, html.replace('Reviewer notes:', 'Reviewer notes: looks good'));
+    fs.writeFileSync(out, html.replace('</footer>', 'looks good</footer>'));
     const w3 = JSON.parse(call(['--tc', t.tc, '--write']).stdout);
     if (w3.gate !== 'BLOCKED' || !w3.refused || w3.refused.reason !== 'hand-edited') p.push('hand-edited page was not refused: ' + w3.gate);
     if (!read(out).includes('looks good')) p.push('refused write still overwrote the page');
@@ -418,6 +423,211 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     if (!base || base.by !== '3b' || base.tool !== '' || base.rerun !== 0 || base.scope !== 'full') p.push('3b stamp without tool no longer parses as before: ' + JSON.stringify(base));
     check('20 run metadata is parsed, surfaced in the payload and never rendered', p, { stamp: st });
   } finally { t.cleanup(); }
+}
+
+/* 21 — data literals: an environment host or an account username repeated in a TC text warns (never blocks); a typed invalid URL, a boundary value and an "(intentional input)" line never warn. */
+{
+  const t = tmpCopy((s) => s
+    .replace('1. Open Strategies — the Strategies list is visible.', '1. Go to https://portal.example.test/strategies — the Strategies list is visible.')
+    .replace('1. Open the Filter panel and set Display Type to "Year" without selecting a year.', '1. Signed in as admin.user, open the Filter panel and set Display Type to "Year" without selecting a year.')
+    .replace('2. Click Apply.', '2. Type "http://not a url" into the Year field, then type 51 characters into Notes and click Apply.')
+    .replace('1. Click Clear in the Filter panel — the Year chip disappears.', '1. Click Clear in the Filter panel — the Year chip disappears; the footer still shows admin.user (intentional input)'));
+  try {
+    const r = render({ tcPath: t.tc, root: t.dir });
+    const p = [];
+    if (r.payload.gate !== 'PASS') p.push('data literals must not change the gate: ' + r.payload.gate + ' ' + r.payload.gateReason);
+    const lits = r.payload.warnings.filter((w) => w.kind === 'data-literal').map((w) => w.id + ':' + (/environment/.test(w.detail) ? 'env' : 'acct')).sort();
+    if (lits.join(',') !== 'TC-KPI-01:env,TC-KPI-03:acct') p.push('data-literal warnings ' + lits.join(',') + ' != TC-KPI-01:env,TC-KPI-03:acct');
+    if (r.payload.warnings.some((w) => w.kind === 'data-literal' && w.id === 'TC-KPI-02')) p.push('"(intentional input)" line was flagged');
+    if (r.payload.counts.dataRefs.literals !== 2) p.push('literal count ' + r.payload.counts.dataRefs.literals + ' != 2');
+    if (r.html === null) p.push('page not rendered');
+    check('21 configuration literals warn; typed inputs, boundary values and intentional inputs never do', p, { literals: lits });
+  } finally { t.cleanup(); }
+}
+
+/* 22 — data references: an unknown token warns; a document without TEST-DATA is not checked; a TEST-DATA without the Environment table reports compatibility. */
+{
+  const t = tmpCopy((s) => s.replace('Logged in as Administrator [A1]; KPI Details open for "Revenue".', 'Logged in as Administrator [A7]; KPI Details open for "Revenue" on [E3].'));
+  const u = tmpCopy((s) => s);
+  fs.writeFileSync(path.join(u.dir, 'TEST-DATA-kpi-filter.md'), read(SAMPLE_DATA).replace(/## 0\. Environment[\s\S]*?(?=## 1\. Accounts)/, '').replace('| ID | Role | Username | Status | Used by TCs | Note |\n|---|---|---|---|---|---|\n| A1 | Administrator |', '| Role | Username | Status | Used by TCs | Note |\n|---|---|---|---|---|\n| Administrator |'));
+  try {
+    const p = [];
+    const r = render({ tcPath: t.tc, root: t.dir });
+    const un = r.payload.warnings.filter((w) => w.kind === 'data-ref-unresolved').map((w) => w.detail.match(/\[(\w+)\]/)[1]).sort();
+    if (un.join(',') !== 'A7,E3') p.push('unresolved refs ' + un.join(',') + ' != A7,E3');
+    if (r.payload.gate !== 'PASS') p.push('unresolved reference must not change the gate: ' + r.payload.gate);
+    fs.rmSync(path.join(t.dir, 'TEST-DATA-kpi-filter.md'));
+    const r2 = render({ tcPath: t.tc, root: t.dir });
+    if (r2.payload.warnings.some((w) => /^data-/.test(w.kind))) p.push('without TEST-DATA the tokens were still checked');
+    if (r2.payload.counts.dataRefs !== null) p.push('dataRefs must be null without TEST-DATA');
+    const r3 = render({ tcPath: u.tc, root: u.dir });
+    for (const w of ['test-data-environment-missing', 'test-data-accounts-no-id']) if (!r3.payload.compatibility.some((c) => c.what === w)) p.push('missing compatibility finding ' + w);
+    const un3 = [...new Set(r3.payload.warnings.filter((w) => w.kind === 'data-ref-unresolved').map((w) => w.detail.match(/\[(\w+)\]/)[1]))].sort();
+    if (un3.join(',') !== 'A1,E1') p.push('legacy TEST-DATA: unresolved ' + un3.join(',') + ' != A1,E1');
+    check('22 unresolved data references warn; no TEST-DATA → not checked; legacy TEST-DATA reports compatibility', p, { unresolved: un });
+  } finally { t.cleanup(); u.cleanup(); }
+}
+
+/* 23 — language precedence (L1–L4): the header line never decides; the narrative check flags Arabic narrative and ignores quoted labels. */
+{
+  const t = tmpCopy((s) => s.replace('**Review page language:** English — see TC-REVIEW-kpi-filter.html', '**Review page language:** Arabic — see TC-REVIEW-kpi-filter.html'));
+  fs.copyFileSync(SAMPLE_STRINGS, path.join(t.dir, 'TC-REVIEW-STRINGS-kpi-filter.ar.json'));
+  const sidecarBefore = fs.readFileSync(SAMPLE_STRINGS);
+  const l3 = tmpCopy((s) => s
+    .replace('### TC-KPI-03 — Apply without a selected year is blocked', '### TC-KPI-03 — التطبيق بدون اختيار سنة مرفوض')
+    .replace('1. Open the Filter panel and set Display Type to "Year" without selecting a year.', '1. افتح لوحة التصفية واضبط نوع العرض على "Year" دون اختيار سنة.')
+    .replace('2. Click Apply.', '2. اضغط تطبيق.')
+    .replace('- **Expected Result:** A validation message "Select a year" appears under the Year field and the grid does not reload.', '- **Expected Result:** تظهر رسالة التحقق "Select a year" تحت حقل السنة ولا تُعاد تحميل الشبكة.'));
+  const l4 = tmpCopy((s) => s.replace('2. Click Apply.', '2. Click «تطبيق» and confirm the toast "تم الحفظ بنجاح" appears next to the "حفظ" button.'));
+  try {
+    const p = [];
+    const r1 = render({ tcPath: t.tc, root: t.dir }); // L1: header says Arabic, sidecar present, no --lang → English page
+    if (r1.payload.input.lang !== 'en' || !/<html lang="en"/.test(r1.html || '')) p.push('L1: header line switched the page to Arabic');
+    if (!/Manual test cases · human review/.test(r1.html || '')) p.push('L1: English chrome missing');
+    if (/class="untranslated"/.test(r1.html || '')) p.push('L1: English page carries translation markers');
+    if (r1.payload.document.reviewLangHeader !== 'Arabic — see TC-REVIEW-kpi-filter.html' || r1.payload.document.langSource !== 'default') p.push('L1: header record / langSource not surfaced: ' + JSON.stringify([r1.payload.document.reviewLangHeader, r1.payload.document.langSource]));
+    if (!r1.payload.warnings.some((w) => w.kind === 'review-lang-header-stale')) p.push('L1: stale header line not reported');
+    if (!fs.readFileSync(path.join(t.dir, 'TC-REVIEW-STRINGS-kpi-filter.ar.json')).equals(sidecarBefore)) p.push('L1: sidecar was touched');
+    if (r1.payload.warnings.some((w) => w.kind === 'narrative-not-english')) p.push('L1: English narrative with an Arabic-locale TC was flagged');
+    const r2 = render({ tcPath: t.tc, lang: 'ar', root: t.dir, langSource: 'flag' }); // L2: explicit --lang ar → Arabic page from the sidecar
+    if (r2.payload.arabicComplete !== true || !/<html lang="ar" dir="rtl">/.test(r2.html || '') || r2.payload.document.langSource !== 'flag') p.push('L2: --lang ar did not render the complete Arabic page');
+    const r3 = render({ tcPath: l3.tc, root: l3.dir }); // L3: Arabic narrative on an English page → warning
+    const w3 = r3.payload.warnings.filter((w) => w.kind === 'narrative-not-english').map((w) => w.id);
+    if (w3.join() !== 'TC-KPI-03') p.push('L3: narrative-not-english ' + JSON.stringify(w3) + ' != [TC-KPI-03]');
+    if (r3.payload.gate !== 'PASS') p.push('L3: narrative warning must not change the gate');
+    const r4 = render({ tcPath: l4.tc, root: l4.dir }); // L4: quoted Arabic labels inside English narrative → no warning
+    if (r4.payload.warnings.some((w) => w.kind === 'narrative-not-english')) p.push('L4: quoted Arabic application labels were flagged');
+    const cli = spawnSync(process.execPath, [SCRIPT, '--tc', t.tc], { encoding: 'utf8', cwd: t.dir });
+    const cp = JSON.parse(cli.stdout); if (cp.input.lang !== 'en' || cp.document.langSource !== 'default') p.push('CLI without --lang must render English by default: ' + JSON.stringify([cp.input.lang, cp.document.langSource]));
+    check('23 language precedence: flag or English; header line and sidecar never decide; narrative check ignores quoted labels', p, { l3: w3 });
+  } finally { t.cleanup(); l3.cleanup(); l4.cleanup(); }
+}
+
+/* 24 — human steps and tags: [HUMAN] steps are counted and badged; Tags render as chips and never become translation keys; a document without a Tags column still renders. */
+{
+  const r = render({ tcPath: SAMPLE, root: here });
+  const p = [];
+  const card = (id) => ((r.html || '').match(new RegExp('<details class="card tc" id="' + id + '">[\\s\\S]*?</details>')) || [''])[0];
+  if (!/badge human/.test(card('TC-KPI-04')) || !/<li class="human">\[HUMAN\]/.test(card('TC-KPI-04'))) p.push('human badge / step class missing on TC-KPI-04');
+  if (/badge human/.test(card('TC-KPI-01'))) p.push('TC-KPI-01 wrongly badged human');
+  if (!/tile human/.test(r.html || '')) p.push('human tile missing');
+  if (!/badge tag"><span class="ltr">uat<\/span>/.test(card('TC-KPI-01'))) p.push('tag chip missing on TC-KPI-01');
+  if (/badge tag/.test(card('TC-KPI-02'))) p.push('TC-KPI-02 (Tags —) renders a chip');
+  const keys = deriveKeys(buildModel(parseTcDocument(read(SAMPLE)), parseTestData(read(SAMPLE_DATA)), { feature: 'kpi-filter' }));
+  if (Object.keys(keys).some((k) => /\.tags?$/.test(k))) p.push('Tags became a translation key');
+  if (!keys['tc.TC-KPI-04.step.2'] || !/^\[HUMAN\]/.test(keys['tc.TC-KPI-04.step.2'])) p.push('[HUMAN] step is not a translation key with its marker');
+  const t = tmpCopy((s) => s.replace('| Shared data | Tags | Validation |', '| Shared data | Validation |').replace(/\|---\|---\|---\|---\|---\|---\|---\|---\|---\|---\|---\|---\|/, '|---|---|---|---|---|---|---|---|---|---|---|').replace(/ \| uat, regression \| validated \|/, ' | validated |').replace(/ \| — \| (inferred|discrepancy|draft — not app-validated|not-implemented — pending implementation) \|/g, ' | $1 |').replace(/- \*\*Tags:\*\* .*\n/g, ''));
+  try {
+    const r2 = render({ tcPath: t.tc, root: t.dir });
+    if (r2.payload.gate !== 'PASS') p.push('document without Tags did not render: ' + r2.payload.gate + ' ' + r2.payload.gateReason + ' ' + JSON.stringify(r2.payload.errors));
+    if (Object.keys(r2.payload.document.tags).length) p.push('tags invented for a document without them');
+  } finally { t.cleanup(); }
+  check('24 [HUMAN] steps counted and badged; Tags rendered as chips, never translated, optional', p, {});
+}
+
+/* 25 — reviewer comments: REVIEW-COMMENTS-{feature}.md beside the source pre-fills the boxes, badges open entries, shows handled ones as history,
+      lists unknown ids, escapes the text, feeds provenance + payload; --comments overrides; a stale revision / another page / a secret are handled;
+      the inline `Reviewer comment` field is shown and never becomes a translation key or narrative. */
+{
+  const p = [];
+  const COMMENTS = (rev) => ['# Review comments — kpi-filter', '**Page:** TC-REVIEW-kpi-filter.html', '**Source:** TEST-CASES-kpi-filter.md', '**Source revision:** ' + rev, '**Reviewer:** QA Reviewer', '**Saved:** 2026-09-27 12:46', '**Comments:** 3 open · 1 handled of 4', '',
+    '## General', 'Looks good overall.', '- **Status:** open', '', '## TC-KPI-01', 'Step 3 should name the grid.', 'Second line.', '- **Status:** open', '',
+    '## PB-1', 'Is this really a bug? {{x}} <b>bold</b>', '- **Status:** answered 2026-09-27', '- **Response:** Yes — the requirement says Clear restores all rows.', '',
+    '## TC-ZZZ-99', 'Comment on a removed test case.', '- **Status:** open', ''].join('\n');
+  const t = tmpCopy((s) => s.replace('- **Validation:** discrepancy', '- **Validation:** discrepancy\n- **Reviewer comment:** تحقق من الرسالة بالعربية'));
+  try {
+    const rev = crypto.createHash('sha256').update(read(t.tc), 'utf8').digest('hex').slice(0, 12);
+    const cf = path.join(t.dir, 'REVIEW-COMMENTS-kpi-filter.md');
+    // no file → silent, comments=none
+    const r0 = render({ tcPath: t.tc, root: t.dir });
+    if (r0.payload.hashes.comments !== 'none' || r0.payload.comments.file !== null || r0.payload.warnings.some((w) => /^comment/.test(w.kind))) p.push('absent comments file is not silent');
+    if (!/ · comments=none · lang=en · page=/.test(r0.html || '')) p.push('provenance lacks comments=none');
+    const note = /<p class="comment-note"><b>Reviewer comment \(in the markdown\):<\/b> تحقق من الرسالة بالعربية<\/p>/.test(r0.html || '');
+    if (!note) p.push('inline Reviewer comment field not shown on TC-KPI-02');
+    if (Object.keys(deriveKeys(r0.model)).some((k) => /reviewer|comment/i.test(k)) || Object.values(deriveKeys(r0.model)).some((v) => /تحقق من الرسالة/.test(v))) p.push('inline comment became a translation key');
+    if (r0.payload.warnings.some((w) => w.kind === 'narrative-not-english' && w.id === 'TC-KPI-02')) p.push('an Arabic reviewer comment tripped the narrative check');
+    if (r0.payload.gate !== 'PASS') p.push('inline comment changed the gate: ' + r0.payload.gate + ' ' + JSON.stringify(r0.payload.errors));
+    // file present
+    fs.writeFileSync(cf, COMMENTS(rev));
+    const r = render({ tcPath: t.tc, root: t.dir }); const html = r.html || '';
+    if (r.payload.gate !== 'PASS') p.push('gate with comments ' + r.payload.gate + ' ' + r.payload.gateReason);
+    if (r.payload.comments.open !== 3 || r.payload.comments.handled !== 1) p.push('counts open/handled ' + r.payload.comments.open + '/' + r.payload.comments.handled);
+    if (r.payload.comments.unknownIds.join(',') !== 'TC-ZZZ-99' || !r.payload.warnings.some((w) => w.kind === 'comment-unknown-id')) p.push('unknown id not reported');
+    if (r.payload.hashes.comments === 'none' || !/ · comments=[0-9a-f]{64} · lang=en · page=/.test(html)) p.push('comments hash missing from provenance');
+    if (!/data-entry="TC-KPI-01"[^>]*>Step 3 should name the grid\.\nSecond line\.<\/textarea>/.test(html)) p.push('open comment not pre-filled in TC-KPI-01');
+    if (!/data-comment-id="TC-KPI-01" data-comment-kind="tc">\n  <p class="comment-label">Reviewer comment <span class="badge cm-open">open comment<\/span>/.test(html)) p.push('open badge missing on TC-KPI-01');
+    if (!/<div class="comment-entry cm-answered"><p class="comment-text">Is this really a bug\? &#123;&#123;x&#125;&#125; &lt;b&gt;bold&lt;\/b&gt;<\/p>/.test(html)) p.push('handled PB-1 comment not rendered as escaped history');
+    if (!/<span class="resp"><b>Response:<\/b> Yes — the requirement says Clear restores all rows\.<\/span>/.test(html)) p.push('response not rendered');
+    if (/data-entry="PB-1"/.test(html)) p.push('a handled comment was offered for editing');
+    if (!/<div class="comments-orphans">[\s\S]*TC-ZZZ-99[\s\S]*Comment on a removed test case\./.test(html)) p.push('orphan comment not listed');
+    if (!/data-comment-id="General"[^>]*data-entry="General"[^>]*>Looks good overall\.<\/textarea>/.test(html)) p.push('general comment not pre-filled');
+    const island = (html.match(/<script type="application\/json" id="report-data">([^<]*)<\/script>/) || [])[1];
+    let data = null; try { data = JSON.parse(island); } catch { p.push('JSON island does not parse'); }
+    if (data && (data.comments.entries.length !== 4 || data.sourceRev !== rev || data.commentsFile !== 'REVIEW-COMMENTS-kpi-filter.md' || data.pageKind !== 'tc-review')) p.push('JSON island identity / entries wrong');
+    if (/\{\{/.test(island || '')) p.push('JSON island carries a double brace');
+    if (!/\bnote\b/.test('note') || /<p class="comment-note">[^<]*<b>[^<]*<\/b> تحقق/.test(html) === false) p.push('inline note vanished once a file was present');
+    // stale revision
+    fs.writeFileSync(cf, COMMENTS('000000000000'));
+    const rs = render({ tcPath: t.tc, root: t.dir });
+    if (!rs.payload.comments.stale || !rs.payload.warnings.some((w) => w.kind === 'comments-stale-revision') || !/badge cm-stale/.test(rs.html || '')) p.push('stale revision not flagged');
+    // another page
+    fs.writeFileSync(cf, COMMENTS(rev).replace('**Page:** TC-REVIEW-kpi-filter.html', '**Page:** TEST-RUN-REPORT-kpi-filter.html'));
+    const rp = render({ tcPath: t.tc, root: t.dir });
+    if (!rp.payload.warnings.some((w) => w.kind === 'comments-page-mismatch') || /data-entry=/.test(rp.html || '')) p.push('comments from another page were attached');
+    // secret
+    fs.writeFileSync(cf, COMMENTS(rev).replace('Looks good overall.', 'login with password: Hunter22'));
+    const rx = render({ tcPath: t.tc, root: t.dir });
+    if (rx.payload.gate !== 'BLOCKED' || !kinds(rx).includes('secret-literal')) p.push('password-shaped comment did not BLOCK');
+    // --comments override
+    fs.rmSync(cf); const alt = path.join(t.dir, 'elsewhere.md'); fs.writeFileSync(alt, COMMENTS(rev));
+    const ro = JSON.parse(spawnSync(process.execPath, [SCRIPT, '--tc', t.tc, '--comments', alt], { cwd: t.dir, encoding: 'utf8' }).stdout);
+    if (ro.comments.open !== 3 || ro.input.comments !== 'elsewhere.md') p.push('--comments override not read');
+    const rm = JSON.parse(spawnSync(process.execPath, [SCRIPT, '--tc', t.tc, '--comments', path.join(t.dir, 'nope.md')], { cwd: t.dir, encoding: 'utf8' }).stdout);
+    if (!rm.warnings.some((w) => w.kind === 'comments-file-missing')) p.push('missing --comments file not warned');
+    // Arabic page: comments never become keys, the sidecar still completes
+    const ra = render({ tcPath: t.tc, root: t.dir, lang: 'ar', stringsPath: SAMPLE_STRINGS, commentsPath: alt });
+    if (ra.payload.strings.missing.some((k) => /comment/i.test(k))) p.push('Arabic page asks for a comment translation');
+    if (!/<p class="comment-label">تعليق المراجع/.test(ra.html || '')) p.push('Arabic comment chrome missing');
+  } finally { t.cleanup(); }
+  check('25 reviewer comments: file pre-fills, badges, history, orphans, provenance; inline field shown, never translated', p, {});
+}
+
+/* 26 — the shell is used once: one stylesheet, one script + one JSON island, one viewer, one toolbar; one comment box per TC / PB / Q + the general box;
+      the body partial holds no document chrome; the old underline notes line is gone. */
+{
+  const p = [];
+  const r = render({ tcPath: SAMPLE, root: here }); const html = r.html || '';
+  const count = (re) => (html.match(re) || []).length;
+  if (count(/<style>/g) !== 1) p.push('<style> count ' + count(/<style>/g));
+  if (count(/<script>/g) !== 1 || count(/<script type="application\/json" id="report-data">/g) !== 1) p.push('script / JSON island count');
+  if (count(/<dialog class="viewer"/g) !== 1 || count(/data-theme-toggle/g) !== 1 || count(/id="comments-save"/g) !== 1 || count(/id="comments-copy"/g) !== 1) p.push('viewer / theme / save / copy not exactly once');
+  const want = r.model.tcs.length + r.model.potentialBugs.length + r.model.openQuestions.length + 1;
+  if (count(/data-comment-kind="/g) !== want) p.push('comment boxes ' + count(/data-comment-kind="/g) + ' != ' + want);
+  if (/______/.test(html) || /class="notes"/.test(html)) p.push('old notes underline still rendered');
+  const body = read(path.join(skillDir, 'assets', 'tc-review.template.html'));
+  if (/<html|<head|<style|<script|<dialog|<footer/i.test(body)) p.push('body partial carries document chrome');
+  if (!/<html lang="en" dir="ltr">/.test(html) || !/<body data-page-kind="tc-review">/.test(html)) p.push('shell lang / page kind');
+  const threw = (() => { try { renderHtml(r.model, { shell: '<!DOCTYPE html>\n<!-- {{#if body}} -->x' }); return false; } catch { return true; } })();
+  if (!threw) p.push('an unclosed shell block did not throw');
+  const rb = render({ tcPath: SAMPLE, root: here, shell: '<!DOCTYPE html>\n{{{body}}}{{no_such_shell_key}}' });
+  if (rb.payload.gate !== 'BLOCKED' || !kinds(rb).includes('placeholder-left')) p.push('a shell leftover did not BLOCK');
+  check('26 one shell per page: one style, one script, one viewer, one comment box per item', p, { boxes: want });
+}
+
+/* 27 — the report shell and the renderer kit are byte-identical with skill 5 when it is installed (the run report uses the same page). */
+{
+  const s5 = path.join(skillDir, '..', 'link-qc-5-test-run-automation');
+  if (!fs.existsSync(s5)) cases.push({ case: '27 shell mirror with skill 5', ok: true, skipped: true, problems: [], detail: 'link-qc-5-test-run-automation not installed — nothing to compare' });
+  else {
+    const p = [];
+    const a = path.join(skillDir, 'assets', 'report-shell.template.html'); const b = path.join(s5, 'assets', 'report-shell.template.html');
+    if (!fs.existsSync(b)) p.push('skill 5 has no assets/report-shell.template.html');
+    else if (sha(fs.readFileSync(a)) !== sha(fs.readFileSync(b))) p.push('assets/report-shell.template.html differs from skill 5');
+    const kit = (f) => { const s = read(f); const i = s.indexOf('/* ==== report-shell kit — BEGIN'); const j = s.indexOf('/* ==== report-shell kit — END ==== */'); return i >= 0 && j > i ? s.slice(i, j) : null; };
+    const ka = kit(SCRIPT); const kb = kit(path.join(s5, 'scripts', 'render-run-report.mjs'));
+    if (!ka || !kb) p.push('report-shell kit markers missing'); else if (ka !== kb) p.push('report-shell kit in render-tc-review.mjs differs from render-run-report.mjs');
+    check('27 shell mirror with skill 5', p, {});
+  }
 }
 
 const out = {
