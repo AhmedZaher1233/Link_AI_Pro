@@ -2,9 +2,11 @@
 name: link-qc-5-test-run-automation
 model: claude-opus-5
 description: >
-  Test Automation — takes a HUMAN-APPROVED test case document (Status: APPROVED is the only
-  entry gate) and generates
-  Playwright automation from that approved document with mandatory Page Object
+  Test Automation — takes skill 3's test case document (Status: APPROVED proceeds at once; an
+  unapproved document is never a dead end — ONE question: approve it now, in which case the skill
+  sets Status: APPROVED in the document for you, run it unapproved, or stop; --approve /
+  --unapproved answer in advance) and generates
+  Playwright automation from that document with mandatory Page Object
   Model. Publishing the TCs to Azure DevOps is NOT required and is never asked for — it is a
   separate skill (link-qc-4-publish-test-cases-azure); when it happens to have run already (ADO-MAP.md
   present and matching the source revision) this skill closes the loop there, otherwise the run
@@ -72,7 +74,7 @@ description: >
   "automate the approved test cases", "run the automation", "generate playwright tests
   from the TC document", "run the test cases for the story", "read my comments on the run
   report", "address the review comments on the test run".
-argument-hint: "[<approved TC document path>] [<User Story ID or title>] [<environment>] [--workers N] [--headless]"
+argument-hint: "[<TC document path>] [<User Story ID or title>] [<environment>] [--approve | --unapproved] [--workers N] [--headless]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Bash(node *validate-automation.mjs*), Bash(node *selftest.mjs*), Bash(node *render-run-report.mjs*), Bash(node *selftest-run-report.mjs*), Bash(node *tc-hash.mjs*), Bash(node *selftest-tc-hash.mjs*), mcp__azure-devops, mcp__playwright
 ---
 
@@ -122,12 +124,14 @@ documented limits) · `references/run-report.md` (report schema, renderer, lifec
 
 You do NOT:
 - design or invent test scenarios beyond the approved document
-- start without `Status: APPROVED` in the TC document
+- start on an unapproved TC document without the user's explicit per-run choice (approve now /
+  run unapproved) — and never flip a status silently or to anything but `APPROVED`
 - guess selectors — every selector is confirmed in source
 - **open a browser to re-verify what is already confirmed in source or a page object**
 - **beautify, re-publish or edit TC work items — that is skill 4's job; you only update
   automation fields and post the summary comment in PHASE 5**
-- **modify the approved source document or the beautified document**
+- **modify the approved source document or the beautified document** — the single exception is
+  the `Status:` line, rewritten to `APPROVED` only on the user's *approve now* choice
 - lower assertions, add timeouts-as-fixes, or skip tests to hide failures
 - modify a test to mask an application bug — app bugs are REPORTED, never absorbed
 - touch application business logic (only safe `data-testid` additions are allowed)
@@ -158,10 +162,24 @@ skill's Q&A and, if project-wide, to `## Project Knowledge`.
 Required inputs — missing from the task input AND the learning file → ASK the user
 (interactive) or BLOCKED (pipeline):
 
-1. **Approved TC document path** — must contain `Status: APPROVED`.
-   `PENDING HUMAN REVIEW` or anything else → BLOCKED: "Human approval is the gate.
-   Ask the reviewer to set Status: APPROVED in {path}." Never proceed on an
-   unapproved document and never flip the status yourself.
+1. **TC document path** — skill 3's `TEST-CASES-{feature}.md`. Read its `Status:` line:
+   - `APPROVED` → proceed.
+   - anything else (`PENDING HUMAN REVIEW`, another value, no line) → **ask ONCE**, before any
+     other question and before anything is written, with the value found and three choices:
+     **A) Approve now** — you set `Status: APPROVED` in the document (that line only — no other
+     byte of the TC document, `TEST-DATA`, the review page or the sidecar changes) and proceed;
+     the final message says the status was set this run on the user's instruction.
+     **B) Run without approval** — the document stays exactly as it is; proceed; the report's
+     `Source document` header line and the phase's `### Deviations` carry
+     `Status: {value} — run without approval (user decision, {date})`, and so does the final
+     message. Skill 4's own gate is untouched (an unapproved document still cannot be published).
+     **C) Stop** → BLOCKED, naming the value found.
+     Recommend A when the user says the review is done, otherwise B. `--approve` answers A and
+     `--unapproved` answers B in advance (never re-asked); a pipeline run with neither is BLOCKED
+     and names both flags. The choice holds for this run only — never written to the learning
+     file, never reused on a later run. Never flip a status silently, never to any value other
+     than `APPROVED`, and never when the document is not a skill-3 TC document (frozen fields
+     missing → BLOCKED, never repaired).
    **This is the ONLY document gate.** Publishing to Azure DevOps is NOT a prerequisite —
    see `ado_mode` below. Never block on it, never ask the user to publish or upload,
    never suggest running `link-qc-4-publish-test-cases-azure`, and never beautify or publish here.
@@ -2314,7 +2332,7 @@ the last code change, return **`## BLOCKED`** instead with the gate record attac
 the test run was. A passing suite is not a passed gate.
 
 **Feature:** {name} · **User Story:** {ID — title}
-**Approved TC document (automation source):** {path}
+**TC document (automation source):** {path} · Status {APPROVED | APPROVED — set this run on the user's instruction | {value} — run without approval (user decision, {date})}
 **Environment:** {env} · **Run command:** {exact command}
 
 ### Azure DevOps linkage
@@ -2497,7 +2515,7 @@ discarded as stale.}
 
 ## BLOCKED
 
-**Reason:** {unapproved TC doc | missing User Story | ambiguous US name | missing profile key | unresolved test-data precondition (QC chose stop, or provisioning failed and no alternative accepted) | **compliance gate not PASS** (Checkpoint A or B `FAIL`/`BLOCKED`, an applicable check still `unresolved`, or the recorded results are stale)}
+**Reason:** {unapproved TC doc — user chose *stop*, or pipeline run without `--approve` / `--unapproved` | missing User Story | ambiguous US name | missing profile key | unresolved test-data precondition (QC chose stop, or provisioning failed and no alternative accepted) | **compliance gate not PASS** (Checkpoint A or B `FAIL`/`BLOCKED`, an applicable check still `unresolved`, or the recorded results are stale)}
 *(Never blocked for Azure DevOps: a missing or stale ADO-MAP.md, an unpublished story, or an
 ADO auth failure all degrade to `ado_mode = local` and the run continues. Never blocked for an
 ambiguous TC step or an unresolved element either: those are raised as PHASE 2.4 open questions
@@ -2547,7 +2565,11 @@ Before returning AUTOMATION COMPLETE:
 - [ ] **No product code modified, no application setting changed, no error suppressed to obtain
       a pass**
 
-- [ ] TC document verified `Status: APPROVED` — gate respected
+- [ ] TC document `Status:` read; `APPROVED` proceeded, anything else asked ONCE (approve now /
+      run without approval / stop) or answered by `--approve` / `--unapproved`; *approve now*
+      rewrote the `Status:` line only; *run without approval* is recorded on the report's
+      `Source document` line, in `### Deviations` and in the final message; the choice was never
+      written to the learning file
 - [ ] User Story id resolved without Azure (task input → frontmatter → folder name → ask) and
       confirmed with the user before naming any folder; never guessed
 - [ ] **`ado_mode` derived and stated (`linked` / `local` + reason); the run was NEVER blocked,

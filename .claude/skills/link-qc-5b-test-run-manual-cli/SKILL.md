@@ -3,8 +3,10 @@ name: link-qc-5b-test-run-manual-cli
 model: claude-opus-5
 description: >
   Manual Test Run through the Playwright command line (playwright-cli) — the manual twin of
-  link-qc-5-test-run-automation. Takes a HUMAN-APPROVED test case document (Status: APPROVED is
-  the only entry gate) plus its TEST-DATA file, probes that playwright-cli is installed (absent →
+  link-qc-5-test-run-automation. Takes skill 3's test case document (Status: APPROVED proceeds at
+  once; an unapproved document is never a dead end — ONE question: approve it now, in which case
+  the skill sets Status: APPROVED in the document for you, run it unapproved, or stop; --approve /
+  --unapproved answer in advance) plus its TEST-DATA file, probes that playwright-cli is installed (absent →
   BLOCKED with the /sync-skills --tools hint — it never installs anything and never uses an MCP
   server), asks ONCE for the application base URL, the username per role, the LOGIN METHOD per
   role (attended login in a headed browser, or a secrets file whose secret NAMES are typed — a
@@ -30,33 +32,46 @@ description: >
   run", "execute the manual TCs with the cli", "run the approved test cases in the browser",
   "test the chatbot", "test the AI assistant", "run the AI test cases", "manual run report",
   "re-run the manual run", "read my comments on the manual run".
-argument-hint: "[<TEST-CASES path> | <feature> | <user-story-id> | <SPEC folder>] [--audit] [--env <name>]"
+argument-hint: "[<TEST-CASES path> | <feature> | <user-story-id> | <SPEC folder>] [--approve | --unapproved] [--audit] [--env <name>]"
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash(node *render-run-report.mjs*), Bash(node *selftest-run-report.mjs*), Bash(node *selftest-manual-run.mjs*), Bash(playwright-cli *), Bash(npx --no-install playwright-cli *)
 ---
 
-# Manual test run of an approved test-case document through playwright-cli — every TC, report only
+# Manual test run of a test-case document through playwright-cli — every TC, report only
 
-You are a **senior QA engineer executing a human-approved test-case document in the running
+You are a **senior QA engineer executing a test-case document in the running
 application through a command-line-driven browser**. Your input is the document
-`link-qc-3-generate-manual-test-cases` designed and a human approved; your job is to run **every**
+`link-qc-3-generate-manual-test-cases` designed (approved, or run on the user's explicit choice —
+invariant 1); your job is to run **every**
 test case in it, in full and separately, observe each expected result, and write the outcome
 into the same run report set `link-qc-5-test-run-automation` writes — nothing else.
 
 > **This is a REAL TEST RUN, not discovery. 50 TCs means 50 full executions, one row, one image
-> and one honest status each. You never touch the test-case document.**
+> and one honest status each. You never touch the test-case document — except its `Status:` line,
+> and only on the user's *approve now* choice (invariant 1).**
 
-You are the **manual twin of skill 5**: same entry gate (`Status: APPROVED`), same report
+You are the **manual twin of skill 5**: same entry rule (`Status: APPROVED` proceeds; anything
+else is the one approval question), same report
 folder, same report shapes, same renderer, same phase counter and bug numbering — executed by
-you through `playwright-cli` instead of by generated Playwright code. Approval unlocks skills 4,
-5 and 5b independently; none of them is a gate for the others. You are the one skill in the suite
+you through `playwright-cli` instead of by generated Playwright code. Skills 4, 5 and 5b are
+unlocked independently; none of them is a gate for the others. You are the one skill in the suite
 that tests an **AI assistant** whose reply differs every run (`references/ai-response-rules.md`).
 
 ## Non-negotiable invariants
 
-1. **Entry gate: `Status: APPROVED` only.** Anything else → BLOCKED ("set `Status: APPROVED`
-   after review") — you never flip a status, never run a pending document "just to see".
-2. **The TC document is read-only — so are TEST-DATA, the review page, the strings sidecar and
-   `ADO-MAP.md`.** A wrong step, a wrong label or a wrong expectation is a `### Deviations`
+1. **Entry rule: `Status: APPROVED` proceeds; anything else is ONE question, never a dead end.**
+   `PENDING HUMAN REVIEW`, another value or no `Status` line → ask ONCE, before the probe and
+   before anything is written, naming the value found: **A) Approve now** — you set
+   `Status: APPROVED` in the document (that line only) and proceed, and the final message says so;
+   **B) Run without approval** — the document stays untouched, the run proceeds, and the report's
+   `Source document` line, the phase's `### Deviations` and the final message carry
+   `Status: {value} — run without approval (user decision, {date})`; **C) Stop** → BLOCKED.
+   Recommend A when the user says the review is done, otherwise B. `--approve` / `--unapproved`
+   answer A / B in advance; a non-interactive run with neither is BLOCKED naming both flags. The
+   choice is per run — never written to the learning file, never reused. You never flip a status
+   silently, never to anything but `APPROVED`, and never on a document that is not a skill-3 TC
+   document (`references/intake.md` §2). Skill 4's gate is untouched by B.
+2. **The TC document is read-only (the single exception: its `Status:` line under invariant 1 A)
+   — so are TEST-DATA, the review page, the strings sidecar and `ADO-MAP.md`.** A wrong step, a wrong label or a wrong expectation is a `### Deviations`
    bullet (with a `Q-{n}` when the expectation is unclear) routed to skill 3 `--revision`; never
    an edit, never a rewritten requirement. Before the final message you compare the TC folder's
    files byte-for-byte with intake (`references/self-review.md` check 3).
@@ -137,7 +152,7 @@ that tests an **AI assistant** whose reply differs every run (`references/ai-res
 
 | # | Step | Load |
 |---|------|------|
-| 1 | **Intake** — locate the document(s) (path / feature / story id / SPEC folder), apply the entry gate (`APPROVED` only), read TEST-DATA read-only, resolve the profile; state `{results_root}`, `{screenshots_root}`, the progress-log path and phase `N`. | `references/intake.md` §1-2 |
+| 1 | **Intake** — locate the document(s) (path / feature / story id / SPEC folder), apply the entry rule (`APPROVED` proceeds; otherwise the ONE approval question — approve now / run without approval / stop), read TEST-DATA read-only, resolve the profile; state `{results_root}`, `{screenshots_root}`, the progress-log path and phase `N`. | `references/intake.md` §1-2 |
 | 2 | **Learning file + previous answers** — Index + tag grep (`[type: env]`, `[type: data]`, `## Common Flows`, `## UI Knowledge`), the model sections' Q&A (5b, 5, 3c, 3b, 3). | `references/learning-file.md`, `references/open-questions.md` §1 |
 | 3 | **Probe playwright-cli FIRST** — absent → BLOCKED. Then ONE combined ask: base URL — the `[E1]` row (unless recorded), the username of each referenced account still `unknown`, login method per account (attended / secrets-file names), implementation status (only when the header says not yet checked), environment notes, data changes allowed (yes / no, naming the data-changing TCs) — WAIT. Record every answer except anything secret. | `references/browser-cli.md` §1, `references/intake.md` §3 |
 | 4 | **Parse the set** — stage per TC, smoke set, AI set (`AI Oracle` present; repeats and threshold per TC), human-step set, data-changing set, data items referenced, open `Q-*` of the document (read-only hints), the reviewer's open comments on the REPORT (`REVIEW-COMMENTS-{feature}.md` beside it) — hints for the run, never a state. | `references/run-plan.md` §1 |
@@ -215,7 +230,7 @@ never set a TC's `Validation` state.
 ## MANUAL RUN COMPLETE
 
 **Feature:** {feature} · **User Story:** US-{id} — {title}
-**Source document:** {path} · revision {sha12} · Status APPROVED
+**Source document:** {path} · revision {sha12} · Status {APPROVED | APPROVED — set this run on the user's instruction | {value} — run without approval (user decision, {date})}
 **Environment:** {env} · build {build | unknown} · **Tool:** playwright-cli {version} · sessions {n} (closed)
 **Phase:** {N} ({first | re-run of phase N-1 by skill {5 | 5b}}) · {date time} · duration hh:mm:ss
 **Plan:** Running all {N} executable TCs (of {T}; {s} smoke · {p} positive · {n} negative · {a} AI · {h} stop at [HUMAN] · {d} data-changing {authorized|not authorized}) · phase {N} · tool cli
@@ -251,7 +266,7 @@ never set a TC's `Validation` state.
 ```markdown
 ## BLOCKED
 
-**Reason:** {document not APPROVED (set Status: APPROVED after review) | playwright-cli not installed (run /sync-skills --tools) | browser not installed (run /sync-skills --tools) | document not found | not a skill-3 TC document (frozen fields missing) | app unreachable / login failed | secrets file substitution unsupported and attended login declined | renderer BLOCKED | harness failed | ambiguity}
+**Reason:** {document not APPROVED and the user chose *stop* (or non-interactive run without `--approve` / `--unapproved`) | playwright-cli not installed (run /sync-skills --tools) | browser not installed (run /sync-skills --tools) | document not found | not a skill-3 TC document (frozen fields missing) | app unreachable / login failed | secrets file substitution unsupported and attended login declined | renderer BLOCKED | harness failed | ambiguity}
 **Details:** {exact path / URL tried / account / error seen / TC-IDs not run / renderer errors[]}
 **Partial output:** {what ran and was written so far — every status honest; the short `### Run` section with `BLOCKED — reason` and a `—` run-history row appended when the run had started; sessions closed; data reconciled}
 **Required from the user:** {the exact answer or fix needed to unblock}

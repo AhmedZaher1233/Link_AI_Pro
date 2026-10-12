@@ -65,8 +65,9 @@ you have none — you walk every TC on every run**). 3b remains the default vali
 replacing it is a later decision that needs an explicit instruction after the comparison
 (`references/cli-vs-mcp-comparison.md`) has been reviewed. A document that never went through you
 is complete and approvable; skills 4 and 5 accept it unchanged, and skill 5 re-verifies readiness
-itself. Human approval (`Status: APPROVED`) stays the only entry gate for skills 4 and 5, and
-publishing (skill 4) stays optional for skill 5.
+itself. Human approval (`Status: APPROVED`) stays the only entry gate for skill 4; skills 5 and 5b
+run an unapproved document only on the user's explicit per-run choice; publishing (skill 4) stays
+optional for skill 5.
 
 ## Non-negotiable invariants
 

@@ -138,7 +138,10 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
 
 Approval unlocks skills 4, 5 and 5b **independently**: publishing is optional and is not skill 5's
 or 5b's gate, the manual CLI run (5b) is optional and gates nothing, and live validation (3b, or its
-CLI twin 3c) is optional and is not a gate for anything.
+CLI twin 3c) is optional and is not a gate for anything. Skill 4 refuses an unapproved document;
+skills 5 and 5b do not — on anything but `Status: APPROVED` they ask ONCE (approve now — the skill
+sets `Status: APPROVED` in the document for you —, run without approval, or stop; `--approve` /
+`--unapproved` answer in advance) and a run without approval is recorded in the report.
 `link-qc-6-ui-testing` sits beside the chain: it audits one implemented screen at a time (any time, any story)
 and writes to `Testing/UI-Testing/`; nothing gates it and it gates nothing.
 
@@ -208,7 +211,8 @@ travels to Azure DevOps through skill 4. A TC that exercises an AI assistant / c
 optional `AI Oracle` field (after `Data Oracle`: Intent · Must contain · Must not contain · Language ·
 Max length · Repeats / Pass threshold) — the rubric skill 5b judges the reply text against; it enters the
 TC hash only when present and never holds a secret. **A human must set `Status: APPROVED`** — that unlocks
-skills 4 (optional), 5 and 5b (optional) independently. Live validation is the separate, optional skill 3b — or
+skills 4 (optional), 5 and 5b (optional) independently (5 and 5b can also set it for you on your
+explicit "approve now", or run the unapproved document and say so in the report). Live validation is the separate, optional skill 3b — or
 its evaluation twin 3c.
 
 ### 3b — validate-manual-test-cases (optional)
@@ -289,7 +293,12 @@ work items of `ADO-MAP.md` to that Test Plan suite (additive; the `Suite` column
 suite is where skill 7 later records outcomes.
 
 ### 5 — test-run-automation
-Its only document gate is `Status: APPROVED`; publishing to Azure DevOps (skill 4) is optional
+Its only document rule is `Status: APPROVED`: an approved document proceeds at once; anything else
+is ONE question — **approve now** (the skill rewrites the `Status:` line to `APPROVED`, nothing else),
+**run without approval** (the document is untouched; the report's `Source document` line, the phase's
+Deviations and the final message say `run without approval (user decision)`) or **stop** (BLOCKED).
+`--approve` / `--unapproved` answer it in advance; a pipeline run with neither is BLOCKED. The choice
+is per run, never remembered. Publishing to Azure DevOps (skill 4) is optional
 and never asked for. Before writing any file it takes an **automation inventory** of the whole
 automation root — every page class, whatever skill or agent wrote it — and records one decision
 per screen (`reuse` / `extend` / `create`, each surfaced candidate accepted or rejected with a
@@ -349,8 +358,9 @@ on its own. The story folder's top level holds nothing else (plus the reviewer's
 `REVIEW-COMMENTS-{feature}.md`); folders from the older layout are read-only history.
 
 ### 5b — test-run-manual-cli (manual CLI run, optional)
-The manual twin of skill 5, beside it the way 3b / 3c sit beside 3. It takes a **human-approved**
-TC document (`Status: APPROVED` is its only entry gate — independent of skills 4 and 5) and
+The manual twin of skill 5, beside it the way 3b / 3c sit beside 3. It takes skill 3's TC document
+(`Status: APPROVED` proceeds; anything else is skill 5's one approval question — approve now / run
+without approval / stop, `--approve` / `--unapproved` — independent of skills 4 and 5) and
 executes **every** test case in full and separately through `playwright-cli` — the same tool as
 3c, never the Playwright MCP, never an install of its own (`/sync-skills --tools`), attended login
 in the headed browser or secret names from the user-run secrets file, never a password. Order is

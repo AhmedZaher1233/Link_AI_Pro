@@ -45,15 +45,16 @@ history: counted for `N`, named on the header's `Earlier phases` line, never ope
 
 ## 2. Entry gate — the document's state decides whether the run starts
 
-Read the header block and the frozen anchors, then classify. This skill has one gate and no
-read-only mode: an unapproved document is not executed, an approved one is never modified.
+Read the header block and the frozen anchors, then classify. This skill has one entry rule and
+no read-only mode: an approved document is executed as it is and never modified; an unapproved
+one is executed only on the user's explicit per-run choice (SKILL.md invariant 1).
 
 | Header / shape | State | What you do |
 |---|---|---|
 | `Status: APPROVED` | approved | proceed |
-| `Status: PENDING HUMAN REVIEW` | not approved | **BLOCKED** — "set `Status: APPROVED` after review, then re-run this skill". No browser, no ask, nothing written |
-| any other `Status` value, or no `Status` line | not approved | the same BLOCKED, naming the value found |
-| Frozen fields missing inside a TC (`Type`, `Steps`, `Expected Result`), or not a skill-3 document at all | invalid | **BLOCKED** — "not a skill-3 TC document"; never repair it |
+| `Status: PENDING HUMAN REVIEW` | not approved | **ask ONCE** — before the probe, before the combined ask, before anything is written — naming the value found: **A) Approve now**: rewrite that one line to `**Status:** APPROVED` (nothing else in the document, `TEST-DATA`, the review page or the sidecar changes) and proceed; **B) Run without approval**: proceed with the document untouched and record `Status: {value} — run without approval (user decision, {date})` on the report's `Source document` header line, as a `### Deviations` bullet of this phase and in the final message; **C) Stop**: BLOCKED, naming the value. Recommend A when the user says the review is done, otherwise B. `--approve` / `--unapproved` answer A / B in advance and are never re-asked; a non-interactive run with neither → BLOCKED naming both flags. The answer is per run: never in the learning file, never reused. (`--audit` reports the status and the question it would ask; it asks nothing and writes nothing) |
+| any other `Status` value, or no `Status` line | not approved | the same question, naming the value found (or "no Status line"); choice A rewrites / inserts the single `**Status:** APPROVED` header line |
+| Frozen fields missing inside a TC (`Type`, `Steps`, `Expected Result`), or not a skill-3 document at all | invalid | **BLOCKED** — "not a skill-3 TC document"; never repair it, and never offer *approve now* on it (the shape check comes before the status question) |
 | No `Scope` / `Generated` / `Stage` (renderer `compatibility[]` lists them) | legacy shape | proceed — the stage of each TC is derived from `Type` and `Smoke` (`run-plan.md` §1); say so once in the plan line. Never rewrite the document |
 | TC stamps by 3b / 3c (`tool: mcp` / `tool: cli`, `MCP validation:` header line) | informational | never changed, never freshness-checked; the `Validation` states are context only. A state this run's observation contradicts (`validated` and the TC fails as `app_bug`; `discrepancy` and the TC passes) → one bullet under the phase's `### Deviations`, nothing in the TC document |
 | `Implementation status:` says `not yet checked live` | status unknown | the combined ask includes the implementation question; `execution-rules.md` §1 establishes it live either way |
@@ -84,7 +85,7 @@ Then ONE message — never a second one for any of these — after searching the
 | Implementation status (implemented / partially / not implemented / not sure) | the header says `not yet checked live` and no skill-4 / skill-10 report answers it | trusted over the live look — both are recorded |
 | Environment notes | always, one line: VPN / tenant / where the build number shows / anything that blocks screens / whether this is production | — |
 | **Data changes on {env}** — may this run create / modify / delete data (`execution-rules.md` §5)? | always; name the data-changing TCs (`Data effect` ≠ read-only) and what each would leave behind and how it is cleaned up. **Production named in the notes → "no" is stated, not asked** ("production environment → forced to no") | a mutation on "no"; a mutation on production; a second question about it |
-| Revision authorization | never — this skill never modifies the document | — |
+| Revision authorization | never — this skill never modifies the document (the `Status:` line under §2 A is the single exception, asked separately and earlier) | — |
 | Scope | never — every TC of the approved document is executed, in full, separately (`run-plan.md`) | a scope question, a recommendation, a narrowing |
 | 3b / 3c evidence | never — the stamps are informational (§2) | a keep / skip / re-validate question |
 | How to get a missing data item | never — a `MISSING` item makes its dependents `SKIP — data_missing`; nothing is prepared (`execution-rules.md` §4) | a provisioning question; a per-item question during the run |
@@ -102,8 +103,10 @@ only. A `TEST-DATA` row that stayed `unknown` is named in the final message so 3
 
 ## 4. Multi-story input — a SPEC folder or several IDs
 
-1. List the stories you found and state the split before anything else; a story whose document
-   is not `APPROVED` is listed as blocked (§2) and the others proceed.
+1. List the stories you found and state the split before anything else; the §2 approval
+   question is asked ONCE for all unapproved stories together (one choice per story, or one
+   answer for all — the user says which), and a story the user stops is listed as blocked (§2)
+   while the others proceed.
 2. One probe, one combined ask for all stories (login method per account once; one attended login
    per account is reused across stories).
 3. Set analysis and plan line **per story** (`run-plan.md` §1-§2); every TC of every story is

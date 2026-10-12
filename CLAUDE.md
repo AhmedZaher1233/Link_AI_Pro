@@ -489,12 +489,18 @@ loaded per step (skill 1 ≈ 110 lines over 9 references). Don't inline referenc
 a SKILL.md.
 
 **Hard rules the skills encode** (preserve them when editing):
-- Human gates: skill 3's TC doc needs `Status: APPROVED` before 4 / 5 / 5b (each unlocked independently);
+- Human gates: skill 3's TC doc needs `Status: APPROVED` before 4 (refused otherwise); 5 and 5b proceed at
+  once on `APPROVED` and on anything else ask ONCE — **approve now** (the skill rewrites the `Status:` line
+  to `APPROVED`, nothing else in the document), **run without approval** (document untouched; recorded on the
+  report's `Source document` line, in `### Deviations` and in the final message) or **stop** (BLOCKED);
+  `--approve` / `--unapproved` answer in advance, a pipeline run with neither is BLOCKED, the choice is per
+  run and never persisted (user decision, 2026-10-12). Each of 4 / 5 / 5b is unlocked independently;
   skill 11's findings need PO approval + `--apply-approved`; skill 1 Mode C needs a confirmed move plan.
   **Skill 4 is NOT a gate for skill 5** — `ADO-MAP.md` at a matching source hash only switches skill 5
   from `local` to `linked`; keep skills 4 and 5 saying the same thing about this. **5b is not a gate for
   anything.**
-- **5b is a real run, report only.** `Status: APPROVED` is its only entry gate; every TC of the document
+- **5b is a real run, report only.** Its entry rule is skill 5's (approved → run; otherwise the one approval
+  question; the `Status:` line is the only byte of the TC document it may ever write); every TC of the document
   is executed in full and separately through playwright-cli — smoke first behind the 30 % smoke gate with
   NO self-heal (application-error majority → stopped and reported), then positive, then negative; statuses
   PASS / FAIL / INCOMPLETE / SKIP / NOT_RUN, a `[HUMAN]` step ends `PARTIAL — human step pending`, never
@@ -547,7 +553,8 @@ a SKILL.md.
 - **Approved documents and 3b:** read-only validation is always allowed; modifying needs the
   user's explicit revision authorization (asked once, `--authorize-revision` counts); `Status`
   becomes `PENDING HUMAN REVIEW` only when something actually changed; republish is mentioned only
-  when an `ADO-MAP.md` exists. The only status flip any skill may make.
+  when an `ADO-MAP.md` exists. Besides 5 / 5b's user-instructed `APPROVED`, the only status flip any
+  skill may make.
 - **Coverage is requirement-based:** "Validation alone does not change design coverage;
   discovering a genuine coverage gap or updating cases may change it." App validation progress is
   the separate observation number.

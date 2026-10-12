@@ -86,8 +86,8 @@ project has no conventions yet.
 
 `Steering (docs/steering) → Requirements (skill 2) → Rules in code (skill 11) → Manual TCs
 (skill 3, design only) → Live validation (skill 3b through Playwright MCP, or its evaluation twin 3c through playwright-cli — optional, same files patched in place) →
-White-box audit (skill 10) → human sets APPROVED → Publish to Azure DevOps (skill 4, optional) →
-Automation (skill 5) → Manual CLI run (5b, optional, after approval, report only, same report folder as 5) → Reports / Screenshots`. Beside the chain, per screen and at any point:
+White-box audit (skill 10) → human sets APPROVED (or answers skill 5 / 5b's "approve now") → Publish to Azure DevOps (skill 4, optional, approved only) →
+Automation (skill 5) → Manual CLI run (5b, optional, report only, same report folder as 5) → Reports / Screenshots`. Beside the chain, per screen and at any point:
 `Visual UI audit (link-qc-6-ui-testing, Playwright MCP + optional Figma MCP) → UI-Testing/`. Every skill reads
 `project-learning.md` before asking and writes back after learning; every skill reads
 `qa-manifest.json` for paths first.

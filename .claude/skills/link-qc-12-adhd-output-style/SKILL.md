@@ -157,17 +157,18 @@ the exact thing the reader must do, with the path, and nothing before it:
 - Skill 3b scope gate -> the one scope choice (FULL / SHARED / CUSTOM) with the recommendation and the TC-IDs it leaves unvalidated; other-validator evidence in scope -> the one cross-validator choice (skip current, re-validate stale). Skill 3c has neither (it walks every TC) -> restate the plan line only. Approved document (3b or 3c) -> the one revision authorization with the list of changes.
 - Skill 3c attended login -> `Log in as {role} in the browser window that just opened, then reply done.` (one per role; the model never sees a password).
 - Skill 3c test-data ask (after the walk, only when evidence could not decide) -> the batched list of undecided items ordered by priority, each with its recommended way; items decided from evidence are not asked.
-- Skill 4 / 5 entry gate -> `Set Status: APPROVED in {path}` (the only document gate for both; publishing to Azure DevOps is optional and never a prerequisite).
+- Skill 4 entry gate -> `Set Status: APPROVED in {path}` (the only document gate; publishing to Azure DevOps is optional and never a prerequisite for 5).
+- Skill 5 / 5b approval question (document not APPROVED) -> `{path} is {value}. A) approve now (I set Status: APPROVED for you) · B) run without approval (recorded in the report) · C) stop. Recommended: {A if you reviewed it | B}.` — one line, three letters, never a second question; `--approve` / `--unapproved` skip it.
 - Skill 5 PHASE 2.6 test-data readiness -> the missing data item and where to add it.
 - Skill 5 Checkpoint A / B -> the one compliance item still unresolved and what would close it (the skill repairs its own code defects; it only surfaces what needs a human).
 - Skill 5 30% smoke failure gate -> the majority failure class and the one decision (continue / stop).
-- Skill 5b entry gate -> `Set Status: APPROVED in {path}` (the same document gate as 4 and 5, unlocked independently; 5b gates nothing).
 - Skill 5b attended login -> `Log in as {role} in the browser window that just opened, then reply done.` (one per role; the model never sees a password — same as 3c).
 - Skill 5b 30% smoke gate -> `Smoke stopped: {n} of {m} failed, application-error majority — no heal in 5b; fix the application, then re-run.` with the failed TC-IDs (5b never self-heals and never re-runs smoke on its own; a stop is the outcome, not a question).
 - Skill 11 PO decision block -> `Open {export path}, fill the decision block, re-run with --apply-approved.`
 - link-qc-6-ui-testing report -> `Open {report path}; answer the Open Questions (measured values inside) so they become bugs or confirmed rules.` (the one pre-flight ask — languages, role, credentials, environment — comes as a single message before the browser opens)
 
-Never ask "want me to continue?" in place of the gate line. Never flip a status yourself.
+Never ask "want me to continue?" in place of the gate line. Never flip a status yourself — the one
+exception is skill 5 / 5b's *approve now*, on the reader's explicit answer, and then the line says so.
 
 ### C2. Five contract facts the chat repeats, never rewrites
 
@@ -197,6 +198,7 @@ Never ask "want me to continue?" in place of the gate line. Never flip a status 
 
 Keep the skill's BLOCKED block intact (it is a contract). Above it, one line: what is missing and
 the single fix. `BLOCKED: Status is still PENDING HUMAN REVIEW. Fix: set Status: APPROVED in TEST-CASES-US-1234.md.`
+(skill 4) — or, in skills 5 / 5b, `BLOCKED: you chose stop. Re-run with --approve or --unapproved, or set Status: APPROVED in {path}.`
 Environment failures (VPN, unreachable app, expired credentials) are never phrased as product bugs.
 
 ### E. Long runs: progress lines, not prose

@@ -1,6 +1,7 @@
 SKILL: link-qc-5b-test-run-manual-cli
-WHAT IT DOES: The manual twin of link-qc-5-test-run-automation. Takes a HUMAN-APPROVED test case
-document (Status: APPROVED is the only entry gate) and EXECUTES EVERY test case in it, in full and
+WHAT IT DOES: The manual twin of link-qc-5-test-run-automation. Takes skill 3's test case
+document (Status: APPROVED proceeds at once; anything else is ONE question — approve now, run
+without approval, or stop) and EXECUTES EVERY test case in it, in full and
 separately, in the RUNNING application through the Playwright command line (playwright-cli) — a
 real test run, not discovery: smoke first behind the 30% smoke gate (no self-heal), then
 positive, then negative; PASS only after the expected result was positively observed; an
@@ -18,12 +19,22 @@ INPUT — WHAT YOU MUST PROVIDE
 ============================================================
 
 ALWAYS REQUIRED:
-  1. The APPROVED TC document              — a path to TEST-CASES-{feature}.md, OR a feature name /
+  1. The TC document                       — a path to TEST-CASES-{feature}.md, OR a feature name /
                                              User Story ID (the skill finds the document under
                                              Testing/Manual_Test/TestCases/**/US-{id}-*/), OR a
-                                             SPEC-{name}/ folder (every APPROVED story inside is
-                                             run; one combined ask, one report set per story).
-                                             Status MUST be APPROVED — anything else is BLOCKED.
+                                             SPEC-{name}/ folder (every story inside is run; one
+                                             combined ask, one report set per story).
+                                             "Status: APPROVED" proceeds at once. Anything else
+                                             (PENDING HUMAN REVIEW, another value, no line) is NOT
+                                             refused: the skill asks you ONCE, before anything else —
+                                               A) Approve now  — it sets "Status: APPROVED" in the
+                                                  document for you (that line only) and proceeds
+                                               B) Run without approval — the document is untouched;
+                                                  the run proceeds and the report + final message
+                                                  record "run without approval (user decision)"
+                                               C) Stop — BLOCKED
+                                             Per run, never remembered; a status is never flipped
+                                             silently and never to anything but APPROVED.
                                              Its TEST-DATA-{feature}.md is read beside it.
 
 PREREQUISITES (installed for you — the skill never installs anything itself):
@@ -50,6 +61,10 @@ OPTIONAL FLAGS:
                                  is executed on every run. A narrowing flag or sentence gets one
                                  line ("this skill runs every TC") and the full run. For a
                                  narrowed live check use skill 3b.
+  --approve | --unapproved       Answer the approval question in advance: --approve sets
+                                 "Status: APPROVED" in the document, --unapproved runs it as it
+                                 is. A non-interactive run on an unapproved document without
+                                 one of them is BLOCKED.
   --env <name>                   The environment name written into the report (UAT, staging…)
                                  when the learning file does not already record it.
   --audit                        Probe playwright-cli and analyse the document only: the entry

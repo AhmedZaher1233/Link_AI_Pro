@@ -116,9 +116,10 @@ BLOCKED with the specific ambiguity — or an open question in the `open-questio
    defects at all — `## Potential Bugs` is written only by 3b.
 7. **Approved documents.** A `TEST-CASES-*.md` carrying `Status: APPROVED` may already be
    published by skill 4. Regenerate it only on an explicit instruction from the user (see
-   `references/deliverables.md` §1). Never flip the status yourself — the one exception is 3b's
+   `references/deliverables.md` §1). Never flip the status yourself — the exceptions are 3b's
    authorized revision, which sets `PENDING HUMAN REVIEW` only when it actually changed the
-   document (`link-qc-3b-validate-manual-test-cases` invariant 5); this skill never applies it.
+   document (`link-qc-3b-validate-manual-test-cases` invariant 5), and skills 5 / 5b, which set
+   `APPROVED` only on the user's explicit *approve now* answer; this skill applies neither.
 8. **Never write a secret into a file.** Passwords, tokens and PATs never enter the TC document,
    the HTML page, the strings sidecar, the learning file or the chat log. Steps name the role
    and the account reference only (`Login as Administrator [A1]`); the username lives in
@@ -145,8 +146,9 @@ BLOCKED with the specific ambiguity — or an open question in the `open-questio
     then you tell the user to run `/link-qc-1-generate-update-testing-structure` (audit first, then
     repair) — never invoke that skill yourself.
 12. **The human is the gate.** Every document is delivered `PENDING HUMAN REVIEW`; only the
-    reviewer sets `APPROVED`, and only that unlocks skills 4 and 5 — independently of each other
-    and independently of 3b.
+    reviewer sets `APPROVED` (by hand, or by answering skill 5 / 5b's *approve now*), and only that
+    unlocks skill 4; skills 5 and 5b run an unapproved document only on the user's explicit per-run
+    choice and say so in the report — each independently of the others and of 3b.
 13. **The review page is rendered, never written by hand.** `TC-REVIEW-{feature}.html` comes
     from `scripts/render-tc-review.mjs` (`references/html-page.md`); its numbers are recomputed
     from the tables, a header line that disagrees is a MISMATCH you fix in the markdown, an

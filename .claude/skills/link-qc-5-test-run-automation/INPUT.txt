@@ -1,5 +1,5 @@
 SKILL: link-qc-5-test-run-automation
-WHAT IT DOES: Takes the HUMAN-APPROVED TC document → generates Playwright automation (POM
+WHAT IT DOES: Takes skill 3's TC document → generates Playwright automation (POM
 mandatory) → passes a pre-run COMPLIANCE CHECKPOINT → measures static coverage → resolves
 test-data readiness with you → runs
 smoke-gated staged execution (smoke → positive → negative) with live progress + ETA in the
@@ -17,9 +17,18 @@ INPUT — WHAT YOU MUST PROVIDE
 ============================================================
 
 REQUIRED:
-  1. Approved TC document path   — Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{Story}/TEST-CASES-*.md
-                                   MUST contain "Status: APPROVED" (skill refuses anything
-                                   else — it never flips the status itself)
+  1. TC document path            — Testing/Manual_Test/TestCases/[SPEC-{spec-name}/]{Story}/TEST-CASES-*.md
+                                   "Status: APPROVED" proceeds at once. Anything else
+                                   (PENDING HUMAN REVIEW, another value, no line) is NOT
+                                   refused: the skill asks you ONCE, before anything else —
+                                     A) Approve now  — it sets "Status: APPROVED" in the
+                                        document for you (that line only) and proceeds
+                                     B) Run without approval — the document is untouched; the
+                                        run proceeds and the report + final message record
+                                        "run without approval (user decision)"
+                                     C) Stop — BLOCKED
+                                   The choice is per run and never remembered. A status is
+                                   never flipped silently and never to anything but APPROVED.
   2. User Story ID or name        — derived from the TC document's frontmatter or its folder
                                    name (US-{id}-{name}) and confirmed with you; no Azure
                                    lookup needed. It only names the report/log/screenshot
@@ -39,6 +48,10 @@ OPTIONAL:
                                    with 1, the documented override)
   5. --headless                  — hide the browser (default: VISIBLE Google Chrome window,
                                    you watch the run; passed to the config as PW_HEADLESS=1)
+  6. --approve | --unapproved    — answer the approval question in advance (--approve sets
+                                   "Status: APPROVED" in the document, --unapproved runs it as
+                                   it is); a pipeline run on an unapproved document without
+                                   one of them is BLOCKED
 
 COMPLIANCE GATES: the run passes through TWO mandatory compliance checkpoints, and BOTH must
   pass before the skill claims the automation is compliant.
@@ -202,7 +215,8 @@ OUTPUT — WHAT YOU GET
     selftest-run-report.mjs (23) · selftest-watchdog.mjs · selftest-config-inventory.mjs ·
     selftest-tc-hash.mjs (the canonical TC hash — same golden as skill 4's harness)
 
-WHEN TO RUN: after a human set Status: APPROVED on skill 3's output. Publishing to Azure
+WHEN TO RUN: after skill 3 produced the TC document — ideally once a human reviewed it and set
+Status: APPROVED; an unapproved document only costs you the one approval question. Publishing to Azure
 DevOps (skill 4) is a separate, optional step — run it before or after this skill, or not
 at all. Live validation of the TCs (skill 3b, or its CLI twin 3c) is optional too: an all-"draft" document is
 accepted as it is.

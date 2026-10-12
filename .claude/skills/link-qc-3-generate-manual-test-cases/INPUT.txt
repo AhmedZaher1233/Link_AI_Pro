@@ -131,7 +131,9 @@ does not force NO — such a TC is "partially automatable"), optionally fill the
 or share data or need a tag in Azure (skill 5 uses the first two to decide parallel vs
 one-after-another execution; blank = it infers), answer the open questions, check the Problems table in
 TEST-DATA-{feature}.md, then set Status: APPROVED in the markdown — that unlocks skill 4
-(publish to Azure DevOps, optional) and skill 5 (automation), independently.
+(publish to Azure DevOps, optional) and skill 5 (automation), independently. Skills 5 and 5b
+can also set it for you when you answer their "approve now" question, or run the unapproved
+document and say so in the report; skill 4 always needs the approved status.
 
 TO COMMENT: every test case, potential bug and open question on the page has a comment box,
 plus one general box. Type your comments, click "Save comments" and save the file

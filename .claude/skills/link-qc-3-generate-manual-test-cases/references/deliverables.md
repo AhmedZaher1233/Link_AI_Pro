@@ -236,7 +236,8 @@ Tell the reviewer, explicitly:
    `ADO-MAP.md`), `link-qc-5-test-run-automation` **and** `link-qc-5b-test-run-manual-cli` (the manual
    run of every approved TC through playwright-cli — it writes only skill 5's run report set, never
    this document) — 4, 5 and 5b independently; publishing is optional and is
-   not skill 5's gate. None accepts a document that is not `Status: APPROVED`, and
+   not skill 5's gate. Skill 4 refuses a document that is not `Status: APPROVED`; 5 and 5b ask
+   once (approve now — they set the status for you — / run without approval / stop), and
    `not-implemented` TCs should not be automated until the story ships.
 8. Multi-story run: point at `TC-GENERATION-SUMMARY.md` and note that each story is approved
    separately.
