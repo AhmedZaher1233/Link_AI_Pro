@@ -75,7 +75,11 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
    the cloud server and `AZURE_DEVOPS_PAT` (raw) for the self-hosted one. Then **fully quit VS Code
    (all windows) and relaunch it** — a window reload or an `/mcp` reconnect keeps the old
    environment, and the validator says "saved on this machine but missing from this session"
-   until you do. The token never goes through the chat or into a file.
+   until you do. The token never goes through the chat or into a file. If an Azure call still
+   fails (`CONNECT_TIMEOUT`, `TF400813` "anonymous", 401, 403), every Azure skill points you to
+   the same guide, `references/azure-mcp-troubleshooting.md` (mirrored in each of them): run
+   `scripts/check-azure-devops-pat.ps1` (or `.sh`) — it prints booleans only — and apply the one
+   fix for the matching row.
 5. Optional, for skill 3c only: `scripts/set-playwright-secrets.ps1` (or `.sh`) stores per-role
    usernames and passwords in a file outside the repository so the CLI validator can log in by
    secret *name*; without it you log in yourself in the browser window it opens.
@@ -521,9 +525,13 @@ carry placeholders only, and skill 1's validator flags product tokens in the ste
 
 Skill 1 writes `.mcp.json` from `assets/mcp.template.json` — the `azure-devops` entry as the
 cloud or the self-hosted block per the detected hosting — and validates each server (the
-optional `figma` entry only on request). A 401 / "anonymous access" (TF400813) from Azure DevOps
-right after the PAT was created means the variable is not in the editor's process yet: fully quit
-VS Code and relaunch it; reconnecting the server in `/mcp` does not help.
+optional `figma` entry only on request). An Azure DevOps connection or auth failure
+(`CONNECT_TIMEOUT`, "anonymous access" `TF400813`, 401, 403) is handled by one shared guide,
+`references/azure-mcp-troubleshooting.md` (canonical in skill 1, byte-identical in skills 2, 3, 4, 5,
+7, 8, 9 and 11): the skill stops Azure calls and gives you the one fix for the matching row first —
+reconnect, full quit + relaunch of VS Code (a reload or `/mcp` reconnect does not reload environment
+variables), the 7-step "Set or replace the PAT", or a missing PAT scope. The user-run
+`check-azure-devops-pat.ps1` / `.sh` tells the cases apart without revealing the token.
 
 ---
 

@@ -117,39 +117,28 @@ merge that entry and the preflight/validator reports `PAT env var` as not set
 (`pat.persisted = false`), **ask the user to create it now** — do not leave it as a vague "set
 the variable" note:
 
-1. Tell the user, in one message, exactly what to run **in their own terminal** (the masked
-   prompt cannot run through Claude's shell):
-
-   ```text
-   The azure-devops MCP entry needs the PAT stored as a user environment variable on this PC.
-   Please run this in a PowerShell window and paste the token when prompted (input is hidden):
-
-     powershell -ExecutionPolicy Bypass -File .claude/skills/link-qc-1-generate-update-testing-structure/scripts/set-azure-devops-pat.ps1
-
-   (macOS/Linux: bash .claude/skills/link-qc-1-generate-update-testing-structure/scripts/set-azure-devops-pat.sh)
-
-   One prompt stores the token twice for your Windows user — AZURE_DEVOPS_PAT_B64 (base64, cloud
-   server) and AZURE_DEVOPS_PAT (raw, self-hosted server) — verifies both, and prints nothing
-   secret. Required PAT scopes: Work Items Read/Write/Manage + Test Management Read/Write.
-   Then FULLY QUIT VS Code (close every window) and relaunch it: a window reload or an /mcp
-   reconnect keeps the old process environment, so the server would still start without the
-   token. Reply "done" once VS Code is back.
-   ```
-
-   Never ask for the token in chat, never accept it if pasted (tell the user to run the script
-   instead), never write it to any file yourself.
+1. Tell the user, in one message, the seven steps of **"Set or replace the PAT"** in
+   `references/azure-mcp-troubleshooting.md` §4, with the command filled in with this
+   project's absolute path (the masked prompt cannot run through Claude's shell — the user runs
+   `scripts/set-azure-devops-pat.ps1` / `.sh` in their own window). One prompt stores the token
+   twice — `AZURE_DEVOPS_PAT_B64` (base64, cloud server) and `AZURE_DEVOPS_PAT` (raw,
+   self-hosted server) — verifies both, and prints nothing secret. Required PAT scopes: Work
+   Items Read/Write/Manage + Test Management Read/Write. Ask the user to reply "done" once VS
+   Code is back after the full quit + relaunch. Never ask for the token in chat, never accept it
+   if pasted (tell the user to run the script instead), never write it to any file yourself.
 2. WAIT for the user. Then re-run `validate-setup.mjs`: the `PAT env var` row reads the
    variable's **existence** from the user registry hive (`HKCU\Environment`) or the shell
    profile — never its value — for the variable the entry references. `persisted: true` with
    `inProcess: false` (`sessionMissing: true`, row WARN "saved on this machine but missing from
    this session") means VS Code was not fully restarted yet: repeat the full-quit instruction,
-   nothing else.
+   nothing else. When the row disagrees with what the user reports, the user runs
+   `scripts/check-azure-devops-pat.ps1` / `.sh` (guide §0 — booleans only) and pastes its output.
 3. Only after that restart can the Azure DevOps probe succeed; until then report
    `Azure DevOps MCP: restart pending`, not FAIL.
 
-The script is idempotent (asks before replacing existing values) and supports `-Remove`
-(`--remove` on macOS/Linux). Mode A never asks for this — it only reports `PAT env var:
-FAIL/WARN` with the command to run.
+The script is idempotent (asks `Replace both? (y/N)` before replacing existing values) and
+supports `-Remove` (`--remove` on macOS/Linux). Mode A never asks for this — it only reports
+`PAT env var: FAIL/WARN` with the command to run.
 
 ## 2b. Browser secrets file — optional, skill 3c only (never the PAT script's job)
 
@@ -219,9 +208,7 @@ WARN, never FAIL, when absent.
 
 | Symptom | Meaning | Action |
 |---|---|---|
-| Azure DevOps 401, "anonymous access" / `TF400813` | the PAT variable is **empty in the MCP server's process** — VS Code was not fully restarted after the variable was created (`PAT env var` row: `sessionMissing`) | tell the user to fully quit VS Code (all windows) and relaunch; a reload or `/mcp` reconnect does not help. You cannot connect or disconnect MCP servers yourself — ask, wait, retry once |
-| Azure DevOps 401 after a full restart | token expired, revoked, or the variable holds an old value | the user re-runs `set-azure-devops-pat.ps1` / `.sh` (replaces both variables), then fully quits and relaunches VS Code again |
-| Azure DevOps 403 | token valid, scope missing | name the missing scope |
+| Azure DevOps `CONNECT_TIMEOUT`, "anonymous access" / `TF400813`, 401, 403 | one of the six rows of `references/azure-mcp-troubleshooting.md` — never set up, missing full restart (`PAT env var` row: `sessionMissing`), raw PAT stored instead of base64, expired / revoked PAT, missing scope, or a server that never started | stop Azure calls; the user runs `scripts/check-azure-devops-pat.ps1` / `.sh` (booleans only) and you give the ONE fix for the matching row as the first line of the reply — the 7 "Set or replace the PAT" steps with the command filled in when that is the fix. You cannot connect or disconnect MCP servers yourself — ask, wait, retry once. Never the token in chat, never REST |
 | Azure DevOps 404 | cloud: wrong organization / project; self-hosted: `AZURE_DEVOPS_ORG_URL` without the collection, or wrong `AZURE_DEVOPS_DEFAULT_PROJECT` | fix the entry in `.mcp.json` (§1b), reload the session |
 | `Azure DevOps hosting` row WARN (package ≠ remote) | cloud package configured for a self-hosted host or the reverse | rewrite the entry from the other template block (§1b); the PAT script needs no re-run — both variables exist |
 | launcher fails | `npx` / `uvx` not resolvable | check Node / `uv` installation; for `docx` make sure `command` is the absolute `uvx` path (§1a step c) |

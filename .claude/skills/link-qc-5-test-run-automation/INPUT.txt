@@ -117,9 +117,12 @@ OPTIONAL (only when the story is already published to Azure DevOps):
   - Azure DevOps MCP connected with a read/write PAT (Work Items + Test Management) — cloud
     or self-hosted server — used ONLY for the close-out. Not connected, or 401/403 → the run
     continues locally and the close-out is skipped; you are never blocked and never asked to
-    publish. (A 401 / "anonymous access" right after the PAT was created means VS Code needs a
-    full quit + relaunch, not an /mcp reconnect. On the self-hosted server test-point outcomes
-    cannot be written — reported as skipped, fields and comments still updated.)
+    publish. (On a connection or auth failure — CONNECT_TIMEOUT, TF400813 "anonymous", 401,
+    403 — the final summary gives you the ONE matching fix from
+    references/azure-mcp-troubleshooting.md: a check script that prints only booleans, then
+    relaunch / full quit of VS Code / the 7-step "Set or replace the PAT" / a PAT scope. On the
+    self-hosted server test-point outcomes cannot be written — reported as skipped, fields and
+    comments still updated.)
 
 ============================================================
 OUTPUT — WHAT YOU GET

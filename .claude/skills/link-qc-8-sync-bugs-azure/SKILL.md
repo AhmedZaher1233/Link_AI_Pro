@@ -31,7 +31,7 @@ A bug source (a `BUG-REPORT-{feature}.md`, a `UI-Visual-QA-<page>.md`, or a stor
 
 ## Hard rules
 - A reviewer comment on a bug (a `Reviewer comment` bullet in `BUG-REPORT-{feature}.md`, or an open `BUG-{n}` entry in `REVIEW-COMMENTS-{feature}.md` beside it) is reviewer input, never a status source and never pushed to Azure as a state. Report open ones in the final message; mark one `answered` / `declined {date}` with a one-line `Response` only when this run actually addressed it (skill 5 `references/run-report.md` §9b). Never edit the reviewer's text.
-- Never request/read/store a PAT or use direct REST; a 401 means "fully quit VS Code and relaunch" (contract §3), never a token in chat.
+- Never request/read/store a PAT or use direct REST (contract §3). **Azure MCP failure (`CONNECT_TIMEOUT`, `TF400813`, 401, 403):** stop Azure calls, run the diagnostic in [references/azure-mcp-troubleshooting.md](references/azure-mcp-troubleshooting.md), and give the user the ONE fix for the matching row as the first line of the reply; when the fix is "Set or replace the PAT", list its 7 steps with the command filled in with this project's path. Outcomes stay `NOT_RUN`; never ask for the token; never use REST as a fallback.
 - Preserve unrelated fields, files, rows and history; never invent an ID, hash, outcome or count.
 - Resolved in Azure never proves a local fix; only observed successful retesting (skill 9) does. This skill never sets a local `resolved`.
 - A local `resolved` is pushed as Closed only when its History carries an actual successful retest; a bare manual edit is Skipped (missing retest evidence).

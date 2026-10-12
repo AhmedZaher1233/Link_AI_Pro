@@ -97,13 +97,12 @@ Generate Manual TCs → Review**
 1. Retrieve the User Story + acceptance criteria from Azure DevOps using the Azure DevOps MCP —
    read the work item by ID or search by exact title with whichever tools the attached server
    exposes (cloud: `wit_get_work_item` / `search_workitem`; self-hosted Azure DevOps Server:
-   `get_work_item` / `search_work_items`). On 401/403 STOP: **401 or "anonymous access"
-   (`TF400813`)** → the PAT variable is empty in the MCP server's process → ask the user to
-   **fully quit VS Code (all windows) and relaunch** (a window reload or an `/mcp` reconnect does
-   not help; still 401 after that → the token expired or was revoked → they re-run skill 1's
-   `set-azure-devops-pat.ps1` / `.sh` and relaunch again) — you cannot connect or disconnect MCP
-   servers yourself, so always ask, wait, then retry once; 403 → missing scope on the PAT. Never
-   ask for the token in chat. If the
+   `get_work_item` / `search_work_items`). **Azure MCP failure (`CONNECT_TIMEOUT`, `TF400813`,
+   401, 403):** STOP the Azure calls, run the diagnostic in `references/azure-mcp-troubleshooting.md`,
+   and give the user the ONE fix for the matching row as the first line of the reply (the 7
+   "Set or replace the PAT" steps with the command filled in with this project's path when that
+   is the fix) — you cannot connect or disconnect MCP servers yourself, so ask, wait, then retry
+   once. Never ask for the token; never use REST as a fallback. If the
    source is a Word document, use `mcp__docx` (`open_document` → `export_markdown`) instead (same fallback as Case 1 when it is not
    attached). If neither source is reachable → BLOCKED.
 2. Convert the User Story into a **structured requirement/specification file**: title, story ID,

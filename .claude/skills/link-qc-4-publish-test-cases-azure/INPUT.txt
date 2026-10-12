@@ -51,11 +51,13 @@ Only what is missing is asked; answers are saved there. PATs are never written t
 
 PREREQUISITES (checked, not guessed):
   - Azure DevOps MCP connected with a read/write PAT (Work Items + Test Management) — cloud
-    (@azure-devops/mcp) or self-hosted (@tiberriver256/mcp-server-azure-devops). On 401 /
-    "anonymous access" (TF400813) the skill asks you to fully quit VS Code (all windows) and
-    relaunch — the PAT variable is not in the editor's process yet; a reload or /mcp reconnect
-    does not help. Still 401 → re-run skill 1's PAT script and relaunch. 403 → a PAT scope is
-    missing. It never asks for the token.
+    (@azure-devops/mcp) or self-hosted (@tiberriver256/mcp-server-azure-devops). On a
+    connection or auth failure (CONNECT_TIMEOUT, TF400813 "anonymous", 401, 403) the skill
+    stops, points you to its diagnostic (references/azure-mcp-troubleshooting.md — a check
+    script that prints only booleans) and gives you the ONE matching fix first: reconnect /
+    relaunch, fully quit VS Code (a reload or /mcp reconnect does not reload environment
+    variables), set or replace the PAT with skill 1's script (7 steps), or add a PAT scope.
+    It never asks for the token and never falls back to REST for a failed MCP call.
   - Node >= 18 for the decision script; its self-test (selftest-ado-sync.mjs) must pass at the
     start of every run, otherwise the run is BLOCKED before any write.
 

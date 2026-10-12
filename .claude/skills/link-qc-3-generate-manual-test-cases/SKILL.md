@@ -210,10 +210,14 @@ nothing else runs. No Playwright MCP: this skill never drives the application. A
 Docx MCP calls are ordinary tool calls for reading a story or existing TCs (cloud server:
 `wit_get_work_item` / `search_workitem`; self-hosted Azure DevOps Server: `get_work_item` /
 `search_work_items` — whichever the attached server exposes). You cannot connect or disconnect
-MCP servers: on a 401 or "anonymous access" (`TF400813`) the PAT variable is empty in the
-server's process — ask the user to fully quit VS Code (all windows) and relaunch (a reload or
-`/mcp` reconnect does not help; still 401 afterwards → the token expired, they re-run skill 1's
-PAT script and relaunch again); on a 403 report the missing scope; never ask for the token in chat.
+MCP servers yourself.
+
+**Azure MCP failure (`CONNECT_TIMEOUT`, `TF400813`, 401, 403):** stop the Azure calls, run the
+diagnostic in [references/azure-mcp-troubleshooting.md](references/azure-mcp-troubleshooting.md),
+and give the user the ONE fix for the matching row as the first line of the reply. When the fix
+is "Set or replace the PAT", list its 7 steps with the command filled in with this project's
+path. Ask, wait for the user, then retry once; neither source reachable → BLOCKED (Case 2). Never
+ask for the token; never use REST as a fallback.
 
 ## Downstream contract
 

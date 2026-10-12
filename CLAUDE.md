@@ -37,7 +37,7 @@ project**, not to this repo. Do not create them here.
 .claude/
   skills/
     link-qc-1-generate-update-testing-structure/   QA foundation: audit / repair / restructure
-      SKILL.md INPUT.txt references/ (9) scripts/ (4 .mjs + selftest.mjs + fixtures/mcp/ + set-azure-devops-pat + set-playwright-secrets .ps1/.sh) assets/ (4 templates)
+      SKILL.md INPUT.txt references/ (10, incl. azure-mcp-troubleshooting.md — CANONICAL, mirrored in 2, 3, 4, 5, 7, 8, 9, 11) scripts/ (4 .mjs + selftest.mjs + fixtures/mcp/ + set-azure-devops-pat + check-azure-devops-pat + set-playwright-secrets .ps1/.sh) assets/ (4 templates)
     link-qc-2-review-requirements/                 story/spec → REQ-*.md + review
     link-qc-3-generate-manual-test-cases/          manual TCs (EN/AR), DESIGN ONLY, rendered HTML review page (human gate)
       SKILL.md INPUT.txt references/ (8) scripts/ (render-tc-review, selftest, fixtures/) assets/ (2: tc-review body partial + report-shell — the one general HTML page, shared with skill 5)
@@ -132,6 +132,10 @@ node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest
   `replace.confirmText` (`REPLACE_WARNING`) from `--check` — Replace / Update only / Cancel. Scope is the
   skill folders + the command only: `.mcp.json`, `.gitignore`, tools and every other file keep the normal
   sync behaviour.
+- `check-azure-devops-pat.ps1` / `.sh` are likewise user-run diagnostics (guide §0): five booleans
+  about `AZURE_DEVOPS_PAT_B64` (user-scope set, in this process, equal, valid base64, decodes with
+  a leading `:`) and the one-line fix for the first failing check — never the value, its length
+  or any part of it.
 - `set-azure-devops-pat.ps1` / `.sh` are run by the *user* in their own terminal; one prompt
   stores BOTH `AZURE_DEVOPS_PAT_B64 = base64(":" + PAT)` (cloud server) and `AZURE_DEVOPS_PAT`
   (raw, self-hosted server) as user-level env vars. Never handle the token. A new env var
@@ -339,6 +343,15 @@ and `link-qc-5-test-run-automation`; its MIRROR banner says so. Both harnesses
 TC, so drift fails a test. Change the canonical form only deliberately, bump `HASH_VERSION`, and
 regenerate both goldens together — an old `automated_tc_sha256` then reads as a conflict, which is
 the intended effect.
+
+## Mirrored file — the Azure MCP troubleshooting guide (skills 1, 2, 3, 4, 5, 7, 8, 9, 11)
+
+`references/azure-mcp-troubleshooting.md` is byte-identical in the nine skills that touch the Azure
+DevOps MCP; the canonical copy is skill 1's and every copy opens with the same `MIRROR` banner. No
+script enforces it — check with `sha256sum .claude/skills/link-qc-*/references/azure-mcp-troubleshooting.md`
+(nine identical hashes) before a commit. Each in-scope `SKILL.md` carries one short "Azure MCP failure"
+block that links the guide and keeps the skill's own outcome wording (STOP / BLOCKED / `NOT_RUN` / drop to
+`local`); the guide's §4 steps must match the prompts of `set-azure-devops-pat.ps1` / `.sh` word for word.
 
 ## Mirrored files — skills 7, 8 and 9
 

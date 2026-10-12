@@ -123,15 +123,15 @@ recorded once as a `[type: env]` line. The self-hosted server has **no test plan
 tools**; PHASE 2 says what that changes (work items, links and fields work the same).
 
 **ADO connectivity check:** perform one cheap read (the User Story fetch counts).
-On 401/403 → STOP. **401 or "anonymous access" (`TF400813`)** → the PAT variable is empty in
-the MCP server's process — VS Code was not fully restarted after the variable was created:
-ask the user to **fully quit VS Code (all windows) and relaunch** (a window reload or an
-`/mcp` reconnect does not help). Still 401 after that → the token expired or was revoked →
-they re-run skill 1's `set-azure-devops-pat.ps1` / `.sh` (a **read/write PAT** with Work
-Items Read/Write/Manage + Test Management Read/Write; the script stores both variable forms)
-and relaunch again. You cannot connect or disconnect MCP servers yourself, so always ask,
-wait for the user, then retry the read once. 403 → a scope is missing on an otherwise valid
-token. Never ask for the token in chat; never echo, log, or write it anywhere.
+**Azure MCP failure (`CONNECT_TIMEOUT`, `TF400813`, 401, 403):** STOP the Azure calls, run the
+diagnostic in [references/azure-mcp-troubleshooting.md](references/azure-mcp-troubleshooting.md),
+and give the user the ONE fix for the matching row as the first line of the reply. When the fix
+is "Set or replace the PAT", list its 7 steps with the command filled in with this project's
+path (a **read/write PAT**: Work Items Read/Write/Manage + Test Management Read/Write). You
+cannot connect or disconnect MCP servers yourself, so always ask, wait for the user, then retry
+the read once; still failing → BLOCKED. Never ask for the token; never use REST as a fallback
+for a failed MCP call — the documented REST suite-placement step (PHASE 2 step 6) is a separate
+feature for the self-hosted server, and an auth failure there follows the same guide.
 </input_gate>
 
 <suite_only_mode>
@@ -544,7 +544,7 @@ block, the outcome precedence and the map columns; this block only orders the st
 
 Any ADO write failure → the exact item and error (`writeError` → `NOT_WRITTEN` →
 `PUBLICATION INCOMPLETE`); finish the remaining items; list failures in the output. Total auth
-failure → stop with the restart instruction from PHASE 0 (full quit + relaunch, never "reconnect").
+failure → stop with the ONE fix from `references/azure-mcp-troubleshooting.md` (PHASE 0 block).
 </ado_publish>
 
 ---

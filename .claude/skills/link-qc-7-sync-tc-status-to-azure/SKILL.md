@@ -31,7 +31,7 @@ Latest `TEST-RUN-REPORT-{feature}.md` (or `--phase N`) or an explicit `TC-ID=PAS
 Plus: run ID, completion state, metrics.
 
 ## Hard rules
-- Never request/read/store a PAT or use direct REST; a 401 means "fully quit VS Code and relaunch" (contract §3).
+- Never request/read/store a PAT or use direct REST (contract §3). **Azure MCP failure (`CONNECT_TIMEOUT`, `TF400813`, 401, 403):** stop Azure calls, run the diagnostic in [references/azure-mcp-troubleshooting.md](references/azure-mcp-troubleshooting.md), and give the user the ONE fix for the matching row as the first line of the reply; when the fix is "Set or replace the PAT", list its 7 steps with the command filled in with this project's path. Outcomes stay `NOT_RUN`; never ask for the token; never use REST as a fallback.
 - Never invent a point, a run, an outcome or a count; never set AutomationStatus / TestAutomated (skills 4 and 5 own them).
 - Preserve unrelated fields, files, rows and history.
 - Confirm ambiguous points/configuration once; never turn an unanswered question into a default.

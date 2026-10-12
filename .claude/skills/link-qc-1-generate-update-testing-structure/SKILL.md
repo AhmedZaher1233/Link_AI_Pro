@@ -46,6 +46,13 @@ only what the resolved mode permits.
    `.mcp.json` entry references exists, and never write, print or accept the token in chat. The
    same holds for the optional browser secrets file of skill 3c (`scripts/set-playwright-secrets.ps1`
    / `.sh`, variable `PLAYWRIGHT_MCP_SECRETS_FILE`): existence only, never its content.
+   **Azure MCP failure (`CONNECT_TIMEOUT`, `TF400813`, 401, 403)** during the probe: stop Azure
+   calls, run the diagnostic in `references/azure-mcp-troubleshooting.md` (the user runs
+   `scripts/check-azure-devops-pat.ps1` / `.sh` — booleans only), and give the user the ONE fix
+   for the matching row as the first line of the reply; when the fix is "Set or replace the
+   PAT", list its 7 steps with the command filled in with this project's path. The row stays
+   `restart pending` / FAIL as `validation-contract.md` says; never ask for the token; never
+   use REST as a fallback.
 6. **Never author L1/L2 or invent L3 values.** Steering documents are found, copied, renamed
    and validated only; a missing layer is reported, a placeholder stays a placeholder.
 7. **One precedence model.** Steering resolves per the rules in `docs/steering/README.md`

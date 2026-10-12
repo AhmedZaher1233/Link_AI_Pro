@@ -190,13 +190,14 @@ Required inputs — missing from the task input AND the learning file → ASK th
 Never ask the user to publish, re-publish, or upload anything.
 
 **ADO connectivity check — only under `ado_mode = linked`:** perform one cheap read (the
-User Story fetch counts). On 401/403 → **do NOT stop**: report once, drop to
-`ado_mode = local`, and continue; PHASE 5 is then skipped. The final summary may note, at
-most once, what would let the close-out run next time: a 401 / "anonymous access"
-(`TF400813`) means the PAT variable is not in the editor's process — fully quit VS Code (all
-windows) and relaunch (a reload or `/mcp` reconnect does not help); still 401 → re-run skill
-1's PAT script (a read/write PAT covering Work Items + Test Management) and relaunch; 403 → a
-scope is missing. Never ask for the token in chat; never echo, log, or write it anywhere.
+User Story fetch counts). **Azure MCP failure (`CONNECT_TIMEOUT`, `TF400813`, 401, 403)** →
+**do NOT stop**: stop the Azure calls, report once, drop to `ado_mode = local`, and continue;
+PHASE 5 is then skipped. Run the diagnostic in
+[references/azure-mcp-troubleshooting.md](references/azure-mcp-troubleshooting.md) and give
+the user the ONE fix for the matching row as the first line of the final summary (at most
+once, as what would let the close-out run next time). When the fix is "Set or replace the
+PAT", list its 7 steps with the command filled in with this project's path (a read/write PAT
+covering Work Items + Test Management). Never ask for the token; never use REST as a fallback.
 </input_gate>
 
 <qa_manifest>

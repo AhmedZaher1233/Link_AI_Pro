@@ -189,7 +189,7 @@ Word or pasted text sit directly under `Testing/Requirements/`.
 | Argument | Action |
 |---|---|
 | Path ending in `.md` / `.feature` / `.txt` | Read directly |
-| Story ID or feature name | Search `Testing/Requirements/**/REQ-*.md` first, then the profile's requirement sources (`specs/**/spec.md`, story folders), then Azure DevOps by ID (Azure DevOps MCP) if configured. Several hits → prefer REQ-*.md > spec.md > story dump and cross-reference the others |
+| Story ID or feature name | Search `Testing/Requirements/**/REQ-*.md` first, then the profile's requirement sources (`specs/**/spec.md`, story folders), then Azure DevOps by ID (Azure DevOps MCP) if configured. Several hits → prefer REQ-*.md > spec.md > story dump and cross-reference the others. **Azure MCP failure (`CONNECT_TIMEOUT`, `TF400813`, 401, 403):** stop Azure calls, run the diagnostic in [references/azure-mcp-troubleshooting.md](references/azure-mcp-troubleshooting.md), and give the user the ONE fix for the matching row as the first line of the reply; when the fix is "Set or replace the PAT", list its 7 steps with the command filled in with this project's path. The story then counts as "no spec" (the `--no-compare` behaviour below) unless a local source exists; never ask for the token; never use REST as a fallback |
 | Blank | Grep `Testing/project-learning.md` (Index + this skill's Q&A) for a recorded last story; if nothing, list the story folders found and ask which one, then record the answer |
 
 If no spec exists at all, say so, switch to `--no-compare` behaviour automatically and tell
