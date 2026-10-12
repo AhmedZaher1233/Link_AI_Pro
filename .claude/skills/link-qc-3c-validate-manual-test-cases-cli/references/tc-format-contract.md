@@ -17,6 +17,13 @@ this skill and the renderer (`html-page.md` §3). Never rename, drop or reorder 
   1. {action + element label + value + inline assertion}
 - **Expected Result:** {…}
 - **Data Oracle:** {… | —}
+- **AI Oracle:**                       (optional; only a TC that prompts an AI assistant — omitted otherwise)
+  - Intent: {what the reply must accomplish; may cite [D{n}] facts}
+  - Must contain: {fact; fact} | —
+  - Must not contain: {phrase; phrase} | —
+  - Language: en | ar
+  - Max length: {n} words | —
+  - Repeats: {n} · Pass threshold: {k} of {n}
 - **Smoke:** YES | NO
 - **Automation Candidate:** YES | NO
 - **Data effect:** {read-only | creates | modifies | deletes | —}
@@ -66,7 +73,8 @@ line starting with `[HUMAN] ` needs a person; it is a frozen marker in the text,
 
 `ID`, `Type`, `Locale`, `Requirement`, `Stage`, `Description`, `Smoke`, `Automation Candidate`,
 `Data effect`, `Shared data`, `Tags` (design-owned; skill 4 publishes them), `Data Oracle` values
-(a wrong oracle is a PB or a Q, not an edit), the `[HUMAN]` markers, the reference tokens,
+(a wrong oracle is a PB or a Q, not an edit), the `AI Oracle` sub-list (same rule — it is judged,
+never edited), the `[HUMAN]` markers, the reference tokens,
 the summary-table design columns, `## Traceability Matrix`, `## Negative Coverage`,
 `## Standards Alignment`, `## Requirement Coverage Score`, `## Manual-Only Scenarios`,
 `## Existing-TC Analysis`, `Requirement coverage (weighted)`, `Manual-only scenarios`,

@@ -32,8 +32,8 @@ that WOULD change, and writes nothing at all — not even the learning file.
 ## 2. `TEST-CASES-{feature}.md` — the source of truth
 
 Write to `{tc_output_folder}` (one folder per User Story — create it if missing). The markdown
-(and `TEST-DATA-{feature}.md`) is **always English** — skills 4, 5 and 3b and the renderer parse
-it. Header block (every line present; an empty optional value is `—`, never blank):
+(and `TEST-DATA-{feature}.md`) is **always English** — skills 4, 5, 3b, the manual CLI run
+(`link-qc-5b-test-run-manual-cli`) and the renderer parse it. Header block (every line present; an empty optional value is `—`, never blank):
 
 ```markdown
 # Test Cases — {feature}
@@ -233,8 +233,10 @@ Tell the reviewer, explicitly:
    with `--revision`. Corrections typed straight into the chat by TC-ID work too. A TC 3b had
    validated is then reset to draft and needs `3b --scope <ids>`.
 7. Approval unlocks `link-qc-4-publish-test-cases-azure` (beautify + publish to Azure DevOps, writes
-   `ADO-MAP.md`) **and** `link-qc-5-test-run-automation` independently — publishing is optional and is
-   not skill 5's gate. Neither accepts a document that is not `Status: APPROVED`, and
+   `ADO-MAP.md`), `link-qc-5-test-run-automation` **and** `link-qc-5b-test-run-manual-cli` (the manual
+   run of every approved TC through playwright-cli — it writes only skill 5's run report set, never
+   this document) — 4, 5 and 5b independently; publishing is optional and is
+   not skill 5's gate. None accepts a document that is not `Status: APPROVED`, and
    `not-implemented` TCs should not be automated until the story ships.
 8. Multi-story run: point at `TC-GENERATION-SUMMARY.md` and note that each story is approved
    separately.
@@ -369,6 +371,7 @@ over the open entries.
 - [ ] Coverage minimums met; all L1 §4 negative categories represented or justified N/A
 - [ ] Every TC has one entry per required locale, confirming language + direction first; a secondary-locale label not recorded in the learning file is written as the English label + "(Arabic label: to be captured live)", never guessed
 - [ ] Data Oracle cited for every data-asserting TC
+- [ ] Every TC that prompts an AI assistant carries an `AI Oracle` (Intent, deterministic hard checks, Repeats ≥ Pass threshold); the prompt is a quoted typed input in `Steps`; `Automation Candidate: NO` unless a hard-check-only oracle justifies YES; the negative AI set covered or `Q-{n}`
 - [ ] Every step has the 4 handoff fields; TCs read as complete user journeys; no selectors, code or passwords in deliverables
 - [ ] Run-stage mapping stated in the header AND per TC in the `Stage` column
 - [ ] Self-review tables completed and included; own findings fixed in place
@@ -383,4 +386,4 @@ over the open entries.
 - [ ] Every `IMPOSSIBLE` / `UNKNOWN` item has a way in §5 or a row in the Problems table; `api` / `db` shown as available only when confirmed by the learning file or the user, otherwise "to be confirmed" and never recommended
 - [ ] Page produced by `scripts/render-tc-review.mjs` with `gate: PASS` (or `MISMATCH` fixed and re-rendered); never hand-written or hand-edited; Arabic complete, or explicitly delivered as a preview with the outstanding keys named
 - [ ] `node scripts/selftest.mjs` passes in this skill folder (run after any renderer / template change; mirror case 0 passes or reports `skipped`)
-- [ ] Final message includes the explicit approval instructions, the optional 3b next step, the open questions, the test-data gap counts, and "5 and 6 independently"
+- [ ] Final message includes the explicit approval instructions, the optional 3b next step, the open questions, the test-data gap counts, and "4, 5 and 5b independently"

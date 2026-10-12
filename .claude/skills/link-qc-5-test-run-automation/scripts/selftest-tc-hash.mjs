@@ -23,7 +23,7 @@ const ID = 'TC-HASH-01';
 /** The one golden hash of TC-HASH-01 on this fixture pair — skill 4's selftest-ado-sync.mjs asserts the same value. */
 export const GOLDEN = '935858124e72e0dd04faac4bdcc7870cd70171fbb00cdf851033120ad7c79bb8';
 
-const read = (p) => fs.readFileSync(p, 'utf8');
+const read = (p) => fs.readFileSync(p, 'utf8').replace(/\r\n?/g, '\n'); // LF-normalised: a checkout may carry CRLF (case 11 covers CRLF on purpose)
 const TC_TEXT = read(TC_FILE);
 const DATA_TEXT = read(DATA_FILE);
 const hashOf = (tcText = TC_TEXT, dataText = DATA_TEXT) => hashDocument(tcText, dataText, [ID])[ID];
@@ -181,6 +181,25 @@ const expectDifferent = (p, label, h) => { if (h.hash === GOLDEN) p.push(label +
   if (withNote === TC_TEXT) p.push('fixture has no Validation line to anchor the comment');
   if (hashOf(withNote).hash !== hashOf().hash) p.push('a Reviewer comment field changed the hash');
   check('14 a Reviewer comment never changes the hash', p, {});
+}
+
+/* 15 — optional `AI Oracle`: absent or `—` → the golden; present → a different hash that moves with its content and ignores formatting; its [D{n}] tokens join the data fingerprint. */
+{
+  const p = [];
+  const ANCHOR = '- **Data Oracle:** price list "Sample" [D1] — expected count: 12';
+  const BLOCK = ANCHOR + '\n- **AI Oracle:**\n  - Intent: states the product count for the category using [D1]\n  - Must contain: 12 products\n  - Must not contain: guaranteed\n  - Language: en\n  - Max length: 80 words\n  - Repeats: 2 · Pass threshold: 2 of 2';
+  const withAi = mutate(TC_TEXT, ANCHOR, BLOCK);
+  const h1 = hashOf(withAi);
+  expectDifferent(p, 'AI Oracle added', h1);
+  if (!/\nAI Oracle=Intent: states the product count/.test(h1.canonical)) p.push('canonical form has no AI Oracle part: ' + h1.canonical.split('\n').slice(-2).join(' | '));
+  if (!/\ndata=A1=[^\n]*;D1=[^\n]*;E1=/.test(h1.canonical)) p.push('data fingerprint lost a referenced row');
+  const h2 = hashOf(mutate(withAi, '  - Intent: states the product count for the category using [D1]', '  - Intent: states the product count AND the category name using [D1]'));
+  if (h2.hash === h1.hash) p.push('changing the Intent did not change the hash');
+  const h3 = hashOf(mutate(withAi, '  - Must contain: 12 products', '  -   Must  **contain:** 12 products'));
+  if (h3.hash !== h1.hash) p.push('formatting inside the AI Oracle changed the hash');
+  expectSame(p, 'AI Oracle —', hashOf(mutate(TC_TEXT, ANCHOR, ANCHOR + '\n- **AI Oracle:** —')));
+  if (hashOf().canonical.includes('AI Oracle=')) p.push('a TC without the field carries an AI Oracle part');
+  check('15 optional AI Oracle: absent / — → golden; present → content-sensitive, format-insensitive', p, { withAi: h1.hash.slice(0, 12) });
 }
 
 const out = {

@@ -17,7 +17,7 @@
 //            `azure-devops` entry in particular (cloud @azure-devops/mcp or self-hosted @tiberriver256/…) is left
 //            byte-for-byte as it is; scripts/selftest.mjs guards that.
 //            Optional tools (opt-in, --tools): installs @playwright/cli globally, its chromium browser, adds
-//            `.playwright-cli/` to .gitignore (skill 3c), and — only when a Python interpreter already exists —
+//            `.playwright-cli/` to .gitignore (skills 3c and 5b), and — only when a Python interpreter already exists —
 //            `pip install pillow numpy` (link-qc-6-ui-testing's static-image annotation fallback). --check always reports the tool
 //            status and the planned actions (`tools.actions`); without --tools nothing is installed — none of it is
 //            a prerequisite for 3b or any other skill.
@@ -164,7 +164,7 @@ function applyMcp() {
   return applied;
 }
 
-// 3c. Plan the optional tools — skill 3c's browser CLI and link-qc-6-ui-testing's Python packages (read-only; applied in step 4 only with --tools).
+// 3c. Plan the optional tools — the browser CLI of skills 3c and 5b and link-qc-6-ui-testing's Python packages (read-only; applied in step 4 only with --tools).
 const tools = { ...planTools(target), requested: installTools, skipped: !installTools };
 function applyTools() {
   if (!installTools || !tools.actions.length) return [];
@@ -273,8 +273,8 @@ if (mcp.error) hints.push(`.mcp.json: ${mcp.error}`);
 if (mcp.uvxFound === false) hints.push('uv not found — the docx entry uses command "uvx"; install uv (powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  or  pip install uv), then re-run so the absolute uvx path is written');
 if (!mcp.exists && migrateMcp && mode === 'apply' && mcpChanged) hints.push('.mcp.json created with the docx entry only — run /link-qc-1-generate-update-testing-structure for playwright and azure-devops');
 if (mcpChanged) hints.push('.mcp.json changed — reload the Claude Code session and approve the docx server via /mcp (a reload is enough for a server entry; only a NEW environment variable needs a full quit + relaunch of VS Code)');
-if (tools.actions.length && !installTools) hints.push(`tools (skill 3c playwright-cli / link-qc-6-ui-testing pillow+numpy — optional): playwright-cli ${tools.cli.version ? 'installed ' + tools.cli.version : 'not installed'}, python ${tools.python.command ? (tools.python.ready ? 'ready' : 'packages missing') : 'absent'} — planned with --tools: ${tools.actions.join(', ')}; not needed by 3b or any other skill`);
-if (mode === 'apply' && installTools && !tools.actions.length) hints.push('playwright-cli already installed with its browser and the gitignore line' + (tools.python.ready ? ', pillow + numpy present' : '') + ' — skill 3c ready' + (tools.python.ready ? ', link-qc-6-ui-testing annotation fallback ready' : ''));
+if (tools.actions.length && !installTools) hints.push(`tools (skills 3c / 5b playwright-cli / link-qc-6-ui-testing pillow+numpy — optional): playwright-cli ${tools.cli.version ? 'installed ' + tools.cli.version : 'not installed'}, python ${tools.python.command ? (tools.python.ready ? 'ready' : 'packages missing') : 'absent'} — planned with --tools: ${tools.actions.join(', ')}; not needed by 3b or any other skill`);
+if (mode === 'apply' && installTools && !tools.actions.length) hints.push('playwright-cli already installed with its browser and the gitignore line' + (tools.python.ready ? ', pillow + numpy present' : '') + ' — skills 3c and 5b ready' + (tools.python.ready ? ', link-qc-6-ui-testing annotation fallback ready' : ''));
 if (mode === 'apply' && installTools && tools.actions.length && !toolFailed.length) hints.push('tools installed (' + tools.actions.join(', ') + ') — no session reload needed');
 if (mode === 'apply' && installTools && !tools.python.command) hints.push('no Python interpreter — pillow + numpy not installed (link-qc-6-ui-testing annotates live pages in the DOM without them; install Python 3 and re-run --tools only to annotate static design images)');
 if (toolFailed.length) hints.push(`tool setup failed at ${toolFailed.map((a) => a.step).join(', ')} (${toolFailed.map((a) => a.error).join(' | ')}) — run /link-qc-1-generate-update-testing-structure repair, or use 3b (Playwright MCP) / DOM annotation meanwhile; every skill file was still synced`);

@@ -10,7 +10,7 @@ skeleton are defined ONCE, in
 Read that file when it is present — it is authoritative. This page holds only what is specific
 to the three TC skills, plus the short fallback below for a project that synced one of them alone.
 
-`{learning_file}` is the plain-English knowledge base shared by ALL QA skills (1-11, 3b and 3c): what
+`{learning_file}` is the plain-English knowledge base shared by ALL QA skills (1-11, 3b, 3c and 5b): what
 the system does (modules, rules, roles), how to reach screens, common flows, UI behaviour, test
 data, EN/AR differences, automation tricks, and answered questions — separated per model. It
 exists to progressively eliminate rediscovery and re-asking across stories.
@@ -113,6 +113,7 @@ base, NOT another specification:
 ### CLI Validation Model (skill 3c)
 ### Publish Model (skill 4)
 ### Automation Model (skill 5)
+### Manual Run Model (skill 5b)
 ### White-Box Model (skill 10)
 ### Rule Discovery Model (skill 11)
 ```

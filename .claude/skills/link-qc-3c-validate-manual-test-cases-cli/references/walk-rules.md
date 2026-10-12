@@ -8,7 +8,9 @@ environment notes, data-changes permission) has already happened in `intake.md` 
 playwright-cli probe before it — a run without the tool is BLOCKED there. The set analysis
 (common flows, unique tails, risk) and the no-gate rule live in `discovery-plan.md`; the
 cross-validator handling in `patch-rules.md` §1b; the test-data look and the write-back in
-`patch-rules.md`. How each browser action is issued (sessions, login, commands, refs, evidence)
+`patch-rules.md`; the test-data decision and the preparation run in `test-data-resolution.md`
+(a `MISSING` item with an executable e2e way is prepared first, before its dependents). How each
+browser action is issued (sessions, login, commands, refs, evidence)
 is `browser-cli.md`. This file holds what happens in the browser regardless of the tool — it is
 the same discipline as skill 3b's, so the two validators stay comparable; the one difference is
 that here the walk set is always every TC (3b narrows it through its scope gate; this skill
@@ -113,12 +115,20 @@ The combined ask (`intake.md` §3) answered "may this run create / modify / dele
   exists: the TC's own cleanup step, a `TEST-DATA` §5 way, or a learning-file entry (delete the
   created record, restore the modified value, recreate a deleted seeded record only when its
   exact values are known). Never revert through an API or the database from here.
+- **Preparation runs** (`test-data-resolution.md` §4) fall under the same answer: a `MISSING`
+  item whose decided way is an `e2e scenario` named by a TC of this set or a learning-file
+  common flow, with every exact value known, is prepared **before the TCs that depend on it**,
+  identified and reverted like any record here — but at the **run end**, after the dependents
+  were observed (the creating TC's own cleanup step is deferred for it). Never in COMPARISON
+  mode, never through an API or the database, never on "no" or on production.
 - **Outcome per record** → the structured return line `**Data changes:** {n} made · {n} cleaned
   up · {n} left ({record identities})`; every record left behind (no way to revert, or the
   revert failed) is an Environment-blockers line `left in {env}: {record} — created/changed by
   TC-…`. The TC keeps its observed state either way.
 - A TC that needs seeded fixture data that is absent is a `MISSING` data item
-  (`patch-rules.md` §3) and stays `draft` — the run never invents data to make a TC pass.
+  (`patch-rules.md` §3) and stays `draft — not app-validated (data missing — D{n})` — the run
+  never invents data to make a TC pass; it may only *prepare* the item through a documented e2e
+  way with the values the file already names (`test-data-resolution.md` §4).
 
 ## 4. Secondary-locale policy — verify where localization matters
 
@@ -170,7 +180,7 @@ matched, outcome observed) · `enhanced` (corrected / extended from observation 
 changed) · `inferred` (prefix seen, tail could not be driven this run but fresh prior evidence
 confirms it — not witnessed) · `discrepancy` (app contradicts spec — PB recorded) ·
 `not-implemented — pending implementation` (§1) · `draft — not app-validated` (not walked: app
-unreachable, data changes not authorized, screen could not be driven, stale and unreachable, or
+unreachable, data changes not authorized, data missing — D{n}, screen could not be driven, stale and unreachable, or
 **human step pending** — reason in parentheses; never "scope excluded" — this skill has no
 scope).
 Never mark a TC `validated` on the strength of its prefix alone — that is `inferred`. Every
@@ -192,7 +202,8 @@ returned without error only says the action was issued. Before a TC becomes `val
    metadata — never rendered, never a step.
 3. **Anything less is not validated**: the expected text absent → re-check once after the P2
    wait, then `discrepancy` + PB (implemented functionality) or `draft` with the reason
-   (environment); data needed for the check missing → `draft` + the `MISSING` data item; the
+   (environment); data needed for the check missing → `draft — not app-validated (data missing
+   — D{n})` + the `MISSING` data item (prepared first when `test-data-resolution.md` §4 allows); the
    expectation itself ambiguous ("the total updates" — which total?) → a `Q-{n}` in the
    `open-questions.md` shape, the TC stays as it was, nothing acted on until answered.
 4. **A `[HUMAN]` step is the end of the walk for that TC** (§3): the steps before it are
@@ -200,6 +211,10 @@ returned without error only says the action was issued. Before a TC becomes `val
    `outcome-check` line reads exactly `human step pending` — the outcome behind a human step is
    never observed by this tool, so the TC is never `validated` or `enhanced`; it is listed under
    "Needs a human run".
+5. **A TC with an `AI Oracle` is one observation**: its reply is judged by the field's hard
+   checks and rubric (`link-qc-5b-test-run-manual-cli/references/ai-response-rules.md` holds the
+   rules); it is `validated` only when that observation passes; a rubric you cannot decide is a
+   `Q-{n}` and the TC stays `draft`.
 
 ## 7. Failure rule
 

@@ -1,0 +1,181 @@
+{
+  "schema": "skill6-run/1",
+  "phase": 1,
+  "status": "complete",
+  "run_id": "US-2000-phase-1-2026-10-08",
+  "user_story_id": "US-2000",
+  "user_story": "US-2000 — Ask the assistant about returns",
+  "user_story_name": "US-2000-ask-assistant",
+  "feature": "ask-assistant",
+  "spec_level": "",
+  "source_tc_doc": "Testing/Manual_Test/TestCases/US-2000-ask-assistant/TEST-CASES-ask-assistant.md",
+  "source_sha256": "7a9c2e41b0d3000000000000000000000000000000000000000000000000beef",
+  "environment": "UAT",
+  "results_root": "reports/US-2000-ask-assistant/",
+  "screenshots_root": "screenshots/US-2000-ask-assistant/",
+  "logs_root": "automation-logs/US-2000-ask-assistant/",
+  "ado_mode": "local",
+  "headed": true,
+  "build": "2.3.0",
+  "framework": "playwright",
+  "file_or_suite": "tests/Assistant_Tests/",
+  "workers_parallel": 2,
+  "started_at": "2026-10-08T09:00:00+03:00",
+  "finished_at": "2026-10-08T09:03:10+03:00",
+  "total_duration_ms": 190000,
+  "progress_log": "automation-logs/US-2000-ask-assistant/run-progress-2026-10-08-0900.log",
+  "previous_phase": null,
+  "stages": {
+    "smoke": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "incomplete": 0,
+      "skipped": 0,
+      "not_run": 0
+    },
+    "positive": {
+      "total": 2,
+      "passed": 0,
+      "failed": 1,
+      "incomplete": 0,
+      "skipped": 1,
+      "not_run": 0
+    },
+    "negative": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "incomplete": 0,
+      "skipped": 0,
+      "not_run": 0
+    }
+  },
+  "smoke_gate": {
+    "fail_pct": 0,
+    "verdict": "passed",
+    "action_taken": "no action needed",
+    "excluded_unverified_assumption": 0,
+    "cycles": 0
+  },
+  "totals": {
+    "total": 3,
+    "passed": 1,
+    "failed": 1,
+    "incomplete": 0,
+    "skipped": 1,
+    "not_run": 0
+  },
+  "variant_totals": {
+    "passed": 1,
+    "failed": 1,
+    "skipped": 1,
+    "not_run": 0
+  },
+  "results": [
+    {
+      "tc_id": "TC-001",
+      "req_id": "REQ-01",
+      "test_name": "Open the assistant panel",
+      "status": "PASS",
+      "duration_ms": 21000,
+      "classification": "N/A",
+      "error_message": null,
+      "root_cause": null,
+      "run_group": "parallel",
+      "run_mode": "parallel",
+      "evidence_screenshot": "screenshots/US-2000-ask-assistant/phase-1/TC-001/chromium--none--r0/attempt-1.png",
+      "failure_screenshot": null,
+      "severity": "N/A",
+      "attempts": 1,
+      "missing_variants": [],
+      "variants": [
+        {
+          "variant_slug": "chromium--none--r0",
+          "project": "chromium",
+          "final_status": "PASS",
+          "duration_ms": 1000,
+          "attempts": [
+            {
+              "attempt": 1,
+              "stage": "smoke",
+              "status": "PASS",
+              "evidence_screenshot": "screenshots/US-2000-ask-assistant/phase-1/TC-001/chromium--none--r0/attempt-1.png",
+              "failure_screenshot": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tc_id": "TC-002",
+      "req_id": "REQ-02",
+      "test_name": "Clear the conversation",
+      "status": "FAIL",
+      "duration_ms": 34000,
+      "classification": "app_bug",
+      "error_message": "expect(messages).toHaveCount(0) — received 2",
+      "root_cause": null,
+      "run_group": "parallel",
+      "run_mode": "parallel",
+      "evidence_screenshot": "screenshots/US-2000-ask-assistant/phase-1/TC-002/chromium--none--r0/attempt-1.png",
+      "failure_screenshot": "screenshots/US-2000-ask-assistant/phase-1/TC-002/chromium--none--r0/attempt-1-failed.png",
+      "severity": "Medium",
+      "attempts": 1,
+      "missing_variants": [],
+      "variants": [
+        {
+          "variant_slug": "chromium--none--r0",
+          "project": "chromium",
+          "final_status": "FAIL",
+          "duration_ms": 1000,
+          "attempts": [
+            {
+              "attempt": 1,
+              "stage": "positive",
+              "status": "FAIL",
+              "evidence_screenshot": "screenshots/US-2000-ask-assistant/phase-1/TC-002/chromium--none--r0/attempt-1.png",
+              "failure_screenshot": "screenshots/US-2000-ask-assistant/phase-1/TC-002/chromium--none--r0/attempt-1-failed.png"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tc_id": "TC-AI-01",
+      "req_id": "REQ-03",
+      "test_name": "Ask for the return window",
+      "status": "SKIP",
+      "duration_ms": 0,
+      "classification": "N/A",
+      "error_message": null,
+      "root_cause": null,
+      "run_group": "parallel",
+      "run_mode": "parallel",
+      "evidence_screenshot": null,
+      "failure_screenshot": null,
+      "severity": "N/A",
+      "attempts": 0,
+      "missing_variants": [],
+      "variants": []
+    }
+  ],
+  "bugs": [
+    {
+      "id": "BUG-1",
+      "title": "The system doesn't clear the conversation when the user confirms Clear",
+      "tc_id": "TC-002",
+      "req_id": "REQ-02",
+      "severity": "Medium",
+      "status": "open"
+    }
+  ],
+  "skips": [
+    {
+      "tc_id": "TC-AI-01",
+      "status": "SKIP",
+      "reason": "Automation Candidate: NO — the reply differs every run; judged by the manual CLI run"
+    }
+  ],
+  "deviations": []
+}

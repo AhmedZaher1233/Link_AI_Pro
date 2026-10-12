@@ -13,7 +13,8 @@ then patch the files. There is no separate reviewer agent — the next gate is t
    buckets — never mixed; a coverage gap is recorded for skill 3, never closed by adding a TC.
 3. **No design field changed** — diff `ID`, `Type`, `Locale`, `Requirement`, `Stage`,
    `Description`, `Smoke`, `Automation Candidate`, `Data effect`, `Shared data`, `Tags`,
-   `Data Oracle`, every `[HUMAN]` marker, every `[E{n}]` / `[A{n}]` / `[D{n}]` token and the TC
+   `Data Oracle`, `AI Oracle` (the whole sub-list), every `[HUMAN]` marker, every `[E{n}]` /
+   `[A{n}]` / `[D{n}]` token and the TC
    set before vs after your patch: identical, or your patch is wrong.
 4. **Coverage untouched** — `Requirement coverage (weighted)`, the per-AC table, the traceability
    matrix and the manual-only table are byte-identical before vs after, unless a recorded design

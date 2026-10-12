@@ -1,8 +1,8 @@
 SKILL: link-qc-1-generate-update-testing-structure
 WHAT IT DOES: Audits, repairs or restructures the project's QA foundation — the Testing/
 layout, docs/steering/ (L1/L2/L3), Node/NPM + Playwright, .mcp.json (Playwright, Azure DevOps,
-Docx MCP; optional Figma MCP), the optional playwright-cli for skill 3c and Python + Pillow for
-link-qc-6-ui-testing, the QA skills 1-12, 3b and 3c (.claude/skills/), Testing/project-learning.md and
+Docx MCP; optional Figma MCP), the optional playwright-cli for skills 3c and 5b and Python + Pillow for
+link-qc-6-ui-testing, the QA skills 1-12, 3b, 3c and 5b (.claude/skills/), Testing/project-learning.md and
 Testing/qa-manifest.json — with a read-only preflight first and a deterministic PASS/FAIL
 validation at the end. Invoke it explicitly; other skills never run it for you.
 
@@ -16,7 +16,7 @@ REQUIRED:
 OPTIONAL ARGUMENT (existing projects; skips the mode question):
   audit        — Mode A: health-check only. Writes NOTHING (no downloads, installs, renames,
                  learning-file or manifest updates). Lists what B would fix.
-  repair       — Mode B: sync skills 1-12, 3b and 3c + sync-skills command, add missing folders / steering
+  repair       — Mode B: sync skills 1-12, 3b, 3c and 5b + sync-skills command, add missing folders / steering
                  layers / MCP entries / learning-file sections, normalize names (steering files,
                  .claude/Skills → .claude/skills, legacy learning heading), write the manifest.
                  Never moves or rewrites existing valid content.
@@ -49,13 +49,13 @@ ASKED DURING THE RUN (only if it cannot detect them and the learning file has no
      (the question lists every edited / extra file). Replace / Update only (keep my edits) / Cancel.
      Your own skills and every other file are never deleted. Asked every run, never recorded.
   6. Install the optional tools? (yes/no) — Mode B/C/new only, when something is missing:
-     playwright-cli for skill 3c, and Pillow + numpy for link-qc-6-ui-testing's static-image annotation
+     playwright-cli for skills 3c and 5b, and Pillow + numpy for link-qc-6-ui-testing's static-image annotation
      (only when a Python interpreter already exists — Python itself is never installed).
      Yes → the skills sync runs with --tools (global @playwright/cli, its chromium browser, the
      .playwright-cli/ line in .gitignore, pip install pillow numpy). No → nothing installed;
-     3b and every other skill work as before, 3c will BLOCK until /sync-skills --tools runs,
+     3b and every other skill work as before, 3c and 5b will BLOCK until /sync-skills --tools runs,
      link-qc-6-ui-testing annotates live pages in the DOM without Python. Recorded, never re-asked.
-     Optional afterwards, for unattended 3c logins only: run scripts/set-playwright-secrets.ps1
+     Optional afterwards, for unattended 3c / 5b logins only: run scripts/set-playwright-secrets.ps1
      (or .sh) in YOUR OWN terminal — the skill only checks that the file exists.
   7. Add the Figma MCP for link-qc-6-ui-testing? — only when you compare against Figma designs. It is Figma's
      remote server (https://mcp.figma.com/mcp); you log in once through /mcp — no token is ever
@@ -73,7 +73,7 @@ OUTPUT — WHAT YOU GET
     README.md                (index + the single set of resolution rules — authored by this skill)
     L1-testing-foundation.md / L2-testing-qa-standards.md   (copied from the source repo, never authored)
     L3-project-testing.md    (template — you fill the placeholders)
-  .claude/skills/1-12, 3b and 3c + .claude/commands/sync-skills.md  (synced from the source repo)
+  .claude/skills/1-12, 3b, 3c and 5b + .claude/commands/sync-skills.md  (synced from the source repo)
   .mcp.json                  (Playwright / Azure DevOps / Docx entries, env-var placeholder for the PAT;
                               the Azure DevOps entry is the cloud or the self-hosted server per the
                               detected hosting; a legacy `word` entry is replaced by `docx` during
@@ -84,7 +84,7 @@ OUTPUT — WHAT YOU GET
   Learning File · .mcp.json · Azure DevOps hosting · PAT env var · Browser secrets file · Playwright MCP · Azure DevOps
   MCP · Docx MCP · Figma MCP · QA Skills · Skills current · sync-skills cmd · Manifest — each
   PASS / WARN / FAIL / NOT_RUN, never PASS without the check having run (the playwright-cli,
-  Python + Pillow and Figma MCP rows are WARN at worst: 3c and link-qc-6-ui-testing's extras are optional).
+  Python + Pillow and Figma MCP rows are WARN at worst: 3c, 5b and link-qc-6-ui-testing's extras are optional).
   Mode A adds "Would be fixed by B" and "Needs C" lists and changes nothing.
 
 WHEN TO RUN: once per project BEFORE skills 2-11; again (audit first) whenever the setup drifts.

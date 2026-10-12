@@ -3,7 +3,8 @@
 //   TEST-RUN-REPORT-{feature}.md (+ BUG-REPORT-{feature}.md, + .runs/phase-N.json)
 //   (+ REVIEW-COMMENTS-{feature}.md, the reviewer's comments saved from the page)
 //   → TEST-RUN-REPORT-{feature}.html, from assets/run-report.template.html (the body partial) inside
-//   assets/report-shell.template.html (the one general report page, mirrored with skills 3, 3b and 3c).
+//   assets/report-shell.template.html (the one general report page, mirrored with skills 3, 3b, 3c and 5b).
+//   Byte-identical copy in link-qc-5b-test-run-manual-cli (the manual CLI run writes the same report set).
 //
 // Node >= 18, ESM, zero dependencies. DEFAULT MODE IS DRY-RUN: parse, compute, validate, print
 // the JSON payload, write nothing. Writing happens only behind --write, and the rendered HTML is
@@ -44,7 +45,7 @@ export const EXECUTED_OUTCOMES = ['GREEN', 'FAILURES', 'INCOMPLETE', 'SMOKE GATE
 // `PARTIAL — human step pending`. It is never counted as passed and never lets a phase be GREEN.
 export const RESULT_STATES = ['PASS', 'FAIL', 'INCOMPLETE', 'SKIP', 'NOT_RUN', 'PARTIAL'];
 export const PARTIAL_REASON = 'human step pending';
-export const CLASSIFICATIONS = ['app_bug', 'selector_failure', 'assertion_failure', 'environment_failure', 'data_missing', 'timeout_failure', 'evidence_failure', 'unverified_assumption'];
+export const CLASSIFICATIONS = ['app_bug', 'selector_failure', 'assertion_failure', 'environment_failure', 'data_missing', 'timeout_failure', 'evidence_failure', 'unverified_assumption', 'ai_rubric_failure'];
 export const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 export const BUG_STATUSES = ['open', 'resolved', 'not-checked'];
 // `partial` is an OPTIONAL column of the Stages / Run history tables and an optional ` · {n} partial`

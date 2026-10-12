@@ -6,8 +6,11 @@ targeted discovery, not a replay, and WITHOUT a scope gate: every test case in t
 walked on every run (each common flow once + every TC's unique tail; nothing is skipped, nothing
 is asked) — sets each TC's validation state with evidence (including what
 was actually observed for the expected result), corrects labels and missing steps, records
-potential bugs with a screenshot, updates the test-data statuses, and patches the same files in
-place (markdown, test-data file, re-rendered HTML page). Before or after human approval. It is
+potential bugs with a screenshot, updates the test-data statuses and decides how each data item
+is obtained (from evidence first — the learning file, the automation project's existing
+fixtures, what the walk showed; prepares a missing item through a documented e2e scenario when
+you allow data changes, and reverts it; asks once for what stays undecided), and patches the
+same files in place (markdown, test-data file, re-rendered HTML page). Before or after human approval. It is
 NOT a gate: skills 4 and 5 accept a document that never went through it. 3b remains the default
 validator; this skill exists to be compared with it (references/cli-vs-mcp-comparison.md).
 
@@ -59,8 +62,9 @@ OPTIONAL FLAGS:
                                  what this run rendered).
   --audit                        Probe playwright-cli and analyse the document only: reports
                                  the document state, the common flows, the executable set
-                                 that a run would walk and what it would write. Writes
-                                 NOTHING, asks for nothing else.
+                                 that a run would walk, the data plan (ways decided from
+                                 evidence, undecided items, preparation candidates) and what
+                                 it would write. Writes NOTHING, asks for nothing else.
 
 ASKED DURING THE RUN — ONE message, after the playwright-cli probe:
   2. Application base URL                  — the TEST-DATA "[E1]" row; reused from the learning
@@ -87,11 +91,26 @@ ASKED DURING THE RUN — ONE message, after the playwright-cli probe:
   7. May this run change data on {env}?    — yes: test cases whose Data effect is creates /
                                              modifies / deletes are executed, records are
                                              identified before the change, reverted through the
-                                             UI where a way exists, and listed at the end;
-                                             no: those TCs stay draft (reason recorded)
+                                             UI where a way exists, and listed at the end; the
+                                             same "yes" lets the skill PREPARE a missing data
+                                             item through an e2e scenario named in TEST-DATA
+                                             (a TC of the set or a known flow, values already
+                                             known) before the TCs that need it, reverted at the
+                                             end — the message names the candidates;
+                                             no: those TCs stay draft (reason recorded) and
+                                             nothing is prepared
   8. Revision authorization                — only for an APPROVED document when changes are
                                              expected and --authorize-revision was not given;
                                              asked once with the concrete list of changes
+
+ASKED ONCE AFTER THE WALK — only if evidence could not decide:
+  9. How to get the undecided data items   — one list ordered by priority (High / Medium / Low
+                                             from the test cases that need each item) with a
+                                             recommended way each (e2e scenario / api / db /
+                                             set directly / manual); items the learning file,
+                                             the automation project's fixtures or the walk
+                                             already decided are not asked. Unanswered → manual
+                                             stays recommended and the question stays open.
 
 NOT ASKED (by design — this skill has no scope gate):
   - Scope                                  — every TC is walked; the skill states the plan in
@@ -130,7 +149,11 @@ OUTPUT — WHAT YOU GET (same folder, patched in place)
     TEST-DATA-{feature}.md    <- item statuses from one read-only look each (READY / MISSING /
                                  UNKNOWN), exact values and states seen, extra accounts,
                                  creation ways confirmed available, problems closed or added,
-                                 "Environment: {env} checked {date}"
+                                 "Environment: {env} checked {date}"; per item HOW it is
+                                 handled (the way decided from evidence or your answer, its
+                                 priority High / Medium / Low, what it was decided from), items
+                                 prepared this run (reverted at the end, or left in place and
+                                 listed), test-data questions closed by evidence or still open
     TC-REVIEW-{feature}.html  <- re-rendered by scripts/render-tc-review.mjs (never hand-edited),
                                  in English unless you pass --lang ar; Arabic pages reuse
                                  TC-REVIEW-STRINGS-{feature}.ar.json — only changed strings need
@@ -143,7 +166,8 @@ OUTPUT — WHAT YOU GET (same folder, patched in place)
     TC-GENERATION-SUMMARY.md  <- status / findings columns patched (multi-story only)
   Testing/project-learning.md <- base URL per environment (no credentials), login method used per
                                  environment (name only), common flows walked, labels, locale
-                                 facts, READY test data, tricks, confirmed Q&A
+                                 facts, READY test data and confirmed data ways, tricks,
+                                 confirmed Q&A
   Browser sessions the run opened are closed and the run's snapshot files under .playwright-cli/
   are deleted before the final message.
 

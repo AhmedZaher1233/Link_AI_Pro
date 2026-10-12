@@ -143,6 +143,10 @@ matched) · `enhanced` (corrected / extended from observation — log what chang
 `draft — not app-validated (human step pending)`, stamped `outcome-check: human step pending`
 (the only case this skill writes that key); the six states are unchanged — this is a draft
 reason. Never mark a TC `validated` on the strength of its prefix alone — that is `inferred`.
+A TC with an `AI Oracle` is one observation: its reply is judged by the field's hard checks and
+rubric (`link-qc-5b-test-run-manual-cli/references/ai-response-rules.md` holds the rules); it is
+`validated` only when that observation passes; a rubric you cannot decide is a `Q-{n}` and the
+TC stays `draft`.
 Every observed TC gets its evidence stamp (`patch-rules.md` §2).
 
 ## 7. Failure rule

@@ -10,7 +10,7 @@ description: >
   requirement coverage score and open questions. Trigger on: "design manual test cases",
   "generate manual TCs", "update existing test cases", "review manual TCs against the story",
   "create TCs for user story", "read my comments", "apply the reviewer comments", "address the
-  review comments on the test cases".
+  review comments on the test cases", "test cases for the chatbot / AI assistant".
 argument-hint: "[<feature-name> | <user-story-id>] [existing TCs path/source] [--revision] [--audit] [--lang ar|en]"
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash(node *render-tc-review.mjs*), Bash(node *selftest.mjs*), mcp__azure-devops, mcp__docx
 ---
@@ -178,7 +178,7 @@ BLOCKED with the specific ambiguity — or an open question in the `open-questio
 | 6 | **Implementation status (static)** — tester's answer → an existing skill-4 report → else `Cannot be validated — not yet checked live`; then ONE ask only for what step 1 left open (a spec-source correction, the out-of-browser interface question of `tc-design.md` when nothing recorded answers it). No browser, no URL, no credentials. | `references/entry-cases.md` §4 |
 | 7 | **Design** — draft the complete set from specs + learning: patterns, 4-field steps, inline assertions, coverage minimums, design techniques (EP / BVA / decision table / state transition) and the E1–E6 error-guessing checklist where the flow has the trigger, locale coverage, out-of-browser outcomes (interface check → an `[E{n}]` row or a `[HUMAN]` step, never a dropped TC), data oracles, format (incl. `Stage`, optional `Tags`), smoke, automation candidates; collect the **data-item list** (every data need, its TCs, its status) and assign the `A{n}` / `E{n}` / `D{n}` IDs the TCs reference as you go; every unresolved gap becomes a `Q-{n}`. Case 1 runs the existing-TC update phase over the existing set instead. | `references/tc-design.md` |
 | 8 | **Validation stamp + data statuses** — every TC `Validation: draft — not app-validated` (or `not-implemented — pending implementation` per step 6); data items `READY` only when the learning file confirms them, else `UNKNOWN`; `Environment: not checked`. | `references/validation-states.md`, `references/tc-design.md` "Test-data collection" |
-| 9 | **Self-review** — the eighteen checks, own findings fixed in place, tables included. | `references/self-review.md` |
+| 9 | **Self-review** — the nineteen checks, own findings fixed in place, tables included. | `references/self-review.md` |
 | 10 | **Deliverables + learning update + human gate** — pre-write guard (incl. the SPEC-folder check), TC markdown (English, frozen anchors), test-data file (English), review page via the renderer (English by default; under `--lang ar`: `--write-skeleton` → fill `ar` → `--write`), renderer warnings `data-literal` / `data-ref-unresolved` / `narrative-not-english` cleared, final message, structured return. | `references/deliverables.md`, `references/html-page.md` |
 
 Load a reference only when its step runs. A default fresh-design run needs `entry-cases.md`,
@@ -221,16 +221,22 @@ ask for the token; never use REST as a fallback.
 
 ## Downstream contract
 
-`link-qc-4-publish-test-cases-azure`, `link-qc-5-test-run-automation` and `link-qc-3b-validate-manual-test-cases` parse the
+`link-qc-4-publish-test-cases-azure`, `link-qc-5-test-run-automation`, `link-qc-5b-test-run-manual-cli`
+and `link-qc-3b-validate-manual-test-cases` parse the
 markdown document. These field names are frozen — renaming or dropping one breaks the pipeline:
 `Status:` (`PENDING HUMAN REVIEW` / `APPROVED`), `ID`, `Type`, `Locale`, `Requirement`, `Stage`,
-`Description`, `Preconditions`, `Steps`, `Expected Result`, `Data Oracle`, `Smoke`, `Automation
+`Description`, `Preconditions`, `Steps`, `Expected Result`, `Data Oracle`, `AI Oracle` (optional,
+assistant TCs only — a sub-list, omitted elsewhere; `references/tc-design.md` "AI / chatbot test
+cases"), `Smoke`, `Automation
 Candidate`, `Data effect`, `Shared data`, `Tags` (optional, `—` when none), `Validation`. The
 header lines `Scope`, `Generated`, `Implementation status`, `MCP validation`, `App validation
 progress` and the level-2 anchors (`references/html-page.md` §3) are frozen for the renderer.
 Skill 4 builds `[TC-ID] {description}` titles and `ADO-MAP.md` from them and publishes the
 `Tags:` values; skill 5 derives `@smoke` from `Smoke:` only, its stages from `Stage` (or Type
-when an older document lacks it) and its run plan from `Data effect` / `Shared data`; 3b
+when an older document lacks it) and its run plan from `Data effect` / `Shared data`; the manual
+CLI run (`link-qc-5b-test-run-manual-cli`) executes every approved TC in full through
+playwright-cli, judges an `AI Oracle` from the reply text, and writes only skill 5's run report
+set — nothing into this document; 3b
 rewrites `Validation`, step label wording and the header counts in place and never a design
 field. `Validation` is always `draft — not app-validated` here — the other states belong to
 3b. Regenerating an approved document changes the revision `ADO-MAP.md` was built from — then
@@ -271,7 +277,7 @@ language; skills 4 and 5 ignore it.
 | `references/learning-file.md` | learning-file specifics for skills 3 / 3b / 3c (shared protocol lives in skill 1) (mirrored) | step 4 |
 | `references/tc-design.md` | patterns, step quality, coverage minimums, design techniques, error-guessing checklist, locale, out-of-browser outcomes (`[HUMAN]`), data oracle, test-data collection + reference tokens, frozen TC shape (incl. `Tags`), automation suitability, existing-TC update | step 7 |
 | `references/validation-states.md` | the six states, who writes them, freshness and stale rules (mirrored) | step 8 |
-| `references/self-review.md` | the eighteen self-review checks incl. coverage score, manual-only list, references, test-data consistency, open questions, technique coverage, error guessing, out-of-browser outcomes | step 9 |
+| `references/self-review.md` | the nineteen self-review checks incl. coverage score, manual-only list, references, test-data consistency, open questions, technique coverage, error guessing, out-of-browser outcomes, AI Oracle completeness | step 9 |
 | `references/deliverables.md` | pre-write guard, TC markdown + test-data file specs, learning update, final message, revision mode, structured returns, quality checklist | step 10 |
 | `references/html-page.md` | the renderer: commands, gate, parsing contract, derived numbers, compatibility, Arabic sidecar, provenance (mirrored) | step 10 |
 | `assets/tc-review.template.html` | the page skeleton + inline CSS, consumed only by the renderer (mirrored) | step 10 |

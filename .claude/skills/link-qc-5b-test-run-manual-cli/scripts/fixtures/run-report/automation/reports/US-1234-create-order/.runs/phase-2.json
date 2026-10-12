@@ -1,0 +1,613 @@
+{
+  "schema": "skill6-run/1",
+  "phase": 2,
+  "status": "complete",
+  "run_id": "US-1234-phase-2-2026-09-21",
+  "user_story_id": "US-1234",
+  "user_story": "US-1234 — Create order",
+  "user_story_name": "US-1234-create-order",
+  "feature": "create-order",
+  "spec_level": "",
+  "source_tc_doc": "Testing/Manual_Test/TestCases/US-1234-create-order/TEST-CASES-create-order.md",
+  "source_sha256": "3f1c9a2b7d4e000000000000000000000000000000000000000000000000abcd",
+  "environment": "UAT",
+  "build": "4.12.1",
+  "framework": "playwright",
+  "file_or_suite": "tests/Orders_Tests/",
+  "ado_mode": "local",
+  "headed": true,
+  "workers_parallel": 4,
+  "started_at": "2026-09-21T13:45:00+03:00",
+  "finished_at": "2026-09-21T13:50:12+03:00",
+  "total_duration_ms": 312000,
+  "results_root": "reports/US-1234-create-order/",
+  "screenshots_root": "screenshots/US-1234-create-order/",
+  "logs_root": "automation-logs/US-1234-create-order/",
+  "progress_log": "automation-logs/US-1234-create-order/run-progress-2026-09-21-1345.log",
+  "previous_phase": {
+    "phase": 1,
+    "file": ".runs/phase-1.json",
+    "location": "nested"
+  },
+  "compliance": {
+    "checkpoint_a": {
+      "gate": "PASS",
+      "scopeDigest": "b7c8d9e0",
+      "recorded_at": "2026-09-21T13:40:00+03:00",
+      "unresolved": []
+    },
+    "checkpoint_b": {
+      "gate": "PASS",
+      "scopeDigest": "b7c8d9e0",
+      "recorded_at": "2026-09-21T14:05:00+03:00",
+      "unresolved": []
+    }
+  },
+  "run_plan": {
+    "user_story": "US-1234",
+    "generated": "2026-09-21T13:38:00+03:00",
+    "headed": true,
+    "workers_parallel": 3,
+    "projects": [
+      "chromium"
+    ],
+    "required_variants": {
+      "TC-001": [
+        "chromium--none--r0"
+      ],
+      "TC-007": [
+        "chromium--variation-a--r0",
+        "chromium--variation-b--r0"
+      ],
+      "TC-010": [
+        "chromium--none--r0"
+      ],
+      "TC-020": [
+        "chromium--none--r0"
+      ],
+      "TC-030": [
+        "chromium--none--r0"
+      ]
+    },
+    "setup_groups": [],
+    "groups": [
+      {
+        "name": "parallel",
+        "mode": "parallel",
+        "workers": 4,
+        "tcs": [
+          "TC-001",
+          "TC-007",
+          "TC-020",
+          "TC-030"
+        ]
+      },
+      {
+        "name": "serial:orders",
+        "mode": "serial",
+        "workers": 1,
+        "tcs": [
+          "TC-010"
+        ],
+        "reason": "deletes the shared draft order"
+      }
+    ],
+    "decisions": [
+      {
+        "tc": "TC-001",
+        "mode": "parallel",
+        "source": "field",
+        "why": "Data effect: read-only"
+      },
+      {
+        "tc": "TC-007",
+        "mode": "parallel",
+        "source": "field",
+        "why": "Data effect: read-only"
+      },
+      {
+        "tc": "TC-010",
+        "mode": "serial",
+        "source": "inferred",
+        "why": "step 4 deletes the order"
+      }
+    ],
+    "estimate": {
+      "serial_only_s": 840,
+      "planned_s": 420
+    }
+  },
+  "open_questions": {
+    "raised": 0,
+    "answered": 0,
+    "reused_from_learning": 1,
+    "assumed": 0,
+    "unresolved": 0,
+    "questions": []
+  },
+  "data_readiness": {
+    "verdict": "READY-WITH-SKIPS",
+    "gaps": [
+      {
+        "gap": "customer without orders",
+        "tcs": [
+          "TC-020"
+        ],
+        "decision": "skip",
+        "source": "learning",
+        "provisioning": null,
+        "cleanup": null
+      }
+    ],
+    "predicted_skips": [
+      "TC-020"
+    ]
+  },
+  "coverage_snapshot": {
+    "measuredAt": "2026-09-21T13:39:00+03:00",
+    "weightedPct": 80,
+    "target": 80,
+    "targetSource": "default",
+    "mechanism": "soft block",
+    "verdict": "PASS",
+    "byStage": {
+      "smoke": {
+        "total": 1,
+        "full": 1,
+        "partial": 0,
+        "none": 0,
+        "weightedPct": 100
+      },
+      "positive": {
+        "total": 3,
+        "full": 2,
+        "partial": 1,
+        "none": 0,
+        "weightedPct": 83.3
+      },
+      "negative": {
+        "total": 1,
+        "full": 0,
+        "partial": 1,
+        "none": 0,
+        "weightedPct": 50
+      }
+    },
+    "tcs": {
+      "TC-001": "Fully Covered",
+      "TC-007": "Fully Covered",
+      "TC-010": "Fully Covered",
+      "TC-020": "Partially Covered",
+      "TC-030": "Partially Covered"
+    },
+    "requirements": [
+      {
+        "id": "REQ-01",
+        "short": "create order",
+        "outcome": "Full",
+        "assertedBy": [
+          "TC-001"
+        ]
+      },
+      {
+        "id": "REQ-02",
+        "short": "total recalculates",
+        "outcome": "Assumed",
+        "assertedBy": [
+          "TC-007"
+        ]
+      },
+      {
+        "id": "REQ-03",
+        "short": "delete draft",
+        "outcome": "Full",
+        "assertedBy": [
+          "TC-010"
+        ]
+      },
+      {
+        "id": "REQ-04",
+        "short": "customer required",
+        "outcome": "Missing",
+        "assertedBy": []
+      },
+      {
+        "id": "REQ-05",
+        "short": "Order confirmation by SMS code",
+        "outcome": "Partial",
+        "assertedBy": [
+          "TC-030"
+        ]
+      }
+    ],
+    "manual": {
+      "total": 1,
+      "high": 0,
+      "medium": 1,
+      "low": 0
+    },
+    "delta": {
+      "against": ".runs/phase-1.json",
+      "pctChange": 5,
+      "improved": [
+        "TC-007"
+      ],
+      "regressed": [],
+      "added": [
+        "TC-030"
+      ],
+      "removed": []
+    }
+  },
+  "stages": {
+    "smoke": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "incomplete": 0,
+      "skipped": 0,
+      "not_run": 0
+    },
+    "positive": {
+      "total": 3,
+      "passed": 1,
+      "failed": 0,
+      "incomplete": 1,
+      "skipped": 0,
+      "not_run": 0,
+      "partial": 1
+    },
+    "negative": {
+      "total": 1,
+      "passed": 0,
+      "failed": 0,
+      "incomplete": 0,
+      "skipped": 1,
+      "not_run": 0
+    }
+  },
+  "smoke_gate": {
+    "fail_pct": 0,
+    "verdict": "passed",
+    "action_taken": "no action needed",
+    "excluded_unverified_assumption": 0,
+    "cycles": 0
+  },
+  "totals": {
+    "total": 5,
+    "passed": 2,
+    "failed": 0,
+    "incomplete": 1,
+    "skipped": 1,
+    "not_run": 0,
+    "partial": 1
+  },
+  "variant_totals": {
+    "passed": 3,
+    "failed": 0,
+    "skipped": 1,
+    "not_run": 1,
+    "partial": 1
+  },
+  "merged": {
+    "stages": [
+      {
+        "name": "smoke",
+        "group": "parallel",
+        "attempt": 1,
+        "project": "chromium",
+        "json_path": "reports/US-1234-create-order/artifacts/stages/smoke-parallel.json",
+        "started_at": "2026-09-21T13:45:05+03:00",
+        "finished_at": "2026-09-21T13:45:48+03:00"
+      },
+      {
+        "name": "positive",
+        "group": "parallel",
+        "attempt": 1,
+        "project": "chromium",
+        "json_path": "reports/US-1234-create-order/artifacts/stages/positive-parallel.json",
+        "started_at": "2026-09-21T13:45:50+03:00",
+        "finished_at": "2026-09-21T13:47:30+03:00"
+      },
+      {
+        "name": "positive",
+        "group": "serial:orders",
+        "attempt": 1,
+        "project": "chromium",
+        "json_path": "reports/US-1234-create-order/artifacts/stages/positive-serial-orders.json",
+        "started_at": "2026-09-21T13:47:32+03:00",
+        "finished_at": "2026-09-21T13:48:25+03:00"
+      },
+      {
+        "name": "negative",
+        "group": "parallel",
+        "attempt": 1,
+        "project": "chromium",
+        "json_path": "reports/US-1234-create-order/artifacts/stages/negative-parallel.json",
+        "started_at": "2026-09-21T13:48:27+03:00",
+        "finished_at": "2026-09-21T13:48:35+03:00"
+      }
+    ],
+    "executions": [],
+    "variants": [],
+    "tcs": [
+      {
+        "tc_id": "TC-001",
+        "required_variants": [
+          "chromium--none--r0"
+        ],
+        "variant_slugs": [
+          "chromium--none--r0"
+        ],
+        "status": "PASS",
+        "missing_variants": [],
+        "skipped_variants": []
+      },
+      {
+        "tc_id": "TC-007",
+        "required_variants": [
+          "chromium--variation-a--r0",
+          "chromium--variation-b--r0"
+        ],
+        "variant_slugs": [
+          "chromium--variation-a--r0"
+        ],
+        "status": "INCOMPLETE",
+        "missing_variants": [
+          "chromium--variation-b--r0"
+        ],
+        "skipped_variants": []
+      },
+      {
+        "tc_id": "TC-010",
+        "required_variants": [
+          "chromium--none--r0"
+        ],
+        "variant_slugs": [
+          "chromium--none--r0"
+        ],
+        "status": "PASS",
+        "missing_variants": [],
+        "skipped_variants": []
+      },
+      {
+        "tc_id": "TC-020",
+        "required_variants": [
+          "chromium--none--r0"
+        ],
+        "variant_slugs": [
+          "chromium--none--r0"
+        ],
+        "status": "SKIP",
+        "missing_variants": [],
+        "skipped_variants": [
+          "chromium--none--r0"
+        ]
+      },
+      {
+        "tc_id": "TC-030",
+        "required_variants": [
+          "chromium--none--r0"
+        ],
+        "variant_slugs": [
+          "chromium--none--r0"
+        ],
+        "status": "PARTIAL",
+        "missing_variants": [],
+        "skipped_variants": []
+      }
+    ]
+  },
+  "results": [
+    {
+      "tc_id": "TC-001",
+      "req_id": "REQ-01",
+      "test_name": "Create an order with valid data",
+      "status": "PASS",
+      "duration_ms": 39000,
+      "classification": "N/A",
+      "unverified_assumption": false,
+      "assumption": null,
+      "error_message": null,
+      "root_cause": null,
+      "run_group": "parallel",
+      "run_mode": "parallel",
+      "evidence_screenshot": "screenshots/US-1234-create-order/phase-2/TC-001/chromium--none--r0/attempt-1.png",
+      "failure_screenshot": null,
+      "severity": "N/A",
+      "healed_in_first_run": false,
+      "attempts": 1,
+      "missing_variants": [],
+      "variants": [
+        {
+          "variant_slug": "chromium--none--r0",
+          "project": "chromium",
+          "final_status": "PASS",
+          "duration_ms": 39000,
+          "attempts": [
+            {
+              "attempt": 1,
+              "stage": "smoke",
+              "status": "PASS",
+              "evidence_screenshot": "screenshots/US-1234-create-order/phase-2/TC-001/chromium--none--r0/attempt-1.png",
+              "failure_screenshot": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tc_id": "TC-007",
+      "req_id": "REQ-02",
+      "test_name": "Order total recalculates",
+      "status": "INCOMPLETE",
+      "duration_ms": 58000,
+      "classification": "N/A",
+      "unverified_assumption": true,
+      "assumption": "total = sum of line totals after each edit, VAT excluded",
+      "error_message": null,
+      "root_cause": null,
+      "run_group": "parallel",
+      "run_mode": "parallel",
+      "evidence_screenshot": "screenshots/US-1234-create-order/phase-2/TC-007/chromium--variation-a--r0/attempt-1.png",
+      "failure_screenshot": null,
+      "severity": "N/A",
+      "healed_in_first_run": false,
+      "attempts": 1,
+      "missing_variants": [
+        "chromium--variation-b--r0"
+      ],
+      "variants": [
+        {
+          "variant_slug": "chromium--variation-a--r0",
+          "project": "chromium",
+          "final_status": "PASS",
+          "duration_ms": 58000,
+          "attempts": [
+            {
+              "attempt": 1,
+              "stage": "positive",
+              "status": "PASS",
+              "evidence_screenshot": "screenshots/US-1234-create-order/phase-2/TC-007/chromium--variation-a--r0/attempt-1.png",
+              "failure_screenshot": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tc_id": "TC-010",
+      "req_id": "REQ-03",
+      "test_name": "Delete a draft order",
+      "status": "PASS",
+      "duration_ms": 50000,
+      "classification": "N/A",
+      "unverified_assumption": false,
+      "assumption": null,
+      "error_message": null,
+      "root_cause": null,
+      "run_group": "serial:orders",
+      "run_mode": "serial",
+      "evidence_screenshot": "screenshots/US-1234-create-order/phase-2/TC-010/chromium--none--r0/attempt-1.png",
+      "failure_screenshot": null,
+      "severity": "N/A",
+      "healed_in_first_run": false,
+      "attempts": 1,
+      "missing_variants": [],
+      "variants": [
+        {
+          "variant_slug": "chromium--none--r0",
+          "project": "chromium",
+          "final_status": "PASS",
+          "duration_ms": 50000,
+          "attempts": [
+            {
+              "attempt": 1,
+              "stage": "positive",
+              "status": "PASS",
+              "evidence_screenshot": "screenshots/US-1234-create-order/phase-2/TC-010/chromium--none--r0/attempt-1.png",
+              "failure_screenshot": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tc_id": "TC-020",
+      "req_id": "REQ-04",
+      "test_name": "Reject an order without a customer",
+      "status": "SKIP",
+      "duration_ms": 0,
+      "classification": "data_missing",
+      "unverified_assumption": false,
+      "assumption": null,
+      "error_message": null,
+      "root_cause": "customer fixture missing — QC chose skip",
+      "run_group": "parallel",
+      "run_mode": "parallel",
+      "evidence_screenshot": null,
+      "failure_screenshot": null,
+      "severity": "N/A",
+      "healed_in_first_run": false,
+      "attempts": 0,
+      "missing_variants": [],
+      "variants": []
+    },
+    {
+      "tc_id": "TC-030",
+      "req_id": "REQ-05",
+      "test_name": "Confirm the order by the code sent by SMS",
+      "status": "PARTIAL",
+      "duration_ms": 47000,
+      "classification": "human step: 4",
+      "unverified_assumption": false,
+      "assumption": null,
+      "error_message": null,
+      "root_cause": null,
+      "run_group": "parallel",
+      "run_mode": "parallel",
+      "evidence_screenshot": "screenshots/US-1234-create-order/phase-2/TC-030/chromium--none--r0/attempt-1.png",
+      "failure_screenshot": null,
+      "severity": "N/A",
+      "healed_in_first_run": false,
+      "attempts": 1,
+      "missing_variants": [],
+      "human_step": 4,
+      "variants": [
+        {
+          "variant_slug": "chromium--none--r0",
+          "project": "chromium",
+          "final_status": "PARTIAL",
+          "duration_ms": 47000,
+          "attempts": [
+            {
+              "attempt": 1,
+              "stage": "positive",
+              "status": "PARTIAL",
+              "evidence_screenshot": "screenshots/US-1234-create-order/phase-2/TC-030/chromium--none--r0/attempt-1.png",
+              "failure_screenshot": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unverified_assumptions": [
+    {
+      "tc_id": "TC-007",
+      "wording": "\"the total updates correctly\"",
+      "interpretation": "total = sum of line totals after each edit, VAT excluded",
+      "evidence": "OrderTotal.ts line 42 sums lineTotal only",
+      "result": "INCOMPLETE"
+    }
+  ],
+  "bugs": [
+    {
+      "id": "BUG-1",
+      "title": "The system doesn't remove a draft order when the user confirms Delete",
+      "tc_id": "TC-010",
+      "req_id": "REQ-03",
+      "severity": "High",
+      "status": "resolved (phase 2)"
+    },
+    {
+      "id": "BUG-2",
+      "title": "The system doesn't recalculate the order total when the user edits the quantity of variation B",
+      "tc_id": "TC-007",
+      "req_id": "REQ-02",
+      "severity": "Medium",
+      "status": "open"
+    }
+  ],
+  "heal_log": [],
+  "skips": [
+    {
+      "tc_id": "TC-020",
+      "status": "SKIP",
+      "reason": "customer fixture missing — QC chose skip"
+    }
+  ],
+  "deviations": [
+    "variation B of TC-007 did not execute: the parametrised title lost its label after the retest edit; re-queued for phase 3"
+  ]
+}

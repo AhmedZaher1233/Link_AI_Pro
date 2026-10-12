@@ -30,8 +30,11 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-report.mj
 To look at the page in a browser, render it **beside the fixture markdown** (omit `--out`) so the
 thumbnails and the viewer find the PNG stubs, then delete the generated HTML from the fixture folder.
 
-The golden is rendered through two templates: `assets/run-report.template.html` (the body partial)
-and `assets/report-shell.template.html` (the shared report shell, byte-identical in skills 3, 3b and
-3c). A shell change changes this golden and skill 3's three goldens; regenerate all four. The
+This whole `fixtures/run-report/` folder, the renderer, the harness, `scan-lib.mjs` and both templates are
+byte-identical in `link-qc-5-test-run-automation` and `link-qc-5b-test-run-manual-cli` (harness case 28);
+regenerate the golden in skill 5 and copy the folder to 5b. The golden is rendered through two templates:
+`assets/run-report.template.html` (the body partial) and `assets/report-shell.template.html` (the shared
+report shell, byte-identical in skills 3, 3b, 3c, 5 and 5b). A shell change changes this golden and
+skill 3's three goldens; regenerate all four (and copy to every mirror). The
 fixture folder holds no `REVIEW-COMMENTS-create-order.md` on purpose: case 24 writes one into a
 temporary copy.

@@ -1,29 +1,29 @@
 ---
-description: Pull the latest QA skills (1-12, 3b and 3c) and this command from the canonical GitHub repo AhmedZaher1233/Link_AI_Pro into the current project's .claude/skills/, migrate .mcp.json from the legacy `word` MCP (office-word-mcp-server) to the `docx` MCP (docx-mcp-server, pinned `--with mcp<2`), and — only with --tools — install playwright-cli + its browser for skill 3c and Pillow + numpy for link-qc-6-ui-testing (when Python exists). Use in ANY project. Args: [skill names…] [--dry-run] [--branch <name>] [--force] [--no-mcp] [--tools]. By default it DELETES our Link skill folders and downloads them fresh — only after the user confirms; other skills and files are never deleted.
-argument-hint: "[link-qc-1-generate-update-testing-structure … link-qc-3b-validate-manual-test-cases link-qc-3c-validate-manual-test-cases-cli … link-qc-11-discover-business-rules link-qc-12-adhd-output-style] [--dry-run] [--branch main] [--force] [--no-mcp] [--tools]"
+description: Pull the latest QA skills (1-12, 3b, 3c and 5b) and this command from the canonical GitHub repo AhmedZaher1233/Link_AI_Pro into the current project's .claude/skills/, migrate .mcp.json from the legacy `word` MCP (office-word-mcp-server) to the `docx` MCP (docx-mcp-server, pinned `--with mcp<2`), and — only with --tools — install playwright-cli + its browser for skills 3c and 5b and Pillow + numpy for link-qc-6-ui-testing (when Python exists). Use in ANY project. Args: [skill names…] [--dry-run] [--branch <name>] [--force] [--no-mcp] [--tools]. By default it DELETES our Link skill folders and downloads them fresh — only after the user confirms; other skills and files are never deleted.
+argument-hint: "[link-qc-1-generate-update-testing-structure … link-qc-3b-validate-manual-test-cases link-qc-3c-validate-manual-test-cases-cli … link-qc-5-test-run-automation link-qc-5b-test-run-manual-cli … link-qc-11-discover-business-rules link-qc-12-adhd-output-style] [--dry-run] [--branch main] [--force] [--no-mcp] [--tools]"
 allowed-tools: Bash(node *sync-qa-skills.mjs*), Bash(curl *), Bash(mkdir *), Read, Glob, Grep
 ---
 
 # /sync-skills — update the QA skills in this project from the source repo
 
 Source of truth: `https://github.com/AhmedZaher1233/Link_AI_Pro` (branch `main` unless
-`--branch` is given). It owns every skill folder listed in `lib.mjs` `SKILLS` (1-12, 3b and 3c, all sub-folders), this command, — inside
+`--branch` is given). It owns every skill folder listed in `lib.mjs` `SKILLS` (1-12, 3b, 3c and 5b, all sub-folders), this command, — inside
 `.mcp.json` — only the `docx` MCP entry plus any legacy `word` entry it replaces, and — only when
 `--tools` is given — the global `@playwright/cli` package, its chromium browser, the
-`.playwright-cli/` line of `.gitignore` (skill 3c's browser tool; never a prerequisite for 3b)
+`.playwright-cli/` line of `.gitignore` (the browser tool of skills 3c and 5b; never a prerequisite for 3b)
 and the Python packages `pillow` + `numpy` when an interpreter already exists (link-qc-6-ui-testing's
 static-image annotation; live URLs need none).
 **The only implementation is** `.claude/skills/link-qc-1-generate-update-testing-structure/scripts/sync-qa-skills.mjs`
 — this command is a thin wrapper around it. Never re-implement the sync in prose.
 
 Arguments: `$ARGUMENTS`
-- No skill names → every skill in `SKILLS` (1-12, 3b and 3c) + this command.
+- No skill names → every skill in `SKILLS` (1-12, 3b, 3c and 5b) + this command.
 - Skill folder names → `--only <name>` for each.
 - `--dry-run` → run the script with `--check` (read-only, nothing copied).
 - `--force` → overwrite files that have local edits (update-only answer only).
 - `--branch <name>` → passed through.
 - `--no-mcp` → leave `.mcp.json` untouched (skills only).
-- `--tools` → also install the optional tools: playwright-cli for skill 3c, and Pillow + numpy for link-qc-6-ui-testing when a Python interpreter already exists (passed through to `--apply`; `--check` only plans it). Without it nothing is installed — 3b and every other skill need none of it.
+- `--tools` → also install the optional tools: playwright-cli for skills 3c and 5b, and Pillow + numpy for link-qc-6-ui-testing when a Python interpreter already exists (passed through to `--apply`; `--check` only plans it). Without it nothing is installed — 3b and every other skill need none of it.
 
 **`.mcp.json` migration (default on `--apply`):** the legacy `word` server (`office-word-mcp-server`,
 read-only comments) is superseded by the `docx` server (`docx-mcp-server` — real Word review comments,
@@ -87,7 +87,7 @@ server is ever changed; a `.mcp.json` that does not parse is left alone and repo
    outside `.claude/skills/`, this command, the `docx` / legacy `word` entries of `.mcp.json`
    (see the migration note above; `--no-mcp` disables it) and — with `--tools` only — the
    optional tools (`npm install -g @playwright/cli@latest`, `playwright-cli install-browser`,
-   the `.playwright-cli/` gitignore line for skill 3c; `pip install pillow numpy` for link-qc-6-ui-testing when
+   the `.playwright-cli/` gitignore line for skills 3c and 5b; `pip install pillow numpy` for link-qc-6-ui-testing when
    Python exists). A failed tool step is reported as `tool-failed` and never stops the skills copy.
 
 4. **Report** the script's `summary`, `applied` (`replaced` / `installed` / `legacy-removed` / `replace-failed` per folder), `localOnlySkills`, `legacySkills`, `mcp` and `hint` fields as a short

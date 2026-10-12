@@ -1,4 +1,4 @@
-# Toolchain — Node.js, NPM, Playwright, playwright-cli (skill 3c), Python + Pillow (link-qc-6-ui-testing)
+# Toolchain — Node.js, NPM, Playwright, playwright-cli (skills 3c and 5b), Python + Pillow (link-qc-6-ui-testing)
 
 Load only when `validate-setup.mjs` reports `Node.js`, `NPM`, `Playwright`, `Playwright cfg`,
 `Playwright CLI` or `Python + Pillow` as FAIL/WARN and the mode allows repair (B, C, new
@@ -24,29 +24,29 @@ project). In Mode A the rows are reported as-is with "would be fixed by B".
 * Installation commands (`npm install`, `npx playwright install`) run under the normal
   permission flow — they are not pre-approved.
 
-## playwright-cli — the browser tool of skill 3c only (optional)
+## playwright-cli — the browser tool of skills 3c and 5b only (optional)
 
 * What it is: Microsoft's `@playwright/cli` (`playwright-cli`), a command-line browser driver
-  that `link-qc-3c-validate-manual-test-cases-cli` uses instead of the Playwright MCP server. Skill 3b
-  and every other skill never need it — its absence is a WARN, never a FAIL, and never a reason
+  that `link-qc-3c-validate-manual-test-cases-cli` and `link-qc-5b-test-run-manual-cli` use instead of
+  the Playwright MCP server. Skill 3b and every other skill never need it — its absence is a WARN, never a FAIL, and never a reason
   to hold up anything else.
 * Detected by `playwright-cli --version` (global, what sync installs) or
   `npx --no-install playwright-cli --version` (a project-local copy); the browser by a chromium
   build in the Playwright browsers cache (`%LOCALAPPDATA%\ms-playwright`, `~/.cache/ms-playwright`,
-  `PLAYWRIGHT_BROWSERS_PATH`) — a cache check only; 3c's first `open` is the real one.
-* Install (Mode B/C/new, only after the user answered **yes** to "install playwright-cli for skill
-  3c?" — record the answer as a `[type: qa]` line so it is never re-asked): run
+  `PLAYWRIGHT_BROWSERS_PATH`) — a cache check only; the first `open` of 3c or 5b is the real one.
+* Install (Mode B/C/new, only after the user answered **yes** to "install playwright-cli for skills
+  3c and 5b?" — record the answer as a `[type: qa]` line so it is never re-asked): run
   `sync-qa-skills.mjs --apply --tools` (`skills-sync.md`), or the same steps by hand under the
   normal permission flow: `npm install -g @playwright/cli@latest`, then
   `playwright-cli install-browser`, then add the line `.playwright-cli/` to `.gitignore`
   (playwright-cli writes page snapshots there; they must never be committed). Global on purpose:
   the tool is a per-machine daemon with a user-level browser cache, and a project without a
-  `package.json` must still be able to run 3c. Never run `playwright-cli install --skills` — the
+  `package.json` must still be able to run 3c and 5b. Never run `playwright-cli install --skills` — the
   vendor's own agent skill is not part of this suite; if a project already has it, it shows as
   LOCAL-ONLY in the sync report and is harmless.
-* Answered **no** → leave the WARN rows as they are and say that 3c will BLOCK until
+* Answered **no** → leave the WARN rows as they are and say that 3c and 5b will BLOCK until
   `/sync-skills --tools` runs; nothing else changes.
-* Optional secrets file for unattended 3c logins: the user runs
+* Optional secrets file for unattended 3c / 5b logins: the user runs
   `scripts/set-playwright-secrets.ps1` / `.sh` in their own terminal (`mcp-setup.md` §2b). You
   only check that the variable and the file exist — never their content.
 

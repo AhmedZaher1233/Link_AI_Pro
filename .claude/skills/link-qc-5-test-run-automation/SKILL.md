@@ -1536,6 +1536,12 @@ contract, both markdown shapes, the run-file schema and the renderer's gates.
   record, a fixture cache, a status file, a backup folder, a retest folder or an extra results
   JSON. Machine data of a run goes into `.runs/phase-{N}.json`; scratch goes under `artifacts/`
   (replaced each run).
+- **The manual CLI run shares this folder.** `link-qc-5b-test-run-manual-cli` writes the same report
+  set into the same story folder with the same phase counter: a phase it wrote counts for `N`, is named
+  by `Previous phase`, is never rewritten and is recognisable by its `Run command` bullet (`manual run —
+  playwright-cli … (skill 5b)`) and the run file's `framework: "manual-cli"` (no `coverage_snapshot`, so
+  the coverage delta skips it). Its screenshots sit in the same tree under `manual-cli--none--r{repeat}`
+  variants, with an AI TC's `reply.md` beside the image. `BUG-{n}` numbering continues across both skills.
 - **Legacy locations are first-class, read-only history.** Projects set up before this layout keep
   their `reports/[SPEC-*/]US-{id}/` folders, top-level `phase-N.json` / `phase-N.html`,
   `merged-results.json`, `run-plan.json`, `open-questions.json`, `data-readiness.json`,
@@ -2062,7 +2068,8 @@ worked in the learning file.
      existing bug whose TC ran this phase append a History line and set the Status —
      `resolved (phase N)` ONLY after the retest actually passed, `open` when it failed again;
      a bug whose TC did not run becomes `not-checked-this-run`. Never rewrite an entry; never
-     reuse an id; update the header's `Bugs` count line. Unverified-assumption failures are
+     reuse an id (ids continue across this skill and the manual CLI run, 5b, which may also resolve a
+     bug of this skill by a passing retest); update the header's `Bugs` count line. Unverified-assumption failures are
      never entered here (they are questions, not bugs).
    - **Reviewer comments.** When `REVIEW-COMMENTS-{feature}.md` exists beside the report (saved
      from the page), or the reviewer pasted comments in chat, read every open entry (`General`,

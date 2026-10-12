@@ -614,10 +614,10 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   check('26 one shell per page: one style, one script, one viewer, one comment box per item', p, { boxes: want });
 }
 
-/* 27 — the report shell and the renderer kit are byte-identical with skill 5 when it is installed (the run report uses the same page). */
-{
-  const s5 = path.join(skillDir, '..', 'link-qc-5-test-run-automation');
-  if (!fs.existsSync(s5)) cases.push({ case: '27 shell mirror with skill 5', ok: true, skipped: true, problems: [], detail: 'link-qc-5-test-run-automation not installed — nothing to compare' });
+/* 27 — the report shell and the renderer kit are byte-identical with skills 5 and 5b when installed (the run report uses the same page). */
+for (const s5name of ['link-qc-5-test-run-automation', 'link-qc-5b-test-run-manual-cli']) {
+  const s5 = path.join(skillDir, '..', s5name);
+  if (!fs.existsSync(s5)) cases.push({ case: '27 shell mirror with ' + s5name, ok: true, skipped: true, problems: [], detail: s5name + ' not installed — nothing to compare' });
   else {
     const p = [];
     const a = path.join(skillDir, 'assets', 'report-shell.template.html'); const b = path.join(s5, 'assets', 'report-shell.template.html');
@@ -626,8 +626,38 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     const kit = (f) => { const s = read(f); const i = s.indexOf('/* ==== report-shell kit — BEGIN'); const j = s.indexOf('/* ==== report-shell kit — END ==== */'); return i >= 0 && j > i ? s.slice(i, j) : null; };
     const ka = kit(SCRIPT); const kb = kit(path.join(s5, 'scripts', 'render-run-report.mjs'));
     if (!ka || !kb) p.push('report-shell kit markers missing'); else if (ka !== kb) p.push('report-shell kit in render-tc-review.mjs differs from render-run-report.mjs');
-    check('27 shell mirror with skill 5', p, {});
+    check('27 shell mirror with ' + s5name, p, {});
   }
+}
+
+/* 28 — AI Oracle: the optional sub-list is parsed into the payload, keyed per line, rendered as a list on the card, its [D{n}] tokens are checked; the plain sample has none; the gate never changes. */
+{
+  const p = [];
+  const base = render({ tcPath: SAMPLE, root: here });
+  if (base.payload.document.aiOracleTcs.length || base.payload.counts.aiOracleTcs !== 0) p.push('the sample has no AI Oracle but the payload says otherwise');
+  if (/<h4>AI oracle<\/h4>/.test(base.html || '')) p.push('AI oracle heading rendered for a document without the field');
+  const ANCHOR = '- **Data Oracle:** KPI "Revenue" all years [D2] — expected count: 36\n';
+  const BLOCK = '- **AI Oracle:**\n  - Intent: explains the KPI total for the selected years using the values of [D2]; never invents a year\n  - Must contain: 36; Revenue\n  - Must not contain: guaranteed; [D9]\n  - Language: en\n  - Max length: 120 words\n  - Repeats: 3 · Pass threshold: 2 of 3\n';
+  const t = tmpCopy((s) => { if (!s.includes(ANCHOR)) throw new Error('sample anchor moved'); return s.replace(ANCHOR, ANCHOR + BLOCK); });
+  try {
+    const r = render({ tcPath: t.tc, root: t.dir });
+    const ids = r.payload.document.aiOracleTcs;
+    if (ids.length !== 1) p.push('expected exactly one AI-oracle TC, got ' + JSON.stringify(ids));
+    if (r.payload.counts.aiOracleTcs !== 1) p.push('counts.aiOracleTcs != 1');
+    if (r.payload.gate !== 'PASS') p.push('gate changed: ' + r.payload.gate + ' ' + r.payload.gateReason);
+    const id = ids[0] || '';
+    const card = ((r.html || '').match(new RegExp('<details class="card tc" id="' + id + '">[\\s\\S]*?</details>')) || [''])[0];
+    if (!/<h4>AI oracle<\/h4><ul class="oracle">/.test(card)) p.push('AI oracle list missing on ' + id);
+    if ((card.match(/<ul class="oracle">[\s\S]*?<\/ul>/) || [''])[0].split('<li>').length - 1 !== 6) p.push('expected 6 AI oracle lines on the card');
+    if (!/Pass threshold: 2 of 3/.test(card)) p.push('the Repeats / threshold line is not rendered');
+    if (!r.payload.warnings.some((w) => w.kind === 'data-ref-unresolved' && /\[D9\]/.test(w.detail))) p.push('[D9] inside the AI Oracle was not checked');
+    const keys = deriveKeys(buildModel(parseTcDocument(read(t.tc)), parseTestData(read(SAMPLE_DATA)), { feature: 'kpi-filter' }));
+    for (let i = 1; i <= 6; i++) if (!keys['tc.' + id + '.ai.' + i]) p.push('missing key tc.' + id + '.ai.' + i);
+    if (!/^Intent:/.test(keys['tc.' + id + '.ai.1'] || '')) p.push('key 1 is not the Intent line');
+    const ar = render({ tcPath: t.tc, root: t.dir, lang: 'ar' });
+    if (!/مرجع الذكاء الاصطناعي/.test(ar.html || '')) p.push('Arabic chrome string for the AI oracle heading missing');
+  } finally { t.cleanup(); }
+  check('28 AI Oracle sub-list parsed, keyed, rendered; [D{n}] checked; absent on the plain sample', p, {});
 }
 
 const out = {

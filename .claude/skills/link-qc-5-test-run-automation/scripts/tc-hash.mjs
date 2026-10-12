@@ -9,7 +9,8 @@
 //   hash = sha256( behaviour fields of the TC  +  fingerprint of the data rows it references )
 //
 // Behaviour fields: Locale, Requirement, Preconditions, Steps, Expected Result, Data Oracle,
-// Data effect, Shared data. Everything else (Validation, the evidence stamp, Smoke, Automation
+// Data effect, Shared data — plus the optional AI Oracle sub-list, which enters the canonical
+// string ONLY when the TC carries it (so every TC without one keeps its hash). Everything else (Validation, the evidence stamp, Smoke, Automation
 // Candidate, Tags, Description, the heading) is excluded — it never changes what the TC does.
 //
 // Normalisation touches ONLY text outside literal inputs / outputs. A quoted segment ("…", “…”,
@@ -173,6 +174,11 @@ export function canonicalTc(tc, data) {
     const body = items.length ? items.map((it) => normText(it)).join('\u001f') : normText(value);
     parts.push(f + '=' + body);
   }
+  // Optional `AI Oracle` (assistant TCs): a part is appended only when the field is present and not `—`,
+  // so the canonical form of every other TC — and HASH_VERSION — stays unchanged.
+  const ai = fieldText(tc, 'AI Oracle');
+  const aiBody = ai.items.length ? ai.items.map((it) => normText(it)).join('\u001f') : normText(ai.value);
+  if (aiBody && aiBody !== '—' && aiBody !== '-') { collect(ai.value); ai.items.forEach(collect); parts.push('AI Oracle=' + aiBody); }
   const fp = [...refs].sort().map((id) => {
     const kind = id[0];
     if (kind === 'A') { const a = d.accounts[id]; return id + '=' + (a ? [a.role, a.note].map(normText).join('|') : '?'); }

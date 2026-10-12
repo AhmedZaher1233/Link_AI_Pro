@@ -320,6 +320,13 @@ or drop one. The **shape** is frozen too (the renderer parses by it, legacy docu
   2. {…}
 - **Expected Result:** {…}
 - **Data Oracle:** {… | —}
+- **AI Oracle:**                       (optional — only a TC that prompts an AI assistant; omitted otherwise)
+  - Intent: {what the reply must accomplish, in words; may cite [D{n}] facts}
+  - Must contain: {fact; fact} | —
+  - Must not contain: {phrase; phrase} | —
+  - Language: en | ar
+  - Max length: {n} words | —
+  - Repeats: {n} · Pass threshold: {k} of {n}
 - **Smoke:** YES | NO
 - **Automation Candidate:** YES | NO
 - **Data effect:** {read-only | creates | modifies | deletes | —}
@@ -329,7 +336,9 @@ or drop one. The **shape** is frozen too (the renderer parses by it, legacy docu
 ```
 
 One bullet per field in this order; `Preconditions` and `Steps` as 2-space-indented ordered
-sub-lists; an empty optional value is `—`, never blank and never omitted. A `<!-- tc-evidence -->`
+sub-lists; an empty optional value is `—`, never blank and never omitted. `AI Oracle` is the one
+field that is **omitted** when it does not apply (a 2-space-indented `- ` sub-list when present —
+"AI / chatbot test cases" below). A `<!-- tc-evidence -->`
 comment after the block belongs to 3b / 3c — never write or edit one here. A step or
 expected-result line that needs a person starts with `[HUMAN] ` ("Out-of-browser outcomes").
 
@@ -345,6 +354,7 @@ expected-result line that needs a person starts with `[HUMAN] ` ("Out-of-browser
 | Steps | Numbered — action + element label + value + inline assertion |
 | Expected Result | Final outcome — specific, assertable, labels in every required locale |
 | Data Oracle | MANDATORY if the TC asserts on data values |
+| AI Oracle | OPTIONAL — present only on a TC whose step sends a prompt to an AI assistant / chatbot whose reply differs every run. Sub-list `Intent` · `Must contain` · `Must not contain` · `Language` · `Max length` · `Repeats` / `Pass threshold` ("AI / chatbot test cases" below). The prompt stays a typed input in `Steps`; `Expected Result` stays the human-readable outcome. Judged by the manual CLI run (skill 5b) and, on one observation, by 3b / 3c; the renderer displays it and never judges it |
 | Smoke | YES / NO — YES only for the critical happy-path journeys that prove the feature is alive (login works, screen reachable, core flow functions). Keep the smoke set small: roughly 10–20% of TCs, at least 1 per screen. Skill 5 runs `Smoke: YES` TCs FIRST behind a failure gate. Mark deliberately — never default everything to YES. |
 | Automation Candidate | YES / NO — see automation suitability below |
 | Data effect | OPTIONAL — `read-only` / `creates` / `modifies` / `deletes`. Tells skill 5 whether this TC may run in parallel with others (read-only) or must run one after another (it changes data). Leave blank to let skill 5 infer it from the steps. |
@@ -368,6 +378,41 @@ blocked role runs in `@negative` — whether it is typed `edge-case` or `negativ
 mapping in the document header AND write the result per TC in the `Stage` field / summary column
 so skill 5 never has to guess.
 
+## AI / chatbot test cases
+
+When the requirement has an AI assistant / chatbot (a free-text prompt answered by a generated
+reply), the reply differs every run, so a TC cannot assert exact text. Such a TC keeps the frozen
+shape and adds the optional `AI Oracle` sub-list right after `Data Oracle`:
+
+- **The prompt stays inline in `Steps`** as a typed input, quoted (`Type "Where is my order
+  12345?" into the message box and send`). Never a secret, a credential or personal data in a
+  prompt or in any oracle line.
+- **`Expected Result` stays the human-readable outcome** ("the assistant names the order status
+  and the delivery date") — the reader must understand the TC without the oracle.
+- **Hard checks are deterministic** and need no judgement: `Must contain` (facts the reply must
+  carry, `;`-separated, may cite `[D{n}]` facts), `Must not contain` (phrases that must be
+  absent), `Language` (`en` | `ar`), `Max length` (`{n} words` | `—`), plus the implicit ones
+  every AI TC has — a reply arrives, it carries no error text, it echoes no secret and no PII.
+  `—` when a line does not apply; `Intent` is always present.
+- **The rubric is judged from the reply text** by Claude in the manual CLI run
+  (`link-qc-5b-test-run-manual-cli`): the `Intent` was met, the reply is grounded in the cited
+  `[D{n}]` facts, no hallucinated capability, scope / refusal behaviour as required, injection
+  resistance, tone, and consistency across repeats. Each repeat's reply is stored verbatim.
+- **Repeats / Pass threshold**: `Repeats: {n} · Pass threshold: {k} of {n}` with
+  `Pass threshold ≤ Repeats`; absent → `1` · `1 of 1`. Use repeats for a reply whose variability
+  matters (a grounded answer, a refusal).
+- **`Automation Candidate: NO` by default** — generated code cannot assert a reply that differs
+  every run. `YES` only with a deterministic hard-check-only oracle (no rubric line the code would
+  have to judge) and the reason stated in the TC.
+- **Negative AI set** the design covers whenever the requirement has an assistant — one TC each,
+  REQ-backed or a `Q-{n}`: prompt injection ("ignore your instructions …"), an out-of-scope
+  request, a request for another user's data / PII, a secret-echo attempt, empty input, very
+  long input, a language switch mid-conversation.
+- **Validation**: 3b / 3c observe such a TC once and judge the reply by the hard checks and the
+  rubric; `validated` only when it passes; a rubric they cannot decide → `Q-{n}`, the TC stays
+  `draft`. The field enters the canonical TC hash only when present; skill 4 publishes its lines
+  verbatim in the last ADO step's expected text.
+
 ## Automation suitability (proposal only — the human decides)
 
 Mark each TC as an Automation Candidate using these heuristics:
@@ -376,6 +421,7 @@ Mark each TC as an Automation Candidate using these heuristics:
 |--------|---------|
 | Stable, deterministic UI or API behaviour | YES |
 | Core business flow with regression risk | YES |
+| Reply differs every run (AI assistant — TC carries an `AI Oracle`) | NO by default; judged by the manual CLI run (skill 5b). YES only with a hard-check-only oracle and a stated reason |
 | Requires visual judgment (layout, colour, aesthetics) | NO — manual preferred |
 | Depends on real-time external data with no fixture | NO — environment risk |
 | One-time scenario with no regression value | NO — overhead exceeds value |

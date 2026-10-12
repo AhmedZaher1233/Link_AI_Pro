@@ -191,6 +191,13 @@
 <!-- {{#if has_oracle}} -->
         <h4>{{tc_oracle}}</h4><p class="oracle">{{{oracle}}}</p>
 <!-- {{/if}} -->
+<!-- {{#if has_ai_oracle}} -->
+        <h4>{{tc_ai_oracle}}</h4><ul class="oracle">
+<!-- {{#each ai_oracle}} -->
+          <li>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ul>
+<!-- {{/if}} -->
         <h4>{{tc_run}}</h4>
 <!-- {{#if has_run}} -->
         <p>{{{run}}}</p>

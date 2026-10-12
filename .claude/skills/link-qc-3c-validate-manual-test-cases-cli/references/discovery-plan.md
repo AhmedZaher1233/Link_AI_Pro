@@ -5,8 +5,9 @@ flow is walked once, every TC's unique tail is walked, and nothing is skipped be
 run (by this skill or by 3b) already looked at it. No scope question is ever asked, nothing is
 recommended, nothing is "left unvalidated by choice". The only TCs that end a run unobserved are
 the ones the application itself keeps out of reach: `not-implemented` (`walk-rules.md` §1),
-`draft (data changes not authorized)` (`walk-rules.md` §3a), `draft (screen could not be
-driven | app unreachable)` (`walk-rules.md` §7) — each with its reason, each listed.
+`draft (data changes not authorized)` (`walk-rules.md` §3a), `draft (data missing — D{n})`
+(`test-data-resolution.md` §4), `draft (screen could not be driven | app unreachable)`
+(`walk-rules.md` §7) — each with its reason, each listed.
 
 ## 1. Analyse the whole TC set FIRST — no browser yet
 
@@ -27,14 +28,22 @@ Read every TC (`tc-format-contract.md`) and build the **discovery plan**:
    (runs only when the data-changes answer was "yes" — `walk-rules.md` §3a; otherwise it stays
    `draft` with that reason), a role no other TC uses, a unique tail longer than the prefix, a
    locale variant whose labels are not in the learning file, a `discrepancy` from an earlier run,
-   an open `Q-*` naming it. Risk signals order the walk (smoke and data-changing TCs first, then
-   the rest) — they never exclude anything.
+   an open `Q-*` naming it, a High-priority data item that is not `READY`. Risk signals order
+   the walk (preparations, then smoke and data-changing TCs, then the rest) — they never exclude
+   anything.
 6. **Gaps** — missing navigation, preconditions, test data, filters/selections, async waits or
    triggers, ambiguous steps, "(Arabic label: to be captured live)" notes: the discovery targets.
    A `[HUMAN]` step is not a gap: the tail is walked up to it and stops there (`walk-rules.md`
    §3); count those TCs for the plan line — they end `draft (human step pending)`.
 7. **Locale-sensitive points** — every element label referenced in any step, plus screens whose
    secondary-locale behaviour must be walked live (`walk-rules.md` §4).
+8. **Data plan** (`test-data-resolution.md` §1-§4) — per data item of `TEST-DATA` §2: its
+   status from the file, the ways already confirmed by the learning file and by skill 5's
+   automation fixtures (read, never run), its priority (High / Medium / Low from the using
+   TCs), and whether it is a **preparation candidate** (`MISSING` or `UNKNOWN` in the file, an
+   e2e way naming a TC of this set or a common flow, exact values complete). Preparations form
+   the **first group of the walk**, because their dependents need them; the data plan never
+   excludes a TC.
 
 ## 2. Flags — accepted, never a question
 
@@ -50,7 +59,7 @@ Read every TC (`tc-format-contract.md`) and build the **discovery plan**:
 Before the first browser command, after the implementation-status gate and the freshness pass:
 
 ```
-Walking all {N} executable TCs (of {T}; {n} not-implemented) · {F} common flows once · {d} data-changing ({authorized | not authorized}) · {h} stop at a [HUMAN] step · tool cli
+Walking all {N} executable TCs (of {T}; {n} not-implemented) · {F} common flows once · {d} data-changing ({authorized | not authorized}) · {p} items to prepare · {h} stop at a [HUMAN] step · tool cli
 ```
 
 No WAIT here — nothing to answer.
@@ -61,7 +70,8 @@ No WAIT here — nothing to answer.
 |---|---|
 | each common flow once (primary locale, `walk-rules.md` §3), **every** unique tail in the executable set, locale policy §4 | per `walk-rules.md` §6-§6a — `validated` / `enhanced` / `discrepancy` (outcome observed) / `not-implemented` / `draft` (app unreachable, data changes not authorized, screen could not be driven, stale and unreachable — reason in parentheses); `inferred` only when the tail could not be driven this run but a fresh earlier observation confirms those exact steps on that exact screen — and then it is listed as needing the reviewer's extra care |
 
-The implementation-status gate runs first; the test-data look (`patch-rules.md` §3) covers every
+The implementation-status gate runs first; preparations run before their dependents
+(`test-data-resolution.md` §4); the test-data look (`patch-rules.md` §3) covers every
 item whose listing screen the walk reaches; the coverage tables are never recomputed by the walk
 itself (SKILL.md invariant 6). Evidence stamps always carry `scope: full-tail`; the header stamp
 always says `scope full`.

@@ -26,5 +26,5 @@ OUTPUT — WHAT YOU GET
     - time estimates are specific, tangents are suppressed, finished work is called out
   No file is written or altered by this skill.
 
-WHEN TO RUN: at the start of a session, before or between any of the QA skills 1-11, 3b and 3c.
+WHEN TO RUN: at the start of a session, before or between any of the QA skills 1-11, 3b, 3c and 5b.
 Never required by any other skill.

@@ -1,0 +1,384 @@
+<!-- Test run report — BODY PARTIAL. RENDERED ONLY BY scripts/render-run-report.mjs — never filled by hand.
+     The renderer renders this partial first and inserts it at the body placeholder of assets/report-shell.template.html
+     (mirrored byte-for-byte with skills 3, 3b and 3c), which owns the document, the one stylesheet and script, the
+     header, meta line, banners, tiles, the general reviewer-comment box, the screenshot viewer and the footer. This
+     file holds only the page-specific sections and uses only the shell's class vocabulary (references/run-report.md §10).
+     TEST-RUN-REPORT-{feature}.md and BUG-REPORT-{feature}.md are the sources of truth: every number is recomputed from
+     them and this page never adds, rewords or reorders content. Placeholders: double-brace snake_case keys only
+     (HTML-escaped); triple braces only where the renderer already escaped the value (the open attribute, comment
+     boxes). Blocks are HTML comments carrying #each / #if / #unless openers and the matching closers. Screenshots are
+     linked by RELATIVE path (thumbnail + "View screenshot"), never embedded. Never render a password, token, selector
+     or code identifier on this page. -->
+  <section>
+    <div class="sec-head"><h2>Run history</h2><span class="note">one row per phase · earlier phases never rewritten</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Phase</th><th>Date</th><th>Outcome</th><th>Passed</th><th>Failed</th><th>Incomplete</th><th>Skipped</th><th>Not run</th><th>Partial</th><th>Total</th><th>Duration</th><th>Bugs</th></tr></thead>
+      <tbody>
+<!-- {{#each history}} -->
+        <tr><td><a href="#phase-{{phase}}">Phase {{phase}}</a></td><td>{{date}}</td><td><span class="badge {{outcome_class}}">{{outcome}}</span></td><td>{{passed}}</td><td>{{failed}}</td><td>{{incomplete}}</td><td>{{skipped}}</td><td>{{notrun}}</td><td>{{partial}}</td><td>{{total}}</td><td>{{duration}}</td><td>{{bugs}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+  </section>
+
+<!-- {{#if has_coverage}} -->
+  <section>
+    <div class="sec-head"><h2>Static coverage · latest phase</h2><span class="note">measured from the spec source before the run · not a pass rate</span></div>
+<!-- {{#each cov_stages}} -->
+    <div class="story">
+      <div class="story-top"><span class="story-id">{{name}}</span><span class="story-count">{{full}} · {{partial}} · {{none}} of {{total}}</span><span class="story-pct">{{pct}}</span></div>
+      <div class="bar"><div class="seg seg-full" style="width:{{w_full}}%"><b>{{full}}</b></div><div class="seg seg-partial" style="width:{{w_partial}}%"><b>{{partial}}</b></div><div class="seg seg-none" style="width:{{w_none}}%"><b>{{none}}</b></div></div>
+    </div>
+<!-- {{/each}} -->
+    <p class="cov-line">{{cov_target}}</p>
+<!-- {{#if has_cov_reqs}} -->
+    <h3 class="sub-head">Requirement outcome coverage</h3>
+    <p class="plain">Linkage is not coverage: a requirement is Full only when its required outcome is asserted; Assumed rests on an unverified-assumption test.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Requirement</th><th>Outcome</th><th>Asserted by</th></tr></thead>
+      <tbody>
+<!-- {{#each cov_reqs}} -->
+        <tr><td>{{id}}</td><td><span class="chip {{outcome_class}}"><span>{{outcome}}</span></span></td><td>{{asserted}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+  </section>
+<!-- {{/if}} -->
+
+  <section class="part" id="results">
+    <p class="eyebrow">Part 1 · test results</p>
+    <div class="sec-head"><h2>Phases</h2><span class="note">source: {{report_file}}</span></div>
+<!-- {{#each phases}} -->
+    <details class="card phase" id="phase-{{n}}"{{{open_attr}}}>
+      <summary><span class="card-id">Phase {{n}}</span><span>{{date}}</span><span class="badge {{outcome_class}}">{{outcome}}</span><span class="card-counts">{{summary_counts}}</span></summary>
+      <div class="card-body">
+        <dl class="facts">
+<!-- {{#each run_fields}} -->
+          <dt>{{name}}</dt><dd>{{value}}</dd>
+<!-- {{/each}} -->
+        </dl>
+<!-- {{#if has_reason}} -->
+        <p class="line">{{reason}}</p>
+<!-- {{/if}} -->
+
+<!-- {{#if has_stages}} -->
+        <h3 class="sub-head">Stages</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Stage</th><th>Total</th><th>Passed</th><th>Failed</th><th>Incomplete</th><th>Skipped</th><th>Not run</th><th>Partial</th></tr></thead>
+          <tbody>
+<!-- {{#each stages}} -->
+            <tr class="{{row_class}}"><td>{{name}}</td><td>{{total}}</td><td>{{passed}}</td><td>{{failed}}</td><td>{{incomplete}}</td><td>{{skipped}}</td><td>{{notrun}}</td><td>{{partial}}</td></tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{#if has_smoke}} -->
+        <p class="line"><b>Smoke gate:</b> <span class="badge {{smoke_class}}">{{smoke_verdict}}</span> {{smoke_rest}}</p>
+<!-- {{/if}} -->
+<!-- {{/if}} -->
+
+<!-- {{#if has_plan}} -->
+        <h3 class="sub-head">Run plan</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+<!-- {{#each plan.header}} -->
+            <th>{{text}}</th>
+<!-- {{/each}} -->
+          </tr></thead>
+          <tbody>
+<!-- {{#each plan.rows}} -->
+            <tr>
+<!-- {{#each cells}} -->
+              <td>{{text}}</td>
+<!-- {{/each}} -->
+            </tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{#if has_plan_decisions}} -->
+        <p class="line">{{plan_decisions}}</p>
+<!-- {{/if}} -->
+<!-- {{/if}} -->
+
+<!-- {{#if has_coverage}} -->
+        <h3 class="sub-head">Static coverage</h3>
+<!-- {{#each cov_stages}} -->
+        <div class="story">
+          <div class="story-top"><span class="story-id">{{name}}</span><span class="story-count">{{full}} · {{partial}} · {{none}} of {{total}}</span><span class="story-pct">{{pct}}</span></div>
+          <div class="bar"><div class="seg seg-full" style="width:{{w_full}}%"><b>{{full}}</b></div><div class="seg seg-partial" style="width:{{w_partial}}%"><b>{{partial}}</b></div><div class="seg seg-none" style="width:{{w_none}}%"><b>{{none}}</b></div></div>
+        </div>
+<!-- {{/each}} -->
+        <p class="cov-line">{{cov_target}}</p>
+<!-- {{#if has_cov_reqs}} -->
+        <div class="tablewrap"><table>
+          <thead><tr><th>Requirement</th><th>Outcome</th><th>Asserted by</th></tr></thead>
+          <tbody>
+<!-- {{#each cov_reqs}} -->
+            <tr><td>{{id}}</td><td><span class="chip {{outcome_class}}"><span>{{outcome}}</span></span></td><td>{{asserted}}</td></tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{/if}} -->
+<!-- {{/if}} -->
+
+<!-- {{#if has_results}} -->
+        <h3 class="sub-head">Results · one row per test case</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>TC-ID</th><th>REQ</th><th>Name</th><th>Status</th><th>Group</th><th>Duration</th><th>Classification</th><th>Evidence</th></tr></thead>
+          <tbody>
+<!-- {{#each results}} -->
+            <tr class="{{row_class}}" id="{{anchor}}"><td>{{tc}}</td><td>{{req}}</td><td>{{name}}</td><td><span class="badge {{status_class}}">{{status}}</span></td><td>{{group}}</td><td>{{duration}}</td><td>{{classification}}</td><td>
+<!-- {{#unless has_evidence}} -->
+              —
+<!-- {{/unless}} -->
+<!-- {{#each evidence}} -->
+<!-- {{#if ok}} -->
+              <span class="shot"><a class="view" href="{{href}}" data-viewer data-group="{{group}}" data-title="{{title}}"><img src="{{href}}" loading="lazy" alt="{{title}}"></a><a class="view-link" href="{{href}}" data-viewer data-group="{{group}}" data-title="{{title}}">View screenshot</a></span>
+<!-- {{/if}} -->
+<!-- {{#if missing}} -->
+              <span class="badge missing">file not found · {{label}}</span>
+<!-- {{/if}} -->
+<!-- {{#if plain}} -->
+              <span class="shot"><a href="{{href}}">{{label}}</a><span class="lbl">not a relative path</span></span>
+<!-- {{/if}} -->
+<!-- {{/each}} -->
+            </td></tr>
+<!-- {{#if has_attempts}} -->
+            <tr class="attempts-row"><td colspan="8"><div class="attempts">
+              <span class="lbl">Variants and attempts of {{tc}} (from the run file){{missing_note}}</span>
+              <table>
+                <thead><tr><th>Variant</th><th>Attempt</th><th>Stage</th><th>Status</th><th>Evidence</th><th>Error</th></tr></thead>
+                <tbody>
+<!-- {{#each attempts}} -->
+                  <tr><td>{{variant}}</td><td>{{attempt}}</td><td>{{stage}}</td><td><span class="badge {{status_class}}">{{status}}</span></td><td>
+<!-- {{#each evidence}} -->
+<!-- {{#if ok}} -->
+                    <span class="shot"><a class="view" href="{{href}}" data-viewer data-group="{{group}}" data-title="{{title}}"><img src="{{href}}" loading="lazy" alt="{{title}}"></a><a class="view-link" href="{{href}}" data-viewer data-group="{{group}}" data-title="{{title}}">View screenshot</a></span>
+<!-- {{/if}} -->
+<!-- {{#if missing}} -->
+                    <span class="badge missing">file not found · {{label}}</span>
+<!-- {{/if}} -->
+<!-- {{#if plain}} -->
+                    <span class="shot"><a href="{{href}}">{{label}}</a><span class="lbl">not a relative path</span></span>
+<!-- {{/if}} -->
+<!-- {{/each}} -->
+                  </td><td>{{error}}</td></tr>
+<!-- {{/each}} -->
+                </tbody>
+              </table>
+            </div></td></tr>
+<!-- {{/if}} -->
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{/if}} -->
+
+<!-- {{#if has_assumptions}} -->
+        <h3 class="sub-head">Unverified assumptions · questions for a human, not bugs</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+<!-- {{#each assumptions.header}} -->
+            <th>{{text}}</th>
+<!-- {{/each}} -->
+          </tr></thead>
+          <tbody>
+<!-- {{#each assumptions.rows}} -->
+            <tr>
+<!-- {{#each cells}} -->
+              <td>{{text}}</td>
+<!-- {{/each}} -->
+            </tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{/if}} -->
+
+<!-- {{#if has_bugrefs}} -->
+        <h3 class="sub-head">Bugs found or retested in this phase</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Bug</th><th>TC-ID</th><th>Severity</th><th>Status</th></tr></thead>
+          <tbody>
+<!-- {{#each bugrefs}} -->
+            <tr><td><a href="#{{anchor}}">{{id}}</a></td><td>{{tc}}</td><td>{{severity}}</td><td><span class="badge {{status_class}}">{{status}}</span></td></tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{/if}} -->
+
+<!-- {{#if has_heals}} -->
+        <h3 class="sub-head">Heal log · first run</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+<!-- {{#each heals.header}} -->
+            <th>{{text}}</th>
+<!-- {{/each}} -->
+          </tr></thead>
+          <tbody>
+<!-- {{#each heals.rows}} -->
+            <tr>
+<!-- {{#each cells}} -->
+              <td>{{text}}</td>
+<!-- {{/each}} -->
+            </tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{/if}} -->
+<!-- {{#if has_heal_text}} -->
+        <h3 class="sub-head">Heal log · first run</h3>
+        <p class="plain">{{heal_text}}</p>
+<!-- {{/if}} -->
+
+<!-- {{#if has_skips}} -->
+        <h3 class="sub-head">Skips and residual failures</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+<!-- {{#each skips.header}} -->
+            <th>{{text}}</th>
+<!-- {{/each}} -->
+          </tr></thead>
+          <tbody>
+<!-- {{#each skips.rows}} -->
+            <tr>
+<!-- {{#each cells}} -->
+              <td>{{text}}</td>
+<!-- {{/each}} -->
+            </tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{/if}} -->
+
+<!-- {{#if has_questions}} -->
+        <h3 class="sub-head">Open questions</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+<!-- {{#each questions.header}} -->
+            <th>{{text}}</th>
+<!-- {{/each}} -->
+          </tr></thead>
+          <tbody>
+<!-- {{#each questions.rows}} -->
+            <tr>
+<!-- {{#each cells}} -->
+              <td>{{text}}</td>
+<!-- {{/each}} -->
+            </tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{/if}} -->
+
+<!-- {{#if has_readiness}} -->
+        <h3 class="sub-head">Test-data readiness</h3>
+        <p class="line">{{readiness_verdict}}</p>
+<!-- {{#if has_readiness_rows}} -->
+        <div class="tablewrap"><table>
+          <thead><tr>
+<!-- {{#each readiness.header}} -->
+            <th>{{text}}</th>
+<!-- {{/each}} -->
+          </tr></thead>
+          <tbody>
+<!-- {{#each readiness.rows}} -->
+            <tr>
+<!-- {{#each cells}} -->
+              <td>{{text}}</td>
+<!-- {{/each}} -->
+            </tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{/if}} -->
+<!-- {{/if}} -->
+
+<!-- {{#if has_deviations}} -->
+        <h3 class="sub-head">Deviations</h3>
+        <ul>
+<!-- {{#each deviations}} -->
+          <li>{{text}}</li>
+<!-- {{/each}} -->
+        </ul>
+<!-- {{/if}} -->
+        {{{comment_box}}}
+      </div>
+    </details>
+<!-- {{/each}} -->
+  </section>
+
+  <section class="part" id="bugs">
+    <p class="eyebrow">Part 2 · bug report</p>
+    <div class="sec-head"><h2>Bugs</h2><span class="note">source: {{bug_file}}</span></div>
+<!-- {{#unless bugs_present}} -->
+    <p class="plain">No bug report file was found next to the run report. Bugs are recorded in BUG-REPORT-{{feature}}.md by the skill; without it this page cannot show them.</p>
+<!-- {{/unless}} -->
+<!-- {{#if bugs_present}} -->
+    <div class="chips">
+      <span class="chip c-missing"><b>{{bug_open}}</b><span>open</span></span>
+      <span class="chip c-full"><b>{{bug_resolved}}</b><span>resolved</span></span>
+      <span class="chip"><b>{{bug_notchecked}}</b><span>not checked this run</span></span>
+      <span class="chip"><b>{{bug_total}}</b><span>total</span></span>
+    </div>
+<!-- {{#unless has_bug_entries}} -->
+    <p class="plain">No bugs recorded.</p>
+<!-- {{/unless}} -->
+<!-- {{#if has_bug_entries}} -->
+    <div class="filter-bar" role="group" aria-label="Filter bugs" data-filter-target=".item-card.bug">
+      <button type="button" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" data-filter="open" aria-pressed="false">Open</button>
+      <button type="button" data-filter="resolved" aria-pressed="false">Resolved</button>
+      <button type="button" data-filter="not-checked" aria-pressed="false">Not checked</button>
+    </div>
+<!-- {{#each bugs}} -->
+    <article class="item-card bug {{status}}" id="{{anchor}}" data-status="{{status}}" data-filter-item>
+      <div class="item-head"><span class="card-id">{{id}}</span><h3>{{title}}</h3><span class="badge {{status_class}}">{{status_word}}</span><span class="badge {{sev_class}}">{{severity}}</span></div>
+      <dl>
+        <dt>Test case</dt><dd>
+<!-- {{#if has_tc_anchor}} -->
+          <a href="#{{tc_anchor}}">{{tc}}</a> · found in phase {{found_in}}
+<!-- {{/if}} -->
+<!-- {{#unless has_tc_anchor}} -->
+          {{tc}} · found in phase {{found_in}}
+<!-- {{/unless}} -->
+        </dd>
+        <dt>Requirement</dt><dd>{{req}}</dd>
+        <dt>Where</dt><dd>{{environment}} · {{browser}} · {{language}} · build {{build}}</dd>
+        <dt>Root cause</dt><dd>{{root_cause}}</dd>
+        <dt>Steps to reproduce</dt><dd><ol>
+<!-- {{#each steps}} -->
+          <li>{{text}}</li>
+<!-- {{/each}} -->
+        </ol></dd>
+        <dt>Expected</dt><dd>{{expected}}</dd>
+        <dt>Actual</dt><dd>{{actual}}</dd>
+        <dt>Screenshot</dt><dd>
+<!-- {{#unless has_screenshot}} -->
+          {{screenshot_text}}
+<!-- {{/unless}} -->
+<!-- {{#each screenshot}} -->
+<!-- {{#if ok}} -->
+          <span class="shot"><a class="view" href="{{href}}" data-viewer data-group="bugs" data-title="{{title}}"><img src="{{href}}" loading="lazy" alt="{{title}}"></a><a class="view-link" href="{{href}}" data-viewer data-group="bugs" data-title="{{title}}">View screenshot</a></span>
+<!-- {{/if}} -->
+<!-- {{#if missing}} -->
+          <span class="badge missing">file not found · {{label}}</span>
+<!-- {{/if}} -->
+<!-- {{#if plain}} -->
+          <span class="shot"><a href="{{href}}">{{label}}</a><span class="lbl">not a relative path</span></span>
+<!-- {{/if}} -->
+<!-- {{/each}} -->
+        </dd>
+        <dt>Evidence</dt><dd><pre>{{evidence_text}}</pre></dd>
+<!-- {{#if has_history}} -->
+        <dt>History</dt><dd><ul>
+<!-- {{#each history}} -->
+          <li>{{text}}</li>
+<!-- {{/each}} -->
+        </ul></dd>
+<!-- {{/if}} -->
+      </dl>
+      {{{comment_box}}}
+    </article>
+<!-- {{/each}} -->
+<!-- {{/if}} -->
+<!-- {{/if}} -->
+  </section>

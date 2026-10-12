@@ -1,5 +1,5 @@
 # Project Learning — {project name}
-<!-- Shared knowledge base for all QA skills (skills 1-11, 3b and 3c). Read before asking; update after learning.
+<!-- Shared knowledge base for all QA skills (skills 1-11, 3b, 3c and 5b). Read before asking; update after learning.
      One tagged line per fact, plain English. Never store credentials, tokens or secrets here.
      Specs and steering documents always win over this file. -->
 
@@ -64,6 +64,11 @@
 ### Automation Model (skill 5)
 #### Knowledge
 <!-- pages that already have page objects (page names only), how to run, environment presets, heal patterns -->
+#### Questions and Answers
+
+### Manual Run Model (skill 5b)
+#### Knowledge
+<!-- login method per environment (attended / secrets file — a name, never a value); where the assistant's message list and its reset control are and how a streaming reply ends; where the app shows its build number -->
 #### Questions and Answers
 
 ### UI Visual QA Model (skill 6)

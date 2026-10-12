@@ -33,7 +33,7 @@ Overall: {PASS | PARTIAL | FAIL}
 2. Reload the Claude Code session (skills / MCP server entries changed) and approve the new `docx` server via /mcp
 3. Fill L3 placeholders: {keys}
 4. {supply missing L1/L2 document | az login | restart PC}
-5. Optional (skill 3c only): run scripts/set-playwright-secrets.ps1 in your own window if you want
+5. Optional (skills 3c and 5b only): run scripts/set-playwright-secrets.ps1 in your own window if you want
    unattended browser logins; attended login works without it
 
 **Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge" | "not touched (audit)"}

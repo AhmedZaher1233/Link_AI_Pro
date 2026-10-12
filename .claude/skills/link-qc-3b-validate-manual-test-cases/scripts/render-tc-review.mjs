@@ -77,6 +77,7 @@ export const LIMITS = [
   'An Arabic page with any missing or stale key is a PREVIEW (arabicComplete: false, gate MISMATCH) — never the finished Arabic deliverable.',
   'A page without a provenance comment (hand-written by an older skill run) is overwritten with a warning; a page whose self-hash no longer matches its provenance was edited by hand and is refused without --force.',
   'Rendering is deterministic: same inputs → same bytes. Nothing in the page depends on the clock.',
+  'The optional `AI Oracle` sub-list of an assistant TC (Intent · Must contain · Must not contain · Language · Max length · Repeats / Pass threshold) is parsed, keyed (tc.{id}.ai.{n}) and displayed; the renderer never judges a reply — the manual CLI run (skill 5b) does.',
   'Run metadata is parsed, never rendered: the evidence-stamp keys tool / outcome-check, the pb-meta key screenshot and the header stamp tail ", tool cli" reach the payload (document.stamp, document.potentialBugs) only.',
   'Reviewer comments come from REVIEW-COMMENTS-{feature}.md beside the source (or --comments): each `## {item-id}` entry is attached to the TC / PB / Q card with that id, "General" to the general box; an id not on the page is listed, never dropped (comment-unknown-id). The file is the reviewer\'s: the renderer only reads it. Comment text is never translated, never a sidecar key and never counted as narrative. Typing in the page never changes the page file, so its self-hash stays valid.',
 ];
@@ -108,7 +109,7 @@ export const CHROME = {
     s_selfreview: 'Self-review tables', s_negative: 'Negative coverage', s_standards: 'Standards alignment',
     s_tcs: 'Test cases', s_tcs_note: 'tile numbers above match these cards', b_smoke: 'Smoke', b_auto_yes: 'Auto: yes', b_auto_no: 'Auto: no', b_orphan: 'orphan', b_stale: 'stale', b_human: 'human step',
     t_human: 'Human steps · TCs with a step a person must perform or observe', cap_human: 'human step — a step marked [HUMAN] must be performed or observed by a person; no tool validates it and the automated part alone never counts as a full pass',
-    tc_requirement: 'Requirement', tc_pre: 'Preconditions', tc_steps: 'Steps', tc_expected: 'Expected result', tc_oracle: 'Data oracle', tc_run: 'Run behaviour', tc_infer: 'let automation infer', tc_tags: 'Tags',
+    tc_requirement: 'Requirement', tc_pre: 'Preconditions', tc_steps: 'Steps', tc_expected: 'Expected result', tc_oracle: 'Data oracle', tc_ai_oracle: 'AI oracle', tc_run: 'Run behaviour', tc_infer: 'let automation infer', tc_tags: 'Tags',
     tc_evidence: 'Evidence', ev_on: 'seen on', ev_env: 'environment', ev_build: 'build', ev_scope: 'scope',
     cap_inferred: 'inferred — confirmed from prior knowledge, not directly observed: review with extra care', cap_discrepancy: 'discrepancy — the application contradicts the requirement; see Potential bugs',
     cap_notimpl: 'Pending implementation — requirement-based; the feature is not built yet. Not a defect.', cap_draft: 'not app-validated — designed from the requirement; not yet seen in the application', cap_stale: 'stale — earlier validation evidence no longer applies; re-validation queued',
@@ -149,7 +150,7 @@ export const CHROME = {
     s_selfreview: 'جداول المراجعة الذاتية', s_negative: 'التغطية السلبية', s_standards: 'المواءمة مع المعايير',
     s_tcs: 'حالات الاختبار', s_tcs_note: 'أرقام البلاطات أعلاه تطابق هذه البطاقات', b_smoke: 'دخان', b_auto_yes: 'أتمتة: نعم', b_auto_no: 'أتمتة: لا', b_orphan: 'يتيم', b_stale: 'قديم', b_human: 'خطوة بشرية',
     t_human: 'خطوات بشرية · حالات فيها خطوة يجب أن ينفذها أو يلاحظها شخص', cap_human: 'خطوة بشرية — الخطوة المعلَّمة [HUMAN] يجب أن ينفذها أو يلاحظها شخص؛ لا تتحقق منها أي أداة، والجزء المؤتمت وحده لا يُعدّ نجاحًا كاملًا',
-    tc_requirement: 'المتطلب', tc_pre: 'الشروط المسبقة', tc_steps: 'الخطوات', tc_expected: 'النتيجة المتوقعة', tc_oracle: 'مرجع البيانات', tc_run: 'سلوك التشغيل', tc_infer: 'تُستنتج بواسطة الأتمتة', tc_tags: 'الوسوم',
+    tc_requirement: 'المتطلب', tc_pre: 'الشروط المسبقة', tc_steps: 'الخطوات', tc_expected: 'النتيجة المتوقعة', tc_oracle: 'مرجع البيانات', tc_ai_oracle: 'مرجع الذكاء الاصطناعي', tc_run: 'سلوك التشغيل', tc_infer: 'تُستنتج بواسطة الأتمتة', tc_tags: 'الوسوم',
     tc_evidence: 'الدليل', ev_on: 'شوهد في', ev_env: 'البيئة', ev_build: 'الإصدار', ev_scope: 'النطاق',
     cap_inferred: 'مستنتَج — أُكِّد من معرفة سابقة ولم يُشاهَد مباشرة: راجعه بعناية إضافية', cap_discrepancy: 'تعارض — التطبيق يخالف المتطلب؛ انظر الأخطاء المحتملة',
     cap_notimpl: 'بانتظار التنفيذ — مبني على المتطلب؛ الميزة غير مبنية بعد. ليس عيبًا.', cap_draft: 'غير متحقَّق من التطبيق — صُمِّم من المتطلب ولم يُشاهَد في التطبيق بعد', cap_stale: 'قديم — دليل التحقق السابق لم يعد ساريًا؛ أُدرج لإعادة التحقق',
@@ -548,7 +549,9 @@ export function buildModel(doc, data, opts = {}) {
     const isHuman = (s) => /^\s*\[HUMAN\]/i.test(String(s ?? ''));
     const humanSteps = steps.filter(isHuman).length + pre.filter(isHuman).length + (isHuman(expected) ? 1 : 0);
     const oracle = bare(fv('Data Oracle')); const shared = bare(fv('Shared data') ?? (e.row ? e.row.shared : ''));
-    const use = scanDataUse([...pre, ...steps, expected, oracle, shared], cfg);
+    // Optional `AI Oracle` sub-list (assistant TCs): displayed and keyed, never judged — its [D{n}] tokens are checked like any other field.
+    const aiF = f('AI Oracle'); const aiOracle = aiF ? aiF.items.map((x) => stripMd(x)).filter(Boolean) : [];
+    const use = scanDataUse([...pre, ...steps, expected, oracle, shared, ...aiOracle], cfg);
     if (data) {
       for (const l of use.literals) warnings.push({ kind: 'data-literal', id: e.id, detail: e.id + ' repeats ' + l.kind + ' value "' + l.value + '" (TEST-DATA ' + (l.id || 'row') + ') — reference it as [' + (l.id || '…') + '] or end the line with "(intentional input)"' });
       for (const r of use.unresolved) warnings.push({ kind: 'data-ref-unresolved', id: e.id, detail: e.id + ' references [' + r + '] but TEST-DATA has no such row' });
@@ -558,7 +561,7 @@ export function buildModel(doc, data, opts = {}) {
       id: e.id, line: e.block ? e.block.line : (e.row ? e.row.line : null), orphan,
       description: (e.block && e.block.title) || (e.row && e.row.description) || fv('Description') || '',
       type, locale: fv('Locale') || (e.row && e.row.locale) || '', requirement: fv('Requirement') || (e.row && e.row.requirement) || '',
-      preconditions: pre, steps, expected, oracle, smoke, auto, tags, humanSteps,
+      preconditions: pre, steps, expected, oracle, aiOracle, smoke, auto, tags, humanSteps,
       effect: bare(fv('Data effect') ?? (e.row ? e.row.effect : '')), shared,
       validation: v.state || 'draft', validationRaw: vRaw || '', stale: v.stale, stage, evidence: ev, refs: [...use.refs].sort(),
       note: bare(fv('Reviewer comment')), // optional reviewer field — displayed, never translated, never a design field
@@ -672,7 +675,7 @@ export function buildModel(doc, data, opts = {}) {
     feature: doc.feature || opts.feature || DASH, header: h, status: status || DASH, approved, implStatus, implState, generated, scope: declared(/^scope$/i) || '', entry: declared(/^entry case$/i) || DASH,
     reqIds: declared(/^requirement ids covered$/i) || DASH, reviewLang: declared(/^review page language$/i) || '', stamp: stamp ? { by: stamp[1].toLowerCase(), date: stamp[2], env: (stamp[3] || '').trim(), scope: stamp[4] || '', rerun: stamp[5] ? Number(stamp[5]) : 0, tool: (stamp[6] || '').toLowerCase() } : null,
     tcs, counts: { total: n, byType, locales, perLocale, smoke, auto, byState, stale, observed, progressPct, coverage: cov, manual: manualCounts, bugs, testData: td.present ? { items: td.items.length, ready: td.ready, missing: td.missing, impossible: td.impossible, unknown: td.unknown, environment: (data.env || []).length, accounts: (data.accounts || []).length } : null, openQuestions: doc.openQuestions.length, orphans: tcs.filter((t) => t.orphan).length,
-      humanSteps: humanStepsTotal, humanTcs, dataRefs: data ? { total: dataRefs.total, resolved: dataRefs.resolved.size, unresolved: dataRefs.unresolved, literals: dataRefs.literals } : null },
+      humanSteps: humanStepsTotal, humanTcs, aiOracleTcs: tcs.filter((t) => t.aiOracle.length).length, dataRefs: data ? { total: dataRefs.total, resolved: dataRefs.resolved.size, unresolved: dataRefs.unresolved, literals: dataRefs.literals } : null },
     trace, manual, log, existing, negative, standards, potentialBugs: doc.potentialBugs, openQuestions: doc.openQuestions, findings: doc.findings, testData: td,
     compatibility, mismatches, warnings, errors,
   };
@@ -693,6 +696,7 @@ export function deriveKeys(model) {
     t.preconditions.forEach((p, i) => add('tc.' + t.id + '.precondition.' + (i + 1), p));
     t.steps.forEach((s, i) => add('tc.' + t.id + '.step.' + (i + 1), s));
     add('tc.' + t.id + '.expected', t.expected); add('tc.' + t.id + '.oracle', t.oracle); add('tc.' + t.id + '.effect', t.effect); add('tc.' + t.id + '.shared', t.shared);
+    (t.aiOracle || []).forEach((s, i) => add('tc.' + t.id + '.ai.' + (i + 1), s));
   }
   model.counts.coverage.rows.forEach((r, i) => { add('coverage.' + (i + 1) + '.ac', r.ac); add('coverage.' + (i + 1) + '.missing', r.missing); });
   model.trace.forEach((r, i) => { add('trace.' + (i + 1) + '.ac', r.ac); add('trace.' + (i + 1) + '.missing', r.missing); });
@@ -971,6 +975,7 @@ function viewModel(model, lang, strings, cm) {
     human: x.humanSteps > 0, n_human: String(x.humanSteps),
     has_tags: x.tags.length > 0, tags: x.tags.map((g) => ({ text: escapeHtml(g) })),
     oracle: t('tc.' + x.id + '.oracle', x.oracle), has_oracle: !!x.oracle,
+    has_ai_oracle: x.aiOracle.length > 0, ai_oracle: x.aiOracle.map((s, i) => ({ text: t('tc.' + x.id + '.ai.' + (i + 1), s) })),
     run: [x.effect ? t('tc.' + x.id + '.effect', x.effect) : '', x.shared ? t('tc.' + x.id + '.shared', x.shared) : ''].filter(Boolean).join(' · '), has_run: !!(x.effect || x.shared),
     has_evidence: !!x.evidence, evidence_on: x.evidence ? x.evidence['validated-on'] || DASH : '', evidence_env: x.evidence ? x.evidence.env || DASH : '', evidence_build: x.evidence ? x.evidence.build || DASH : '', evidence_scope: x.evidence ? x.evidence.scope || DASH : '',
     evidence_tool: x.evidence ? x.evidence.tool || '' : '', evidence_outcome: x.evidence ? x.evidence['outcome-check'] || '' : '', // metadata — not used by the template
@@ -1160,6 +1165,7 @@ export function render({ tcPath, dataPath = null, stringsPath = null, commentsPa
     document: { status: model.status, approved: model.approved, implementationStatus: model.implStatus, generated: model.generated, stamp: model.stamp, sections: doc.sectionTitles,
       reviewLangHeader, langSource: opts.langSource || 'default',
       tags: Object.fromEntries(model.tcs.filter((t) => t.tags.length).map((t) => [t.id, t.tags])), humanTcs: model.tcs.filter((t) => t.humanSteps > 0).map((t) => t.id),
+      aiOracleTcs: model.tcs.filter((t) => t.aiOracle.length).map((t) => t.id),
       evidence: model.tcs.filter((t) => t.evidence).map((t) => ({ id: t.id, tool: t.evidence.tool || null, outcomeCheck: t.evidence['outcome-check'] || null })),
       potentialBugs: model.potentialBugs.map((b) => ({ id: b.id, tc: b.tc || null, status: b.status, screenshot: b.meta.screenshot || null })) },
     compatibility: [...compatibility, ...model.compatibility], mismatches: model.mismatches, warnings: [...warnings, ...model.warnings], errors: model.errors,

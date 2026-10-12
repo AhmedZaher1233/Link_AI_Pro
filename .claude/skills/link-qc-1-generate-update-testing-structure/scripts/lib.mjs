@@ -13,6 +13,7 @@ export const SKILLS = [
   'link-qc-3c-validate-manual-test-cases-cli',
   'link-qc-4-publish-test-cases-azure',
   'link-qc-5-test-run-automation',
+  'link-qc-5b-test-run-manual-cli',
   'link-qc-6-ui-testing',
   'link-qc-7-sync-tc-status-to-azure',
   'link-qc-8-sync-bugs-azure',
@@ -85,7 +86,7 @@ export const LEARNING_SHARED_SECTIONS = ['## Index', '## Project Knowledge', '##
 export const LEARNING_MODEL_SECTIONS = [
   '### Setup Model (skill 1)', '### Requirements Review Model (skill 2)', '### Manual TC Model (skill 3)',
   '### Validation Model (skill 3b)', '### CLI Validation Model (skill 3c)', '### Publish Model (skill 4)', '### Automation Model (skill 5)',
-  '### UI Visual QA Model (skill 6)', '### Azure Sync Model (skills 7 to 9)',
+  '### Manual Run Model (skill 5b)', '### UI Visual QA Model (skill 6)', '### Azure Sync Model (skills 7 to 9)',
   '### White-Box Model (skill 10)', '### Rule Discovery Model (skill 11)',
 ];
 // Headings written by earlier releases → the canonical heading (skill 1 Mode B renames them in place; the body is kept).
@@ -133,12 +134,13 @@ export const DOCX_ARGS = ['--from', DOCX_PACKAGE, '--with', DOCX_MCP_PIN, DOCX_P
 export const LEGACY_WORD_PACKAGE = 'office-word-mcp-server';
 export const LEGACY_WORD_ENTRYPOINT = 'word_mcp_server';
 export const MANIFEST = 'Testing/qa-manifest.json';
-// Playwright CLI (@playwright/cli) — the browser tool of link-qc-3c-validate-manual-test-cases-cli only. Installed
-// globally by `sync-qa-skills.mjs --apply --tools` (opt-in); never a prerequisite for 3b or any other skill.
+// Playwright CLI (@playwright/cli) — the browser tool of link-qc-3c-validate-manual-test-cases-cli and
+// link-qc-5b-test-run-manual-cli only. Installed globally by `sync-qa-skills.mjs --apply --tools` (opt-in); never a
+// prerequisite for 3b or any other skill.
 export const PLAYWRIGHT_CLI_PACKAGE = '@playwright/cli';
 export const PLAYWRIGHT_CLI_BIN = 'playwright-cli';
 export const PLAYWRIGHT_CLI_IGNORE = '.playwright-cli/';
-// Optional browser secrets file for 3c (and any Playwright MCP backend): written ONLY by the user through
+// Optional browser secrets file for 3c and 5b (and any Playwright MCP backend): written ONLY by the user through
 // scripts/set-playwright-secrets.ps1 / .sh. The scripts here check existence, never content.
 export const BROWSER_SECRETS_VAR = 'PLAYWRIGHT_MCP_SECRETS_FILE';
 export const BROWSER_SECRETS_FILE = path.join(os.homedir(), '.link-ai-pro', 'playwright-secrets.env');
@@ -436,7 +438,7 @@ export function scanToolchain(root) {
 
 /** playwright-cli (@playwright/cli): version + where it was found, and whether a Playwright browser cache exists.
  *  The cache check only says "a chromium build is present under the Playwright browsers folder" — it is not a PASS
- *  on its own; the real check is 3c's first `open`. */
+ *  on its own; the real check is the first `open` of 3c or 5b. */
 export function scanPlaywrightCli(root) {
   const g = run(`${PLAYWRIGHT_CLI_BIN} --version`, root, 30000);
   const l = g.ok ? { ok: false } : run(`npx --no-install ${PLAYWRIGHT_CLI_BIN} --version`, root, 30000);
@@ -474,7 +476,7 @@ export function scanGitignore(root) {
   return { exists: true, ignoresPlaywrightCli: lines.some((l) => l === PLAYWRIGHT_CLI_IGNORE || l === PLAYWRIGHT_CLI_IGNORE.replace(/\/$/, '') || l === '/' + PLAYWRIGHT_CLI_IGNORE || l === '/' + PLAYWRIGHT_CLI_IGNORE.replace(/\/$/, '')) };
 }
 
-/** Existence-only check of the browser secrets file variable (3c, optional). The file is never read. */
+/** Existence-only check of the browser secrets file variable (3c and 5b, optional). The file is never read. */
 export function scanBrowserSecrets(name = BROWSER_SECRETS_VAR) {
   const inProcess = process.env[name] || null;
   let persisted = null, value = null, scope = null;
@@ -496,7 +498,7 @@ export function scanBrowserSecrets(name = BROWSER_SECRETS_VAR) {
 }
 
 /**
- * Read-only plan of what `sync-qa-skills.mjs --apply --tools` would do for skill 3c's browser tool and
+ * Read-only plan of what `sync-qa-skills.mjs --apply --tools` would do for the browser tool of skills 3c and 5b and
  * link-qc-6-ui-testing's annotation fallback.
  * actions: 'install:playwright-cli' (global npm package missing), 'install-browser:chromium' (no chromium in
  * the Playwright browsers cache), 'gitignore:.playwright-cli/' (line missing; only inside a git repo),

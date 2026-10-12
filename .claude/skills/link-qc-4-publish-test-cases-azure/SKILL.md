@@ -406,7 +406,8 @@ Beautify is format-only. Before writing the file, assert and report:
 
 - TC **count** identical to the source
 - TC-**ID set** identical — no adds, drops, merges, splits, or renumbering
-- `Expected result` · `Requirement` · `Data Oracle` · `Type` · `Smoke` · `Automation
+- `Expected result` · `Requirement` · `Data Oracle` · `AI Oracle` (every line of the sub-list,
+  when present) · `Type` · `Smoke` · `Automation
   Candidate` · `Tags` · `Shared data` · locale variants unchanged in substance
 - every assertion present in the source still present
 - every `[HUMAN]` marker and every `[A{n}]` / `[E{n}]` / `[D{n}]` token present in the source
@@ -457,7 +458,11 @@ block, the outcome precedence and the map columns; this block only orders the st
      (cloud: the test-case tools accept plain steps and write that field; self-hosted:
      `create_work_item` with `workItemType: "Test Case"` + the XML via `additionalFields`,
      `update_work_item` on re-runs). `[HUMAN]` markers and `[A|E|D]` tokens go in verbatim.
-   - Description: REQ-IDs, locale, preconditions, Data Oracle, the review notes of step 4,
+     A TC with an `AI Oracle` carries its lines verbatim in the last step's expected text, after
+     the Expected Result: `AI oracle — Intent: …; Must contain: …; Must not contain: …;
+     Language: …; Max length: …; Repeats: …` (the item stays executable from Azure alone).
+   - Description: REQ-IDs, locale, preconditions, Data Oracle, AI Oracle (when present), the
+     review notes of step 4,
      then the **"Test data" block** of step 3b — required on every TC.
    - Tags: `tagsPreserve` + `tagsAdd` − `tagsRemove`, exactly as planned (step 5).
 2. **Link it to the User Story** with the **Tested By** relation

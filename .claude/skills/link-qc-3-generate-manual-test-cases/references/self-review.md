@@ -114,6 +114,16 @@ gate is the human.
     no authorized interface can perform; no TC was dropped, marked N/A or forced to
     `Automation Candidate: NO` because of a tool limit; every `[HUMAN]` TC has its
     `Human-observed step` row.
+19. **AI Oracle completeness** (`tc-design.md` "AI / chatbot test cases") — every TC that
+    prompts an AI assistant carries an `AI Oracle` sub-list right after `Data Oracle`, and no
+    other TC does: `Intent` present; the hard checks (`Must contain`, `Must not contain`,
+    `Language`, `Max length`) deterministic — facts and phrases, never a judgement word — and
+    free of any secret, credential or personal data; `Language` is `en` or `ar`;
+    `Pass threshold ≤ Repeats` (absent → `1` · `1 of 1`); `Automation Candidate: NO` unless a
+    hard-check-only oracle and a stated reason justify `YES`; the prompt itself is a quoted
+    typed input in `Steps`, never in the oracle; `Expected Result` readable without the oracle;
+    the negative AI set (injection, out-of-scope, another user's data / PII, secret echo, empty /
+    very long input, language switch) covered, or each missing item a `Q-{n}`.
 
 Anything you cannot fix yourself (spec ambiguity, missing fixture, unclear requirement) is listed
 under **Open Findings for the Human Reviewer** — never silently resolved. Header counts you

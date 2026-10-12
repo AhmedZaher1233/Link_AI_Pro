@@ -76,6 +76,14 @@ bug file, a missing run file, a missing screenshot file or a legacy artifact in 
   record, a fixture cache, a status file, a backup folder, a retest folder or an extra results
   JSON. The renderer neither reads nor lists `automation-inventory.md`; the validator does. Machine data of a run goes into
   `.runs/phase-{N}.json`; scratch goes under `artifacts/` (replaced each run, safe to gitignore).
+- **Shared with the manual CLI run.** `link-qc-5b-test-run-manual-cli` (the manual twin of this skill) writes
+  the SAME three files, `.runs/phase-{N}.json` and the screenshot tree with the same phase counter: a
+  phase it wrote is an ordinary earlier phase here (it counts for `N`, is named by `Previous phase`, is
+  never rewritten) and is recognisable by its `Run command` bullet (`manual run — playwright-cli …
+  (skill 5b)`), `Compliance: — (manual run)` and the run file's `framework: "manual-cli"`; its variants
+  are `manual-cli--none--r{repeat}` and an AI TC's verbatim reply lives beside the screenshot as
+  `reply.md` in that variant folder. `BUG-{n}` numbering continues across both skills; a passing retest
+  by either skill may set `resolved (phase N)`. `ai_rubric_failure` is written only by 5b.
 - **Legacy = read-only history.** `reports/US-{id}/`, `reports/{spec_level}US-{id}/`, and any
   `phase-N.json` / `phase-N.html`, `merged-results.json`, `run-plan.json`, `open-questions.json`,
   `data-readiness.json`, `stages/`, `coverage/coverage-dashboard.html`, `coverage-previous.json`
@@ -208,6 +216,10 @@ done | NOT_RUN }` (optional; the renderer ignores it — the Timeout policy sect
 carries the human-readable form) · `watchdog_events[] { stage, group, worker, tc, step,
 elapsed_ms, deadline_ms, action }` (optional).
 
+A run file written by `link-qc-5b-test-run-manual-cli` carries the generic keys only (`framework:
+"manual-cli"`, `file_or_suite: "—"`, no `compliance` / `run_plan` / `coverage_snapshot` / `merged` /
+`heal_log` / `timeouts` / `watchdog_events`); the coverage delta therefore skips it.
+
 **Lifecycle.** `N` is assigned once at profile time: 1 + the highest phase found across
 `.runs/phase-*.json`, legacy `phase-*.json|html` at the top of `{results_root}`, and every legacy
 root. The file is created with `status: planning` and updated at PHASE 2.4 (`open_questions`), 2.5
@@ -286,7 +298,7 @@ render, so a template edit is always caught. After any template or renderer chan
 false-PASS guards, evidence and viewer markup, bug cross-checks, provenance, exit codes,
 determinism, case 23 — a `PARTIAL — human step pending` row is its own bucket, never passed,
 never GREEN — case 24 reviewer comments, case 25 one shell per page, case 26 the shell mirror —
-26 cases) and regenerate the golden only for a deliberate change
+28 cases) and regenerate the golden only for a deliberate change
 (`scripts/fixtures/run-report/README.md`). A shell change is copied to skills 3, 3b and 3c.
 
 ## 11. Migration — projects set up before this layout

@@ -1,6 +1,6 @@
 # Skills sync — the one procedure
 
-The canonical source of skills 1-12, 3b and 3c (12 = the ADHD chat overlay) and the `/sync-skills` command is
+The canonical source of skills 1-12, 3b, 3c and 5b (12 = the ADHD chat overlay) and the `/sync-skills` command is
 `https://github.com/AhmedZaher1233/Link_AI_Pro` (branch `main`). The only implementation is
 `scripts/sync-qa-skills.mjs`; `/sync-skills` (`.claude/commands/sync-skills.md`) is a thin
 wrapper around it. Never re-describe the procedure elsewhere — link here.
@@ -12,7 +12,7 @@ wrapper around it. Never re-describe the procedure elsewhere — link here.
 | same, user chose "update only" / nothing of ours present yet | `node ${CLAUDE_SKILL_DIR}/scripts/sync-qa-skills.mjs --apply --target <project>` | yes — normal permission flow |
 | one skill only | add `--only link-qc-5-test-run-automation` | |
 | locally edited skill files, update-only | add `--force` (only when the user says so) | |
-| install the optional tools — playwright-cli for skill 3c, Pillow + numpy for link-qc-6-ui-testing (opt-in) | add `--tools` to `--apply` (only after the user said yes) | yes — global `@playwright/cli`, its chromium browser, the `.playwright-cli/` line in `.gitignore`, and `pip install pillow numpy` when a Python interpreter already exists |
+| install the optional tools — playwright-cli for skills 3c and 5b, Pillow + numpy for link-qc-6-ui-testing (opt-in) | add `--tools` to `--apply` (only after the user said yes) | yes — global `@playwright/cli`, its chromium browser, the `.playwright-cli/` line in `.gitignore`, and `pip install pillow numpy` when a Python interpreter already exists |
 
 **Replace confirmation (Mode B / C / new project).** Run `--check` first. When `replace.needsConfirmation` is
 true, show `replace.deleteAndRedownload`, `replace.legacyRemoved`, `replace.lost` and `replace.keptUntouched`
@@ -45,7 +45,7 @@ What the script does:
    lists the planned actions under `mcp.actions`.
 6. Optional tools (**only with `--tools`** on `--apply`): `npm install -g
    @playwright/cli@latest`, `playwright-cli install-browser` (chromium) and the
-   `.playwright-cli/` line in `.gitignore` (inside a git repository) for skill 3c; and
+   `.playwright-cli/` line in `.gitignore` (inside a git repository) for skills 3c and 5b; and
    `<python> -m pip install pillow numpy` for link-qc-6-ui-testing's static-image annotation — only when a
    Python interpreter is already present (the interpreter itself is never installed; without it
    link-qc-6-ui-testing annotates live pages in the DOM). `--check` always reports the tool status and the

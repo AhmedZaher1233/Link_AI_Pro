@@ -4,7 +4,7 @@ Load in write modes (B, C, new project) before touching the learning file, and i
 before asking the user a question.
 
 ## What it is
-One plain-English file every QA skill (1-11, 3b and 3c) reads **before asking the QC/user anything** and
+One plain-English file every QA skill (1-11, 3b, 3c and 5b) reads **before asking the QC/user anything** and
 updates **after learning anything**: modules, rules, roles, screens, flows, test data, EN/AR
 differences, automation tricks — one section per skill (`Knowledge` + `Questions and Answers`)
 plus shared sections. Behaviour knowledge lives here; structural paths live in
@@ -19,7 +19,7 @@ plus shared sections. Behaviour knowledge lives here; structural paths live in
   `(skill 5)`, `### White-Box Model (skill 4)` → `(skill 10)`, `### Rule Discovery Model (skill 7)`
   → `(skill 11)`, `### UI Visual QA Model (skill qc-ui)` → `(skill 6)`, `### Azure Sync Model
   (skills link-qc-1…link-qc-6)` → `(skills 7 to 9)`). Add a missing model section (`### Validation
-  Model (skill 3b)`, `### CLI Validation Model (skill 3c)`, `### UI Visual QA Model (skill 6)`,
+  Model (skill 3b)`, `### CLI Validation Model (skill 3c)`, `### Manual Run Model (skill 5b)`, `### UI Visual QA Model (skill 6)`,
   `### Azure Sync Model (skills 7 to 9)`, …) with its `#### Knowledge` / `#### Questions and Answers`
   at the position the template gives it; never reorder existing sections.
 * Legacy `.planning/project-learning.md` present and the new file missing → move its content
@@ -48,7 +48,7 @@ file names, variables, selectors, code, stack traces, secrets, or requirement te
 verbatim. `data-testid` values and URLs only under `Automation Tricks` / `Automation Model`,
 each explained in words on the same line.
 
-## Protocol — shared by skills 1-11, 3b and 3c (read first, ask second, write back)
+## Protocol — shared by skills 1-11, 3b, 3c and 5b (read first, ask second, write back)
 
 *Read first — targeted, never the whole file:* read only the `## Index`; pick the module/page/
 element names relevant to the task plus their `Similar to` modules; grep the tags
@@ -85,4 +85,4 @@ Examples of what this skill records under `### Setup Model (skill 1) → #### Kn
 (Mode A: `not touched (audit)`).
 
 ### Azure Sync Model (skills 7 to 9)
-The six QC skills share this section: ado_org, ado_project, test_plan_id, test_suite_id, bug_story_filter_tags, flaky_story_title, default_assignee, custom_fields, language_switch and reopen_mention_text. Use tagged [type: env] confirmed answers, one bundled ask, no PAT. Sixteen skills therefore have eleven model sections.
+The six QC skills share this section: ado_org, ado_project, test_plan_id, test_suite_id, bug_story_filter_tags, flaky_story_title, default_assignee, custom_fields, language_switch and reopen_mention_text. Use tagged [type: env] confirmed answers, one bundled ask, no PAT. Seventeen skills therefore have twelve model sections.

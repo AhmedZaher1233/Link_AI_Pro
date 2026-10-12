@@ -163,6 +163,8 @@ OUTPUT — WHAT YOU GET
                                          bugs, heal log — immutable once final
       coverage/                        ← coverage-summary.csv · coverage-detail.csv ·
                                          manual-scenarios.csv (replaced each run)
+  NOTE: the same report set may hold phases written by link-qc-5b-test-run-manual-cli (the
+  manual CLI run) — one phase counter, one BUG-n sequence; its phases are read-only history here.
       artifacts/stages/*.json          ← raw Playwright JSON per stage command (replaced each run)
       artifacts/progress/*.jsonl       ← heartbeat + incremental results per stage command (the
                                          watchdog's inputs); *.watchdog.json only when a frozen

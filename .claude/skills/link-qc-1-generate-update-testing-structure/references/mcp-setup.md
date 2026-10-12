@@ -98,7 +98,7 @@ on them. Never generate documents during setup.
 
 | Server | Auth | Notes |
 |---|---|---|
-| `playwright` | none | configure fully and unconditionally — required by `link-qc-3b-validate-manual-test-cases` (BLOCKED without it) and `link-qc-5-test-run-automation`, used by skill 4 as a gap-filler only; skill 3 never uses it; `link-qc-3c-validate-manual-test-cases-cli` uses `playwright-cli` instead (`toolchain.md`) and never this server |
+| `playwright` | none | configure fully and unconditionally — required by `link-qc-3b-validate-manual-test-cases` (BLOCKED without it) and `link-qc-5-test-run-automation`, used by skill 4 as a gap-filler only; skill 3 never uses it; `link-qc-3c-validate-manual-test-cases-cli` and `link-qc-5b-test-run-manual-cli` use `playwright-cli` instead (`toolchain.md`) and never this server |
 | `azure-devops` (cloud) | PAT via `${AZURE_DEVOPS_PAT_B64}` | `@azure-devops/mcp`; value = base64 of `":" + PAT`; scopes Work Items Read/Write/Manage + Test Management Read/Write. It is a PAT — not an Azure Storage SAS token; no `az login`. Write the entry even when the variable is not set yet and report "run the PAT script, then fully quit VS Code and relaunch" as the only user action (§2a) |
 | `azure-devops` (self-hosted) | PAT via `${AZURE_DEVOPS_PAT}` (raw) | `@tiberriver256/mcp-server-azure-devops` with `AZURE_DEVOPS_ORG_URL` (`https://host/Collection`), `AZURE_DEVOPS_AUTH_METHOD=pat`, `AZURE_DEVOPS_DEFAULT_PROJECT`; same scopes; no test plan / suite tools (§1b). Same user action as the cloud row — the script stores both variables |
 | `docx` | none | `{UVX_PATH} --from docx-mcp-server --with "mcp<2" docx-mcp-server` (§1a); used later by skills 2/3 for documents and review comments — never generate documents during setup. A legacy `word` (`office-word-mcp-server`) entry is superseded — removed by the skills sync, or offered for removal |
@@ -140,16 +140,16 @@ The script is idempotent (asks `Replace both? (y/N)` before replacing existing v
 supports `-Remove` (`--remove` on macOS/Linux). Mode A never asks for this — it only reports
 `PAT env var: FAIL/WARN` with the command to run.
 
-## 2b. Browser secrets file — optional, skill 3c only (never the PAT script's job)
+## 2b. Browser secrets file — optional, skills 3c and 5b only (never the PAT script's job)
 
-`link-qc-3c-validate-manual-test-cases-cli` drives the browser through command lines that land in the
-chat transcript, so it never types a password: the user either logs in themselves in the browser
+`link-qc-3c-validate-manual-test-cases-cli` and `link-qc-5b-test-run-manual-cli` drive the browser through
+command lines that land in the chat transcript, so they never type a password: the user either logs in themselves in the browser
 window the skill opens (attended login — works without any setup), or stores the credentials
 ONCE in a secrets file the tool reads by NAME. When the validator reports `Browser secrets file`
-as not set and the project intends to run 3c unattended, tell the user once (no wait):
+as not set and the project intends to run 3c or 5b unattended, tell the user once (no wait):
 
 ```text
-Optional, for skill 3c only: to let the CLI validator log in without you, run this in your own
+Optional, for skills 3c and 5b only: to let the CLI validator and the manual CLI run log in without you, run this in your own
 PowerShell window (macOS/Linux: bash …/set-playwright-secrets.sh). It asks for each role's
 username and password (hidden), writes them to a file outside the repository that only your
 account can read, and points PLAYWRIGHT_MCP_SECRETS_FILE at it. The skills type only the key
@@ -157,7 +157,7 @@ names (e.g. ADMIN_PASSWORD); the tool substitutes the values and masks them.
 
   powershell -ExecutionPolicy Bypass -File .claude/skills/link-qc-1-generate-update-testing-structure/scripts/set-playwright-secrets.ps1
 
-Skip it if you prefer to log in yourself when 3c opens the browser. Afterwards fully quit
+Skip it if you prefer to log in yourself when 3c or 5b opens the browser. Afterwards fully quit
 VS Code (all windows) and relaunch it — a window reload does not pick up the new variable.
 ```
 

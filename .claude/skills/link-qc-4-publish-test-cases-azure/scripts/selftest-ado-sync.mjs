@@ -529,6 +529,25 @@ export const GOLDEN_SHARED_TC_HASH = '935858124e72e0dd04faac4bdcc7870cd70171fbb0
   check('21 shared tc-hash fixture matches the golden both harnesses assert; skill 5 copy byte-identical', p, { skipped, golden: GOLDEN_SHARED_TC_HASH });
 }
 
+/* 22 — optional `AI Oracle` (assistant TCs, skill 3 contract): absent or `—` keeps the shared golden; present → a different, content-sensitive, format-insensitive hash (skill 5's harness case 15 asserts the same). */
+{
+  const p = [];
+  const shared = (f) => path.join(here, 'fixtures', 'tc-hash', f);
+  const tcText = readLf(shared('TEST-CASES-hash-sample.md')); const dataText = readLf(shared('TEST-DATA-hash-sample.md'));
+  const h = (t) => hashDocument(t, dataText, ['TC-HASH-01'])['TC-HASH-01'];
+  const ANCHOR = '- **Data Oracle:** price list "Sample" [D1] — expected count: 12';
+  if (!tcText.includes(ANCHOR)) p.push('fixture anchor moved');
+  const BLOCK = ANCHOR + '\n- **AI Oracle:**\n  - Intent: states the product count for the category using [D1]\n  - Must contain: 12 products\n  - Must not contain: guaranteed\n  - Language: en\n  - Max length: 80 words\n  - Repeats: 2 · Pass threshold: 2 of 2';
+  const withAi = tcText.replace(ANCHOR, BLOCK);
+  const h1 = h(withAi);
+  if (h1.hash === GOLDEN_SHARED_TC_HASH) p.push('adding an AI Oracle did not change the hash');
+  if (!/\nAI Oracle=Intent: states the product count/.test(h1.canonical)) p.push('canonical form has no AI Oracle part');
+  if (h(withAi.replace('  - Intent: states the product count for the category using [D1]', '  - Intent: states the product count AND the category name using [D1]')).hash === h1.hash) p.push('changing the Intent did not change the hash');
+  if (h(withAi.replace('  - Must contain: 12 products', '  -   Must  **contain:** 12 products')).hash !== h1.hash) p.push('formatting inside the AI Oracle changed the hash');
+  if (h(tcText.replace(ANCHOR, ANCHOR + '\n- **AI Oracle:** —')).hash !== GOLDEN_SHARED_TC_HASH) p.push('`AI Oracle: —` changed the hash');
+  check('22 optional AI Oracle: absent / — → golden; present → content-sensitive, format-insensitive', p, { withAi: h1.hash.slice(0, 12) });
+}
+
 const out = {
   tool: 'selftest-ado-sync',
   ran: cases.length,

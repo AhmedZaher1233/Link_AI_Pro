@@ -24,6 +24,8 @@ This repository is the **canonical source**. Any project pulls the skills from h
       SKILL.md INPUT.txt scripts/ (ado-sync-plan, tc-hash, selftest-ado-sync + fixtures)
     link-qc-5-test-run-automation/                 generate + run Playwright (POM, automation inventory), two compliance gates, coverage, reports
       SKILL.md INPUT.txt references/ (5) scripts/ (11 + fixtures) assets/ (8)
+    link-qc-5b-test-run-manual-cli/                OPTIONAL, manual twin of 5 through playwright-cli (no MCP): runs EVERY TC of an approved document in full, smoke gate without heal, AI chatbot TCs judged against their `AI Oracle` rubric, writes skill 5's report set into skill 5's story folder — report only, gates nothing
+      SKILL.md INPUT.txt references/ (9) scripts/ (render-run-report, selftest-run-report, scan-lib + fixtures/run-report — mirrors of skill 5's; selftest-manual-run + fixtures/manual-run — 5b-only) assets/ (2: run-report body + report shell, mirrored)
     link-qc-6-ui-testing/                          visual UI audit of an implemented screen against its design (Figma MCP / screenshots / reference site) or, with no design, against tokens, consistency, WCAG, RTL — beside the chain
       SKILL.md (≈420 lines) INPUT.txt references/ (10, loaded per step)
     link-qc-7-sync-tc-status-to-azure/             Azure loop: latest TC outcomes → one Test Plan run (cloud test-plan tools; else NOT_RUN)
@@ -55,9 +57,9 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
    curl -fsSL -o .claude/commands/sync-skills.md https://raw.githubusercontent.com/AhmedZaher1233/Link_AI_Pro/main/.claude/commands/sync-skills.md
    ```
 
-2. In Claude Code run `/sync-skills` — it bootstraps the sync script, copies skills 1–7, 3b, 3c and
-   link-qc-6-ui-testing and link-qc-7…link-qc-9 into `.claude/skills/` and updates itself. Reload the session when it tells you to. Add
-   `--tools` only if you want to evaluate skill 3c (installs `playwright-cli` and its browser) or
+2. In Claude Code run `/sync-skills` — it bootstraps the sync script, copies skills 1-12, 3b, 3c and 5b
+   into `.claude/skills/` and updates itself. Reload the session when it tells you to. Add
+   `--tools` only if you want to run skill 3c or 5b (installs `playwright-cli` and its browser) or
    annotate static design images with link-qc-6-ui-testing (installs Pillow + numpy when Python exists) — 3b and
    every other skill need none of it.
 3. Run `/link-qc-1-generate-update-testing-structure`. On a fresh project it runs the full setup
@@ -80,9 +82,9 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
    the same guide, `references/azure-mcp-troubleshooting.md` (mirrored in each of them): run
    `scripts/check-azure-devops-pat.ps1` (or `.sh`) — it prints booleans only — and apply the one
    fix for the matching row.
-5. Optional, for skill 3c only: `scripts/set-playwright-secrets.ps1` (or `.sh`) stores per-role
-   usernames and passwords in a file outside the repository so the CLI validator can log in by
-   secret *name*; without it you log in yourself in the browser window it opens.
+5. Optional, for skills 3c and 5b only: `scripts/set-playwright-secrets.ps1` (or `.sh`) stores per-role
+   usernames and passwords in a file outside the repository so the CLI validator and the manual CLI run can log in by
+   secret *name*; without it you log in yourself in the browser window they open.
 6. Optional, for link-qc-6-ui-testing only: if you audit against Figma designs, let skill 1 add the `figma` MCP
    entry (Figma's hosted server — you log in once through `/mcp`, no token in any file). Without
    it, Figma links fall back to exported screenshots.
@@ -116,11 +118,11 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
    └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘        │
                                       │ human sets APPROVED
                                       ▼
-   ┌──────────────────────────┐   ┌──────────────────────────┐
-   │ 4 publish-test-cases-    │   │ 5 test-run-automation    │──► Playwright suite,
-   │   azure (beautify + ADO, │   │  Checkpoint A → run →    │    coverage, TEST-RUN-REPORT,
-   │   --suite-only) optional │   │  Checkpoint B (both PASS)│    BUG-REPORT, screenshots
-   └──────────────────────────┘   └──────────────────────────┘
+   ┌──────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
+   │ 4 publish-test-cases-    │   │ 5 test-run-automation    │   │ 5b test-run-manual-cli   │──► 5: Playwright suite, coverage;
+   │   azure (beautify + ADO, │   │  Checkpoint A → run →    │   │  (manual CLI run → same  │    5 and 5b: TEST-RUN-REPORT,
+   │   --suite-only) optional │   │  Checkpoint B (both PASS)│   │   report set) optional   │    BUG-REPORT, screenshots — one
+   └──────────────────────────┘   └──────────────────────────┘   └──────────────────────────┘    story folder, one phase counter
           ┆ ADO-MAP.md only closes the loop in 5 ▲       │
           └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘       ▼  optional Azure loop
                               ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
@@ -134,8 +136,9 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
                                 (code → spec; PO approves → --apply-approved → REQ delta → 2 → 3)
 ```
 
-Approval unlocks skills 4 and 5 **independently**: publishing is optional and is not skill 5's
-gate, and live validation (3b, or its CLI twin 3c) is optional and is not a gate for anything.
+Approval unlocks skills 4, 5 and 5b **independently**: publishing is optional and is not skill 5's
+or 5b's gate, the manual CLI run (5b) is optional and gates nothing, and live validation (3b, or its
+CLI twin 3c) is optional and is not a gate for anything.
 `link-qc-6-ui-testing` sits beside the chain: it audits one implemented screen at a time (any time, any story)
 and writes to `Testing/UI-Testing/`; nothing gates it and it gates nothing.
 
@@ -153,8 +156,8 @@ it NEW or EXISTING before anything is touched; the mode is resolved from that sn
 `scripts/validate-setup.mjs` produces the PASS / WARN / FAIL / NOT_RUN table at the end and
 never reports PASS for a check that did not run. Run modes on an existing project:
 **audit** writes nothing at all and lists what repair would change; **repair** syncs skills
-1-12, 3b and 3c, adds missing folders, steering layers, MCP entries and learning-file sections (and,
-only after you say yes, `playwright-cli` for skill 3c and Pillow + numpy for link-qc-6-ui-testing), normalizes
+1-12, 3b, 3c and 5b, adds missing folders, steering layers, MCP entries and learning-file sections (and,
+only after you say yes, `playwright-cli` for skills 3c and 5b and Pillow + numpy for link-qc-6-ui-testing), normalizes
 names (steering files, `.claude/Skills` → `.claude/skills`, legacy learning heading) and writes
 the manifest; **restructure** adds a confirmed `git mv` migration to the canonical layout.
 Front-matter: `disable-model-invocation: true`, `model: inherit`, and `allowed-tools` limited
@@ -201,8 +204,11 @@ notification, background job) gets a complete TC; the skill first checks which a
 interfaces exist (task input → learning file → one question) and prefixes only a step a person
 must really perform or observe with `[HUMAN]` — candidacy, execution coverage (skill 5) and
 validation status (3b / 3c) stay separate axes. An optional per-TC `Tags` field (e.g. `uat`)
-travels to Azure DevOps through skill 4. **A human must set `Status: APPROVED`** — that unlocks
-skills 4 (optional) and 6 independently. Live validation is the separate, optional skill 3b — or
+travels to Azure DevOps through skill 4. A TC that exercises an AI assistant / chatbot carries an
+optional `AI Oracle` field (after `Data Oracle`: Intent · Must contain · Must not contain · Language ·
+Max length · Repeats / Pass threshold) — the rubric skill 5b judges the reply text against; it enters the
+TC hash only when present and never holds a secret. **A human must set `Status: APPROVED`** — that unlocks
+skills 4 (optional), 5 and 5b (optional) independently. Live validation is the separate, optional skill 3b — or
 its evaluation twin 3c.
 
 ### 3b — validate-manual-test-cases (optional)
@@ -242,7 +248,13 @@ carried it). And the tool: named CLI sessions per role, **no
 password ever typed** (you log in yourself in the headed browser it opens, or it types the
 secret *names* from the file `set-playwright-secrets.ps1` created), a per-run **data-changes
 authorization** for TCs that create / modify / delete (with UI cleanup and a list of every
-record), an **outcome rule** (a TC is `validated` only after its expected result was positively
+record), a **test-data resolution** pass (`references/test-data-resolution.md`: decides from
+the learning file, skill 5's existing automation fixtures and what the walk showed how each
+data item is obtained — fixed way order `e2e scenario → api → db → set directly → manual`,
+item priority High / Medium / Low from the TCs that need it — prepares a missing item through a
+documented e2e scenario under that same "yes" and reverts it at the end, closes test-data
+questions that evidence turned into facts and asks once, after the walk, for the rest), an
+**outcome rule** (a TC is `validated` only after its expected result was positively
 observed and written to the stamp as `outcome-check` — a command that merely succeeded proves
 nothing), one **screenshot per potential bug** under `evidence/`, and run metadata (`tool: cli`,
 header stamp `by 3c … , tool cli`) so results stay traceable. `playwright-cli` missing → BLOCKED with the
@@ -335,6 +347,32 @@ review page (one shared shell: header, tiles, cards, viewer, theme toggle and co
 every bug and phase takes a reviewer comment the same way; a comment never changes a bug's status
 on its own. The story folder's top level holds nothing else (plus the reviewer's optional
 `REVIEW-COMMENTS-{feature}.md`); folders from the older layout are read-only history.
+
+### 5b — test-run-manual-cli (manual CLI run, optional)
+The manual twin of skill 5, beside it the way 3b / 3c sit beside 3. It takes a **human-approved**
+TC document (`Status: APPROVED` is its only entry gate — independent of skills 4 and 5) and
+executes **every** test case in full and separately through `playwright-cli` — the same tool as
+3c, never the Playwright MCP, never an install of its own (`/sync-skills --tools`), attended login
+in the headed browser or secret names from the user-run secrets file, never a password. Order is
+smoke first behind the 30 % smoke gate — **no self-heal**: an application-error majority stops the
+run and is reported — then positive, then negative. Each TC ends PASS / FAIL / INCOMPLETE / SKIP /
+NOT_RUN or `PARTIAL — human step pending` (a `[HUMAN]` step, never PASS), with an assertion-point
+screenshot under `screenshots/…/phase-N/{TC-ID}/manual-cli--none--r{k}/`. A TC that carries skill
+3's optional `AI Oracle` field (an AI assistant / chatbot reply) is run the rubric's number of
+times and judged by Claude from the reply text — hard checks (must contain / must not contain /
+language / max length) plus the rubric and its pass threshold; a hard-check miss is `app_bug`, a
+rubric miss `ai_rubric_failure` (both a bug entry), and every reply is stored verbatim in `reply.md` beside the screenshot
+(`references/ai-response-rules.md`). It writes **only skill 5's run-report set into skill 5's story
+folder** — `TEST-RUN-REPORT-{feature}.md`, `BUG-REPORT-{feature}.md`, `.runs/phase-N.json` and
+the rendered `TEST-RUN-REPORT-{feature}.html` through a byte-identical mirror of skill 5's
+renderer — sharing one phase counter and continuing `BUG-{n}` numbering with skill 5, so one page
+tells the story's whole run history. It never writes into the TC document: a design problem goes
+to skill 3 `--revision`. It is not a gate for anything, asks no learning questions beyond its own
+`### Manual Run Model (skill 5b)` section, and has no MCP server of any kind (`allowed-tools`:
+its three scripts plus `playwright-cli`). Prerequisites: `playwright-cli` (BLOCKED with the
+`/sync-skills --tools` hint when missing) and, optionally, the secrets file for unattended logins.
+What it never does: heal, re-run smoke on its own, switch tool mid-run, touch Azure DevOps, read
+a password, or change a TC's design, state or status.
 
 ### 6 — ui-testing (visual UI audit, beside the chain)
 Compares an implemented screen with its approved design and writes a **UI Visual QA Bug
@@ -436,14 +474,14 @@ Helper for discovering and installing community skills from <https://skills.sh/>
 
 **QA manifest** — `Testing/qa-manifest.json`, written by skill 1 (repair / restructure / new
 project, never by audit). Machine-readable structure contract: QA paths, steering file paths,
-framework config, documented deviations. Skills 2-11, 3b and 3c read it first and fall back to detection
+framework config, documented deviations. Skills 2-11, 3b, 3c and 5b read it first and fall back to detection
 only when it is missing, telling the user to run skill 1.
 
 **Project learning file** — `Testing/project-learning.md`, created by skill 1 from
 `assets/project-learning.template.md`. One tagged plain-English line per fact
 (`[module: X] [page: Y] [type: rule|qa|data|env|trick|status|bug]`), an `## Index` of modules,
 shared sections (Project Knowledge, Common Flows, UI Knowledge, Test Data, Locale Knowledge,
-Automation Tricks) and eleven model sections (skills 1-11, 3b and 3c; the Azure-loop skills 7 to 9 share one) with `Knowledge` and
+Automation Tricks) and twelve model sections (skills 1-11, 3b, 3c and 5b; the Azure-loop skills 7 to 9 share one) with `Knowledge` and
 `Questions and Answers`. Every skill greps it **before asking you anything** and writes back what
 it learned; only a **confirmed** answer is written (`(confirmed by user {date})`) and reused —
 an unanswered recommendation never is. No secrets, file paths, selectors or code identifiers
@@ -473,14 +511,15 @@ story came from a spec FILE; stories from Azure DevOps, Word or pasted text sit 
 holding the TC document, the test-data file, the rendered review page and (Arabic) the strings
 sidecar (skill 3, patched in place by 3b or 3c; 3c adds `evidence/` and, during the comparison,
 `comparison/`), the beautified upload document and `ADO-MAP.md`
-(skill 4) — mirroring the requirement folder, `SPEC-*` parent included. Skill 5's reports, logs
+(skill 4) — mirroring the requirement folder, `SPEC-*` parent included. Skill 5's (and 5b's) reports, logs
 and screenshots mirror it again.
 
-**Human gates** — skill 3's TC document must be approved by a human before skills 4 and 5
+**Human gates** — skill 3's TC document must be approved by a human before skills 4, 5 and 5b
 run; skill 11's findings must be approved by the Product Owner before they become knowledge;
 skill 1's restructure needs a confirmed move plan. Publishing to Azure DevOps is **not** a gate:
-skill 5 runs locally when skill 4 has not run. Live validation (3b or 3c) is **not** a gate either:
-skills 4 and 5 accept a document whose TCs are all `draft — not app-validated`. The one status
+skill 5 runs locally when skill 4 has not run; the manual CLI run (5b) is **not** a gate for anything
+and needs nothing but the approval. Live validation (3b or 3c) is **not** a gate either:
+skills 4, 5 and 5b accept a document whose TCs are all `draft — not app-validated`. The one status
 change a skill may make: 3b or 3c, with the reviewer's explicit revision authorization, sets an
 approved document back to `PENDING HUMAN REVIEW` — only when it actually changed something.
 
@@ -518,7 +557,7 @@ carry placeholders only, and skill 1's validator flags product tokens in the ste
 
 | Server | Used by | Purpose |
 |---|---|---|
-| Playwright MCP | 3b (required), 4 (gap-filler only), 5, 6 (live URLs), 9 (retest) | live application discovery and automation — skill 3 never uses it; 3c uses `playwright-cli` instead (installed by `/sync-skills --tools`, never a prerequisite for 3b) |
+| Playwright MCP | 3b (required), 4 (gap-filler only), 5, 6 (live URLs), 9 (retest) | live application discovery and automation — skill 3 never uses it; 3c and 5b use `playwright-cli` instead, no MCP (installed by `/sync-skills --tools`, never a prerequisite for 3b) |
 | Azure DevOps MCP | 2, 3, 4, 5, 7, 8, 9, 11 | read User Stories, publish Test Cases, update automation fields, comment results — cloud (`@azure-devops/mcp`: `wit_*`, `search_workitem`, `testplan_*`) or self-hosted Azure DevOps Server (`@tiberriver256/mcp-server-azure-devops`: `get_work_item`, `search_work_items`, `create_work_item`, `update_work_item`, `manage_work_item_link`; no test plan / suite tools — skill 4 places TCs in a suite through the REST API only when you name one, otherwise reports it skipped) |
 | Docx MCP | 2, 3 | read requirement and test-case documents, and write review comments back into them |
 | Figma MCP (optional) | link-qc-6-ui-testing | exact design tokens, layer inventory and frame screenshots from Figma links — Figma's hosted server (`https://mcp.figma.com/mcp`, login through `/mcp`, no token in files); without it link-qc-6-ui-testing uses exported screenshots |
@@ -542,7 +581,7 @@ variables), the 7-step "Set or replace the PAT", or a missing PAT scope. The use
 /sync-skills link-qc-5-test-run-automation      # one skill
 /sync-skills --dry-run                  # read-only check, nothing copied
 /sync-skills --force                    # with the "update only" answer: overwrite locally edited skill files
-/sync-skills --tools                    # also install playwright-cli + browser (skill 3c) and Pillow + numpy (link-qc-6-ui-testing, when Python exists) — opt-in
+/sync-skills --tools                    # also install playwright-cli + browser (skills 3c and 5b) and Pillow + numpy (link-qc-6-ui-testing, when Python exists) — opt-in
 ```
 
 The command is a wrapper around `scripts/sync-qa-skills.mjs` (`--check` / `--apply`). It never
@@ -594,8 +633,11 @@ skill folder at a time, so none may import from another. Edit all copies; each c
 MIRROR banner, `scripts/fixtures/MIRROR.md` lists the comment-free ones, and self-test case 0
 sha256-compares every mirrored path against every sibling that is present. The **report shell**
 (`assets/report-shell.template.html`, the one general HTML page) and the renderers' "report-shell
-kit" block are shared four ways, by skills 3, 3b, 3c and 5: skill 3's case 27 and skill 5's run-report
-case 26 compare them. Skills 3b and 3c also
+kit" block are shared five ways, by skills 3, 3b, 3c, 5 and 5b: skill 3's case 27 and skill 5's run-report
+cases 26 and 28 compare them. Skills 5 and 5b share the run-report renderer, its harness, `scan-lib.mjs`,
+both templates and the run-report fixtures the same way (byte-identical, MIRROR banners, checked by skill
+5's case 28 and by the 5b copy); only `selftest-manual-run.mjs` and `fixtures/manual-run/` are 5b's own.
+Skills 3b and 3c also
 share the cross-validator check prose (`patch-rules.md` §1b) word for word. Skills 4 and 5 share
 `scripts/tc-hash.mjs` (the canonical TC hash) the same way: byte-identical, MIRROR banner, and
 each harness asserts the same golden hash for the same fixture.
@@ -604,8 +646,8 @@ Scripts are zero-dependency ESM, Node ≥ 18, and return their result as a JSON 
 reporting scripts are read-only and always exit 0 (`--strict` on skill 5's validator and on the
 two renderers is the opt-in exception, for CI); the renderers write only behind `--write` (skill
 3's also `--write-skeleton`); every `selftest*.mjs` is a test harness and exits non-zero on
-mismatch by design. After changing skill 5's validator or run-report renderer / template, or the
-review-page renderer / template in skills 3, 3b and 3c, run the self-tests:
+mismatch by design. After changing skill 5's validator or run-report renderer / template (mirrored in
+5b), or the review-page renderer / template in skills 3, 3b and 3c, run the self-tests:
 
 ```bash
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest.mjs --pretty
@@ -613,6 +655,8 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-report.mj
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-watchdog.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-config-inventory.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-tc-hash.mjs --pretty
+node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty
+node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty
 node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/selftest-ado-sync.mjs --pretty
 node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/selftest.mjs --pretty
 node .claude/skills/link-qc-3b-validate-manual-test-cases/scripts/selftest.mjs --pretty

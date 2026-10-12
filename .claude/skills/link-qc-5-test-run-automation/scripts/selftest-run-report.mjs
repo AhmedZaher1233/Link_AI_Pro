@@ -26,6 +26,8 @@ const REPORT = fx('automation', STORY, 'TEST-RUN-REPORT-create-order.md');
 const BUGS = fx('automation', STORY, 'BUG-REPORT-create-order.md');
 const GOLDEN = fx('golden', 'TEST-RUN-REPORT-create-order.html');
 
+/** The two skill folders that own a byte-identical copy of the run-report renderer, this harness, scan-lib, both templates and fixtures/run-report/. */
+const RUN_REPORT_SKILLS = ['link-qc-5-test-run-automation', 'link-qc-5b-test-run-manual-cli'];
 const cases = []; const fail = [];
 function check(name, problems, detail) { cases.push({ case: name, ok: problems.length === 0, problems, detail }); if (problems.length) fail.push({ case: name, problems }); }
 /** A temporary copy of the whole automation tree, so `../../screenshots/…` links resolve exactly as in a project. */
@@ -554,10 +556,10 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   check('25 one shell per page: one style, one script, one viewer, one comment box per item', p, { boxes: want });
 }
 
-/* 26 — MIRROR: assets/report-shell.template.html and the renderer kit are byte-identical with skills 3 / 3b / 3c where installed. */
+/* 26 — MIRROR: assets/report-shell.template.html and the renderer kit are byte-identical with skills 3 / 3b / 3c (and the other run-report folder, 5 ↔ 5b) where installed. */
 {
   const skillDir = path.resolve(here, '..');
-  const sibs = ['link-qc-3-generate-manual-test-cases', 'link-qc-3b-validate-manual-test-cases', 'link-qc-3c-validate-manual-test-cases-cli'].map((s) => path.join(skillDir, '..', s)).filter((d) => fs.existsSync(d));
+  const sibs = ['link-qc-3-generate-manual-test-cases', 'link-qc-3b-validate-manual-test-cases', 'link-qc-3c-validate-manual-test-cases-cli', ...RUN_REPORT_SKILLS].filter((s) => s !== path.basename(skillDir)).map((s) => path.join(skillDir, '..', s)).filter((d) => fs.existsSync(d));
   if (!sibs.length) cases.push({ case: '26 shell mirror with skills 3 / 3b / 3c', ok: true, skipped: true, problems: [], detail: 'no sibling installed — nothing to compare' });
   else {
     const p = [];
@@ -567,9 +569,45 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     for (const d of sibs) {
       const n = path.basename(d); const b = path.join(d, 'assets', 'report-shell.template.html');
       if (!fs.existsSync(b)) p.push(n + ': no assets/report-shell.template.html'); else if (sha(b) !== sha(SHELL_PATH)) p.push(n + ': report shell differs');
-      const k = kit(path.join(d, 'scripts', 'render-tc-review.mjs')); if (mine && k !== mine) p.push(n + ': renderer kit differs');
+      const rf = fs.existsSync(path.join(d, 'scripts', 'render-tc-review.mjs')) ? 'render-tc-review.mjs' : 'render-run-report.mjs';
+      const k = kit(path.join(d, 'scripts', rf)); if (mine && k !== mine) p.push(n + ': renderer kit differs');
     }
     check('26 shell mirror with skills 3 / 3b / 3c', p, { siblings: sibs.map((d) => path.basename(d)) });
+  }
+}
+
+/* 27 — classification catalogue: `ai_rubric_failure` (written only by the manual CLI run, skill 5b) is in the catalogue; a misspelt one still warns, never BLOCKs. */
+{
+  const ROW = '| TC-010 | REQ-03 | Delete a draft order | PASS | serial:orders | 00:00:50 | — |';
+  const base = render({ reportPath: REPORT, root: here });
+  const swap = (cls) => (s) => { const i = s.lastIndexOf(ROW); if (i < 0) throw new Error('fixture row moved'); return s.slice(0, i) + ROW.replace('| PASS | serial:orders | 00:00:50 | — |', '| FAIL | serial:orders | 00:00:50 | ' + cls + ' |') + s.slice(i + ROW.length); };
+  const t1 = tmpCopy(swap('ai_rubric_failure')); const t2 = tmpCopy(swap('ai_rubric'));
+  const r1 = render({ reportPath: t1.report, root: here }); const r2 = render({ reportPath: t2.report, root: here });
+  const p = [];
+  if (wkinds(base).includes('unknown-classification')) p.push('fixture warns on classification');
+  if (wkinds(r1).includes('unknown-classification')) p.push('ai_rubric_failure is reported as unknown');
+  if (!wkinds(r2).includes('unknown-classification')) p.push('a misspelt classification does not warn');
+  if (kinds(r2).includes('unknown-classification')) p.push('a classification must never BLOCK');
+  t1.cleanup(); t2.cleanup();
+  check('27 ai_rubric_failure classification', p, { w1: wkinds(r1), w2: wkinds(r2) });
+}
+
+/* 28 — MIRROR 5 ↔ 5b: the renderer, this harness, scan-lib, both templates and every file under fixtures/run-report/ are byte-identical in the other run-report skill folder when it is installed. */
+{
+  const skillDir = path.resolve(here, '..'); const me = path.basename(skillDir);
+  const others = RUN_REPORT_SKILLS.filter((s) => s !== me).map((s) => path.join(skillDir, '..', s)).filter((d) => fs.existsSync(d));
+  if (!others.length) cases.push({ case: '28 run-report mirror 5 ↔ 5b', ok: true, skipped: true, problems: [], detail: 'the other run-report skill folder is not installed — nothing to compare' });
+  else {
+    const p = [];
+    const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+    const fixed = ['scripts/render-run-report.mjs', 'scripts/selftest-run-report.mjs', 'scripts/scan-lib.mjs', 'assets/run-report.template.html', 'assets/report-shell.template.html'];
+    const rel = listFiles(path.join(here, 'fixtures', 'run-report')).map((f) => path.relative(skillDir, f).split(path.sep).join('/'));
+    for (const d of others) {
+      const n = path.basename(d);
+      for (const f of [...fixed, ...rel]) { const a = path.join(skillDir, f); const b = path.join(d, f); if (!fs.existsSync(b)) p.push(n + ': missing ' + f); else if (sha(a) !== sha(b)) p.push(n + ': differs ' + f); }
+      for (const f of listFiles(path.join(d, 'scripts', 'fixtures', 'run-report')).map((f) => path.relative(d, f).split(path.sep).join('/'))) if (!rel.includes(f)) p.push(n + ': extra fixture file ' + f);
+    }
+    check('28 run-report mirror 5 ↔ 5b', p, { siblings: others.map((d) => path.basename(d)), files: fixed.length + rel.length });
   }
 }
 
