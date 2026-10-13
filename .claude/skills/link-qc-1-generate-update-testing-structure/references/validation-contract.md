@@ -3,8 +3,8 @@
 `scripts/validate-setup.mjs` produces every row below. A row is **PASS only when its check
 executed and succeeded**; a check that did not run is `NOT_RUN`, never PASS. Claude adds
 judgment (what to do about a FAIL), never a status the script did not produce — except the
-four MCP probe rows, whose results Claude passes in via `--mcp` (`figma=` only when the entry
-exists).
+five MCP probe rows, whose results Claude passes in via `--mcp` (`figma=` and
+`azure-devops-attachments=` only when the entry exists).
 
 | Row | PASS means | WARN | FAIL |
 |---|---|---|---|
@@ -25,6 +25,7 @@ exists).
 | PAT env var | the variable the `azure-devops` entry references (`AZURE_DEVOPS_PAT_B64` cloud / `AZURE_DEVOPS_PAT` self-hosted; both names checked when there is no entry) exists as a user-level variable (registry hive / shell profile) **and** is visible to this process — existence only, value never read | saved on this machine but missing from this session → the user must fully quit VS Code (all windows) and relaunch (`references/azure-mcp-troubleshooting.md` row 3); or not set and no azure-devops entry yet | azure-devops entry present but variable not set → the user follows "Set or replace the PAT" (`references/azure-mcp-troubleshooting.md` §4: `scripts/set-azure-devops-pat.ps1` / `.sh`, masked prompt, stores both variables, full quit + relaunch). The user-run `scripts/check-azure-devops-pat.ps1` / `.sh` (booleans only) tells the cases apart |
 | Browser secrets file | `PLAYWRIGHT_MCP_SECRETS_FILE` exists as a user-level variable and the file it names exists — existence only, never read (3c and 5b log in by secret name) | not set (optional — attended login works without it; user runs `scripts/set-playwright-secrets.ps1`), or set but the file is missing | — (never FAIL) |
 | Playwright MCP · Azure DevOps MCP · Docx MCP | Claude probed the attached server and it responded (Azure DevOps: `core_list_projects` cloud / `list_projects` self-hosted) | configured, reload pending — or, for Azure DevOps with `PAT env var` WARN, restart pending | probe failed (an Azure DevOps `CONNECT_TIMEOUT` / `TF400813` / 401 / 403 → the ONE matching row of `references/azure-mcp-troubleshooting.md` is the reason; a 401 while the PAT row says "missing from this session" is the missing full restart, not a bad token) | (`NOT_RUN` when not probed) |
+| Azure DevOps attachments MCP | cloud project: the `azure-devops-attachments` entry runs `node .claude/mcp-launchers/azure-devops-attachments.cjs`, the launcher is present and byte-identical to skill 1's asset copy, and Claude probed it (`list_projects`); self-hosted project without the entry: PASS "not needed" (its `azure-devops` server already uploads attachments) | cloud entry without the attachments entry (optional — skills 8 / 9 leave evidence attachments pending with manual instructions; Mode B adds it, `mcp-setup.md` §2d); entry present but the launcher missing / not referenced / outdated (re-run skill 1 Mode B — `/sync-skills` never updates the launcher); a literal token in its env (the `.mcp.json` row carries the FAIL) | — (never FAIL on its own; `NOT_RUN` when there is no `azure-devops` entry yet, or when configured but not probed) |
 | Figma MCP | `figma` entry configured and Claude probed it (it needs a Figma login through `/mcp`) | not configured (optional — link-qc-6-ui-testing only; Figma links fall back to exported screenshots, `mcp-setup.md` §2c), or configured + reload pending | — (never FAIL; `NOT_RUN` when configured but not probed) |
 | QA Skills | 15/15 skill folders (1-12, 3b, 3c and 5b) with valid front-matter | folder is `.claude/Skills` (uppercase) | any missing or invalid |
 | Skills current | `sync --check` report: all CURRENT | some BEHIND / missing | — (`NOT_RUN` without a report) |
@@ -44,7 +45,7 @@ exists).
 * `USER ACTION REQUIRED` may contain only: set the PAT environment variable (the script, then a
   full quit + relaunch of VS Code — never "reconnect" or "reload" for a new variable), run an
   interactive `az login`, reload the session (new server entries / skills), approve a server via
-  `/mcp`, fill L3 placeholders / supply a
+  `/mcp` (`docx`, `azure-devops-attachments`), fill L3 placeholders / supply a
   missing L1-L2 document, restart the PC when the environment demands it, and — optional, for
   skills 3c and 5b only — run the browser secrets script; — optional, for link-qc-6-ui-testing only — log in to the
   Figma MCP through `/mcp`, or install Python 3 for static-image annotation.

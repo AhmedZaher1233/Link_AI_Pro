@@ -29,7 +29,7 @@ This repository is the **canonical source**. Any project pulls the skills from h
     link-qc-6-ui-testing/                          visual UI audit of an implemented screen against its design (Figma MCP / screenshots / reference site) or, with no design, against tokens, consistency, WCAG, RTL — beside the chain
       SKILL.md (≈420 lines) INPUT.txt references/ (10, loaded per step)
     link-qc-7-sync-tc-status-to-azure/             Azure loop: latest TC outcomes → one Test Plan run (cloud test-plan tools; else NOT_RUN)
-    link-qc-8-sync-bugs-azure/                     Azure loop: two-way bug sync with a direction gate (md → Azure creates + pushes; Azure → md pulls retest candidates); ADO-BUG-MAP.md
+    link-qc-8-sync-bugs-azure/                     Azure loop: two-way bug sync with a direction gate (md → Azure creates + pushes, evidence attached through an upload-capable MCP and verified; Azure → md pulls retest candidates); ADO-BUG-MAP.md
       SKILL.md INPUT.txt references/ (qc-contract — canonical copy, md-to-azure, azure-to-md)
     link-qc-9-retesting/                           Azure loop: retest bugs live (Playwright MCP), close or reopen in Azure with evidence
     link-qc-10-white-box-testing/                  audit the code against the requirement: gaps, bugs, repro scenarios
@@ -466,7 +466,14 @@ the ledger and the bug History as retest candidates) or **both** (pull first). T
 `ADO-BUG-MAP.md` beside `ADO-MAP.md` (identity = source + Bug ID, rows never dropped). The truth
 rule is asymmetric: Azure wins for `open`, only an actual retest (skill 9) produces `resolved`;
 an Azure Resolved is never a local resolution and a local resolved without retest evidence is
-never pushed. MCP only — never a PAT, a `.env` or REST. Contract in
+never pushed. MCP only — never a PAT, a `.env` or REST. Evidence screenshots are attached for
+real (since 2026-10-13): before any upload the evidence files are hashed and two bugs sharing one
+byte-identical image are resolved (the image goes to the bug whose Actual result it shows, the other
+gets the correct image from the same attempt folder or stays pending; the producer report is never
+edited); then each file is uploaded through a capability ladder — an upload tool that takes a file
+path on the attached `azure-devops` server (self-hosted), else the optional second server
+`azure-devops-attachments` (cloud; upload / delete only), else `NOT_RUN` and pending in the ledger
+with the manual instruction — and counts only after read-back (`AttachedFile` name + size). Contract in
 [references/qc-contract.md](.claude/skills/link-qc-8-sync-bugs-azure/references/qc-contract.md)
 (canonical copy, mirrored in skills 7 and 9).
 
@@ -474,8 +481,9 @@ never pushed. MCP only — never a PAT, a `.env` or REST. Contract in
 Re-executes a bug's own reproduction steps in the running application through the Playwright
 MCP (both configured languages), positively observes the Expected result, captures evidence,
 sets the local Status (`resolved (phase N)` only after an actual pass; `open` + History on a
-fail), then applies skill 8's push inline (close, or reopen with tag / assignee / mention /
-attachment) and skill 7's outcome push for the related TC. Candidates come from skill 8's
+fail), then applies skill 8's push inline (close, or reopen with tag / assignee / mention; the
+retest screenshot attached through the same ladder and verified by read-back) and skill 7's outcome
+push for the related TC. Candidates come from skill 8's
 Azure → md pull (`--awaiting-retest`) or explicit bug IDs. Asks once before the browser opens
 (URL, role, environment, data-change authorization, language switch); the password is typed in
 the browser or named from the user-run secrets file. Incidental defects are logged in the
@@ -605,12 +613,14 @@ carry placeholders only, and skill 1's validator flags product tokens in the ste
 |---|---|---|
 | Playwright MCP | 3b (required), 4 (gap-filler only), 5, 6 (live URLs), 9 (retest) | live application discovery and automation — skill 3 never uses it; 3c and 5b use `playwright-cli` instead, no MCP (installed by `/sync-skills --tools`, never a prerequisite for 3b) |
 | Azure DevOps MCP | 2, 3, 4, 5, 7, 8, 9, 11 | read User Stories, publish Test Cases, update automation fields, comment results — cloud (`@azure-devops/mcp`: `wit_*`, `search_workitem`, `testplan_*`) or self-hosted Azure DevOps Server (`@tiberriver256/mcp-server-azure-devops`: `get_work_item`, `search_work_items`, `create_work_item`, `update_work_item`, `manage_work_item_link`; no test plan / suite tools — skill 4 places TCs in a suite through the REST API only when you name one, otherwise reports it skipped) |
+| Azure DevOps attachments MCP (optional, cloud only) | 8, 9 | upload evidence screenshots as Bug attachments (`create_work_item_attachment`, and `delete_work_item_attachment` for a file the skill itself attached in error) — `@tiberriver256/mcp-server-azure-devops` started by `.claude/mcp-launchers/azure-devops-attachments.cjs` against the same cloud organization with the same PAT (derived in memory from `AZURE_DEVOPS_PAT_B64`; no new variable), because the cloud server cannot upload a file from disk; written by skill 1 with every cloud `azure-devops` entry; self-hosted projects need nothing extra; without it attachments stay pending with manual instructions |
 | Docx MCP | 2, 3 | read requirement and test-case documents, and write review comments back into them |
 | Figma MCP (optional) | link-qc-6-ui-testing | exact design tokens, layer inventory and frame screenshots from Figma links — Figma's hosted server (`https://mcp.figma.com/mcp`, login through `/mcp`, no token in files); without it link-qc-6-ui-testing uses exported screenshots |
 
 Skill 1 writes `.mcp.json` from `assets/mcp.template.json` — the `azure-devops` entry as the
 cloud or the self-hosted block per the detected hosting — and validates each server (the
-optional `figma` entry only on request). An Azure DevOps connection or auth failure
+optional `figma` entry only on request; on a cloud project the `azure-devops-attachments` entry and
+its launcher always, replaced when outdated — `/sync-skills` never touches either). An Azure DevOps connection or auth failure
 (`CONNECT_TIMEOUT`, "anonymous access" `TF400813`, 401, 403) is handled by one shared guide,
 `references/azure-mcp-troubleshooting.md` (canonical in skill 1, byte-identical in skills 2, 3, 4, 5,
 7, 8, 9 and 11): the skill stops Azure calls and gives you the one fix for the matching row first —

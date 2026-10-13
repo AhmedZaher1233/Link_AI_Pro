@@ -20,6 +20,7 @@ ASKED DURING THE RUN — ONE message, before the browser opens:
 PREREQUISITES (checked by link-qc-1-generate-update-testing-structure):
   - playwright MCP server in .mcp.json (BLOCKED without it).
   - azure-devops MCP server in .mcp.json; the bugs were synced by link-qc-8-sync-bugs-azure (an unsynced bug is skipped with the reason).
+  - OPTIONAL, cloud projects only: the second server `azure-devops-attachments` in .mcp.json (added by skill 1 Mode B with its launcher; same PAT) — needed to attach the retest screenshot to the Azure Bug; without it the attachment stays pending in the ledger with a manual instruction (Bug id → absolute file path). The self-hosted server uploads by itself.
   - Skill 7's test-point tools only when the related TC result should reach the Test Plan (otherwise that step is NOT_RUN).
 
 ============================================================
@@ -27,9 +28,9 @@ OUTPUT — WHAT YOU GET
 ============================================================
 BUG-REPORT-{feature}.md / ADO-BUG-MAP.md   — Status `resolved (phase N)` or `open`, appended History lines with evidence, recomputed Bugs header (UI bugs: ledger only)
 {evidence folder}/BUG-n-retest-{pass|fail}-{date-time}-{language}.png   — never overwritten
-Azure DevOps                               — verified close, or reopen ([Reopened] title, `reopened` tag, first assignee, mention comment, evidence attached); incidental new bugs created and linked to the same story
+Azure DevOps                               — verified close, or reopen ([Reopened] title, `reopened` tag, first assignee, mention comment); the retest evidence attached and verified by read-back, or pending with the manual instruction; incidental new bugs created and linked to the same story
 Summary tables                             — retests (pass / fail / unobserved separated from the Azure results) and incidental defects; metrics; pending actions
 
 WHEN TO RUN IT: after skill 8 pulled developer states and listed retest candidates; whenever a specific bug should be re-verified; after a new build.
 
-HARD RULES: Playwright MCP + azure-devops MCP only; resolved only after a positive observation in every required language; no password anywhere; no fixed selector, role or path in the skill; TC results are edited only for the latest phase and only with explicit confirmation; nothing is created in Azure for a bug that was never synced.
+HARD RULES: Playwright MCP + azure-devops MCP only (the optional azure-devops-attachments server for attachment upload / delete alone); attachments only through an upload-capable MCP tool, verified by read-back, never REST or inline base64; resolved only after a positive observation in every required language; no password anywhere; no fixed selector, role or path in the skill; TC results are edited only for the latest phase and only with explicit confirmation; nothing is created in Azure for a bug that was never synced.

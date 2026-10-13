@@ -30,7 +30,9 @@ read-only comments) is superseded by the `docx` server (`docx-mcp-server` — re
 threads, track changes, used by skills 2/3). The script removes every legacy `word` entry and
 adds or re-pins the `docx` entry with the absolute `uvx` path and the mandatory `--with "mcp<2"`
 (the package declares an unpinned `mcp` dependency; `mcp` 2.x breaks the server on import). No other
-server is ever changed; a `.mcp.json` that does not parse is left alone and reported.
+server is ever changed — not `azure-devops`, not the optional `azure-devops-attachments` entry, and never
+its launcher `.claude/mcp-launchers/azure-devops-attachments.cjs` (skill 1 Mode B copies and refreshes
+that); a `.mcp.json` that does not parse is left alone and reported.
 
 ## Steps
 
@@ -85,7 +87,7 @@ server is ever changed; a `.mcp.json` that does not parse is left alone and repo
    earlier release — `lib.mjs` `SKILL_RENAMES` — is the one exception in both modes: `--apply` removes it once its replacement
    is in place and reports it under `legacy-removed`). It never touches anything
    outside `.claude/skills/`, this command, the `docx` / legacy `word` entries of `.mcp.json`
-   (see the migration note above; `--no-mcp` disables it) and — with `--tools` only — the
+   (see the migration note above; `--no-mcp` disables it; never `.claude/mcp-launchers/`) and — with `--tools` only — the
    optional tools (`npm install -g @playwright/cli@latest`, `playwright-cli install-browser`,
    the `.playwright-cli/` gitignore line for skills 3c and 5b; `pip install pillow numpy` for link-qc-6-ui-testing when
    Python exists). A failed tool step is reported as `tool-failed` and never stops the skills copy.
@@ -104,7 +106,9 @@ server is ever changed; a `.mcp.json` that does not parse is left alone and repo
    — when an `mcp-*` action ran — to approve the new `docx` server via `/mcp` (a reload covers
    server entries and skills; only a NEW environment variable, e.g. the Azure DevOps PAT, needs a
    full quit + relaunch of VS Code — that is skill 1's business, never this command's). The
-   `azure-devops` entry (cloud or self-hosted) is never touched by the sync. If `mcp.uvxFound` is
+   `azure-devops` entry (cloud or self-hosted), the optional `azure-devops-attachments` entry and its
+   launcher `.claude/mcp-launchers/azure-devops-attachments.cjs` are never touched by the sync (skill 1
+   Mode B owns them; `validate-setup.mjs` reports an outdated launcher). If `mcp.uvxFound` is
    false, relay the install hint (`uv` is required for the docx server). In `--dry-run` mode the
    header reads `⟳ Dry run — nothing copied`.
 

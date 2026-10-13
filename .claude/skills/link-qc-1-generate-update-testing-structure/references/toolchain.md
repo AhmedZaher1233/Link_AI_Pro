@@ -76,6 +76,12 @@ project). In Mode A the rows are reported as-is with "would be fixed by B".
 Not a toolchain item: it is an MCP server entry, documented in `mcp-setup.md` §2c. Nothing to
 install — the user logs in once through `/mcp`.
 
+## Azure DevOps attachments MCP — cloud projects only (optional)
+
+Not a toolchain item either: an MCP entry plus the launcher file
+`.claude/mcp-launchers/azure-devops-attachments.cjs`, documented in `mcp-setup.md` §2d. Nothing to
+install — the launcher runs the pinned package through `npx -y` on first start.
+
 ## playwright.config.*
 * Create only when required; when it exists, read it and preserve every valid project setting.
 * Requirements are listed in `references/testing-layout.md` (paths from the manifest, HTML

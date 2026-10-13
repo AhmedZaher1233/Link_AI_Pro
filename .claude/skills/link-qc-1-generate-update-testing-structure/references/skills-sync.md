@@ -41,7 +41,8 @@ What the script does:
 5. `.mcp.json` migration (with `--apply`, unless `--no-mcp`): removes every legacy `word` server
    (`office-word-mcp-server`, read-only comments — superseded) and adds or re-pins the `docx`
    server (`docx-mcp-server`, absolute `uvx` path, `--with "mcp<2"`). Only those entries are
-   touched; other servers, an unparsable file, and everything else stay as they are. `--check`
+   touched; other servers (`azure-devops`, the optional `azure-devops-attachments`), an unparsable
+   file, and everything else stay as they are. `--check`
    lists the planned actions under `mcp.actions`.
 6. Optional tools (**only with `--tools`** on `--apply`): `npm install -g
    @playwright/cli@latest`, `playwright-cli install-browser` (chromium) and the
@@ -53,7 +54,8 @@ What the script does:
    failed step is reported as `tool-failed` and never stops the skills copy. None of it is
    needed by 3b or any other skill, so the flag is never implied.
 7. Owns nothing else: never touches `docs/`, `Testing/`, other `.mcp.json` servers, settings,
-   tests, app code, or the browser secrets file (user-run script only).
+   tests, app code, the browser secrets file (user-run script only), or `.claude/mcp-launchers/`
+   (the attachments launcher — skill 1 Mode B copies and refreshes it).
 8. Emits JSON: `files[]`, `summary`, `applied[]`, `localOnlySkills`, `replace` (the plan + `confirmText`), `mcp`, `tools`, `reloadRequired`. Pass the
    `--check` output file to `validate-setup.mjs --sync-report` so the `Skills current` row is
    measured, not guessed.

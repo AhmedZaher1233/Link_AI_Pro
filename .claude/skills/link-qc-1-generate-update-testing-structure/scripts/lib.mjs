@@ -3,7 +3,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 export const SKILLS = [
   'link-qc-1-generate-update-testing-structure',
@@ -117,8 +119,27 @@ export const PAT_VARS = [PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED];
 export const ENV_RESTART_HINT = 'fully quit VS Code (all windows) and relaunch — a window reload or an /mcp reconnect keeps the old environment';
 // Optional servers: reported, never required. `figma` (Figma's remote Dev Mode MCP, OAuth through /mcp —
 // no token in any file) is used by link-qc-6-ui-testing only, for exact design tokens; screenshots work without it.
-export const MCP_OPTIONAL = ['figma'];
+// `azure-devops-attachments` (cloud projects only) is the second Azure DevOps server skills 8 / 9 use to UPLOAD
+// evidence attachments — see ADO_ATTACHMENTS_* below.
+export const MCP_OPTIONAL = ['figma', 'azure-devops-attachments'];
 export const FIGMA_MCP_URL = 'https://mcp.figma.com/mcp';
+// Azure DevOps attachments MCP — CLOUD projects only, optional. Microsoft's @azure-devops/mcp cannot upload a
+// work-item attachment from disk; a second entry runs @tiberriver256/mcp-server-azure-devops (pinned) through a
+// launcher that derives AZURE_DEVOPS_PAT from AZURE_DEVOPS_PAT_B64 in memory when the raw variable is absent (the
+// user-run PAT script stores both anyway). Self-hosted projects need nothing: their `azure-devops` entry is already
+// that server (create_work_item_attachment). The launcher lives OUTSIDE .claude/skills, so /sync-skills never updates
+// it — skill 1 Mode B copies it from assets/ and the validator reports an outdated copy by sha256. Never required;
+// never touched by applyMcpMigration (selftest.mjs guards that).
+export const ADO_ATTACHMENTS_SERVER = 'azure-devops-attachments';
+export const ADO_ATTACHMENTS_LAUNCHER = '.claude/mcp-launchers/azure-devops-attachments.cjs';
+export const ADO_ATTACHMENTS_LAUNCHER_ASSET = 'assets/mcp-launchers/azure-devops-attachments.cjs'; // relative to the skill folder
+export const ADO_ATTACHMENTS_PACKAGE_PIN = '@tiberriver256/mcp-server-azure-devops@0.1.49';
+export const ADO_ATTACHMENTS_PROBE = 'list_projects';
+/** Absolute path of the launcher asset shipped beside this file; null when the skill folder is a bootstrap-only copy. */
+export function adoAttachmentsLauncherAssetPath() {
+  const p = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', ADO_ATTACHMENTS_LAUNCHER_ASSET);
+  return isFile(p) ? p : null;
+}
 // Python + Pillow (+ numpy): link-qc-6-ui-testing's static-image annotation fallback only (live URLs need none of it).
 // `sync-qa-skills.mjs --apply --tools` installs the two packages when a Python interpreter exists; the
 // interpreter itself is never installed by this suite.
@@ -341,8 +362,8 @@ export function resolveUvx() {
 }
 
 /** The JSON-level apply of planMcpMigration(): removes legacy word entries, adds / re-pins docx. Pure — the caller
- *  writes the file. It never touches any other server (the `azure-devops` entry — cloud or self-hosted — in
- *  particular); scripts/selftest.mjs guards that. `keepCommand(existingCommand)` decides whether an existing absolute
+ *  writes the file. It never touches any other server (the `azure-devops` entry — cloud or self-hosted — and the
+ *  optional `azure-devops-attachments` entry in particular); scripts/selftest.mjs guards that. `keepCommand(existingCommand)` decides whether an existing absolute
  *  launcher path is kept (sync passes an isFile check; tests pass a stub). */
 export function applyMcpMigration(json, uvxPath, keepCommand = (c) => typeof c === 'string' && c !== 'uvx' && isFile(c)) {
   const out = [];
@@ -377,6 +398,45 @@ export function inspectAdoEntry(entry) {
   return { present: true, package: pkg, hosting, patVar, patKey, orgUrl, defaultProject: typeof env.AZURE_DEVOPS_DEFAULT_PROJECT === 'string' ? env.AZURE_DEVOPS_DEFAULT_PROJECT : null, authMethod: typeof env.AZURE_DEVOPS_AUTH_METHOD === 'string' ? env.AZURE_DEVOPS_AUTH_METHOD : null, inlinePat };
 }
 
+/** Shape of an optional `azure-devops-attachments` entry (cloud projects). Pure — no I/O; secret values are never returned.
+ *  `launcherReferenced` is true only when the entry runs `node` with the canonical launcher path (slashes / `./` normalised). */
+export function inspectAdoAttachmentsEntry(entry) {
+  const none = { present: false, launcherReferenced: false, launcherArg: null, orgUrl: null, defaultProject: null, authMethod: null, inlinePat: false };
+  if (!entry || typeof entry !== 'object') return none;
+  const args = Array.isArray(entry.args) ? entry.args.map(String) : [];
+  const env = entry.env && typeof entry.env === 'object' ? entry.env : {};
+  const norm = (a) => a.replace(/\\/g, '/').replace(/^\.\//, '');
+  const launcherArg = args.find((a) => norm(a) === ADO_ATTACHMENTS_LAUNCHER) ?? null;
+  const isNode = /^node(\.exe)?$/i.test(path.basename(String(entry.command || '')));
+  return {
+    present: true,
+    launcherReferenced: isNode && launcherArg !== null,
+    launcherArg,
+    orgUrl: typeof env.AZURE_DEVOPS_ORG_URL === 'string' ? env.AZURE_DEVOPS_ORG_URL : null,
+    defaultProject: typeof env.AZURE_DEVOPS_DEFAULT_PROJECT === 'string' ? env.AZURE_DEVOPS_DEFAULT_PROJECT : null,
+    authMethod: typeof env.AZURE_DEVOPS_AUTH_METHOD === 'string' ? env.AZURE_DEVOPS_AUTH_METHOD : null,
+    inlinePat: hasInlineEnvSecret({ mcpServers: { [ADO_ATTACHMENTS_SERVER]: entry } }),
+  };
+}
+
+/** sha256 of a text file after `\r\n` → `\n` normalisation (a consumer's autocrlf must not make the launcher look outdated). */
+const sha256Text = (p) => { const t = read(p); return t === null ? null : crypto.createHash('sha256').update(t.replace(/\r\n/g, '\n')).digest('hex'); };
+
+/** The attachments entry + its launcher on disk + freshness against the asset shipped with this skill. Reads only.
+ *  `launcherCurrent`: true / false, or null when either the launcher or the asset is missing. */
+export function scanAdoAttachments(root, entry) {
+  const shape = inspectAdoAttachmentsEntry(entry);
+  const launcherPath = path.join(root, ADO_ATTACHMENTS_LAUNCHER);
+  const launcherExists = isFile(launcherPath);
+  const text = launcherExists ? read(launcherPath) || '' : '';
+  const pkg = (text.match(/@tiberriver256\/mcp-server-azure-devops@\d+\.\d+\.\d+/) || [null])[0];
+  const asset = adoAttachmentsLauncherAssetPath();
+  const launcherSha256 = launcherExists ? sha256Text(launcherPath) : null;
+  const assetSha256 = asset ? sha256Text(asset) : null;
+  return { ...shape, launcher: ADO_ATTACHMENTS_LAUNCHER, launcherExists, package: pkg, pinned: pkg ? pkg === ADO_ATTACHMENTS_PACKAGE_PIN : null,
+    launcherSha256, assetSha256, launcherCurrent: launcherSha256 && assetSha256 ? launcherSha256 === assetSha256 : null };
+}
+
 /** Any server env value under a secret-looking key that is not an `${VAR}` reference. Structural — independent of formatting. */
 function hasInlineEnvSecret(json) {
   for (const s of Object.values((json && json.mcpServers) || {})) {
@@ -394,10 +454,11 @@ export function scanMcp(root) {
   const emptyDocx = { present: false, pinned: false, legacyWord: [], actions: [] };
   const noOptional = Object.fromEntries(MCP_OPTIONAL.map((s) => [s, false]));
   const noAdo = inspectAdoEntry(null);
-  if (!isFile(p)) return { exists: false, valid: false, servers: [], missing: MCP_REQUIRED, optional: noOptional, inlineSecrets: false, docx: emptyDocx, azureDevops: noAdo };
+  const noAtt = scanAdoAttachments(root, null); // an orphan launcher stays visible (present:false, launcherExists:true)
+  if (!isFile(p)) return { exists: false, valid: false, servers: [], missing: MCP_REQUIRED, optional: noOptional, inlineSecrets: false, docx: emptyDocx, azureDevops: noAdo, adoAttachments: noAtt };
   let json = null;
-  try { json = JSON.parse(read(p)); } catch { return { exists: true, valid: false, servers: [], missing: MCP_REQUIRED, optional: noOptional, inlineSecrets: false, docx: emptyDocx, azureDevops: noAdo }; }
-  if (json === null || typeof json !== 'object' || Array.isArray(json)) return { exists: true, valid: false, servers: [], missing: MCP_REQUIRED, optional: noOptional, inlineSecrets: false, docx: emptyDocx, azureDevops: noAdo };
+  try { json = JSON.parse(read(p)); } catch { return { exists: true, valid: false, servers: [], missing: MCP_REQUIRED, optional: noOptional, inlineSecrets: false, docx: emptyDocx, azureDevops: noAdo, adoAttachments: noAtt }; }
+  if (json === null || typeof json !== 'object' || Array.isArray(json)) return { exists: true, valid: false, servers: [], missing: MCP_REQUIRED, optional: noOptional, inlineSecrets: false, docx: emptyDocx, azureDevops: noAdo, adoAttachments: noAtt };
   const servers = Object.keys(json.mcpServers || {});
   const text = read(p);
   const inlineSecrets = hasInlineEnvSecret(json)
@@ -408,7 +469,8 @@ export function scanMcp(root) {
   const missing = MCP_REQUIRED.filter((s) => (s === DOCX_SERVER ? !plan.docxPresent : !servers.includes(s)));
   const optional = Object.fromEntries(MCP_OPTIONAL.map((s) => [s, servers.includes(s)]));
   const azureDevops = inspectAdoEntry((json.mcpServers || {})[ADO_SERVER]);
-  return { exists: true, valid: true, servers, missing, optional, inlineSecrets, docx, azureDevops };
+  const adoAttachments = scanAdoAttachments(root, (json.mcpServers || {})[ADO_ATTACHMENTS_SERVER]);
+  return { exists: true, valid: true, servers, missing, optional, inlineSecrets, docx, azureDevops, adoAttachments };
 }
 
 export function scanToolchain(root) {

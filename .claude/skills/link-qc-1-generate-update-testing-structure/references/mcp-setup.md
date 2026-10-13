@@ -12,9 +12,9 @@ logins belong to the user.
 1. Exists → read it and **merge**: add only the missing server entries; never remove or rewrite
    existing ones.
 2. Missing → create it from `assets/mcp.template.json` (`mcpServers` block only; drop the
-   `_self_hosted_azure_devops_server`, `_optional_azure_resources_server` and
-   `_optional_figma_server_for_qc_ui` keys — they are alternatives you copy from, never
-   written as-is).
+   `_self_hosted_azure_devops_server`, `_optional_azure_devops_attachments_server`,
+   `_optional_azure_resources_server` and `_optional_figma_server_for_qc_ui` keys — they are
+   alternatives you copy from, never written as-is).
 3. `npx`-based servers need no pre-installation (`npx -y` fetches on first launch). Never run
    `npm install -g` for them.
 4. **Azure DevOps hosting decides which `azure-devops` entry you write** (§1b). Read
@@ -23,7 +23,9 @@ logins belong to the user.
    → `self-hosted`). Not detectable (no ADO remote) → check the learning file (`[type: env]`
    hosting line), else ask the user for a User Story URL and run the same rule on it. Never
    guess from the org name alone.
-   - cloud → the `mcpServers.azure-devops` block; replace `{ORG_NAME}` with the organization.
+   - cloud → the `mcpServers.azure-devops` block; replace `{ORG_NAME}` with the organization —
+     and, always and without asking, the optional `azure-devops-attachments` entry plus its
+     launcher (§2d).
    - self-hosted → the `_self_hosted_azure_devops_server.azure-devops` block, written under the
      same key `azure-devops`; replace `{ORG_URL}` with `https://host[:port]/[tfs/]{collection}`
      (`preflight.git.azureDevOps.orgUrl` / the story URL) and `{PROJECT_NAME}` with the project.
@@ -41,6 +43,7 @@ logins belong to the user.
 | Org value | organization name | `https://host[:port]/[tfs/]{collection}` — the collection is part of the URL |
 | Tools | `wit_*`, `search_workitem`, `testplan_*`, `core_list_projects` | `get_work_item`, `create_work_item`, `update_work_item`, `list_work_items`, `search_work_items`, `manage_work_item_link`, `list_projects`, … — **no test plan / suite tools** |
 | Probe | `core_list_projects` | `list_projects` |
+| Attachments from disk (skills 8 / 9) | cannot — needs the optional second entry `azure-devops-attachments` + launcher (§2d) | built in (`create_work_item_attachment` / `delete_work_item_attachment`) — nothing to add |
 
 Both servers live under the key `azure-devops`, so every skill's `mcp__azure-devops` permission
 covers either. The user-run PAT script stores **both** variables from one prompt (§2a), so an
@@ -102,6 +105,7 @@ on them. Never generate documents during setup.
 | `azure-devops` (cloud) | PAT via `${AZURE_DEVOPS_PAT_B64}` | `@azure-devops/mcp`; value = base64 of `":" + PAT`; scopes Work Items Read/Write/Manage + Test Management Read/Write. It is a PAT — not an Azure Storage SAS token; no `az login`. Write the entry even when the variable is not set yet and report "run the PAT script, then fully quit VS Code and relaunch" as the only user action (§2a) |
 | `azure-devops` (self-hosted) | PAT via `${AZURE_DEVOPS_PAT}` (raw) | `@tiberriver256/mcp-server-azure-devops` with `AZURE_DEVOPS_ORG_URL` (`https://host/Collection`), `AZURE_DEVOPS_AUTH_METHOD=pat`, `AZURE_DEVOPS_DEFAULT_PROJECT`; same scopes; no test plan / suite tools (§1b). Same user action as the cloud row — the script stores both variables |
 | `docx` | none | `{UVX_PATH} --from docx-mcp-server --with "mcp<2" docx-mcp-server` (§1a); used later by skills 2/3 for documents and review comments — never generate documents during setup. A legacy `word` (`office-word-mcp-server`) entry is superseded — removed by the skills sync, or offered for removal |
+| `azure-devops-attachments` (optional, cloud only) | the same PAT, read from the environment by the launcher (`AZURE_DEVOPS_PAT`, else derived in memory from `AZURE_DEVOPS_PAT_B64`) — no new variable, no key in the entry | `"command": "node", "args": [".claude/mcp-launchers/azure-devops-attachments.cjs"]`, env `AZURE_DEVOPS_ORG_URL` = `https://dev.azure.com/{ORG_NAME}`, `AZURE_DEVOPS_AUTH_METHOD=pat`, `AZURE_DEVOPS_DEFAULT_PROJECT`; the launcher runs `@tiberriver256/mcp-server-azure-devops@0.1.49` so skills 8 / 9 can upload evidence attachments (the cloud server cannot). Written with every cloud `azure-devops` entry, never asked; self-hosted projects never get it (§2d) |
 | `azure` (optional) | `az login` when a call fails | Azure resources only, not DevOps |
 | `figma` (optional) | Figma login through `/mcp` (OAuth) | `link-qc-6-ui-testing` only — exact design tokens, layer inventory and frame screenshots from Figma links (§2c). Remote server, `"type": "http"`, `"url": "https://mcp.figma.com/mcp"`; no command, no token, nothing installed. Add it only when the project compares against Figma designs; link-qc-6-ui-testing falls back to exported screenshots without it |
 
@@ -190,6 +194,66 @@ Never ask for or store a Figma personal access token; the OAuth login is the onl
 path. Report the row as `Figma MCP: configured, reload pending` until the login happened; it is
 WARN, never FAIL, when absent.
 
+## 2d. Azure DevOps attachments MCP — cloud projects only, optional
+
+**Why.** Microsoft's cloud server `@azure-devops/mcp` (the `azure-devops` entry) can download a
+work-item attachment but cannot upload one from disk (its nightly upload tool takes inline base64
+only — a 150 KB screenshot is ~210,000 characters of tool input, unusable). `link-qc-8-sync-bugs-azure`
+and `link-qc-9-retesting` attach evidence screenshots to Azure Bugs, and their contract forbids
+REST. The self-hosted server `@tiberriver256/mcp-server-azure-devops` has
+`create_work_item_attachment(workItemId, filePath, …)` and `delete_work_item_attachment`, which read
+the file from disk — so a cloud project runs that server as a SECOND entry, used for those two tools
+only. The existing `azure-devops` entry is never edited, replaced or merged. Proven on 2026-10-13.
+
+**What to write** (the `_optional_azure_devops_attachments_server` block of `assets/mcp.template.json`,
+under its own key beside `azure-devops`; `{ORG_NAME}` / `{PROJECT_NAME}` filled in like the cloud entry):
+
+```json
+"azure-devops-attachments": {
+  "command": "node",
+  "args": [".claude/mcp-launchers/azure-devops-attachments.cjs"],
+  "env": {
+    "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/{ORG_NAME}",
+    "AZURE_DEVOPS_AUTH_METHOD": "pat",
+    "AZURE_DEVOPS_DEFAULT_PROJECT": "{PROJECT_NAME}"
+  }
+}
+```
+
+No PAT key in the env. The server needs the raw PAT in `AZURE_DEVOPS_PAT`; the launcher takes it
+from the environment when it is set (the user-run PAT script stores both variables) and otherwise
+derives it in memory from `AZURE_DEVOPS_PAT_B64` (`base64(":" + PAT)`), prints nothing and writes
+nothing. No new variable, no new prompt: a project whose `PAT env var` row is PASS is ready.
+
+**The launcher.** Copy `assets/mcp-launchers/azure-devops-attachments.cjs` from this skill to
+`.claude/mcp-launchers/azure-devops-attachments.cjs` in the project — a byte copy, never edited,
+committed like `.mcp.json` (it holds no secret). Copy it when it is missing and replace it when
+`validate-setup.mjs` / the preflight say `launcher outdated` (sha256 differs from the asset — an
+outdated copy is not valid content). It lives outside `.claude/skills/`, so `/sync-skills` never
+writes or updates it: this step is the only updater. The pinned package version lives in the
+launcher and in `lib.mjs` (`ADO_ATTACHMENTS_PACKAGE_PIN`); `npx -y` fetches it on first start, nothing
+is pre-installed. The entry's path is relative to the project root (Claude Code starts `.mcp.json`
+servers there).
+
+**When.** Always on a cloud project — with every cloud `azure-devops` entry written or repaired,
+no question asked. Never on a self-hosted project: its `azure-devops` entry already has the upload
+tool (the validator row reads `PASS — not needed`; an entry someone added anyway is reported as
+redundant, harmless). Mode A only reports.
+
+**Permissions.** `mcp__azure-devops-attachments` is granted
+`create_work_item_attachment` and `delete_work_item_attachment` only — skills 8 and 9 list exactly
+those two tools in their `allowed-tools`, and their contract (§3 ladder) forbids any other use of
+this server (no create, update, link, state or query). Every other skill keeps `mcp__azure-devops`
+unchanged.
+
+**Validation and user action.** Row `Azure DevOps attachments MCP`: WARN at worst — not configured
+on a cloud project (skills 8 / 9 then leave attachments pending with manual instructions), launcher
+missing / not referenced / outdated, or a literal token in its env (the `.mcp.json` row carries the
+FAIL). Probe: `list_projects` (`--mcp azure-devops-attachments=PASS`). After writing the entry the
+user reloads the session and approves `azure-devops-attachments` via `/mcp`; a PAT variable created in
+the same run still needs the full quit + relaunch of §2a. Failures: `references/azure-mcp-troubleshooting.md`
+row 7.
+
 ## 3. Probing (Claude-side, results passed to `validate-setup.mjs --mcp ...`)
 
 * Newly configured servers attach **only after the Claude Code session is reloaded** (and may
@@ -200,9 +264,10 @@ WARN, never FAIL, when absent.
 * Attached server → one cheap read each: Playwright MCP (e.g. browser status), Azure DevOps
   (cloud: `core_list_projects`; self-hosted: `list_projects`), Docx (e.g. `get_document_outline` on a scratch `.docx`, or any cheap
   read that returns without error), Figma when configured (`whoami` / any cheap read; a 401 means
-  the `/mcp` login has not happened yet → WARN `login pending`). Pass
-  `--mcp playwright=PASS,azure-devops=FAIL,docx=PASS[,figma=PASS]` to the validator; unprobed
-  servers stay `NOT_RUN` — never PASS.
+  the `/mcp` login has not happened yet → WARN `login pending`), the attachments server when
+  configured (`list_projects` — the same PAT rows apply). Pass
+  `--mcp playwright=PASS,azure-devops=FAIL,docx=PASS[,figma=PASS][,azure-devops-attachments=PASS]`
+  to the validator; unprobed servers stay `NOT_RUN` — never PASS.
 
 ## 4. Diagnostics
 
@@ -212,10 +277,12 @@ WARN, never FAIL, when absent.
 | Azure DevOps 404 | cloud: wrong organization / project; self-hosted: `AZURE_DEVOPS_ORG_URL` without the collection, or wrong `AZURE_DEVOPS_DEFAULT_PROJECT` | fix the entry in `.mcp.json` (§1b), reload the session |
 | `Azure DevOps hosting` row WARN (package ≠ remote) | cloud package configured for a self-hosted host or the reverse | rewrite the entry from the other template block (§1b); the PAT script needs no re-run — both variables exist |
 | launcher fails | `npx` / `uvx` not resolvable | check Node / `uv` installation; for `docx` make sure `command` is the absolute `uvx` path (§1a step c) |
+| `azure-devops-attachments` `CONNECT_TIMEOUT` / its tools absent / `Cannot find module …azure-devops-attachments.cjs` | the launcher could not start: no PAT variable in the process, cold `npx` cache, or the launcher file missing (not copied, or the server started from another folder — the path is relative to the project root) | `references/azure-mcp-troubleshooting.md` row 7: PAT variable set + full quit and relaunch; warm the cache with `npm exec --yes --package=@tiberriver256/mcp-server-azure-devops@0.1.49 -- node -e 0`; run `node .claude/mcp-launchers/azure-devops-attachments.cjs` once by hand and read its stderr; launcher missing → re-run skill 1 Mode B |
+| `azure-devops-attachments` starts but every call is 401 / `TF400813` | the launcher found neither `AZURE_DEVOPS_PAT` nor `AZURE_DEVOPS_PAT_B64`, or the token is stale | same rows as the `azure-devops` entry (one token, two servers) |
 | docx server exits with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` | `mcp` 2.x was resolved — the `--with "mcp<2"` pin is missing | add `"--with", "mcp<2"` before the final `docx-mcp-server` arg (validate-setup.mjs reports this as FAIL) |
 | still failing after fixes at environment level | machine-level issue | tell the user: setup is complete but a PC restart is required, then re-run validation |
 
 Do not retry indefinitely. Never claim an MCP works if it was not actually verified.
 
 ## QC sync family capabilities
-All link-qc-7…link-qc-9 use mcp__azure-devops only, never token reads or REST. Skill 4 --suite-only requires suite listing/add tools; link-qc-7 requires point listing, run creation, result listing/update and run completion; link-qc-8 and link-qc-9 need work-item tools only. These testplan_* capabilities require the cloud @azure-devops/mcp server; probe actual attached schemas. Missing capability → NOT_RUN (server has no required test-plan tools), no fallback. link-qc-8–6 require work-item reads/writes, fields/states, revisions and evidence attachment tools; link-qc-9 also uses Playwright MCP. Interactive cloud capability probe and live writes/browser runs in this authoring repository: NOT_RUN; perform in a consumer project after sync.
+All link-qc-7…link-qc-9 use mcp__azure-devops only, never token reads or REST. Skill 4 --suite-only requires suite listing/add tools; link-qc-7 requires point listing, run creation, result listing/update and run completion; link-qc-8 and link-qc-9 need work-item tools only. These testplan_* capabilities require the cloud @azure-devops/mcp server; probe actual attached schemas. Missing capability → NOT_RUN (server has no required test-plan tools), no fallback. link-qc-8 and link-qc-9 require work-item reads/writes, fields/states and revisions on mcp__azure-devops, plus an attachment-upload tool that takes a FILE PATH for evidence: the self-hosted server's own, else the optional `azure-devops-attachments` entry (§2d; upload / delete only), else the attachment is NOT_RUN and stays pending with a manual instruction — never REST, never an inline base64 upload; link-qc-9 also uses Playwright MCP. Interactive cloud capability probe and live writes/browser runs in this authoring repository: NOT_RUN; perform in a consumer project after sync.

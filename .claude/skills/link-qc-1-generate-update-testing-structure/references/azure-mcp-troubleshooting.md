@@ -40,9 +40,11 @@ provided the user opened that window after the variable was set.
 | 4 | `TF400813` … anonymous **and the variable is set but does not decode to a string starting with `:`** (`Valid base64: False` or `Decodes with a leading ':': False`) | the raw PAT was stored instead of `base64(":" + PAT)` (set by hand, not by the script) | follow §4 "Set or replace the PAT" and answer `y` to "Replace both? (y/N)" |
 | 5 | `TF400813` … anonymous **and the variable is set and well-formed** (every check line `True`) | the PAT expired or was revoked in Azure DevOps | create a new PAT in Azure DevOps (User settings → Personal access tokens; scopes **Work Items Read & Write** and **Test Management Read & Write**), then follow §4 "Set or replace the PAT" (answer `y`) |
 | 6 | 401 on some endpoints while others return 200, or **403** | a PAT scope is missing (the token is valid) | add the missing scope to the PAT in Azure DevOps (edit the existing token, or create a new one and go through §4). **Never retry with another credential** |
+| 7 | `azure-devops-attachments` `CONNECT_TIMEOUT` / "server not connected" / its two attachment tools are absent (cloud projects only — the optional second server skills 8 / 9 use to upload evidence; `mcp-setup.md` §2d) | its launcher `.claude/mcp-launchers/azure-devops-attachments.cjs` could not start the pinned `@tiberriver256/mcp-server-azure-devops`: no PAT variable in the VS Code process, a cold `npx` cache, or the launcher file missing | three steps, in order: (1) `AZURE_DEVOPS_PAT_B64` or `AZURE_DEVOPS_PAT` must be set for the user (§0 check script) — a FULL quit and relaunch of VS Code is needed after setting it; (2) warm the cache in the user's own terminal: `npm exec --yes --package=@tiberriver256/mcp-server-azure-devops@0.1.49 -- node -e 0`; (3) run `node .claude/mcp-launchers/azure-devops-attachments.cjs` once by hand from the project root and read its stderr (a missing file → re-run skill 1 Mode B, which copies it). The skill's outcome: the attachment stays pending with the manual instruction; the `azure-devops` entry is unaffected |
 
 Rows 2-5 are told apart by the check script only; never guess between them from the error
-text — Azure returns the same `TF400813` for all four.
+text — Azure returns the same `TF400813` for all four. Row 7 concerns the optional second server
+only; the `azure-devops` entry keeps working without it.
 
 ## 2. Why the "anonymous user" error happens
 
@@ -63,6 +65,9 @@ leading `:`" line exists.
 - The same script also writes `AZURE_DEVOPS_PAT` (the raw PAT) for the **self-hosted** server
   (`@tiberriver256/mcp-server-azure-devops`, `"AZURE_DEVOPS_PAT": "${AZURE_DEVOPS_PAT}"`), so
   switching servers never needs a second run.
+- The optional `azure-devops-attachments` entry (cloud projects; `mcp-setup.md` §2d) carries no PAT
+  key at all: its launcher reads `AZURE_DEVOPS_PAT` from the environment, or derives it in memory
+  from `AZURE_DEVOPS_PAT_B64`. One token, one script, never a third variable.
 - The MCP server process inherits the variable from VS Code, and VS Code reads User-scope
   variables **once, at launch**. That is the whole reason for the "fully quit and relaunch" rule.
 

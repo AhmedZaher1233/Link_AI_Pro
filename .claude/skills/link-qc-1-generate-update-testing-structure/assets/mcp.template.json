@@ -32,6 +32,17 @@
       }
     }
   },
+  "_optional_azure_devops_attachments_server": {
+    "azure-devops-attachments": {
+      "command": "node",
+      "args": [".claude/mcp-launchers/azure-devops-attachments.cjs"],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/{ORG_NAME}",
+        "AZURE_DEVOPS_AUTH_METHOD": "pat",
+        "AZURE_DEVOPS_DEFAULT_PROJECT": "{PROJECT_NAME}"
+      }
+    }
+  },
   "_optional_azure_resources_server": {
     "azure": {
       "command": "npx",

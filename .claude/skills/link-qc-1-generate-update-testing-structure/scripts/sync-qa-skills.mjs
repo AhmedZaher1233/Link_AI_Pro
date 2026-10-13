@@ -14,8 +14,10 @@
 //            .mcp.json migration (skip with --no-mcp): removes every legacy `word` server (office-word-mcp-server,
 //            read-only comments) and adds/pins the `docx` server (docx-mcp-server, `--with mcp<2`, absolute uvx path).
 //            Only the docx entry and legacy word entries are ever touched; other servers are never changed — the
-//            `azure-devops` entry in particular (cloud @azure-devops/mcp or self-hosted @tiberriver256/…) is left
-//            byte-for-byte as it is; scripts/selftest.mjs guards that.
+//            `azure-devops` entry in particular (cloud @azure-devops/mcp or self-hosted @tiberriver256/…) and the
+//            optional `azure-devops-attachments` entry are left byte-for-byte as they are, and its launcher
+//            .claude/mcp-launchers/azure-devops-attachments.cjs is never copied or updated here (skill 1 Mode B owns
+//            it); scripts/selftest.mjs guards that.
 //            Optional tools (opt-in, --tools): installs @playwright/cli globally, its chromium browser, adds
 //            `.playwright-cli/` to .gitignore (skills 3c and 5b), and — only when a Python interpreter already exists —
 //            `pip install pillow numpy` (link-qc-6-ui-testing's static-image annotation fallback). --check always reports the tool
@@ -41,7 +43,7 @@ const target = path.resolve(args.target || process.cwd());
 const branch = args.branch && args.branch !== true ? args.branch : 'main';
 const only = [].concat(args.only || []).filter((x) => x !== true);
 const wanted = only.length ? SKILLS.filter((s) => only.includes(s)) : SKILLS;
-const OWNED = ['.claude/skills', '.claude/commands/sync-skills.md', `.mcp.json (${DOCX_SERVER} entry + legacy word entries only)`, `with --tools: the global ${PLAYWRIGHT_CLI_PACKAGE} package, its chromium browser, the ${PLAYWRIGHT_CLI_IGNORE} line of .gitignore, and the Python packages ${PYTHON_PACKAGES.join(' + ')} when a Python interpreter exists (link-qc-6-ui-testing annotation fallback)`];
+const OWNED = ['.claude/skills', '.claude/commands/sync-skills.md', `.mcp.json (${DOCX_SERVER} entry + legacy word entries only — never azure-devops / azure-devops-attachments, never .claude/mcp-launchers/)`, `with --tools: the global ${PLAYWRIGHT_CLI_PACKAGE} package, its chromium browser, the ${PLAYWRIGHT_CLI_IGNORE} line of .gitignore, and the Python packages ${PYTHON_PACKAGES.join(' + ')} when a Python interpreter exists (link-qc-6-ui-testing annotation fallback)`];
 const migrateMcp = !args['no-mcp'];
 const installTools = Boolean(args.tools);
 const replaceMode = Boolean(args.replace);
@@ -158,7 +160,8 @@ function planMcp() {
 function applyMcp() {
   if (!migrateMcp || mcp.error || !mcp.actions.length) return [];
   // The JSON mutation lives in lib.mjs (applyMcpMigration) so scripts/selftest.mjs can prove it never touches the
-  // `azure-devops` entry (cloud or self-hosted) or any other server — only docx + legacy word entries.
+  // `azure-devops` entry (cloud or self-hosted), the optional `azure-devops-attachments` entry or any other server — only
+  // docx + legacy word entries. The attachments launcher under .claude/mcp-launchers/ is outside the sync set as well.
   const { json, applied } = applyMcpMigration(mcp.json, mcp.uvxPath);
   fs.writeFileSync(path.join(target, '.mcp.json'), JSON.stringify(json, null, 2) + '\n');
   return applied;

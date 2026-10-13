@@ -20,13 +20,14 @@ ASKED DURING THE RUN — ONE message each, before any write:
 
 PREREQUISITES (checked by link-qc-1-generate-update-testing-structure):
   - azure-devops MCP server in .mcp.json (cloud or self-hosted; work-item tools are enough for this skill).
+  - OPTIONAL, cloud projects only: the second server `azure-devops-attachments` in .mcp.json (added by skill 1 Mode B with its launcher .claude/mcp-launchers/azure-devops-attachments.cjs; same PAT, no extra variable) — the cloud azure-devops server cannot upload a file from disk. Without it every evidence attachment stays pending in the ledger with a manual instruction (Bug id → absolute file path); the self-hosted server uploads by itself.
   - Testing/project-learning.md with the `### Azure Sync Model (skills 7 to 9)` section (added by skill 1 Mode B).
 
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
 Testing/Manual_Test/TestCases/[SPEC-*/]US-{id}-{name}/ADO-BUG-MAP.md   — the ledger (Bug ID · Source · ADO Work Item ID · Story ID · Local status · ADO state · Last sync · Note), created beside ADO-MAP.md, rows never dropped
-Azure DevOps                                                          — new Bug work items (linked Parent → story, evidence attached), state / title / tag / assignee updates, mention comments on reopen
+Azure DevOps                                                          — new Bug work items (linked Parent → story, evidence attached and verified by read-back, or pending with the manual instruction), state / title / tag / assignee updates, mention comments on reopen
 BUG-REPORT-{feature}.md                                               — Azure → md only: appended History lines, Status `open` on a developer-side reopen, recomputed `**Bugs:**` header; nothing else in that file or folder
 Summary table  | Item | Source | ADO ID | Direction | Before | After | Result |  + metrics, retest candidates for link-qc-9-retesting, pending actions, learning-file changes
 
@@ -36,4 +37,4 @@ WHEN TO RUN IT:
   - After skill 9 or a human changed local statuses with retest evidence → md-to-azure.
   - Unsure → both (pull first, then push).
 
-HARD RULES: MCP only, never a PAT / .env / REST; Azure Resolved never becomes a local resolved — only an actual successful retest does; a local resolved without retest evidence is not pushed; never edits a TC document, a UI report, ADO-MAP.md or anything in the reports folder beyond Status / History / the Bugs header; no project-specific defaults; the direction answer is never stored.
+HARD RULES: MCP only, never a PAT / .env / REST; attachments only through an upload-capable MCP tool (file path) and verified by read-back — never an inline base64 upload; evidence identity (sha256) is checked before upload and a byte-identical file shared by two bugs is never uploaded to both; Azure Resolved never becomes a local resolved — only an actual successful retest does; a local resolved without retest evidence is not pushed; never edits a TC document, a UI report, ADO-MAP.md or anything in the reports folder beyond Status / History / the Bugs header; no project-specific defaults; the direction answer is never stored.

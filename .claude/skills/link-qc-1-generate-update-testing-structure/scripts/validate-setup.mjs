@@ -4,13 +4,14 @@
 // A row is PASS only when its check actually executed and succeeded.
 //
 // Usage: node validate-setup.mjs [--root <path>] [--pretty]
-//          [--mcp playwright=PASS,azure-devops=FAIL,docx=NOT_RUN]   ← Claude-side MCP probe results
+//          [--mcp playwright=PASS,azure-devops=FAIL,docx=NOT_RUN[,figma=PASS][,azure-devops-attachments=PASS]]   ← Claude-side MCP probe results
 //          Rows for the browser tool of skills 3c and 5b (Playwright CLI, its browser, .gitignore, the secrets file) are WARN
 //          at worst — 3c and 5b are optional and their tool is never a prerequisite for 3b or any other skill. The same holds
-//          for link-qc-6-ui-testing's optional extras (Figma MCP, Python + Pillow): WARN at worst, never FAIL.
+//          for link-qc-6-ui-testing's optional extras (Figma MCP, Python + Pillow) and for the optional
+//          `azure-devops-attachments` server of skills 8 / 9 (cloud projects): WARN at worst, never FAIL.
 //          [--sync-report <path-to-json-from-sync-qa-skills --check>]
 import path from 'node:path';
-import { parseArgs, print, read, isFile, scanGit, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanManifest, scanPat, scanGitignore, scanBrowserSecrets, SKILLS, SYNC_COMMAND, STEERING_CANONICAL, PLAYWRIGHT_CLI_IGNORE, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, ENV_RESTART_HINT } from './lib.mjs';
+import { parseArgs, print, read, isFile, scanGit, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanManifest, scanPat, scanGitignore, scanBrowserSecrets, SKILLS, SYNC_COMMAND, STEERING_CANONICAL, PLAYWRIGHT_CLI_IGNORE, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, ENV_RESTART_HINT, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER, ADO_ATTACHMENTS_PACKAGE_PIN, ADO_ATTACHMENTS_PROBE } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const root = path.resolve(args.root || process.cwd());
@@ -75,6 +76,29 @@ for (const [server, label] of [['playwright', 'Playwright MCP'], ['azure-devops'
   const configured = server === 'docx' ? m.docx.present : m.servers.includes(server);
   const probeHint = server === ADO_SERVER && ado.present ? ` (${ado.package === 'self-hosted' ? 'self-hosted: list_projects' : 'cloud: core_list_projects'})` : '';
   row(label, ['PASS', 'FAIL', 'WARN'].includes(p) ? p : 'NOT_RUN', configured ? (p === 'NOT_RUN' ? `configured; reachability not probed this run${probeHint}` : `probe ${p}${p === 'FAIL' && server === ADO_SERVER && pat.sessionMissing ? ` — ${pat.name} is not in this session: ${ENV_RESTART_HINT}` : ''}`) : 'not configured');
+}
+// Azure DevOps attachments MCP (skills 8 / 9, cloud projects, optional): the second server that uploads evidence attachments from
+// disk. WARN at worst, never FAIL on its own (a literal token in its env makes the .mcp.json row FAIL, as for every server).
+{
+  const at = m.adoAttachments;
+  const p = (probes[ADO_ATTACHMENTS_SERVER] || 'NOT_RUN').toUpperCase();
+  const cloud = ado.present && ado.package === 'cloud', selfHosted = ado.present && ado.package === 'self-hosted';
+  let status, reason;
+  if (!at.present) {
+    if (selfHosted) { status = 'PASS'; reason = `not needed — the self-hosted azure-devops entry (${ADO_SELF_HOSTED_PACKAGE}) already uploads attachments (create_work_item_attachment)`; }
+    else if (cloud) { status = 'WARN'; reason = `not configured — optional, cloud projects only: skills 8 / 9 leave evidence attachments pending with manual upload instructions until skill 1 Mode B adds the ${ADO_ATTACHMENTS_SERVER} entry and copies ${ADO_ATTACHMENTS_LAUNCHER} (mcp-setup.md §2d)`; }
+    else { status = 'NOT_RUN'; reason = 'no azure-devops entry yet — decided with it (cloud → skill 1 Mode B adds it; self-hosted → not needed)'; }
+  } else if (at.inlinePat) { status = 'WARN'; reason = `${ADO_ATTACHMENTS_SERVER} entry carries a literal token — remove the key; the launcher reads ${PAT_VAR_SELF_HOSTED} / ${PAT_VAR_CLOUD} from the environment (the .mcp.json row stays FAIL until it is removed)`; }
+  else if (!at.launcherReferenced) { status = 'WARN'; reason = `${ADO_ATTACHMENTS_SERVER} entry does not run the launcher — expected "command": "node", "args": ["${ADO_ATTACHMENTS_LAUNCHER}"] (template block _optional_azure_devops_attachments_server)`; }
+  else if (!at.launcherExists) { status = 'WARN'; reason = `entry present but ${ADO_ATTACHMENTS_LAUNCHER} is missing — the server cannot start; re-run skill 1 Mode B (it copies assets/mcp-launchers/azure-devops-attachments.cjs; /sync-skills never does)`; }
+  else if (at.launcherCurrent === false) { status = 'WARN'; reason = `${ADO_ATTACHMENTS_LAUNCHER} differs from skill 1's asset copy (${at.package || 'package not readable'} vs ${ADO_ATTACHMENTS_PACKAGE_PIN}) — launcher outdated; re-run skill 1 Mode B (/sync-skills never updates it)`; }
+  else {
+    status = ['PASS', 'FAIL', 'WARN'].includes(p) ? p : 'NOT_RUN';
+    reason = p === 'NOT_RUN'
+      ? `configured (${at.package || ADO_ATTACHMENTS_PACKAGE_PIN} via ${ADO_ATTACHMENTS_LAUNCHER}${at.launcherCurrent ? ', current' : ''}${selfHosted ? '; redundant on self-hosted — the azure-devops entry already uploads' : ''}); reachability not probed this run (probe: ${ADO_ATTACHMENTS_PROBE})`
+      : `probe ${p}${p === 'FAIL' && pat.sessionMissing ? ` — ${pat.name} is not in this session: ${ENV_RESTART_HINT}` : ''}`;
+  }
+  row('Azure DevOps attachments MCP', status, reason);
 }
 // Figma MCP (link-qc-6-ui-testing, optional): not configured → WARN with the setup hint, never FAIL; configured → probe result or NOT_RUN.
 {

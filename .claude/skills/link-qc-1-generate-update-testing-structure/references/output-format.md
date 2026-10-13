@@ -13,7 +13,7 @@ the actions left for the user.
 Created:   {folders / files actually created, one per line}
 Renamed:   {old → new, one per line}          ← steering names, skills folder case, legacy heading, legacy skill folder (SKILL_RENAMES)
 Installed: {Playwright, browsers, uv, playwright-cli + its browser (only when the user said yes) …}
-Updated:   {.mcp.json entries added (azure-devops: cloud | self-hosted, org / org URL), learning-file sections added, .gitignore line for .playwright-cli/, manifest written}
+Updated:   {.mcp.json entries added (azure-devops: cloud | self-hosted, org / org URL; cloud: azure-devops-attachments), .claude/mcp-launchers/azure-devops-attachments.cjs copied | replaced (cloud), learning-file sections added, .gitignore line for .playwright-cli/, manifest written}
 Moved (Mode C): {old → new, one per line} · playwright test --list: {n tests discovered}
 
 ### Validation
@@ -30,7 +30,7 @@ Overall: {PASS | PARTIAL | FAIL}
    user-level AZURE_DEVOPS_PAT_B64 and AZURE_DEVOPS_PAT variables), then FULLY QUIT VS Code (all
    windows) and relaunch it — a window reload or /mcp reconnect does not pick up a new variable
    ← also when the PAT row says "saved on this machine but missing from this session"
-2. Reload the Claude Code session (skills / MCP server entries changed) and approve the new `docx` server via /mcp
+2. Reload the Claude Code session (skills / MCP server entries changed) and approve the new `docx` / `azure-devops-attachments` server(s) via /mcp
 3. Fill L3 placeholders: {keys}
 4. {supply missing L1/L2 document | az login | restart PC}
 5. Optional (skills 3c and 5b only): run scripts/set-playwright-secrets.ps1 in your own window if you want

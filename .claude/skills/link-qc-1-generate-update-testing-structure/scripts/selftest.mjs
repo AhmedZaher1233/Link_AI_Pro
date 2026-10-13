@@ -15,14 +15,25 @@
 //        PERSONAL_ACCESS_TOKEN is an inline secret; `${VAR}` references are clean.
 //   6    scanPat(): the referenced variable is the one checked; both names when there is no entry;
 //        `sessionMissing` when the variable is persisted but absent from this process.
-//   7    The template ships both entries with placeholders only and the self-hosted block has the four env keys.
+//   7    The template ships both entries with placeholders only, the self-hosted block has the four env keys, and the
+//        optional attachments block runs the launcher with placeholders and no PAT / TOKEN key.
 //   8    planReplace(): only OUR folders (SKILLS + SKILL_RENAMES) can be replaced / removed; every other skill folder
 //        is kept; a wanted folder missing in the source is refused (never deleted); --only narrows the set.
+//   9    scanMcp().adoAttachments / inspectAdoAttachmentsEntry(): present / launcher referenced / launcher on disk /
+//        package pin / sha-current vs stale / literal token; absent on cloud.mcp.json and self-hosted.mcp.json; the
+//        optional server is never in `missing`; a root without .mcp.json still carries the shape.
+//   10   applyMcpMigration() leaves the `azure-devops-attachments` entry byte-identical (with azure-devops) and
+//        planMcpMigration() never names it.
+//   11   The launcher asset parses (node --check), pins ADO_ATTACHMENTS_PACKAGE_PIN, names both PAT variables, requires
+//        node: builtins only, carries no real org / host and no token-looking literal.
+//   12   validate-setup.mjs row `Azure DevOps attachments MCP`: present + launcher → NOT_RUN "configured"; cloud entry
+//        without it → WARN "not configured"; present but launcher missing → WARN "missing"; self-hosted → PASS "not needed".
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, print, planMcpMigration, applyMcpMigration, detectAdoHosting, scanMcp, scanPat, inspectAdoEntry, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, PAT_VARS, DOCX_SERVER, DOCX_ARGS, planReplace, SKILLS } from './lib.mjs';
+import { spawnSync } from 'node:child_process';
+import { parseArgs, print, run, planMcpMigration, applyMcpMigration, detectAdoHosting, scanMcp, scanPat, inspectAdoEntry, inspectAdoAttachmentsEntry, scanAdoAttachments, adoAttachmentsLauncherAssetPath, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, PAT_VARS, DOCX_SERVER, DOCX_ARGS, planReplace, SKILLS, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER, ADO_ATTACHMENTS_PACKAGE_PIN } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -33,12 +44,19 @@ const check = (id, name, ok, detail = null) => results.push({ id, name, status: 
 const loadFixture = (f) => JSON.parse(fs.readFileSync(path.join(fixtures, f), 'utf8'));
 const stable = (o) => JSON.stringify(o);
 
-// A scratch root holding one fixture as its .mcp.json — scanMcp reads from disk.
+// A scratch root holding one fixture as its .mcp.json — scanMcp reads from disk. `launcher`: null (none), 'asset' (the
+// shipped launcher copied to .claude/mcp-launchers/) or 'stale' (a one-line stub standing in for an outdated copy).
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-skill1-selftest-'));
-function rootWith(fixture) {
-  const dir = path.join(tmp, fixture.replace(/\W+/g, '_'));
+function rootWith(fixture, { launcher = null } = {}) {
+  const dir = path.join(tmp, fixture.replace(/\W+/g, '_') + (launcher ? `_${launcher}` : ''));
   fs.mkdirSync(dir, { recursive: true });
   fs.copyFileSync(path.join(fixtures, fixture), path.join(dir, '.mcp.json'));
+  if (launcher) {
+    const dst = path.join(dir, ADO_ATTACHMENTS_LAUNCHER);
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    if (launcher === 'asset') fs.copyFileSync(adoAttachmentsLauncherAssetPath(), dst);
+    else fs.writeFileSync(dst, '// stale stub — not the shipped launcher\n');
+  }
   return dir;
 }
 
@@ -109,7 +127,8 @@ for (const [id, fixture, expectDocxAction] of [[1, 'cloud.mcp.json', 'mcp-added'
   check(5, 'scanMcp reads both azure-devops entries (package, PAT variable, org URL) and flags a literal token in AZURE_DEVOPS_PAT / PERSONAL_ACCESS_TOKEN',
     cloudOk && selfOk && cleanOk && selfInlineOk && cloudInlineOk && missingOk, { cloudOk, selfOk, cleanOk, selfInlineOk, cloudInlineOk, missingOk, cloud, self });
   // Secret hygiene of the payload itself: no scanner output may carry the literal token from the fixture.
-  const leaked = JSON.stringify([selfInline, cloudInline]).includes('notarealtoken') || JSON.stringify([selfInline, cloudInline]).includes('OjAwMDAw');
+  const attInline = scanMcp(rootWith('cloud-attachments-inline-pat.mcp.json'));
+  const leaked = JSON.stringify([selfInline, cloudInline, attInline]).includes('notarealtoken') || JSON.stringify([selfInline, cloudInline, attInline]).includes('OjAwMDAw');
   check('5b', 'scanMcp output never contains the token value', !leaked);
 }
 
@@ -139,7 +158,11 @@ for (const [id, fixture, expectDocxAction] of [[1, 'cloud.mcp.json', 'mcp-added'
   const text = fs.readFileSync(template, 'utf8');
   const noData = !/nupco|linkdev|link-dev|dev\.azure\.com\/[a-z]/i.test(text);
   const bothInspect = inspectAdoEntry(cloud).package === 'cloud' && inspectAdoEntry(self).package === 'self-hosted' && !inspectAdoEntry(cloud).inlinePat && !inspectAdoEntry(self).inlinePat;
-  check(7, 'mcp.template.json ships the cloud entry and the self-hosted block with placeholders only', Boolean(cloudOk && selfOk && noData && bothInspect), { cloudOk: Boolean(cloudOk), selfOk: Boolean(selfOk), noData, bothInspect });
+  const att = t._optional_azure_devops_attachments_server?.[ADO_ATTACHMENTS_SERVER];
+  const attShape = att ? inspectAdoAttachmentsEntry(att) : null;
+  const attOk = att && att.command === 'node' && stable(att.args) === stable([ADO_ATTACHMENTS_LAUNCHER]) && att.env.AZURE_DEVOPS_ORG_URL === 'https://dev.azure.com/{ORG_NAME}' && att.env.AZURE_DEVOPS_AUTH_METHOD === 'pat' && att.env.AZURE_DEVOPS_DEFAULT_PROJECT === '{PROJECT_NAME}'
+    && !Object.keys(att.env).some((k) => /PAT|TOKEN/i.test(k)) && attShape.launcherReferenced && !attShape.inlinePat && !(ADO_ATTACHMENTS_SERVER in (t.mcpServers || {}));
+  check(7, 'mcp.template.json ships the cloud entry, the self-hosted block and the optional attachments block with placeholders only', Boolean(cloudOk && selfOk && noData && bothInspect && attOk), { cloudOk: Boolean(cloudOk), selfOk: Boolean(selfOk), noData, bothInspect, attOk: Boolean(attOk) });
 }
 
 // ---- 8. planReplace: our folders only ----
@@ -158,6 +181,78 @@ for (const [id, fixture, expectDocxAction] of [[1, 'cloud.mcp.json', 'mcp-added'
     && stable(b.replace) === stable(['link-qc-5-test-run-automation']) && b.remove.length === 0 && b.install.length === 0
     && !touched.some((x) => ['find-skills', 'my-own-skill', 'not-a-skill'].includes(x));
   check(8, 'planReplace deletes only our skill folders, keeps every other skill, refuses a folder missing in the source, honours --only', ok, { a, b });
+}
+
+// ---- 9. The optional attachments server: entry shape, launcher on disk, freshness, never required ----
+{
+  const a = scanMcp(rootWith('cloud-attachments.mcp.json', { launcher: 'asset' }));
+  const b = scanMcp(rootWith('cloud-attachments.mcp.json'));
+  const c = scanMcp(rootWith('cloud-attachments.mcp.json', { launcher: 'stale' }));
+  const d = [scanMcp(rootWith('cloud.mcp.json')), scanMcp(rootWith('self-hosted.mcp.json'))];
+  const e = scanMcp(rootWith('cloud-attachments-inline-pat.mcp.json'));
+  const noFile = scanMcp(path.join(tmp, 'no-mcp-json'));
+  const aa = a.adoAttachments;
+  const aOk = aa.present && aa.launcherReferenced && aa.launcherExists && aa.package === ADO_ATTACHMENTS_PACKAGE_PIN && aa.pinned === true && aa.launcherCurrent === true && typeof aa.assetSha256 === 'string'
+    && !aa.inlinePat && aa.orgUrl === 'https://dev.azure.com/example-org' && aa.defaultProject === 'ExampleProject' && aa.authMethod === 'pat'
+    && a.optional[ADO_ATTACHMENTS_SERVER] === true && !a.inlineSecrets && !a.missing.includes(ADO_ATTACHMENTS_SERVER) && a.azureDevops.package === 'cloud';
+  const bOk = b.adoAttachments.present && b.adoAttachments.launcherReferenced && !b.adoAttachments.launcherExists && b.adoAttachments.package === null && b.adoAttachments.launcherCurrent === null;
+  const cOk = c.adoAttachments.launcherExists && c.adoAttachments.launcherCurrent === false && c.adoAttachments.package === null && c.adoAttachments.pinned === null;
+  const dOk = d.every((m) => m.adoAttachments.present === false && m.optional[ADO_ATTACHMENTS_SERVER] === false && !m.missing.includes(ADO_ATTACHMENTS_SERVER));
+  const eOk = e.adoAttachments.inlinePat && e.inlineSecrets;
+  const f1 = inspectAdoAttachmentsEntry({ command: 'npx', args: ['-y', ADO_ATTACHMENTS_PACKAGE_PIN] });
+  const f2 = inspectAdoAttachmentsEntry({ command: 'C:\\Program Files\\nodejs\\node.exe', args: ['.\\.claude\\mcp-launchers\\azure-devops-attachments.cjs'] });
+  const fOk = f1.present && !f1.launcherReferenced && f2.present && f2.launcherReferenced && inspectAdoAttachmentsEntry(undefined).present === false;
+  const noFileOk = noFile.exists === false && noFile.adoAttachments && noFile.adoAttachments.present === false && noFile.optional[ADO_ATTACHMENTS_SERVER] === false;
+  check(9, 'scanMcp reads the optional azure-devops-attachments entry (launcher referenced / on disk / pinned / current vs stale / literal token), absent on the plain fixtures, never required',
+    aOk && bOk && cOk && dOk && eOk && fOk && noFileOk, { aOk, bOk, cOk, dOk, eOk, fOk, noFileOk, a: aa, b: b.adoAttachments, c: c.adoAttachments });
+}
+
+// ---- 10. Migration guard for the attachments entry ----
+{
+  const before = loadFixture('cloud-attachments.mcp.json');
+  const keep = { [ADO_SERVER]: stable(before.mcpServers[ADO_SERVER]), [ADO_ATTACHMENTS_SERVER]: stable(before.mcpServers[ADO_ATTACHMENTS_SERVER]) };
+  const { json, applied } = applyMcpMigration(structuredClone(before), '/fake/uvx', () => false);
+  const same = Object.entries(keep).every(([n, s]) => stable(json.mcpServers[n]) === s);
+  const wordGone = !('word' in json.mcpServers);
+  const docx = json.mcpServers[DOCX_SERVER];
+  const docxOk = docx && stable(docx.args) === stable(DOCX_ARGS);
+  const noTouch = !applied.some((x) => [ADO_SERVER, ADO_ATTACHMENTS_SERVER].includes(x.server));
+  const plans = ['cloud-attachments.mcp.json', 'cloud-attachments-inline-pat.mcp.json'].map((f) => planMcpMigration(loadFixture(f)));
+  const planOk = plans.every((p) => p.actions.every((a) => !a.includes(ADO_ATTACHMENTS_SERVER) && !a.includes(ADO_SERVER)) && !p.legacyWord.includes(ADO_ATTACHMENTS_SERVER));
+  check(10, 'applyMcpMigration leaves azure-devops-attachments (and azure-devops) byte-identical, removes word, adds docx; planMcpMigration never names it', same && wordGone && docxOk && noTouch && planOk, { same, wordGone, docxOk: Boolean(docxOk), noTouch, planOk });
+}
+
+// ---- 11. The launcher asset ----
+{
+  const asset = adoAttachmentsLauncherAssetPath();
+  const text = asset ? fs.readFileSync(asset, 'utf8') : '';
+  const parses = asset ? run(`node --check "${asset}"`).ok : false;
+  const ok = Boolean(asset) && parses
+    && text.includes(ADO_ATTACHMENTS_PACKAGE_PIN) && text.includes(PAT_VAR_CLOUD) && text.includes(PAT_VAR_SELF_HOSTED) && text.includes("'use strict'")
+    && !/require\(\s*['"](?!node:)/.test(text)
+    && !/nupco|linkdev|link-dev|dev\.azure\.com\/[a-z]/i.test(text)
+    && !/[A-Za-z0-9+/]{40,}={0,2}/.test(text);
+  check(11, 'launcher asset parses, pins the package, names both PAT variables, requires node: builtins only, carries no data or token-looking literal', ok, { asset, parses });
+}
+
+// ---- 12. validate-setup.mjs row for the optional server ----
+{
+  const validate = path.join(here, 'validate-setup.mjs');
+  const rowFor = (root) => {
+    const r = spawnSync(process.execPath, [validate, '--root', root], { encoding: 'utf8' });
+    try { return JSON.parse(r.stdout).rows.find((x) => x.item === 'Azure DevOps attachments MCP') || null; } catch { return null; }
+  };
+  const present = rowFor(rootWith('cloud-attachments.mcp.json', { launcher: 'asset' }));
+  const absent = rowFor(rootWith('cloud.mcp.json'));
+  const missing = rowFor(rootWith('cloud-attachments.mcp.json'));
+  const stale = rowFor(rootWith('cloud-attachments.mcp.json', { launcher: 'stale' }));
+  const selfHosted = rowFor(rootWith('self-hosted.mcp.json'));
+  const ok = present?.status === 'NOT_RUN' && /configured/.test(present.reason)
+    && absent?.status === 'WARN' && /not configured/.test(absent.reason)
+    && missing?.status === 'WARN' && /missing/.test(missing.reason)
+    && stale?.status === 'WARN' && /outdated/.test(stale.reason)
+    && selfHosted?.status === 'PASS' && /not needed/.test(selfHosted.reason);
+  check(12, 'validate-setup row: present → NOT_RUN configured; cloud without it → WARN; launcher missing / outdated → WARN; self-hosted → PASS not needed', ok, { present, absent, missing, stale, selfHosted });
 }
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}

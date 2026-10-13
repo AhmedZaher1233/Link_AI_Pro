@@ -3,7 +3,7 @@ name: link-qc-8-sync-bugs-azure
 description: >
   Link (QC) skill 8. Two-way bug sync between the story's bug reports (skill 5's BUG-REPORT-{feature}.md, skill 6's UI-Visual-QA-<page>.md) and Azure DevOps through the azure-devops MCP: create the bugs that are not in Azure yet and push local status changes (md → Azure), pull developer states back as retest candidates (Azure → md), or both. Asks ONCE which direction to run unless --direction is given. Trigger on: "sync bugs to Azure", "publish the bug report", "push bug status", "pull bug states from DevOps", "which bugs did the developers resolve", "update bugs both ways". Runs after skill 5 or skill 6 produced bugs and whenever developer states change; not a gate.
 argument-hint: "[BUG-REPORT-*.md | UI-Visual-QA-*.md | story ID] [--direction md-to-azure | azure-to-md | both] [--only BUG-n,…] [--dry-run]"
-allowed-tools: Read, Grep, Glob, Write, Edit, mcp__azure-devops
+allowed-tools: Read, Grep, Glob, Write, Edit, mcp__azure-devops, mcp__azure-devops-attachments__create_work_item_attachment, mcp__azure-devops-attachments__delete_work_item_attachment
 disable-model-invocation: true
 ---
 
@@ -12,7 +12,7 @@ disable-model-invocation: true
 You are the QA Azure sync operator for defects, beside the story chain. One skill, two directions; the direction gate decides which reference you follow.
 
 ## Host and tools
-Use the host's file tools and the attached MCP servers. Tool names differ by server; inspect actual schemas before calling. [references/qc-contract.md](references/qc-contract.md) is the shared authoritative contract (documents, configuration, MCP rule, state table, ledger, recipes, output). Missing required capabilities produce NOT_RUN, never a shell/REST fallback.
+Use the host's file tools and the attached MCP servers. Tool names differ by server; inspect actual schemas before calling. [references/qc-contract.md](references/qc-contract.md) is the shared authoritative contract (documents, configuration, MCP rule, state table, ledger, recipes, output). Missing required capabilities produce NOT_RUN, never a shell/REST fallback. Evidence screenshots are attached through the contract §3 ladder: an upload tool that takes a file path on the attached `azure-devops` server, else the optional second server `azure-devops-attachments` (cloud projects; added by skill 1 together with its launcher) for attachment upload / delete ONLY — never for a create, update, link, state or query — else the attachment stays pending with the manual instruction.
 
 ## Inputs
 A bug source (a `BUG-REPORT-{feature}.md`, a `UI-Visual-QA-<page>.md`, or a story ID → both are located), the story ID (bug-report header `**User Story:**`, `ADO-MAP.md` header, or asked once), and the ledger `ADO-BUG-MAP.md` when it exists. Resolve configuration through contract §2 before asking; see INPUT.txt.
@@ -32,6 +32,8 @@ A bug source (a `BUG-REPORT-{feature}.md`, a `UI-Visual-QA-<page>.md`, or a stor
 ## Hard rules
 - A reviewer comment on a bug (a `Reviewer comment` bullet in `BUG-REPORT-{feature}.md`, or an open `BUG-{n}` entry in `REVIEW-COMMENTS-{feature}.md` beside it) is reviewer input, never a status source and never pushed to Azure as a state. Report open ones in the final message; mark one `answered` / `declined {date}` with a one-line `Response` only when this run actually addressed it (skill 5 `references/run-report.md` §9b). Never edit the reviewer's text.
 - Never request/read/store a PAT or use direct REST (contract §3). **Azure MCP failure (`CONNECT_TIMEOUT`, `TF400813`, 401, 403):** stop Azure calls, run the diagnostic in [references/azure-mcp-troubleshooting.md](references/azure-mcp-troubleshooting.md), and give the user the ONE fix for the matching row as the first line of the reply; when the fix is "Set or replace the PAT", list its 7 steps with the command filled in with this project's path. Outcomes stay `NOT_RUN`; never ask for the token; never use REST as a fallback.
+- Evidence identity is checked (sha256) before any upload (contract §6b): a byte-identical evidence file shared by two bugs is never uploaded to both — the image is matched to its bug by the Actual result, the other bug gets the correct image from the same attempt folder or stays pending, the producer report is never edited and the wrong link is reported.
+- Attachments go only through an upload-capable MCP tool that reads the file from disk and are verified by read-back (`AttachedFile` name + `resourceSize` = local byte size) before they count; never REST, never an inline base64 upload; delete only an attachment this skill added in error. No upload-capable server → `NOT_RUN`, pending in the ledger Note with the manual instruction (Bug id → absolute file path).
 - Preserve unrelated fields, files, rows and history; never invent an ID, hash, outcome or count.
 - Resolved in Azure never proves a local fix; only observed successful retesting (skill 9) does. This skill never sets a local `resolved`.
 - A local `resolved` is pushed as Closed only when its History carries an actual successful retest; a bare manual edit is Skipped (missing retest evidence).

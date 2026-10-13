@@ -37,7 +37,7 @@ project**, not to this repo. Do not create them here.
 .claude/
   skills/
     link-qc-1-generate-update-testing-structure/   QA foundation: audit / repair / restructure
-      SKILL.md INPUT.txt references/ (10, incl. azure-mcp-troubleshooting.md — CANONICAL, mirrored in 2, 3, 4, 5, 7, 8, 9, 11) scripts/ (4 .mjs + selftest.mjs + fixtures/mcp/ + set-azure-devops-pat + check-azure-devops-pat + set-playwright-secrets .ps1/.sh) assets/ (4 templates)
+      SKILL.md INPUT.txt references/ (10, incl. azure-mcp-troubleshooting.md — CANONICAL, mirrored in 2, 3, 4, 5, 7, 8, 9, 11) scripts/ (4 .mjs + selftest.mjs + fixtures/mcp/ + set-azure-devops-pat + check-azure-devops-pat + set-playwright-secrets .ps1/.sh) assets/ (4 templates + mcp-launchers/azure-devops-attachments.cjs)
     link-qc-2-review-requirements/                 story/spec → REQ-*.md + review
     link-qc-3-generate-manual-test-cases/          manual TCs (EN/AR), DESIGN ONLY, rendered HTML review page (human gate)
       SKILL.md INPUT.txt references/ (8) scripts/ (render-tc-review, selftest, fixtures/) assets/ (2: tc-review body partial + report-shell — the one general HTML page, shared with skill 5)
@@ -54,7 +54,7 @@ project**, not to this repo. Do not create them here.
     link-qc-6-ui-testing/                          visual UI audit of one implemented screen vs its design (Playwright MCP; optional Figma MCP) or, with no design, vs tokens / consistency / WCAG / RTL — beside the chain, gates nothing
       SKILL.md (≈420 lines, orchestrator) INPUT.txt references/ (10: capture-and-files, no-design-audit, measurement-passes, coverage-passes, bug-metadata, annotation, annotation-fallback, report-template, learning-and-coverage-index, second-round) — no scripts
     link-qc-7-sync-tc-status-to-azure/             Azure loop: latest TC outcomes → ONE Test Plan run (cloud test-plan tools; otherwise NOT_RUN) — SKILL.md INPUT.txt references/qc-contract.md (mirror)
-    link-qc-8-sync-bugs-azure/                     Azure loop: two-way bug sync, direction gate (md → Azure creates + pushes · Azure → md pulls · both), ADO-BUG-MAP.md ledger
+    link-qc-8-sync-bugs-azure/                     Azure loop: two-way bug sync, direction gate (md → Azure creates + pushes · Azure → md pulls · both), ADO-BUG-MAP.md ledger; evidence attached through the contract's capability ladder after the §6b identity check, verified by read-back
       SKILL.md INPUT.txt references/ (qc-contract.md — CANONICAL copy, md-to-azure.md, azure-to-md.md)
     link-qc-9-retesting/                           Azure loop: retest bugs live (Playwright MCP), close / reopen in Azure with evidence, incidental bugs — SKILL.md INPUT.txt references/qc-contract.md (mirror)
     link-qc-10-white-box-testing/                  code audit against a requirement
@@ -156,15 +156,29 @@ node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest
   `applyMcpMigration` is the ONLY .mcp.json mutation the sync performs — never the
   `azure-devops` entry. Templates and fixtures carry placeholders only (`devops.example.com`,
   `{ORG_URL}`, `{PROJECT_NAME}`) — never a project's real host, collection or project.
+- **Azure DevOps attachments server** (`ADO_ATTACHMENTS_*` constants, `inspectAdoAttachmentsEntry`,
+  `scanAdoAttachments` → `scanMcp().adoAttachments`; added 2026-10-13): the cloud server cannot upload
+  a work-item attachment from disk, so every CLOUD project gets a second, optional entry
+  `azure-devops-attachments` (`node .claude/mcp-launchers/azure-devops-attachments.cjs`, template block
+  `_optional_azure_devops_attachments_server`, placeholders only, no PAT key) whose launcher runs the
+  pinned `@tiberriver256/mcp-server-azure-devops@0.1.49` and derives `AZURE_DEVOPS_PAT` in memory from
+  `AZURE_DEVOPS_PAT_B64` when the raw variable is absent. Skills 8 / 9 use it for
+  `create_work_item_attachment` / `delete_work_item_attachment` ONLY. Self-hosted projects need
+  nothing (their entry already uploads). The launcher asset lives in `assets/mcp-launchers/` and is
+  copied by skill 1 Mode B to `.claude/mcp-launchers/` — outside the sync set, so `/sync-skills` never
+  writes it; the scanner reports `launcherExists` / `launcherCurrent` (sha256 vs the asset, CRLF
+  normalised) and the `Azure DevOps attachments MCP` row is WARN at worst (absent on cloud, launcher
+  missing / not referenced / outdated, literal token) and PASS "not needed" on self-hosted. Bump the pin in
+  `ADO_ATTACHMENTS_PACKAGE_PIN` AND the launcher together (selftest case 11 asserts they agree).
 - `tc-hash.mjs` + `selftest-tc-hash.mjs`: the byte-identical copy of skill 4's canonical hash
   (see skill 4's section) and its harness — the close-out writes `automated_tc_sha256` with it
   for every TC that ran `full` coverage with PASS after Checkpoint B PASS, never for a `PARTIAL`
   TC. Regenerate the golden hash only together with skill 4's.
-- `selftest.mjs` (9 cases over `fixtures/mcp/`, the last one `planReplace` — only our folders replaced / removed) **exits non-zero on mismatch by design**: the
-  sync guard (azure-devops byte-identical, cloud and self-hosted), the plan never naming
-  azure-devops, `detectAdoHosting`, `scanMcp` inline-token detection, `scanPat` session-vs-machine
+- `selftest.mjs` (13 cases over `fixtures/mcp/`; case 8 `planReplace` — only our folders replaced / removed; cases 9-12 the optional attachments server: scanner states, migration guard, launcher asset, the validator row on scratch roots) **exits non-zero on mismatch by design**: the
+  sync guard (azure-devops and azure-devops-attachments byte-identical, cloud and self-hosted), the plan never naming
+  either, `detectAdoHosting`, `scanMcp` inline-token detection, `scanPat` session-vs-machine
   (probe-injected, never the registry) and the template's placeholder-only check. Run it after
-  any change to `lib.mjs`, the template or the PAT handling.
+  any change to `lib.mjs`, the template, the launcher asset or the PAT handling.
 - `set-playwright-secrets.ps1` / `.sh` (optional, skills 3c and 5b) are likewise user-run: per-role
   `{ROLE}_USER` / `{ROLE}_PASSWORD` lines in `~/.link-ai-pro/playwright-secrets.env` and the
   user-level `PLAYWRIGHT_MCP_SECRETS_FILE` pointing at it. `scanBrowserSecrets` checks existence
@@ -181,7 +195,9 @@ node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest
   `MCP_OPTIONAL` (`figma`, link-qc-6-ui-testing only — Figma's hosted server at `FIGMA_MCP_URL`, `"type":
   "http"`, OAuth through `/mcp`, never a token in a file) is reported under `mcp.optional` and
   its `Figma MCP` row is WARN at worst. The template keeps it under
-  `_optional_figma_server_for_qc_ui`; skill 1 adds it only on request.
+  `_optional_figma_server_for_qc_ui`; skill 1 adds it only on request. `MCP_OPTIONAL` also lists
+  `azure-devops-attachments` (cloud projects only, added with every cloud entry without asking — see
+  the attachments bullet above); its row is WARN at worst too.
 
 ### `skills/link-qc-5-test-run-automation/scripts/`
 
@@ -389,6 +405,8 @@ script enforces it — check with `sha256sum .claude/skills/link-qc-*/references
 (nine identical hashes) before a commit. Each in-scope `SKILL.md` carries one short "Azure MCP failure"
 block that links the guide and keeps the skill's own outcome wording (STOP / BLOCKED / `NOT_RUN` / drop to
 `local`); the guide's §4 steps must match the prompts of `set-azure-devops-pat.ps1` / `.sh` word for word.
+Row 7 (the optional `azure-devops-attachments` server) names the pinned package in its warm-up command — change it
+together with `ADO_ATTACHMENTS_PACKAGE_PIN`, the launcher asset and `mcp-setup.md` §2d, then re-copy all nine.
 
 ## Mirrored files — skills 7, 8 and 9
 
@@ -693,6 +711,18 @@ the mirrored `references/qc-contract.md`. They share ONE learning section,
   a shell HTTP call — skill 4's REST suite fallback does not apply to them. 401 → "fully quit VS Code and
   relaunch", never "reconnect". Test-plan capabilities exist on the cloud server only; a missing capability
   is `NOT_RUN` with the reason, never a fallback.
+- **Evidence attachments are laddered, identity-checked and verified** (contract §3 / §6 / §6b, 2026-10-13):
+  upload only through an MCP tool that takes a FILE PATH — the attached `azure-devops` server's own
+  (self-hosted), else the optional `azure-devops-attachments` server (cloud; skills 8 / 9 list exactly
+  `create_work_item_attachment` / `delete_work_item_attachment` in `allowed-tools`, never another use), else
+  `NOT_RUN (no upload-capable MCP server)` pending in the ledger Note with the manual instruction; never REST,
+  never an inline base64 upload. Before any upload the evidence files are sha256-hashed: two bugs sharing one
+  byte-identical image is a producer defect — the image goes to the bug whose Actual result it shows, the other
+  gets the correct image from the same attempt folder (`evidence_substituted=`) or stays pending; the producer
+  report is never edited. Name `BUG-{n}-{TC-ID}-phase-{N}-{original}`, comment `BUG-{n} evidence - …`, no duplicate
+  names, and an upload counts only after read-back (`AttachedFile` relation with that name, `resourceSize` = local
+  byte size). Delete only a file this skill added in error. Note keys `attachments=`, `pending: attach …`,
+  `evidence_substituted=`.
 - **Skill 8 is one skill with a direction gate**: `--direction md-to-azure | azure-to-md | both`, otherwise ONE
   question with a ledger-derived recommendation, answered per run and never persisted. `both` pulls first.
 - **Asymmetric truth rule.** Azure DevOps is the truth for `open` (a developer-side reopen is mirrored at
