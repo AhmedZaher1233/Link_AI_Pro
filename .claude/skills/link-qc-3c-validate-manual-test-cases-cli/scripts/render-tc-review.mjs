@@ -63,7 +63,7 @@ const DASH = '—';
 export const VALIDATION_STATES = ['validated', 'enhanced', 'inferred', 'discrepancy', 'not-implemented', 'draft'];
 export const OBSERVED_STATES = ['validated', 'enhanced', 'discrepancy'];
 export const TC_TYPES = ['happy-path', 'edge-case', 'negative'];
-export const DATA_STATUSES = ['READY', 'MISSING', 'IMPOSSIBLE', 'UNKNOWN'];
+export const DATA_STATUSES = ['READY', 'MISSING', 'IMPOSSIBLE', 'UNKNOWN', 'NOT CREATABLE'];
 export const ID_RE = /^[A-Z][A-Z0-9]*(?:-[A-Za-z0-9.]+)+$/;
 
 export const LIMITS = [
@@ -95,7 +95,7 @@ export const CHROME = {
     banner_impl_title: 'Implementation status', warn_strip: 'Header counts in the markdown disagree with the tables below — the page shows the values computed from the tables. Fix the header lines.',
     preview_banner: 'PREVIEW — Arabic translation incomplete. Untranslated strings are shown in English and marked. This page is not the Arabic deliverable until every string is translated.',
     t_tcs: 'Test cases', t_types: 'Happy / edge / negative', t_locale: 'Per locale', t_smoke: 'Smoke', t_auto: 'Automation candidates',
-    t_validation: 'Validated / enhanced / inferred / discrepancy / not-impl / draft', t_data: 'Test data items · ready / missing / impossible / unknown',
+    t_validation: 'Validated / enhanced / inferred / discrepancy / not-impl / draft', t_data: 'Test data items · ready / missing / impossible / unknown / not creatable',
     t_progress: 'App validation progress · observed live', t_bugs: 'Potential bugs · open / not checked / resolved',
     gauge_label: 'Requirement coverage', gauge_caption: 'Requirement coverage is computed from the acceptance criteria and the designed test cases. It is independent of live validation.',
     chip_full: 'Fully covered', chip_partial: 'Partially covered', chip_none: 'Not covered',
@@ -136,7 +136,7 @@ export const CHROME = {
     banner_impl_title: 'حالة التنفيذ', warn_strip: 'أرقام الترويسة في ملف الماركداون لا تطابق الجداول أدناه — الصفحة تعرض القيم المحسوبة من الجداول. صحّح أسطر الترويسة.',
     preview_banner: 'معاينة — الترجمة العربية غير مكتملة. النصوص غير المترجمة تظهر بالإنجليزية ومعلَّمة. هذه الصفحة ليست النسخة العربية النهائية حتى تُترجم كل النصوص.',
     t_tcs: 'حالات الاختبار', t_types: 'المسار السعيد / الحدّي / السلبي', t_locale: 'لكل لغة', t_smoke: 'اختبارات الدخان', t_auto: 'مرشّحة للأتمتة',
-    t_validation: 'متحقَّق / محسَّن / مستنتَج / تعارض / غير منفَّذ / مسودة', t_data: 'عناصر بيانات الاختبار · جاهزة / مفقودة / مستحيلة / غير معروفة',
+    t_validation: 'متحقَّق / محسَّن / مستنتَج / تعارض / غير منفَّذ / مسودة', t_data: 'عناصر بيانات الاختبار · جاهزة / مفقودة / مستحيلة / غير معروفة / غير قابلة للإنشاء',
     t_progress: 'تقدّم التحقق من التطبيق · شوهد حيًا', t_bugs: 'أخطاء محتملة · مفتوحة / لم تُفحص / محلولة',
     gauge_label: 'تغطية المتطلبات', gauge_caption: 'تغطية المتطلبات محسوبة من معايير القبول وحالات الاختبار المصمَّمة. وهي مستقلة عن التحقق الحي.',
     chip_full: 'مغطّى بالكامل', chip_partial: 'مغطّى جزئيًا', chip_none: 'غير مغطّى',
@@ -420,7 +420,7 @@ export function parseTestData(text) {
     const ci = { num: col(gt, /^#$/), name: col(gt, /data item/i), look: col(gt, /must look like/i), used: col(gt, /used by/i), status: col(gt, /^status$/i), way: col(gt, /best way/i) };
     for (const r of gt.rows) {
       const status = stripMd(cell(r, ci.status)).toUpperCase();
-      if (status && !DATA_STATUSES.includes(status)) errors.push({ kind: 'unknown-enum', line: gt.line, detail: 'test-data status "' + status + '" is not READY / MISSING / IMPOSSIBLE / UNKNOWN' });
+      if (status && !DATA_STATUSES.includes(status)) errors.push({ kind: 'unknown-enum', line: gt.line, detail: 'test-data status "' + status + '" is not READY / MISSING / IMPOSSIBLE / UNKNOWN / NOT CREATABLE' });
       items.push({ num: stripMd(cell(r, ci.num)), name: stripMd(cell(r, ci.name)), look: stripMd(cell(r, ci.look)), used: stripMd(cell(r, ci.used)), status, way: stripMd(cell(r, ci.way)) });
     }
     for (const b of gt.broken) errors.push({ kind: 'broken-row', line: b.line, detail: 'test-data row has ' + b.cells + ' cells, header has ' + b.expected });
@@ -636,7 +636,7 @@ export function buildModel(doc, data, opts = {}) {
   for (const b of doc.potentialBugs) if (b.tc && !byId.has(b.tc)) warnings.push({ kind: 'pb-unknown-tc', id: b.id, detail: b.id + ' references ' + b.tc + ', which is not a TC in this document' });
 
   // ---- test data
-  const td = data && data.present ? { items: data.items, problems: data.problemRows, ready: data.items.filter((i) => i.status === 'READY').length, missing: data.items.filter((i) => i.status === 'MISSING').length, impossible: data.items.filter((i) => i.status === 'IMPOSSIBLE').length, unknown: data.items.filter((i) => i.status === 'UNKNOWN').length, present: true } : { items: [], problems: [], present: false };
+  const td = data && data.present ? { items: data.items, problems: data.problemRows, ready: data.items.filter((i) => i.status === 'READY').length, missing: data.items.filter((i) => i.status === 'MISSING').length, impossible: data.items.filter((i) => i.status === 'IMPOSSIBLE').length, unknown: data.items.filter((i) => i.status === 'UNKNOWN').length, notCreatable: data.items.filter((i) => i.status === 'NOT CREATABLE').length, present: true } : { items: [], problems: [], present: false };
   if (data) { errors.push(...data.errors); compatibility.push(...(data.compatibility || [])); }
   if (!data) compatibility.push({ what: 'test-data-missing', detail: 'No TEST-DATA file was supplied or found — the test-data tile renders `—`; [A/E/D] references and configuration literals are not checked.' });
 
@@ -674,7 +674,7 @@ export function buildModel(doc, data, opts = {}) {
   return {
     feature: doc.feature || opts.feature || DASH, header: h, status: status || DASH, approved, implStatus, implState, generated, scope: declared(/^scope$/i) || '', entry: declared(/^entry case$/i) || DASH,
     reqIds: declared(/^requirement ids covered$/i) || DASH, reviewLang: declared(/^review page language$/i) || '', stamp: stamp ? { by: stamp[1].toLowerCase(), date: stamp[2], env: (stamp[3] || '').trim(), scope: stamp[4] || '', rerun: stamp[5] ? Number(stamp[5]) : 0, tool: (stamp[6] || '').toLowerCase() } : null,
-    tcs, counts: { total: n, byType, locales, perLocale, smoke, auto, byState, stale, observed, progressPct, coverage: cov, manual: manualCounts, bugs, testData: td.present ? { items: td.items.length, ready: td.ready, missing: td.missing, impossible: td.impossible, unknown: td.unknown, environment: (data.env || []).length, accounts: (data.accounts || []).length } : null, openQuestions: doc.openQuestions.length, orphans: tcs.filter((t) => t.orphan).length,
+    tcs, counts: { total: n, byType, locales, perLocale, smoke, auto, byState, stale, observed, progressPct, coverage: cov, manual: manualCounts, bugs, testData: td.present ? { items: td.items.length, ready: td.ready, missing: td.missing, impossible: td.impossible, unknown: td.unknown, notCreatable: td.notCreatable, environment: (data.env || []).length, accounts: (data.accounts || []).length } : null, openQuestions: doc.openQuestions.length, orphans: tcs.filter((t) => t.orphan).length,
       humanSteps: humanStepsTotal, humanTcs, aiOracleTcs: tcs.filter((t) => t.aiOracle.length).length, dataRefs: data ? { total: dataRefs.total, resolved: dataRefs.resolved.size, unresolved: dataRefs.unresolved, literals: dataRefs.literals } : null },
     trace, manual, log, existing, negative, standards, potentialBugs: doc.potentialBugs, openQuestions: doc.openQuestions, findings: doc.findings, testData: td,
     compatibility, mismatches, warnings, errors,
@@ -1010,8 +1010,8 @@ function viewModel(model, lang, strings, cm) {
     trace: model.trace.map((r, i) => ({ ac: t('trace.' + (i + 1) + '.ac', r.ac), req: r.req || DASH, tcs: r.tcs || DASH, status: r.status || DASH, missing: t('trace.' + (i + 1) + '.missing', r.missing || DASH), gap: r.gap })), has_trace: model.trace.length > 0,
     manual: model.manual.map((m, i) => ({ category: t('manual.' + (i + 1) + '.category', m.category), tc: m.tc, scenario: t('manual.' + (i + 1) + '.scenario', m.scenario), why: t('manual.' + (i + 1) + '.why', m.why), prio_class: 'prio-' + m.priority, priority: m.priorityText || DASH })),
     n_manual: num(c.manual.total), n_manual_high: num(c.manual.high), n_manual_medium: num(c.manual.medium), n_manual_low: num(c.manual.low),
-    has_data: model.testData.present, data_items: model.testData.items.map((d, i) => ({ num: d.num || String(i + 1), name: t('data.' + (d.num || i + 1) + '.name', d.name), look: t('data.' + (d.num || i + 1) + '.look', d.look), used: d.used || DASH, status: d.status || DASH, d_class: 'd-' + (d.status || 'unknown').toLowerCase(), way: t('data.' + (d.num || i + 1) + '.way', d.way || DASH) })),
-    n_data: c.testData ? String(c.testData.items) : DASH, n_ready: c.testData ? String(c.testData.ready) : DASH, n_missing: c.testData ? String(c.testData.missing) : DASH, n_impossible: c.testData ? String(c.testData.impossible) : DASH, n_unknown: c.testData ? String(c.testData.unknown) : DASH,
+    has_data: model.testData.present, data_items: model.testData.items.map((d, i) => ({ num: d.num || String(i + 1), name: t('data.' + (d.num || i + 1) + '.name', d.name), look: t('data.' + (d.num || i + 1) + '.look', d.look), used: d.used || DASH, status: d.status || DASH, d_class: 'd-' + (d.status || 'unknown').toLowerCase().replace(/\s+/g, '-'), way: t('data.' + (d.num || i + 1) + '.way', d.way || DASH) })),
+    n_data: c.testData ? String(c.testData.items) : DASH, n_ready: c.testData ? String(c.testData.ready) : DASH, n_missing: c.testData ? String(c.testData.missing) : DASH, n_impossible: c.testData ? String(c.testData.impossible) : DASH, n_unknown: c.testData ? String(c.testData.unknown) : DASH, n_notcreatable: c.testData ? String(c.testData.notCreatable) : DASH,
     problems: model.testData.problems.map((p, i) => ({ num: p.num || String(i + 1), item: p.item, problem: t('problem.' + (p.num || i + 1) + '.problem', p.problem), why: t('problem.' + (p.num || i + 1) + '.why', p.why), decision: t('problem.' + (p.num || i + 1) + '.decision', p.decision) })),
     has_existing: !!model.existing, existing: model.existing ? model.existing.rows.map((r, i) => ({ original: r[0] || DASH, disposition: t('existing.' + (i + 1) + '.1', r[1] || DASH), reason: t('existing.' + (i + 1) + '.2', r[2] || DASH) })) : [],
     tcs, has_log: model.log.rows.length > 0, log_header: model.log.header.map((h) => ({ text: escapeHtml(h) })), log_rows: model.log.rows.map((r, i) => ({ cells: r.map((cc, j) => ({ text: j >= 2 ? t('log.' + (i + 1) + '.' + j, cc) : cc })) })),

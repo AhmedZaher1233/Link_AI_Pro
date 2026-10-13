@@ -36,16 +36,20 @@ Read every TC and build the plan:
 9. **Secondary-locale TCs** (`TC-01b`) are TCs like any other: their own row, their own image,
    executed fully in the secondary locale (switched through the app's own control), never
    inferred from the primary-locale twin.
-10. **Test-data look** (`execution-rules.md` §4) — one read-only look per `D{n}` item the TCs
-    reference, planned before the first stage that needs the item; `MISSING` → the dependents of
-    that item are `SKIP — data_missing` before their turn.
+10. **Test-data look and preparation** (`execution-rules.md` §4, `test-data-preparation.md`) —
+    one read-only look per `D{n}` item the TCs reference, planned before the first stage that
+    needs the item; `MISSING` → a way is searched (learning file, automation helpers, application
+    source, UI journey, database helper) and the item is prepared before its dependents, under
+    the consent its way needs; the dependents are `SKIP` before their turn only with
+    `data_missing` (no way found / preparation failed), `not creatable` (evidence) or `QC
+    declined`. The plan line counts the items to prepare.
 
 ## 2. The plan line — stated once, before the first browser command
 
 After the implementation gate and the test-data look for the smoke stage:
 
 ```
-Running all {N} executable TCs (of {T}; {s} smoke · {p} positive · {n} negative · {a} AI · {h} stop at [HUMAN] · {d} data-changing {authorized | not authorized}) · phase {N} · tool cli
+Running all {N} executable TCs (of {T}; {s} smoke · {p} positive · {n} negative · {a} AI · {h} stop at [HUMAN] · {d} data-changing {authorized | not authorized} · {p} items to prepare) · phase {N} · tool cli
 ```
 
 `p` and `n` count the non-smoke positive and negative TCs. No WAIT here — nothing to answer.

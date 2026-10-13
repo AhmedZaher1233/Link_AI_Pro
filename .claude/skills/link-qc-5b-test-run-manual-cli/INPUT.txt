@@ -96,8 +96,29 @@ ASKED DURING THE RUN — ONE message, after the playwright-cli probe:
                                              identified before the change, reverted through the
                                              UI after the screenshot where a way exists, and
                                              listed at the end; no: those TCs are SKIP with the
-                                             reason. Nothing is ever prepared through an API or
-                                             the database; a MISSING data item makes its TCs SKIP.
+                                             reason. The same "yes" lets the skill PREPARE a
+                                             MISSING data item through the automation project's
+                                             existing helper; a UI journey (a creating TC of the
+                                             document, a known flow or a creation screen) is
+                                             prepared without any answer — the message lists it.
+                                             A MISSING item makes its TCs SKIP only when no way
+                                             to create it exists, the state is not creatable
+                                             (evidence recorded) or you declined.
+
+ASKED ONCE BEFORE THE STAGE THAT NEEDS THE ITEM — only when such a way was found:
+  7b. May the skill create {item} through     — the application's create endpoint read from the
+      an endpoint found in the source code,      source code (no helper exists), or a database
+      or write it in the database?               write for a state no API or UI can reach; one
+                                                 message naming each item, what would be done
+                                                 and the TCs it unblocks; yes per item; no →
+                                                 those TCs SKIP (QC declined)
+
+ASKED ONCE AFTER THE LAST STAGE — only when something was prepared:
+  7c. Keep or clean up the prepared records  — every record this run created is listed with its
+                                                 way and identity; default keep (recorded in the
+                                                 learning file); "clean up D{n}" removes it
+                                                 through an existing helper or the UI; anything
+                                                 left behind is listed in the report
 
 NOT ASKED (by design):
   - Scope                                  — every TC runs; the plan is stated in one line.
@@ -124,7 +145,12 @@ OUTPUT — WHAT YOU GET (skill 5's story folder, one new phase)
                                       gate line, Results (one row per TC: PASS / FAIL / INCOMPLETE /
                                       SKIP / NOT_RUN / PARTIAL — human step pending, classification,
                                       evidence links), Bugs cross-reference, Skips and residual
-                                      failures, Open questions, Test-data readiness, Deviations.
+                                      failures, Open questions, Test-data readiness (one row per
+                                      data item: READY / prepared (api|ui|db) with identifiers,
+                                      stamped values and where it was verified / skip —
+                                      data_missing / skip — not creatable / skip — QC declined),
+                                      Deviations (incl. every value the system stamped in place
+                                      of a TC literal, routed to skill 3 --revision).
                                       Earlier phases (skill 5's or this skill's): UNCHANGED.
     BUG-REPORT-{feature}.md        <- one "### BUG-n" per application defect found (incl. an
                                       assistant that fails a hard check or its rubric — "The

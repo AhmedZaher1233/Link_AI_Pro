@@ -164,6 +164,39 @@ function parseIdBlocks(lines, base, idTest) {
 }
 const genericTable = (t) => (t ? { header: t.header.map(stripMd), rows: t.rows.map((r) => r.map(stripMd)), line: t.line } : null);
 
+/* Test-data readiness decisions (the `Decision` column of the `### Test-data readiness` table, skills 5 and 5b):
+   READY · prepared (api|ui|db) · skip — data_missing · skip — not creatable · skip — QC declined. The legacy bare
+   words (skip / api / ui / db / manual) are still accepted; anything else warns `unknown-readiness-decision`. */
+const READINESS_VOCAB = 'READY / prepared (api|ui|db) / skip — data_missing / skip — not creatable / skip — QC declined';
+function readinessCounts(table, n, warnings) {
+  if (!table) return null;
+  const ci = col(table, /^decision$/i); if (ci < 0) return null;
+  const rc = { rows: 0, ready: 0, prepared: { total: 0, api: 0, ui: 0, db: 0 }, skipped: { total: 0, data_missing: 0, not_creatable: 0, qc_declined: 0, unspecified: 0 }, manual: 0, unknown: 0 };
+  for (const r of table.rows) {
+    const d = stripMd(cell(r, ci)); const dl = d.toLowerCase().replace(/\s+/g, ' ').trim(); let m;
+    if (!dl || dl === DASH) continue;
+    rc.rows++;
+    if (dl === 'ready') rc.ready++;
+    else if ((m = dl.match(/^prepared \((api|ui|db)\)$/))) { rc.prepared.total++; rc.prepared[m[1]]++; }
+    else if (/^skip [—–-] data_missing$/.test(dl)) { rc.skipped.total++; rc.skipped.data_missing++; }
+    else if (/^skip [—–-] not creatable/.test(dl)) { rc.skipped.total++; rc.skipped.not_creatable++; }
+    else if (/^skip [—–-] qc declined$/.test(dl)) { rc.skipped.total++; rc.skipped.qc_declined++; }
+    else if (dl === 'skip') { rc.skipped.total++; rc.skipped.unspecified++; }
+    else if ((m = dl.match(/^(api|ui|db)$/))) { rc.prepared.total++; rc.prepared[m[1]]++; }
+    else if (dl === 'manual') rc.manual++;
+    else { rc.unknown++; warnings.push({ kind: 'unknown-readiness-decision', phase: n, detail: 'readiness decision "' + d + '" is not ' + READINESS_VOCAB }); }
+  }
+  return rc;
+}
+const readinessLine = (rc) => {
+  if (!rc || !rc.rows) return '';
+  const parts = ['ready ' + rc.ready, 'prepared ' + rc.prepared.total + ' (api ' + rc.prepared.api + ' · ui ' + rc.prepared.ui + ' · db ' + rc.prepared.db + ')',
+    'skipped ' + rc.skipped.total + ' (data_missing ' + rc.skipped.data_missing + ' · not creatable ' + rc.skipped.not_creatable + ' · QC declined ' + rc.skipped.qc_declined + (rc.skipped.unspecified ? ' · unspecified ' + rc.skipped.unspecified : '') + ')'];
+  if (rc.manual) parts.push('manual ' + rc.manual);
+  if (rc.unknown) parts.push('unknown ' + rc.unknown);
+  return 'Decisions: ' + parts.join(' · ');
+};
+
 /* ---- TEST-RUN-REPORT-{feature}.md ---- */
 export function parseReport(text) {
   const lines = text.split('\n');
@@ -254,7 +287,8 @@ export function parseReport(text) {
       bugRefs, heals: healT ? genericTable(healT) : null, healText: healSec && !healT ? healSec.lines.map((l) => l.trim()).filter(Boolean).map(stripMd).join(' ') : '',
       skips: skipsSec && !isNone(skipsSec.lines) ? genericTable(tablesOf(skipsSec)[0]) : null,
       questions: qSec && !isNone(qSec.lines) ? genericTable(tablesOf(qSec)[0]) : null,
-      readinessVerdict: readySec ? boldLine(readySec.lines, 'Verdict') : null, readiness: readySec ? genericTable(tablesOf(readySec)[0]) : null,
+      readinessVerdict: readySec ? (boldLine(readySec.lines, 'Verdict') || (readySec.lines.some((l) => /^all ready\.?$/i.test(stripMd(l).trim())) ? 'all ready' : null)) : null, readiness: readySec ? genericTable(tablesOf(readySec)[0]) : null,
+      readinessCounts: readySec ? readinessCounts(tablesOf(readySec)[0], n, warnings) : null,
       deviations: devSec ? bulletItems(devSec.lines).filter((x) => !/^(none|—|-)\.?$/i.test(x)) : [],
       subsectionTitles: subs.map((z) => z.title),
     });
@@ -740,6 +774,7 @@ function viewModel(model, files, cm) {
       has_skips: !!(p.skips && p.skips.rows.length), skips: table(p.skips),
       has_questions: !!(p.questions && p.questions.rows.length), questions: table(p.questions),
       has_readiness: !!(p.readinessVerdict || p.readiness), readiness_verdict: p.readinessVerdict ? 'Verdict: ' + stripMd(p.readinessVerdict) : DASH, has_readiness_rows: !!(p.readiness && p.readiness.rows.length), readiness: table(p.readiness),
+      has_readiness_counts: !!readinessLine(p.readinessCounts), readiness_counts: readinessLine(p.readinessCounts),
       has_deviations: p.deviations.length > 0, deviations: p.deviations.map((d) => ({ text: d })),
       comment_box: commentBoxHtml('phase-' + p.n, 'phase', cm, 'en', bare(fieldValue(p.runFields.fields, 'Reviewer comment'))),
     };
@@ -889,7 +924,7 @@ export function render({ reportPath, bugsPath = null, runsDir = null, commentsPa
     document: {
       feature, userStory: bare(model.header['User Story'] || '') || null, spec: bare(model.header['Spec'] || '') || null, latestPhase: latest ? latest.n : null, status: latest ? latest.outcome : null,
       compliance: bare(model.header['Compliance'] || '') || null, adoMode: bare(model.header['Azure DevOps'] || '') || null, earlierPhases: bare(model.header['Earlier phases'] || '') || null, legacyFiles: model.legacyFiles,
-      phases: model.phases.map((p) => ({ phase: p.n, date: p.date, outcome: p.outcome, declared: p.declared, counts: p.counts, smokeGate: p.smokeGate ? stripMd(p.smokeGate) : null, coverage: p.covStages ? { target: p.covTarget ? stripMd(p.covTarget) : null, total: (p.covStages.rows.find((r) => /^total$/i.test(stripMd(r[0]))) || []).map(stripMd) } : null, bugRefs: p.bugRefs.map((b) => b.id), assumptions: p.assumptions ? p.assumptions.rows.length : 0, heals: p.heals ? p.heals.rows.length : 0, runFile: p.run ? { present: true, status: p.run.status || null, schema: p.run.schema } : { present: false, status: null, schema: null } })),
+      phases: model.phases.map((p) => ({ phase: p.n, date: p.date, outcome: p.outcome, declared: p.declared, counts: p.counts, smokeGate: p.smokeGate ? stripMd(p.smokeGate) : null, coverage: p.covStages ? { target: p.covTarget ? stripMd(p.covTarget) : null, total: (p.covStages.rows.find((r) => /^total$/i.test(stripMd(r[0]))) || []).map(stripMd) } : null, bugRefs: p.bugRefs.map((b) => b.id), assumptions: p.assumptions ? p.assumptions.rows.length : 0, heals: p.heals ? p.heals.rows.length : 0, readiness: p.readinessCounts ? { verdict: p.readinessVerdict ? stripMd(p.readinessVerdict) : null, ...p.readinessCounts } : null, runFile: p.run ? { present: true, status: p.run.status || null, schema: p.run.schema } : { present: false, status: null, schema: null } })),
       bugs: model.bugs ? { present: true, ...model.bugs.counts, entries: model.bugs.entries.map((b) => ({ id: b.id, tcId: b.tc, severity: b.severity, status: b.status, foundInPhase: b.foundIn, historyLength: b.history.length, screenshot: b.screenshot.map((s) => s.href) })) } : { present: false, total: null, open: null, resolved: null, notChecked: null, entries: [] },
     },
     counts: { phases: model.phases.length, latest: latest ? latest.counts : null, evidenceLinks, evidenceMissing: model.warnings.filter((w) => w.kind === 'evidence-file-missing').length, bugs: model.bugs ? model.bugs.counts.total : null, comments: { open: cm.open, handled: cm.handled }, assumptions: latest && latest.assumptions ? latest.assumptions.rows.length : 0 },

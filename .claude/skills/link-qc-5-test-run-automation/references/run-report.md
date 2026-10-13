@@ -123,7 +123,7 @@ then `## Phase N — YYYY-MM-DD` sections, ascending. Sub-sections per phase (`#
 | `Heal log` | the nine-column table of `<first_run>` step 5, or `First run fully green` | optional |
 | `Skips and residual failures` | table `TC-ID · Status · Reason`, or `none` | optional |
 | `Open questions` | table `# · Source · Ambiguity · TCs · Decision · By`, or `none` | optional |
-| `Test-data readiness` | `**Verdict:** …` + table `Gap · TCs · Decision · Source · Provisioning · Cleanup`, or `all ready` | optional |
+| `Test-data readiness` | `**Verdict:** …` + table `Gap · TCs · Decision · Source · Provisioning · Identifiers / names · Effective stamped values · Verified on · Cleanup`, or `all ready` (rendered as the verdict). `Decision` ∈ `READY` · `prepared (api\|ui\|db)` · `skip — data_missing` · `skip — not creatable` · `skip — QC declined` (the legacy bare `skip` / `api` / `ui` / `db` / `manual` still parse); the renderer counts them per phase (`document.phases[].readiness`, a `Decisions:` line under the verdict) and warns `unknown-readiness-decision` for any other word | optional |
 | `Deviations` | bullets, or `- none` | optional |
 
 Empty optional value = `—`. **Earlier phase sections are immutable**: each run appends one section
@@ -176,6 +176,7 @@ when the two files disagree.
 | Stage table, coverage bars, target / verdict / delta | the phase's own tables — bars are `full / partial / none` shares of that stage's total; zero total → `—`, never `0%` |
 | Variants · attempts · missing variants · planned vs actual | `.runs/phase-N.json` (`results[].variants[].attempts[]`, `variant_totals`, `run_plan.estimate`) — additive; absent → `—` and a `run-file-missing` warning |
 | Bugs open / resolved / not checked | the bug file's entries (Status), never its header |
+| Test-data readiness decisions `Decisions: ready n · prepared n (api · ui · db) · skipped n (data_missing · not creatable · QC declined)` | the `Decision` column of the phase's readiness table (`document.phases[].readiness`); legacy bare words map to the same buckets (`skip` → unspecified) |
 | — (not on the page) | the run file's `open_questions`, `data_readiness`, `compliance`, `merged.executions[]` — machine data for the ADO close-out and the checklist |
 
 ## 7. `.runs/phase-N.json` — schema `skill6-run/1` and its lifecycle
@@ -192,7 +193,9 @@ environment-blocked | blocked`) · `run_id` · `user_story_id` · `user_story` �
 `previous_phase { phase, file, location: nested | legacy | null }` ·
 `compliance { checkpoint_a { gate, scopeDigest, recorded_at, unresolved[] }, checkpoint_b {…} }` ·
 `run_plan` (the `<run_plan>` shape) · `open_questions` (the `<open_questions>` shape, without a
-`file` key) · `data_readiness` (the `<data_readiness>` shape) ·
+`file` key) · `data_readiness` (the `<data_readiness>` shape: `verdict`, `gaps[] { gap, tcs,
+decision, source, provisioning, identifiers, stamped_values, verified_on, cleanup }`,
+`predicted_skips`; the same rows as the phase's `### Test-data readiness` table) ·
 `coverage_snapshot { measuredAt, weightedPct, target, targetSource, mechanism, verdict, byStage
 {smoke|positive|negative: {total, full, partial, none, weightedPct}}, tcs {TC-ID: status},
 requirements [{id, short, outcome, assertedBy[]}], manual {total, high, medium, low}, delta

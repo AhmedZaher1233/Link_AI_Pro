@@ -1,6 +1,6 @@
 # Test Data — kpi-filter
 **Story:** US-1234 · **TC document:** TEST-CASES-kpi-filter.md (2026-09-20) · **Environment:** staging checked 2026-09-25
-**Data items:** 3 — ready 2 · missing 0 · impossible 0 · unknown 1
+**Data items:** 4 — ready 2 · missing 0 · impossible 0 · unknown 1 · not creatable 1
 **Accounts needed:** 1 roles — 1 confirmed · 0 unknown
 **Environment items:** 1 — ready 1 · unknown 0
 
@@ -20,6 +20,7 @@
 | D1 | KPI "Revenue" with 12 monthly values for 2026 | 12 rows, Jan…Dec, strategy "Growth 2026" | TC-KPI-01, TC-KPI-01b, TC-KPI-04 | READY | — |
 | D2 | KPI "Revenue" values for 2024-2026 | 36 rows | TC-KPI-02 | READY | — |
 | D3 | An exported KPI file | Excel, 12 rows | TC-KPI-04 | UNKNOWN | to check — pending implementation |
+| D4 | A KPI whose strategy was deleted | strategy removed, KPI still listed | TC-KPI-03 | NOT CREATABLE | none — not creatable (see Problems #2) |
 
 ## 3. Data item details
 ### D1 — KPI "Revenue" with 12 monthly values for 2026
@@ -34,6 +35,7 @@
 | # | Data item | Problem | Why | What the QC / PO must decide |
 |---|---|---|---|---|
 | 1 | D3 | Export is not built yet | AC-3 pending implementation | accept UNKNOWN until the story ships |
+| 2 | D4 | not creatable — deleting a strategy removes its KPIs with it (application rule, checked on staging 2026-09-25) | the state TC-KPI-03 assumes cannot exist | reword TC-KPI-03 (skill 3 --revision) |
 
 ## 5. How to prepare the missing data
 (none — no MISSING items)

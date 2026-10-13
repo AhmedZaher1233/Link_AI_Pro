@@ -27,7 +27,9 @@ A TC is an **AI TC** when its block carries `- **AI Oracle:**` (skill 3's contra
 - `Repeats` / `Pass threshold` absent → **1 repeat, 1 of 1**. The block's own line overrides;
   nothing else does (no flag raises or lowers it).
 - A `[D{n}]` cited in `Intent` or `Must contain` resolves through its own TEST-DATA row — the
-  facts the reply must agree with. A token without a row → the TC is `SKIP — data_missing`.
+  facts the reply must agree with. A token without a row → the TC is `SKIP — data_missing`
+(there is nothing to prepare from); a token whose item is `MISSING` is prepared first
+(`test-data-preparation.md`).
 - The oracle is a design field: you never edit it. An oracle you cannot apply (contradictory
   lines, a `Must contain` that the Intent forbids, `Pass threshold > Repeats`) is a `Q-{n}` and
   the TC is `INCOMPLETE — incomplete: rubric-ambiguous`.

@@ -53,7 +53,9 @@ validated ONCE), known knowledge (confirmed by the learning file or by a flow va
 this run — NOT rediscovered), gaps (missing navigation, preconditions, data, filters, async waits,
 triggers, ambiguous steps — the discovery targets), and locale-sensitive points (every element
 label referenced in any step, plus screens whose secondary-locale behaviour must be walked live,
-§4). Data items are checked with one read-only look each during the walk — `patch-rules.md` §3.
+§4). Data items are checked with one read-only look each during the walk — `patch-rules.md` §3;
+a `MISSING` item whose dependents are in scope is prepared before them (§3a,
+`test-data-resolution.md` §4).
 Apply the plan within the chosen scope (FULL / SHARED / CUSTOM — `scope-gate.md` §4).
 
 ## 3. Targeted MCP budget rules
@@ -86,9 +88,49 @@ Apply the plan within the chosen scope (FULL / SHARED / CUSTOM — `scope-gate.m
 - **Observing only.** Do not write code, selectors, or JSON. You may read element identifiers
   incidentally and record them in the learning file's `## Automation Tricks` section — but
   NEVER in the TC deliverables.
-- **Read-only in spirit**: prefer navigation and selection over creating, editing, or deleting
-  records. If a case genuinely requires mutated state, use seeded fixture data.
+- **Prefer selection over mutation for observation**: a label, a reveal or a wait is confirmed
+  by navigation and selection. **Data changes follow §3a**, never a general "read-only in
+  spirit" rule: a TC that creates, modifies or deletes runs only under the run's "yes", and a
+  `MISSING` data item is prepared per `test-data-resolution.md` §4 before the TCs that need it.
 - **One progress line per screen** in the chat (`scope-gate.md` §6) — no narration of clicks.
+
+## 3a. Data-changing TCs — executed when authorized, always reconciled
+
+The combined ask (`intake.md` §3) answered "may this run create / modify / delete data on
+{env}?". The answer holds for the whole run and is never re-asked.
+
+- **Which TCs**: those whose `Data effect` is `creates`, `modifies` or `deletes` (a read-only TC
+  never mutates, whatever the answer). Production named in the environment note forces "no".
+- **"No"** → each such TC in scope stays `draft — not app-validated (data changes not
+  authorized)`; its common-flow prefix may still be observed for wording, but its tail is not
+  run and it is never `inferred` from the prefix alone. This is the one exclusion the run makes
+  on the user's word, and the final message names every TC it kept out.
+- **"Yes"** → before the mutating step, identify the record as the UI shows it (name, number,
+  key — plain words, no ids from the snapshot) and note it in the run log you keep in the chat
+  context; after the TC's Expected Result was checked, **revert through the UI** when a way
+  exists: the TC's own cleanup step, a `TEST-DATA` §5 way, or a learning-file entry (delete the
+  created record, restore the modified value, recreate a deleted seeded record only when its
+  exact values are known). Never revert through an API or the database from here.
+- **Preparation runs** (`test-data-resolution.md` §4) — a `MISSING` item whose dependents are
+  inside the chosen scope is prepared **before the TCs that depend on it** under the consent its
+  way needs: a UI journey (a creating TC of this set, a common flow, a creation screen seen)
+  needs no answer; an existing automation helper runs under this "yes"; an endpoint from the
+  application's source code and a database write each need the explicit "yes" of the consent
+  ask. The record is identified like any record here, verified on its oracle, and **kept by
+  default** — the keep / clean-up decision is the ONE post-walk question (the creating TC's own
+  cleanup step is deferred to it). Never in COMPARISON mode, never on production, never with
+  invented values.
+- **Outcome per record** → the structured return line `**Data changes:** {n} made · {n} cleaned
+  up · {n} kept · {n} left ({record identities})`; every record left behind (no way to revert, or
+  the revert failed) is an Environment-blockers line `left in {env}: {record} — created/changed
+  by TC-…`. The TC keeps its observed state either way.
+- A TC that needs fixture data that is absent is a `MISSING` data item (`patch-rules.md` §3):
+  the item is prepared through the first available way (`test-data-resolution.md` §4) and the
+  TC is walked on it — its stamp says `data: prepared this run ({way})`. It stays `draft — not
+  app-validated (data missing — D{n})` only when no way exists, the preparation was not
+  confirmed by the oracle or the QC declined, and `draft — not app-validated (data not creatable
+  — D{n})` when evidence shows the state cannot exist. The run never invents data to make a TC
+  pass.
 
 ## 4. Secondary-locale policy — verify where localization matters
 
@@ -138,8 +180,9 @@ locales.
 matched) · `enhanced` (corrected / extended from observation — log what changed) · `inferred`
 (prefix seen, tail confirmed from prior knowledge or SHARED scope — not witnessed) ·
 `discrepancy` (app contradicts spec — PB recorded) · `not-implemented — pending implementation`
-(§1) · `draft — not app-validated` (not walked: scope excluded, app unreachable, stale, or
-**human step pending** — reason in parentheses). A TC stopped at a `[HUMAN]` step is
+(§1) · `draft — not app-validated` (not walked: scope excluded, app unreachable, stale, data
+changes not authorized, data missing — D{n}, data not creatable — D{n}, or **human step
+pending** — reason in parentheses). A TC stopped at a `[HUMAN]` step is
 `draft — not app-validated (human step pending)`, stamped `outcome-check: human step pending`
 (the only case this skill writes that key); the six states are unchanged — this is a draft
 reason. Never mark a TC `validated` on the strength of its prefix alone — that is `inferred`.

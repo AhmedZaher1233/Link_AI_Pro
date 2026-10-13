@@ -123,7 +123,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   if (r.payload.warnings.length) p.push('clean sample raised warnings: ' + r.payload.warnings.map((w) => w.kind).join(','));
   if (JSON.stringify(c.byState) !== JSON.stringify({ validated: 1, enhanced: 0, inferred: 1, discrepancy: 1, 'not-implemented': 1, draft: 1 })) p.push('byState ' + JSON.stringify(c.byState));
   if (c.coverage.weighted !== 66.7 || c.coverage.full !== 1 || c.coverage.partial !== 2) p.push('coverage ' + JSON.stringify([c.coverage.weighted, c.coverage.full, c.coverage.partial]));
-  if (c.testData.ready !== 2 || c.testData.unknown !== 1) p.push('testData ' + JSON.stringify(c.testData));
+  if (c.testData.items !== 4 || c.testData.ready !== 2 || c.testData.unknown !== 1 || c.testData.notCreatable !== 1) p.push('testData ' + JSON.stringify(c.testData));
   if (c.bugs.open !== 1 || c.bugs.current !== 1) p.push('bugs ' + JSON.stringify(c.bugs));
   check('4 derived numbers', p, c.byState);
 }
@@ -658,6 +658,23 @@ for (const s5name of ['link-qc-5-test-run-automation', 'link-qc-5b-test-run-manu
     if (!/مرجع الذكاء الاصطناعي/.test(ar.html || '')) p.push('Arabic chrome string for the AI oracle heading missing');
   } finally { t.cleanup(); }
   check('28 AI Oracle sub-list parsed, keyed, rendered; [D{n}] checked; absent on the plain sample', p, {});
+}
+
+/* 29 — the fifth test-data status NOT CREATABLE (written by 3b / 3c) is accepted, counted and badged; any other word still BLOCKs. */
+{
+  const p = [];
+  const base = render({ tcPath: SAMPLE, root: here });
+  if (base.payload.gate !== 'PASS') p.push('sample with a NOT CREATABLE row is not PASS: ' + base.payload.gate + ' ' + base.payload.gateReason);
+  if (base.payload.counts.testData.notCreatable !== 1) p.push('counts.testData.notCreatable != 1: ' + JSON.stringify(base.payload.counts.testData));
+  if (!/<span class="badge d-not-creatable">NOT CREATABLE<\/span>/.test(base.html || '')) p.push('NOT CREATABLE badge not rendered with the d-not-creatable class');
+  if (!/<span class="ltr">4<\/span> · <span class="ltr">2<\/span> \/ <span class="ltr">0<\/span> \/ <span class="ltr">0<\/span> \/ <span class="ltr">1<\/span> \/ <span class="ltr">1<\/span>/.test(base.html || '')) p.push('the test-data header note does not show the fifth count');
+  const t = tmpCopy((s) => s);
+  fs.writeFileSync(path.join(t.dir, 'TEST-DATA-kpi-filter.md'), read(SAMPLE_DATA).replace('| NOT CREATABLE |', '| NOT POSSIBLE |'));
+  try {
+    const r = render({ tcPath: t.tc, root: t.dir });
+    if (r.payload.gate !== 'BLOCKED' || !kinds(r).includes('unknown-enum')) p.push('a sixth status word did not BLOCK: ' + r.payload.gate);
+  } finally { t.cleanup(); }
+  check('29 NOT CREATABLE test-data status accepted, counted, badged; other words BLOCK', p, {});
 }
 
 const out = {

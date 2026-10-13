@@ -121,10 +121,15 @@ PREREQUISITES (asked/checked, not guessed):
   - Healthy app environment (URL responding, VPN up) — otherwise the run stops as
     ENVIRONMENT_BLOCKED
   - Test data: BEFORE the run the skill checks every TC's preconditions/data against the
-    environment, lists the TCs that would be skipped, and asks you ONCE per gap how to
-    handle it — api (an endpoint it found) / ui (an end-to-end setup journey) / db (only if
-    you name the env var holding the connection string) / manual (you insert, reply "done")
-    / skip. Created data is deleted after the run unless you add "keep".
+    environment, searches a way to create what is missing (the learning file, the automation
+    project's helpers, the application's source code, a UI journey, a DB helper) and PREPARES it
+    itself — a UI journey or an existing helper without asking; an endpoint read from the source
+    code or a database write only after your "yes" (asked ONCE, in one message); db only if you
+    name the env var holding the connection string; manual (you insert, reply "done") or skip
+    only for a gap with no way. Every prepared item is verified on its oracle before its TCs run,
+    values the system stamps (dates, codes) are read back and reported as deviations for skill
+    3, and "not creatable" is recorded with evidence instead of "data missing". Created data is
+    KEPT unless you answer "clean up" to the one question after the run.
 
 OPTIONAL (only when the story is already published to Azure DevOps):
   - Azure DevOps MCP connected with a read/write PAT (Work Items + Test Management) — cloud

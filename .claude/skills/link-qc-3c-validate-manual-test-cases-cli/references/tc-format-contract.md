@@ -37,6 +37,7 @@ build: {version shown by the app | unknown}
 scope: full-tail   (this skill never writes prefix-only — it has no shared-flows-only mode)
 tool: cli
 outcome-check: {what was looked at → what it showed, plain words | human step pending}
+data: prepared this run ({e2e scenario | api helper | api source code | db})   (only for a TC walked on data this run prepared — test-data-resolution.md §4; otherwise absent)
 content-sha256: {sha256 of Preconditions + Steps + Expected Result text, normalized}
 req-sha256: {sha256 of the cited acceptance-criterion text as read from the REQ / spec now}
 open-questions: {Q-ids open at observation time | —}

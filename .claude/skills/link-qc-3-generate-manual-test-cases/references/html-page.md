@@ -44,7 +44,7 @@ Read the payload, never the HTML: `gate`, `gateReason`, `counts`, `mismatches[]`
 |---|---|---|
 | `PASS` | header consistent, vocabulary valid, (Arabic) every key translated | deliver the page |
 | `MISMATCH` | a header line disagrees with the tables (`mismatches[]`), and/or Arabic keys are missing or stale | the page IS written (with a warning strip / preview banner). **Fix the header lines in the markdown** (skill 3) or the counts you patched (3b), re-render. An Arabic page with `arabicComplete: false` is a **preview** — say so; never call it the Arabic deliverable |
-| `BLOCKED` | something would make the page wrong: out-of-vocabulary `Type` / `Validation` / test-data status, a table row with the wrong cell count, a TC without `Type` / `Steps` / `Expected Result`, a password-shaped literal in a step or in a reviewer comment, a placeholder the model cannot fill, a hand-edited page without `--force` | nothing is written. Fix the markdown (`errors[]` names the line) and re-render. Never bypass by writing HTML yourself |
+| `BLOCKED` | something would make the page wrong: out-of-vocabulary `Type` / `Validation` / test-data status (the five words `READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN` / `NOT CREATABLE`), a table row with the wrong cell count, a TC without `Type` / `Steps` / `Expected Result`, a password-shaped literal in a step or in a reviewer comment, a placeholder the model cannot fill, a hand-edited page without `--force` | nothing is written. Fix the markdown (`errors[]` names the line) and re-render. Never bypass by writing HTML yourself |
 | `NOT_RUN` | no `--tc`, or the file does not exist | fix the path |
 
 `readOnly: true` in the payload means nothing was written (dry run, or a refused write).
@@ -98,7 +98,7 @@ TEST-DATA without the Environment table or without the Accounts `ID` column rend
 | Validated / enhanced / inferred / discrepancy / not-impl / draft | the `Validation` value per TC (`draft — … (stale — …)` counts as draft and is badged `stale`) |
 | **App validation progress** `{observed}/{N} ({pct}%)` | observed = `validated` + `enhanced` + `discrepancy`, not stale. Excludes `inferred`, `not-implemented`, `draft`. Not a pass rate |
 | **Requirement coverage** gauge, Full / Partial / None chips, per-AC depth bars | the `## Requirement Coverage Score` table only (`weighted = (full + 0.5 × partial) / ACs`). Per-AC bar segments = TCs the row cites, split into happy (non-negative types) / negative / distinct locales. Zero ACs → `—`, never `0%`. **Independent of validation states** — the caption on the page says so |
-| Test data `{items} · ready / missing / impossible / unknown` | the at-a-glance table rows; no file → `—` |
+| Test data `{items} · ready / missing / impossible / unknown / not creatable` | the at-a-glance table rows (`counts.testData.notCreatable` counts the `NOT CREATABLE` rows the validators write); no file → `—` |
 | Potential bugs `open / not checked / resolved` | `pb-meta` status; *current* = open + not checked (resolved is history) |
 | — (not on the page) | run metadata: the header stamp's `by` / `tool`, each stamp's `tool` / `outcome-check`, each PB's `screenshot`. They reach the payload only (`document.stamp`, `document.evidence[]`, `document.potentialBugs[]`) so a comparison between validators stays traceable without changing the page |
 | Manual-only counts | the manual-only table rows and their Priority |

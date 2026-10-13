@@ -42,15 +42,15 @@ project**, not to this repo. Do not create them here.
     link-qc-3-generate-manual-test-cases/          manual TCs (EN/AR), DESIGN ONLY, rendered HTML review page (human gate)
       SKILL.md INPUT.txt references/ (8) scripts/ (render-tc-review, selftest, fixtures/) assets/ (2: tc-review body partial + report-shell — the one general HTML page, shared with skill 5)
     link-qc-3b-validate-manual-test-cases/         OPTIONAL live validation of a TC doc (Playwright MCP), patches in place — the default validator
-      SKILL.md INPUT.txt references/ (10) scripts/ + assets/ = byte-identical mirrors of skill 3's
+      SKILL.md INPUT.txt references/ (11, incl. test-data-resolution.md — SHARED-3B-3C blocks byte-identical with 3c's) scripts/ + assets/ = byte-identical mirrors of skill 3's
     link-qc-3c-validate-manual-test-cases-cli/     OPTIONAL evaluation twin of 3b on playwright-cli (no MCP); same contracts; NO scope gate (walks every TC); comparison protocol
-      SKILL.md INPUT.txt references/ (13, incl. test-data-resolution.md — 3c-only) assets/ (template mirror + comparison template) scripts/ = mirrors of skill 3's
+      SKILL.md INPUT.txt references/ (13, incl. test-data-resolution.md — shared contract with 3b) assets/ (template mirror + comparison template) scripts/ = mirrors of skill 3's
     link-qc-4-publish-test-cases-azure/            beautify approved TCs → Azure DevOps + ADO-MAP.md with verified tags / automation status; --suite-only places published TCs in a Test Plan suite later
       SKILL.md INPUT.txt scripts/ (ado-sync-plan, tc-hash — canonical copy, selftest-ado-sync + fixtures/ado-sync/)
     link-qc-5-test-run-automation/                 Playwright POM generation (automation inventory first) + phased run + 2 compliance gates
       SKILL.md INPUT.txt references/ (5: automation-rules, compliance-checkpoints, run-report, validator, code-craft) scripts/ (11 + fixtures/: the 9 below plus tc-hash — mirror of skill 4's — and selftest-tc-hash) assets/ (8: run-report body partial + report-shell mirror, 6 *.template.ts copied into consumer projects)
     link-qc-5b-test-run-manual-cli/                manual twin of 5: every TC of an APPROVED document run in full through playwright-cli (no MCP), smoke gate without heal, `AI Oracle` TCs judged by rubric; writes skill 5's report set into skill 5's story folder — report only, gates nothing
-      SKILL.md INPUT.txt references/ (9: intake, browser-cli, run-plan, execution-rules, ai-response-rules, run-report-manual, open-questions, learning-file, self-review) scripts/ (render-run-report, selftest-run-report, scan-lib + fixtures/run-report/ — mirrors of skill 5's; selftest-manual-run + fixtures/manual-run/ — 5b-only) assets/ (2: run-report body partial + report-shell — mirrors)
+      SKILL.md INPUT.txt references/ (10: intake, browser-cli, run-plan, execution-rules, test-data-preparation, ai-response-rules, run-report-manual, open-questions, learning-file, self-review) scripts/ (render-run-report, selftest-run-report, scan-lib + fixtures/run-report/ — mirrors of skill 5's; selftest-manual-run + fixtures/manual-run/ — 5b-only) assets/ (2: run-report body partial + report-shell — mirrors)
     link-qc-6-ui-testing/                          visual UI audit of one implemented screen vs its design (Playwright MCP; optional Figma MCP) or, with no design, vs tokens / consistency / WCAG / RTL — beside the chain, gates nothing
       SKILL.md (≈420 lines, orchestrator) INPUT.txt references/ (10: capture-and-files, no-design-audit, measurement-passes, coverage-passes, bug-metadata, annotation, annotation-fallback, report-template, learning-and-coverage-index, second-round) — no scripts
     link-qc-7-sync-tc-status-to-azure/             Azure loop: latest TC outcomes → ONE Test Plan run (cloud test-plan tools; otherwise NOT_RUN) — SKILL.md INPUT.txt references/qc-contract.md (mirror)
@@ -257,7 +257,7 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-config-invent
   reviewer's file, the only extra entry in the story-folder whitelist); `--comments` overrides;
   the provenance line gains an optional `comments=` hash (v1.0 pages still verify). The contract
   lives in `references/run-report.md` (§9b comments, §10 templates).
-- `selftest-run-report.mjs` exits non-zero on mismatch by design; its 28 cases (23 PARTIAL rows, 24 reviewer comments, 25 one shell per page, 26 shell + kit mirror with 3 / 3b / 3c, 27 the `ai_rubric_failure` classification, 28 the full mirror with 5b — renderer, harness, scan-lib, both templates, run-report fixtures) run on a temporary
+- `selftest-run-report.mjs` exits non-zero on mismatch by design; its 29 cases (23 PARTIAL rows, 24 reviewer comments, 25 one shell per page, 26 shell + kit mirror with 3 / 3b / 3c, 27 the `ai_rubric_failure` classification, 28 the full mirror with 5b — renderer, harness, scan-lib, both templates, run-report fixtures, 29 the test-data readiness decisions counted per phase) run on a temporary
   copy of `scripts/fixtures/run-report/automation/` (a story with two phases, two bugs and PNG
   stubs) and compare against `scripts/fixtures/run-report/golden/`. Regenerate the golden only for
   a deliberate change (command in the fixture README).
@@ -316,7 +316,7 @@ node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/selftest.mjs --
 - `--write-skeleton` **merges** the sidecar and never resets a translation (unchanged `en` keeps
   its `ar`; changed → `stale` with the old `ar` kept; new → `ar: null`; removed → `orphan`). A
   page rendered with missing / stale keys is a preview (`arabicComplete: false`).
-- `selftest.mjs` exits non-zero on mismatch by design; its 29 cases cover the golden EN / AR /
+- `selftest.mjs` exits non-zero on mismatch by design; its 30 cases cover the golden EN / AR /
   legacy pages, the merge rule, the false-PASS guards, exit codes, provenance, **case 20 (run
   metadata — the `by 3c … , tool cli` header, the `tool` / `outcome-check` stamp keys and the
   `screenshot` pb-meta key are parsed into the payload and never rendered)**, **cases 21-22
@@ -324,7 +324,7 @@ node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/selftest.mjs --
   unresolved tokens warn; no TEST-DATA → unchecked; legacy TEST-DATA → compatibility)**, **case 23
   (language precedence L1-L4: the header line and the sidecar never decide, `--lang ar` does, the
   narrative check flags Arabic narrative and ignores quoted labels)**, **case 24 (`[HUMAN]` count
-  and badge, `Tags` chips, Tags optional)**, **case 25 (reviewer comments: pre-fill, badges, history, orphans, stale revision, other page, secret, `--comments`, Arabic)**, **case 26 (one shell per page)**, **case 27 (shell + kit byte-identical with skills 5 and 5b when installed)**, **case 28 (the optional `AI Oracle` field)** and **case 0, the mirror check** (sha256 of every
+  and badge, `Tags` chips, Tags optional)**, **case 25 (reviewer comments: pre-fill, badges, history, orphans, stale revision, other page, secret, `--comments`, Arabic)**, **case 26 (one shell per page)**, **case 27 (shell + kit byte-identical with skills 5 and 5b when installed)**, **case 28 (the optional `AI Oracle` field)**, **case 29 (the fifth test-data status `NOT CREATABLE` — accepted, counted, badged; any other word still BLOCKs)** and **case 0, the mirror check** (sha256 of every
   mirrored path against every sibling skill folder present — `MIRROR_SKILLS` = 3, 3b, 3c;
   `skipped` only when none is present). Regenerate a golden only for a deliberate change
   (`scripts/fixtures/MIRROR.md`).
@@ -349,9 +349,11 @@ genuine coverage gap or updating cases may change it"), the no-code rule with th
 exception, the frozen field list, and "3b / 3c is not a gate". Between 3b and 3c only: the
 freshness / PB / open-question rules, which 3c copied from 3b and adapted only where the browser
 tool differs (`walk-rules.md` = 3b's `mcp-pass.md` made tool-neutral + §3a data changes + §6a
-outcome rule; `browser-cli.md` and `test-data-resolution.md` — the evidence-based way decision,
-item priority, e2e preparation run and closure-by-evidence of test-data questions — are
-3c-only). **Scope is where they deliberately differ** (user
+outcome rule; `browser-cli.md` is 3c-only; `test-data-resolution.md` — the evidence-based way
+decision, item priority, the nine-step preparation run with its consent table, the delivered
+statuses incl. `NOT CREATABLE` and closure-by-evidence of test-data questions — exists in both
+with the tool sections adapted and two `SHARED-3B-3C` blocks byte-identical; 3b's `mcp-pass.md`
+§3a is 3c's `walk-rules.md` §3a with MCP wording). **Scope is where they deliberately differ** (user
 decision, 2026-09-27): 3b keeps its scope gate (`references/scope-gate.md`, FULL / SHARED /
 CUSTOM, one question) and its cross-validator question (`patch-rules.md` §1b); 3c has
 `references/discovery-plan.md` instead — no scope question, no narrowing flag, every TC walked
@@ -508,7 +510,8 @@ a SKILL.md.
   in `reply.md` beside the screenshot; it writes only skill 5's report set into skill 5's story folder,
   sharing the phase counter and the `BUG-{n}` sequence, and never writes into the TC document (a design
   problem → skill 3 `--revision`). Like 3c it never receives a password, never installs, never uses MCP,
-  never switches tool mid-run.
+  never switches tool mid-run. Missing test data is prepared per the twelve principles below
+  (`references/test-data-preparation.md`); `TEST-DATA` stays read-only for it.
 - **AI Oracle** (optional TC field after `Data Oracle`: Intent · Must contain · Must not contain ·
   Language · Max length · Repeats / Pass threshold): designed by skill 3, judged by 5b from the reply
   text — hard checks + rubric against the pass threshold, never from a screenshot; no secret in the prompt
@@ -540,16 +543,47 @@ a SKILL.md.
   file), never installs anything (`/sync-skills --tools` does), never uses MCP, never switches
   tool mid-run; a TC is `validated` only after its expected result was positively observed
   (`outcome-check`); data-changing TCs run only with the per-run "yes" and are reconciled.
+- **Missing test data is prepared, not skipped — the twelve principles** (user decision,
+  2026-10-13; byte-identical block in 3b / 3c `references/test-data-resolution.md`, skill 5
+  PHASE 2.6 and 5b `references/test-data-preparation.md`, plus a shared consent table): for every
+  `MISSING` / `UNKNOWN` item the skill searches a way in the order learning file → the automation
+  project's helpers (manifest paths, then a search for create / seed / fixture / factory /
+  pre-request / setup modules) → the application's create endpoints read from its source code
+  (skill 10's `.project-profile.md` first) → a UI journey (creating TC / common flow / creation
+  screen) → a DB helper → manual; "available" only by code, a screen seen live or a recorded
+  decision (API docs alone = `to be confirmed`). **Consent follows the way:** a UI journey needs
+  no question; an existing helper runs under the run's data-changes "yes"; an endpoint from the
+  source code and a DB write each need an explicit "yes" naming the item, asked ONCE together
+  after discovery and before the dependents; keep / clean-up is asked ONCE after the run (default
+  keep); production named in the environment note stops every preparation. The seed is a
+  temporary script in the session scratch folder (project helpers imported by absolute path,
+  env selected the project's way, deleted afterwards — never new code in the repository, kept as
+  a fixture only on request); fixtures are dedicated and right-sized; an item is `READY` only
+  after its oracle confirmed it (screen + a read-only API / DB read when the screen hides the
+  value); system-stamped values (dates, periods, codes, sequence numbers) are read back and used
+  for the run, each substitution a Deviation / step-wording finding for skill 3, never a silent
+  rewrite; permission / visibility / ownership preconditions are checked against the rule's
+  source too; evidence that a state cannot exist is `NOT CREATABLE — {evidence}` (never "data
+  missing"); a permission-layer refusal stops the step and is reported, never worked around; no
+  secret is printed, logged, stored or passed on a command line and captured output is filtered;
+  a pre-existing record is never modified. Runners (5, 5b) record every item in the readiness
+  table / `data_readiness` as `READY` · `prepared (api|ui|db)` · `skip — data_missing` (no way
+  found) · `skip — not creatable` · `skip — QC declined` (the run-report renderer counts them,
+  warns on any other word, still accepts the legacy bare words); validators (3b, 3c) deliver a
+  kept item `READY`, a removed one `MISSING` with a recreate note, write `NOT CREATABLE` (the
+  fifth TEST-DATA status, accepted and counted by the review renderer, never written by skill 3)
+  and stamp a walked TC `data: prepared this run ({way})`; draft reasons `data missing — D{n}` /
+  `data not creatable — D{n}` exist only after the search. 3b prepares only for items whose
+  dependents are inside the chosen scope; neither validator prepares in a 3b-vs-3c COMPARISON
+  run. No seed runner is ever pre-approved in `allowed-tools`.
 - **3c resolves test data from evidence** (`references/test-data-resolution.md`): each item's
-  way is the first available in `e2e scenario → api → db → set directly → manual`, "available"
-  meaning a learning-file line, skill 5's automation fixtures (read, never run, described in
-  words), a creating TC / common flow, or a creation screen seen live — an API-docs page is
-  `to be confirmed`, an unconfirmed `api` / `db` is never chosen; item priority High / Medium /
-  Low from the using TCs; a `MISSING` item is prepared only through a documented e2e scenario
-  under that same "yes", before its dependents, reverted at the run end, never via api / db,
-  never in COMPARISON mode, and a reverted item is delivered `MISSING`; a test-data question is
-  closed only by evidence (facts → `## Test Data`, never the Q&A); undecided items are asked
-  ONCE after the walk. The mirrored `open-questions.md` is untouched by this.
+  way is the first available in `e2e scenario → api → db → set directly → manual` (availability
+  per the principles above); item priority High / Medium / Low from the using TCs; a test-data
+  question is closed only by evidence (facts → `## Test Data`, never the Q&A); undecided items
+  are asked ONCE after the walk, in the same message as keep / clean-up. 3b shares the file
+  (MCP wording in the tool sections, the `SHARED-3B-3C` blocks byte-identical — not a `MIRROR`
+  file, not in selftest case 0; check with a marker-bounded diff). The mirrored
+  `open-questions.md` is untouched by this.
 - **Approved documents and 3b:** read-only validation is always allowed; modifying needs the
   user's explicit revision authorization (asked once, `--authorize-revision` counts); `Status`
   becomes `PENDING HUMAN REVIEW` only when something actually changed; republish is mentioned only
@@ -640,8 +674,10 @@ a SKILL.md.
 ## Git
 
 Branch `main`; commit and push only when asked. Projects pick changes up on their next
-`/sync-skills`, so a push here is effectively a release — make sure `SKILL.md`, `INPUT.txt`,
-`lib.mjs` and `README.md` are consistent, and that all twelve self-test harnesses pass (skill 1's
+`/sync-skills`, so a push here is effectively a release — add an entry under `## [Unreleased]` in
+`CHANGELOG.md` (one sub-list per skill touched; it doubles as the PR description), make sure
+`SKILL.md`, `INPUT.txt`, `lib.mjs` and `README.md` are consistent, and that all twelve self-test
+harnesses pass (skill 1's
 `selftest.mjs`; skill 4's `selftest-ado-sync.mjs`; skill 5's validator, run-report, watchdog,
 config-inventory and tc-hash harnesses; the mirrored one in skills 3, 3b and 3c including its
 mirror case; and skill 5b's `selftest-run-report.mjs` — the run-report mirror — and

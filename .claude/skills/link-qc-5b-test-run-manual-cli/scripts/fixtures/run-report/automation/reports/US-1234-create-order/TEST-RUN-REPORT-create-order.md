@@ -113,9 +113,9 @@
 ### Test-data readiness
 **Verdict:** READY-WITH-SKIPS (1 TC)
 
-| Gap | TCs | Decision | Source | Provisioning | Cleanup |
-|---|---|---|---|---|---|
-| customer without orders | TC-020 | skip | qc | — | — |
+| Gap | TCs | Decision | Source | Provisioning | Identifiers / names | Effective stamped values | Verified on | Cleanup |
+|---|---|---|---|---|---|---|---|---|
+| customer without orders | TC-020 | skip — QC declined | qc | — | — | — | — | — |
 
 ### Deviations
 - none
@@ -205,11 +205,12 @@ First run fully green
 none
 
 ### Test-data readiness
-**Verdict:** READY-WITH-SKIPS (1 TC)
+**Verdict:** READY-WITH-SKIPS (1 TC) — 1 gap prepared
 
-| Gap | TCs | Decision | Source | Provisioning | Cleanup |
-|---|---|---|---|---|---|
-| customer without orders | TC-020 | skip | learning | — | — |
+| Gap | TCs | Decision | Source | Provisioning | Identifiers / names | Effective stamped values | Verified on | Cleanup |
+|---|---|---|---|---|---|---|---|---|
+| customer without orders | TC-020 | skip — QC declined | learning | — | — | — | — | — |
+| order with 12 line items | TC-010 | prepared (api) | learning | the automation project's order helper | order no. 10231 in customer "qa-create-order" | order date = 2026-05-02 | order list + read-only API read, 2026-05-02 | kept |
 
 ### Deviations
 - variation B of TC-007 did not execute: the parametrised title lost its label after the retest edit; re-queued for phase 3

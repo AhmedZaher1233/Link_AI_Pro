@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- render-tc-review v1.1 · source=033d6eccfe6b09f38693abd9c4d6b1eb98dc7331f0c417d58e5050bd7ec13fac · data=none · strings=none · comments=none · lang=en · page=7d46480db9bfcd3f92f96cec7628abcc9b2b6e94cd22417211a2ba75bb4a5a60 -->
+<!-- render-tc-review v1.1 · source=033d6eccfe6b09f38693abd9c4d6b1eb98dc7331f0c417d58e5050bd7ec13fac · data=none · strings=none · comments=none · lang=en · page=64958ca806ad425039e2f2151528ea205a48d2a6b525b1c30100649e483a7e63 -->
 <!-- MIRROR — byte-identical copies live in five skill folders, each under assets/:
      link-qc-3-generate-manual-test-cases ↔ link-qc-3b-validate-manual-test-cases ↔
      link-qc-3c-validate-manual-test-cases-cli ↔ link-qc-5-test-run-automation ↔ link-qc-5b-test-run-manual-cli.
@@ -156,6 +156,7 @@ tr.attempts-row td { background: var(--panel-2); padding: 8px 14px 14px; }
 .badge.d-missing { border-color: var(--amber); color: var(--amber); }
 .badge.d-impossible { border-color: var(--red); color: var(--red); }
 .badge.d-unknown { border-color: var(--muted); }
+.badge.d-not-creatable { border-color: var(--red); color: var(--red); border-style: dotted; }
 .badge.stale, .badge.orphan { border-color: var(--red); color: var(--red); } .badge.stale { border-style: dashed; }
 .badge.human { border-color: var(--purple); color: var(--purple); }
 .badge.s-pass, .badge.s-green { border-color: var(--green); color: var(--green); }
@@ -304,7 +305,7 @@ footer code { font-family: var(--mono); color: var(--text); }
     <div class="tile "><b>2</b><span>Automation candidates</span></div>
     <div class="tile "><b>1/0/0/0/0/1</b><span>Validated / enhanced / inferred / discrepancy / not-impl / draft</span></div>
     <div class="tile "><b>1/2</b><span>App validation progress · observed live (50%)</span></div>
-    <div class="tile "><b>—</b><span>Test data items · ready / missing / impossible / unknown</span></div>
+    <div class="tile "><b>—</b><span>Test data items · ready / missing / impossible / unknown / not creatable</span></div>
     <div class="tile "><b>—</b><span>Potential bugs · open / not checked / resolved</span></div>
   </div>
 

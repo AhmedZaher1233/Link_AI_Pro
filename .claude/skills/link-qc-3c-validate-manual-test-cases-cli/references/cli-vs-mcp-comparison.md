@@ -16,7 +16,7 @@ be retired.** Those are later, explicit user instructions after the report has b
 | Scope | `--full` on both invocations: 3c always walks every TC (it has no scope gate), so 3b is given `--full` to walk the same set — never the scope question |
 | Login | the same method for both: **attended** (3b asks for credentials in chat today, so a 3c run that also uses attended login keeps the comparison about the browser tool, not about the login path). Both resolve every `[A{n}]` / `[E{n}]` / `[D{n}]` token through the same `TEST-DATA` rows. Note the method in the report |
 | Data changes | the same answer for both runs ("yes" only when the reset procedure covers it) |
-| Preparation | 3c's test-data preparation (`test-data-resolution.md` §4) is **switched off** in COMPARISON mode — 3b has no equivalent and the reset procedure defines the data; 3c records what it would have prepared and prepares nothing |
+| Preparation | test-data preparation (`test-data-resolution.md` §4 in both skills) is **switched off** in COMPARISON mode for both runs — the reset procedure defines the data; each run records what it would have prepared and prepares nothing |
 | Session | a **fresh Claude Code session** per run, nothing else done in it; the invocation names the comparison explicitly ("compare 3b and 3c — run {skill} on {document} --full") so 3b asks no cross-validator or repeat question (3c never asks one) |
 | Order | run 3b first or 3c first — state the order; the reset between runs makes it irrelevant |
 
@@ -73,7 +73,7 @@ row: the TC-IDs, the expected outcome, the 3b result, the 3c result, a verdict.
 | 3 | Dynamic element / stale reference (a screen that re-renders after an action) | the step still completes; 3c re-snapshots once (`browser-cli.md` §6); no `draft (screen could not be driven)` |
 | 4 | Two roles | both sessions / both logins used; role-specific TCs observed under the right role |
 | 5 | Arabic screen | secondary-locale labels captured live, none guessed; RTL assertion walked when the TC has one |
-| 6 | Missing data | the TC stays `draft`, the data item `MISSING`, never `validated` (3c: lists the item as "would prepare", prepares nothing) |
+| 6 | Missing data | the TC stays `draft`, the data item `MISSING`, never `validated` (both: the item is listed as "would prepare" with its way, nothing is prepared in COMPARISON mode) |
 | 7 | Unavailable environment (a screen made unreachable on purpose) | failure rule: re-ask once, honest partial write-back, BLOCKED with the unwalked TC-IDs; 3c sessions closed |
 | 8 | Interrupted run (the session is killed mid-walk, the skill is re-run) | no assumption about what the interrupted run saw; freshness pass on any stamp written; states honest |
 | 9 | APPROVED document without authorization | read-only report, nothing written, `ADO-MAP.md` untouched |

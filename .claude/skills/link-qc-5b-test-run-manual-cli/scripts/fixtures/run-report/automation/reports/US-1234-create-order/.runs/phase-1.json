@@ -46,7 +46,7 @@
     "estimate": { "serial_only_s": 840, "planned_s": 420 }
   },
   "open_questions": { "raised": 1, "answered": 0, "reused_from_learning": 0, "assumed": 1, "unresolved": 0, "questions": [ { "id": 1, "source": "TC-007 expected result", "ambiguity": "\"the total updates correctly\"", "tcs": ["TC-007"], "decision": "sum of line totals, VAT excluded", "by": "assumption" } ] },
-  "data_readiness": { "verdict": "READY-WITH-SKIPS", "gaps": [ { "gap": "customer without orders", "tcs": ["TC-020"], "decision": "skip", "source": "qc", "provisioning": null, "cleanup": null } ], "predicted_skips": ["TC-020"] },
+  "data_readiness": { "verdict": "READY-WITH-SKIPS", "gaps": [ { "gap": "customer without orders", "tcs": ["TC-020"], "decision": "skip — QC declined", "source": "qc", "provisioning": null, "identifiers": null, "stamped_values": null, "verified_on": null, "cleanup": null } ], "predicted_skips": ["TC-020"] },
   "coverage_snapshot": {
     "measuredAt": "2026-09-20T10:03:00+03:00", "weightedPct": 75, "target": 80, "targetSource": "default", "mechanism": "soft block", "verdict": "override",
     "byStage": { "smoke": { "total": 1, "full": 1, "partial": 0, "none": 0, "weightedPct": 100 }, "positive": { "total": 2, "full": 1, "partial": 1, "none": 0, "weightedPct": 75 }, "negative": { "total": 1, "full": 0, "partial": 1, "none": 0, "weightedPct": 50 } },

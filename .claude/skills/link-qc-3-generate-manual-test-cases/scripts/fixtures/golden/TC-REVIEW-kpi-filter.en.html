@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- render-tc-review v1.1 · source=8f90061b5ed124b34201537cbdd34f35130508c9d58a00e9d6e670ece3c1cadc · data=c07192701c989626d288039a029ad8dfaef89d48da5f6c7eb783b3d9c8f09ea6 · strings=none · comments=none · lang=en · page=24011a474109ce0ac31859d8d20469a51b9e38133b31e76e398bcf44d591499c -->
+<!-- render-tc-review v1.1 · source=8f90061b5ed124b34201537cbdd34f35130508c9d58a00e9d6e670ece3c1cadc · data=68fcee15a22f4de8039436f5301c9c7e380e8d34d22a4a275ba19706b56ff018 · strings=none · comments=none · lang=en · page=479febe4d252f56fdb44928ca5c85abd6bcc1a2c58fabbcaae6635e108e5f365 -->
 <!-- MIRROR — byte-identical copies live in five skill folders, each under assets/:
      link-qc-3-generate-manual-test-cases ↔ link-qc-3b-validate-manual-test-cases ↔
      link-qc-3c-validate-manual-test-cases-cli ↔ link-qc-5-test-run-automation ↔ link-qc-5b-test-run-manual-cli.
@@ -156,6 +156,7 @@ tr.attempts-row td { background: var(--panel-2); padding: 8px 14px 14px; }
 .badge.d-missing { border-color: var(--amber); color: var(--amber); }
 .badge.d-impossible { border-color: var(--red); color: var(--red); }
 .badge.d-unknown { border-color: var(--muted); }
+.badge.d-not-creatable { border-color: var(--red); color: var(--red); border-style: dotted; }
 .badge.stale, .badge.orphan { border-color: var(--red); color: var(--red); } .badge.stale { border-style: dashed; }
 .badge.human { border-color: var(--purple); color: var(--purple); }
 .badge.s-pass, .badge.s-green { border-color: var(--green); color: var(--green); }
@@ -306,7 +307,7 @@ footer code { font-family: var(--mono); color: var(--text); }
     <div class="tile "><b>4</b><span>Automation candidates</span></div>
     <div class="tile "><b>1/0/1/1/1/1</b><span>Validated / enhanced / inferred / discrepancy / not-impl / draft</span></div>
     <div class="tile "><b>2/5</b><span>App validation progress · observed live (40%)</span></div>
-    <div class="tile "><b>3 · 2/0/0/1</b><span>Test data items · ready / missing / impossible / unknown</span></div>
+    <div class="tile "><b>4 · 2/0/0/1</b><span>Test data items · ready / missing / impossible / unknown / not creatable</span></div>
     <div class="tile "><b>1/0/0</b><span>Potential bugs · open / not checked / resolved</span></div>
     <div class="tile human"><b>1</b><span>Human steps · TCs with a step a person must perform or observe (<span class="ltr">1</span>)</span></div>
   </div>
@@ -389,19 +390,21 @@ footer code { font-family: var(--mono); color: var(--text); }
   </section>
 
   <section>
-    <div class="sec-head"><h2>Test data</h2><span class="note"><span class="ltr">3</span> · <span class="ltr">2</span> / <span class="ltr">0</span> / <span class="ltr">0</span> / <span class="ltr">1</span> — details in <span class="ltr">TEST-DATA-kpi-filter.md</span></span></div>
+    <div class="sec-head"><h2>Test data</h2><span class="note"><span class="ltr">4</span> · <span class="ltr">2</span> / <span class="ltr">0</span> / <span class="ltr">0</span> / <span class="ltr">1</span> / <span class="ltr">1</span> — details in <span class="ltr">TEST-DATA-kpi-filter.md</span></span></div>
     <div class="tablewrap"><table>
       <thead><tr><th>#</th><th>Data item</th><th>Must look like</th><th>Used by TCs</th><th>Status</th><th>Best way to get it</th></tr></thead>
       <tbody>
         <tr><td><span class="ltr">D1</span></td><td>KPI &quot;Revenue&quot; with 12 monthly values for 2026</td><td>12 rows, Jan…Dec, strategy &quot;Growth 2026&quot;</td><td><span class="ltr">TC-KPI-01, TC-KPI-01b, TC-KPI-04</span></td><td><span class="badge d-ready">READY</span></td><td>—</td></tr>
         <tr><td><span class="ltr">D2</span></td><td>KPI &quot;Revenue&quot; values for 2024-2026</td><td>36 rows</td><td><span class="ltr">TC-KPI-02</span></td><td><span class="badge d-ready">READY</span></td><td>—</td></tr>
         <tr><td><span class="ltr">D3</span></td><td>An exported KPI file</td><td>Excel, 12 rows</td><td><span class="ltr">TC-KPI-04</span></td><td><span class="badge d-unknown">UNKNOWN</span></td><td>to check — pending implementation</td></tr>
+        <tr><td><span class="ltr">D4</span></td><td>A KPI whose strategy was deleted</td><td>strategy removed, KPI still listed</td><td><span class="ltr">TC-KPI-03</span></td><td><span class="badge d-not-creatable">NOT CREATABLE</span></td><td>none — not creatable (see Problems #2)</td></tr>
       </tbody>
     </table></div>
     <div class="tablewrap"><table>
       <thead><tr><th>#</th><th>Data item</th><th>Problem</th><th>Why</th><th>What the QC / PO must decide</th></tr></thead>
       <tbody>
         <tr class="prio-high"><td><span class="ltr">1</span></td><td><span class="ltr">D3</span></td><td>Export is not built yet</td><td>AC-3 pending implementation</td><td>accept UNKNOWN until the story ships</td></tr>
+        <tr class="prio-high"><td><span class="ltr">2</span></td><td><span class="ltr">D4</span></td><td>not creatable — deleting a strategy removes its KPIs with it (application rule, checked on staging 2026-09-25)</td><td>the state TC-KPI-03 assumes cannot exist</td><td>reword TC-KPI-03 (skill 3 --revision)</td></tr>
       </tbody>
     </table></div>
   </section>

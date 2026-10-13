@@ -37,6 +37,7 @@ build: {version shown by the app | unknown}
 scope: full-tail | prefix-only
 tool: mcp
 outcome-check: human step pending   (only for a TC stopped at a [HUMAN] step; otherwise absent in this skill)
+data: prepared this run ({e2e scenario | api helper | api source code | db})   (only for a TC walked on data this run prepared — test-data-resolution.md §4; otherwise absent)
 content-sha256: {sha256 of Preconditions + Steps + Expected Result text, normalized}
 req-sha256: {sha256 of the cited acceptance-criterion text as read from the REQ / spec now}
 open-questions: {Q-ids open at observation time | —}

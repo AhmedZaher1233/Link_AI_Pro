@@ -133,10 +133,26 @@
         "tcs": [
           "TC-020"
         ],
-        "decision": "skip",
+        "decision": "skip — QC declined",
         "source": "learning",
         "provisioning": null,
+        "identifiers": null,
+        "stamped_values": null,
+        "verified_on": null,
         "cleanup": null
+      },
+      {
+        "gap": "order with 12 line items",
+        "tcs": [
+          "TC-010"
+        ],
+        "decision": "prepared (api)",
+        "source": "learning",
+        "provisioning": "the automation project's order helper",
+        "identifiers": "order no. 10231 in customer \"qa-create-order\"",
+        "stamped_values": "order date = 2026-05-02",
+        "verified_on": "order list + read-only API read, 2026-05-02",
+        "cleanup": "kept"
       }
     ],
     "predicted_skips": [

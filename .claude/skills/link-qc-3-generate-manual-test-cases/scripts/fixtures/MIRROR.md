@@ -14,7 +14,7 @@ on any drift (a sibling that is not installed is simply not compared).
 | Path | What it is |
 |---|---|
 | `sample/TEST-CASES-kpi-filter.md` | new-shape document: 5 TCs across all six validation states, evidence stamps, `[A1]` / `[E1]` / `[D{n}]` data references, a `Tags` column + field (`uat, regression` on TC-KPI-01), one `[HUMAN]` step (TC-KPI-04), `## Potential Bugs`, `## Open Questions`, five findings buckets |
-| `sample/TEST-DATA-kpi-filter.md` | its test-data file (`## 0. Environment` E1, `## 1. Accounts` A1 with the `ID` column, 3 items: 2 READY, 1 UNKNOWN; 1 problem) |
+| `sample/TEST-DATA-kpi-filter.md` | its test-data file (`## 0. Environment` E1, `## 1. Accounts` A1 with the `ID` column, 4 items: 2 READY, 1 UNKNOWN, 1 NOT CREATABLE; 2 problems) |
 | `sample/TC-REVIEW-STRINGS-kpi-filter.ar.json` | complete Arabic sidecar for the sample (every key translated) |
 | `legacy/TEST-CASES-legacy-login.md` | pre-change shape: no `Scope` / `Generated` / `Stage` / anchors / stamps / PB section, `###` self-review tables, `LOGIN-01:` heading style, `APPROVED` |
 | `golden/TC-REVIEW-kpi-filter.en.html` | expected English page for the sample — byte-for-byte |

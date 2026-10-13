@@ -14,7 +14,7 @@ carries them forward as "possibly stale"). The words are frozen — never rename
 | `inferred` | Only the TC's common-flow prefix was observed live; its unique tail was confirmed from the learning file or an earlier observation, NOT replayed (also every TC in a SHARED-FLOWS-ONLY scope whose tail is known). The reviewer must treat it as not directly witnessed | 3b, 3c |
 | `discrepancy` | The application contradicts the requirement (implemented functionality only) — recorded as a Potential Bug, never designed around | 3b, 3c |
 | `not-implemented — pending implementation` | Requirement-based TC for functionality the app does not have yet. Not an application defect | 3b, 3c (skill 3 may write it only when the tester or a skill-4 report states the story is not implemented) |
-| `draft — not app-validated` | Never observed: designed from the requirement (skill 3), scope-excluded, app unreachable, or reset. May carry a reason in parentheses: `draft — not app-validated (stale — {content \| requirement \| environment \| build \| open question Q-n \| revised \| data changes not authorized \| screen could not be driven})`, or `draft — not app-validated (human step pending)` when the TC's browser part was walked but a `[HUMAN]` step remains for a person (3b / 3c stamp `outcome-check: human step pending`; the TC is listed under "Needs a human run" and never counts as observed) | 3, 3b, 3c |
+| `draft — not app-validated` | Never observed: designed from the requirement (skill 3), scope-excluded, app unreachable, or reset. May carry a reason in parentheses: `draft — not app-validated (stale — {content \| requirement \| environment \| build \| open question Q-n \| revised \| data changes not authorized \| data missing — D{n} \| data not creatable — D{n} \| screen could not be driven})` (`data missing` only after 3b / 3c searched every way to prepare the item and none could be run — `test-data-resolution.md` in each validator; `data not creatable` when evidence proves the state cannot exist), or `draft — not app-validated (human step pending)` when the TC's browser part was walked but a `[HUMAN]` step remains for a person (3b / 3c stamp `outcome-check: human step pending`; the TC is listed under "Needs a human run" and never counts as observed) | 3, 3b, 3c |
 
 Rules that hold in every skill that writes a state:
 
@@ -25,7 +25,9 @@ Rules that hold in every skill that writes a state:
 - **A state survives only while its evidence applies.** Each observed TC carries a
   `<!-- tc-evidence -->` stamp (date, environment, build, scope, content hash, requirement-text
   hash, open questions at observation time; 3b writes `tool: mcp`, 3c writes `tool: cli` plus an
-  `outcome-check` line — a stamp without `tool` was written by 3b before 3c existed). When the TC
+  `outcome-check` line — a stamp without `tool` was written by 3b before 3c existed; either
+  validator adds `data: prepared this run ({way})` when the TC was walked on data that run
+  prepared). When the TC
   content, the cited requirement text, the
   environment, the build (where known) or an undermining open question changes, the state drops to
   `draft — not app-validated (stale — {reason})` and the TC is re-queued. A stale TC is counted as

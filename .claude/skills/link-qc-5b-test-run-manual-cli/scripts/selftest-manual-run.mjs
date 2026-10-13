@@ -59,12 +59,18 @@ const section = (html, re) => (html.match(re) || [''])[0];
   const r = render({ reportPath: REPORT, root: here });
   const p = []; const html = r.html || '';
   const c = r.payload.counts.latest;
-  if (!c || c.passed !== 2 || c.failed !== 1 || c.partial !== 1 || c.total !== 4) p.push('latest counts wrong: ' + JSON.stringify(c));
+  if (!c || c.passed !== 2 || c.failed !== 1 || c.partial !== 1 || c.skipped !== 1 || c.total !== 5) p.push('latest counts wrong: ' + JSON.stringify(c));
   if (r.payload.document.status !== 'FAILURES') p.push('status ' + r.payload.document.status + ' != FAILURES');
-  for (const s of ['manual run — playwright-cli 0.9.2 (skill 5b)', 'headed · one session per account', 'A1 attended', '— (manual run)', '00:28:40 (manual run · one session per account)', 'not authorized · 0 made · 0 cleaned up · 0 left']) if (!html.includes(s)) p.push('Run bullet missing on the page: ' + s);
+  for (const s of ['manual run — playwright-cli 0.9.2 (skill 5b)', 'headed · one session per account', 'A1 attended', '— (manual run)', '00:28:40 (manual run · one session per account)', 'authorized · 1 made (0 by TCs · 1 preparation) · 0 cleaned up · 1 kept · 0 left', 'e2e 0 · api helper 1 · api from source 0 · db 0 · kept 1 · cleaned up 0']) if (!html.includes(s)) p.push('Run bullet missing on the page: ' + s);
   if (html.includes('attended ·') && /password|passcode/i.test(section(html, /Login method[\s\S]{0,200}/))) p.push('a login method line carries a secret-shaped word');
   if (!/PARTIAL — human step pending/.test(html)) p.push('PARTIAL status missing');
-  check('2 manual phase counts, outcome and Run bullets', p, { latest: c });
+  const rd = r.payload.document.phases[1].readiness;
+  if (!rd || rd.rows !== 2 || rd.prepared.api !== 1 || rd.skipped.not_creatable !== 1 || rd.skipped.data_missing !== 0) p.push('phase-2 readiness decisions not counted: ' + JSON.stringify(rd));
+  if (!/Decisions: ready 0 · prepared 1 \(api 1 · ui 0 · db 0\) · skipped 1 \(data_missing 0 · not creatable 1 · QC declined 0\)/.test(html)) p.push('the Decisions line is not rendered');
+  if (!/system stamped 2026-10-10 10:52/.test(html)) p.push('the stamped-value Deviation is not rendered');
+  if (!/not creatable — a return older than the window/.test(html)) p.push('the not-creatable skip reason is not rendered');
+  if (wkinds(r).includes('unknown-readiness-decision')) p.push('fixture warns on a readiness decision');
+  check('2 manual phase counts, Run bullets, readiness decisions and the stamped-value deviation', p, { latest: c, readiness: rd });
 }
 
 /* 3 — `ai_rubric_failure` is a catalogue classification (no warning); the two repeats render as variants with their attempts; the reply files are plain evidence links that resolve. */

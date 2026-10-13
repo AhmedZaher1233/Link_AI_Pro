@@ -2,9 +2,15 @@ SKILL: link-qc-3b-validate-manual-test-cases
 WHAT IT DOES: OPTIONAL step after link-qc-3-generate-manual-test-cases. Walks an existing test-case
 document through the RUNNING application with Playwright MCP — targeted discovery, not a replay —
 sets each TC's validation state with evidence, corrects labels and missing steps, records
-potential bugs, updates the test-data statuses, and patches the same files in place (markdown,
-test-data file, re-rendered HTML page). Before or after human approval. It is NOT a gate:
-skills 4 and 5 accept a document that never went through it.
+potential bugs, updates the test-data statuses and decides how each data item is obtained (from
+evidence first — the learning file, the automation project's existing helpers, the application's
+source code, what the walk showed; PREPARES a missing item itself before the in-scope TCs that
+need it — a UI journey without asking, an existing helper under your data-changes "yes", an
+endpoint found in the source code or a database write only after your explicit "yes" —,
+verifies it on its oracle, reads back the values the system stamped, keeps the records unless
+you ask to clean up, records "not creatable" with evidence), and patches the same files in place
+(markdown, test-data file, re-rendered HTML page). Before or after human approval. It is NOT a
+gate: skills 4 and 5 accept a document that never went through it.
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE
@@ -53,7 +59,19 @@ ASKED DURING THE RUN — ONE message, after the Playwright MCP probe:
   4. Is the story implemented?             — only when the document's header says
                                              "not yet checked live"; the skill verifies live
                                              either way
-  5. Environment notes                     — e.g. VPN, test tenant, build shown in the footer
+  5. Environment notes                     — e.g. VPN, test tenant, build shown in the footer,
+                                             "this is production" (then no data changes)
+  5b. May this run change data on {env}?   — yes: test cases whose Data effect is creates /
+                                             modifies / deletes are walked, records are
+                                             identified before the change, reverted through the
+                                             UI where a way exists, and listed at the end; the
+                                             same "yes" lets the skill PREPARE a missing data
+                                             item through the automation project's existing
+                                             helper (a UI journey named by a TC of the set, a
+                                             known flow or a creation screen is prepared
+                                             without any answer — the message lists it);
+                                             no: those TCs stay draft (reason recorded) and
+                                             no helper is run; production → forced to no
   6. Scope                                 — only when no --scope / --full was given: ONE
                                              question with a recommendation (from case count,
                                              risk, role differences, unique behaviour — 15 cases
@@ -69,6 +87,30 @@ ASKED DURING THE RUN — ONE message, after the Playwright MCP probe:
                                              stale TC stays draft (never counted as validated).
                                              Not asked with --full or an explicit "compare" /
                                              "validate again" instruction.
+
+ASKED ONCE BEFORE THE WALK — only when such a way was found for an in-scope item:
+  8b. May the skill create {item} through     — the application's create endpoint read from the
+      an endpoint found in the source code,      source code (no helper exists), or a database
+      or write it in the database?               write for a state no API or UI can reach; one
+                                                 message naming each item, what would be done
+                                                 and the TCs it unblocks; yes per item; no →
+                                                 those TCs stay draft (data missing — declined)
+
+ASKED ONCE AFTER THE WALK — one message, only when something was prepared or stays undecided:
+  9a. Keep or clean up the prepared records — every record this run created is listed with its
+                                             way and identity; default keep (recorded in the
+                                             learning file); "clean up D{n}" removes it through
+                                             an existing helper or the UI; a kept item is
+                                             delivered READY, a removed one MISSING with the
+                                             recreate note; anything left behind is listed
+  9. How to get the undecided data items   — one list ordered by priority (High / Medium / Low
+                                             from the test cases that need each item) with a
+                                             recommended way each (e2e scenario / api / db /
+                                             set directly / manual); items the learning file,
+                                             the automation project's helpers, the application's
+                                             source code or the walk already decided are not
+                                             asked. Unanswered → manual stays recommended and
+                                             the question stays open.
 
   No Playwright MCP server attached? The skill stops BEFORE asking for anything (BLOCKED, with
   the /mcp hint) — there is nothing it can deliver without the application.
@@ -96,9 +138,16 @@ OUTPUT — WHAT YOU GET (same folder, patched in place)
                                  findings buckets. Design fields, TC IDs, coverage score,
                                  traceability and manual-only tables: UNCHANGED.
     TEST-DATA-{feature}.md    <- item statuses from one read-only look each (READY / MISSING /
-                                 UNKNOWN), exact values and states seen, extra accounts,
+                                 UNKNOWN; NOT CREATABLE with evidence when the state cannot
+                                 exist), exact values and states seen, extra accounts,
                                  creation ways confirmed available, problems closed or added,
-                                 "Environment: {env} checked {date}"
+                                 "Environment: {env} checked {date}"; per item HOW it is
+                                 handled (the way decided from evidence or your answer, its
+                                 priority High / Medium / Low, what it was decided from), items
+                                 prepared this run (kept → READY, with the identity and the
+                                 values the system stamped; removed on your answer → MISSING
+                                 with the recreate note), test-data questions closed by
+                                 evidence or still open
     TC-REVIEW-{feature}.html  <- re-rendered by scripts/render-tc-review.mjs (never hand-edited),
                                  in English unless you pass --lang ar; Arabic pages reuse
                                  TC-REVIEW-STRINGS-{feature}.ar.json — only changed strings need

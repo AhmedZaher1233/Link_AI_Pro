@@ -44,6 +44,28 @@ then patch the files. There is no separate reviewer agent — the next gate is t
     gap, why, evidence, recommendation + reason, alternatives, pending, status); nothing was
     done on the strength of an unanswered recommendation; the dependent TCs kept their state and
     are listed under Unclear requirements; the same questions appear in the final message.
+11. **Data reconciled and test data resolved honestly** (`mcp-pass.md` §3a,
+    `test-data-resolution.md`) — no mutation happened without the run's "yes" and none on
+    production; every record a data-changing TC or a preparation created is listed as cleaned up,
+    kept or left behind; every item carries a way decided from named evidence, a user answer or
+    an open `Q-{n}`, in the fixed order `e2e scenario → api → db → set directly → manual`;
+    every `MISSING` item with an in-scope dependent was searched for a way in the principle-1
+    order (learning file, automation helpers through the manifest paths and by search, the
+    application's source code, UI journeys, a database helper) before any `data missing` state
+    remained; nothing seen on an API-documentation page or an import screen counted as
+    available; every preparation ran before its dependents under the consent its way needs
+    (none for a UI journey, the run's "yes" for a helper, the user's explicit "yes" for an
+    endpoint from the source or a database write — never worked around a refusal), with values
+    the file already named, through a temporary seed that is no longer in the scratch folder
+    and never entered the repository, was verified on its oracle before any dependent was
+    walked, had its stamped values read back (each substitution a Deviation + a finding for
+    skill 3), and is listed as kept or removed; a kept item is delivered `READY`, a removed one
+    `MISSING` with the recreate note, an impossible state `NOT CREATABLE` with its evidence; no
+    credential or secret line in any captured output, deliverable or learning line;
+    evidence-closed facts are in `## Test Data`, never in the Q&A; at most one consent ask
+    (before the walk) and one post-walk ask (keep / clean-up + undecided items); nothing
+    prepared in a 3b-vs-3c comparison run; no path, endpoint, table or fixture name anywhere in
+    the file.
 
 Anything you cannot fix yourself (an unreachable screen, a contradiction, an unclear
 requirement) is listed under **Open Findings for the Human Reviewer** — never silently resolved.

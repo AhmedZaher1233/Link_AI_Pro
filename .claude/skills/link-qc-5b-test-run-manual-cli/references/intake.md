@@ -20,8 +20,8 @@ another level (flat `US-*` while a `SPEC-*/US-*` twin exists) is reported; the a
 Companion files in the same folder, **read when present, never written** (this skill writes
 nothing into the TC folder — not a state, not a stamp, not a data status): `TEST-DATA-{feature}.md`
 (its `## 0. Environment` / `## 1. Accounts` / `## 2.` rows are what every `[E{n}]` / `[A{n}]` /
-`[D{n}]` token resolves to; missing → the tokens are unresolved, their TCs `SKIP — data_missing`,
-and the final message says to re-run skill 3), `evidence/` (3b / 3c screenshots — never touched),
+`[D{n}]` token resolves to; missing → the tokens are unresolved, their TCs `SKIP — data_missing`
+— there is no inventory to prepare from —, and the final message says to re-run skill 3), `evidence/` (3b / 3c screenshots — never touched),
 `ADO-MAP.md` (only to name the work-item ids in the final message — never a gate, never edited),
 `TC-REVIEW-STRINGS-{feature}.ar.json` and `REVIEW-COMMENTS-{feature}.md` (ignored).
 
@@ -84,11 +84,12 @@ Then ONE message — never a second one for any of these — after searching the
 | **Login method per account** — A) attended: you open a visible browser for that account and the user logs in themselves; B) secrets file: skill 1's `set-playwright-secrets` script was run with names that follow the account ID (`A1_USER` / `A1_PASSWORD` for `[A1]`) and you type only those NAMES (`browser-cli.md` §3) | always, per referenced account; state the recorded method for this environment as the recommendation when the learning file has one | a password — not in chat, not on a command line, not in a file; the run never receives one |
 | Implementation status (implemented / partially / not implemented / not sure) | the header says `not yet checked live` and no skill-4 / skill-10 report answers it | trusted over the live look — both are recorded |
 | Environment notes | always, one line: VPN / tenant / where the build number shows / anything that blocks screens / whether this is production | — |
-| **Data changes on {env}** — may this run create / modify / delete data (`execution-rules.md` §5)? | always; name the data-changing TCs (`Data effect` ≠ read-only) and what each would leave behind and how it is cleaned up. **Production named in the notes → "no" is stated, not asked** ("production environment → forced to no") | a mutation on "no"; a mutation on production; a second question about it |
+| **Data changes on {env}** — may this run create / modify / delete data (`execution-rules.md` §5)? | always; name the data-changing TCs (`Data effect` ≠ read-only) and what each would leave behind and how it is cleaned up, and **the `MISSING` items an existing automation helper would create under this same "yes"** (`test-data-preparation.md`); a UI journey preparation needs no answer and is only listed. **Production named in the notes → "no" is stated, not asked** ("production environment → forced to no") and stops every preparation | a mutation on "no"; a mutation on production; a second question about it |
 | Revision authorization | never — this skill never modifies the document (the `Status:` line under §2 A is the single exception, asked separately and earlier) | — |
 | Scope | never — every TC of the approved document is executed, in full, separately (`run-plan.md`) | a scope question, a recommendation, a narrowing |
 | 3b / 3c evidence | never — the stamps are informational (§2) | a keep / skip / re-validate question |
-| How to get a missing data item | never — a `MISSING` item makes its dependents `SKIP — data_missing`; nothing is prepared (`execution-rules.md` §4) | a provisioning question; a per-item question during the run |
+| How to get a missing data item | never at intake — a `MISSING` item is prepared by the run through the first available way (`test-data-preparation.md` §3); only an endpoint from the application's source code or a database write is asked about, ONCE after discovery and before the stage that needs the item (§4 consent ask) | a per-item question during the run; a second intake message |
+| Keep or clean up the prepared records | never at intake — asked ONCE after the last stage (`test-data-preparation.md` §4); default keep | — |
 
 **Where each answer is recorded** — in the phase section's `### Run` bullets of
 `{run_report_md}` and in the learning file, **never in the TC document or `TEST-DATA`**:
@@ -98,7 +99,9 @@ project-wide); usernames → `- **Accounts:** {role} [A{n}] — {username} — a
 file; implementation status → `- **Implementation status:** {value} ({source})`; environment notes
 → `- **Environment notes:** …` (project-wide facts also to the learning file); the data-changes
 answer → `- **Data changes:** {authorized | not authorized} · …` (`execution-rules.md` §5), the run
-only. A `TEST-DATA` row that stayed `unknown` is named in the final message so 3b / 3c or skill 3
+only; the consent and keep / clean-up answers → `- **Data preparation:** e2e {n} · api helper {n}
+· api from source {n} (user yes) · db {n} (user yes) · kept {n} · cleaned up {n}` and the learning
+file (`[type: qa]`, `[type: data]`). A `TEST-DATA` row that stayed `unknown` is named in the final message so 3b / 3c or skill 3
 `--revision` can fill it.
 
 ## 4. Multi-story input — a SPEC folder or several IDs

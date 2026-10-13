@@ -12,7 +12,7 @@ produced by them and never by hand.
 ```bash
 node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/render-run-report.mjs --report {results_root}/TEST-RUN-REPORT-{feature}.md --pretty            # dry run: payload, gate, mismatches
 node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/render-run-report.mjs --report {results_root}/TEST-RUN-REPORT-{feature}.md --write --pretty    # writes TEST-RUN-REPORT-{feature}.html beside it
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty      # the mirrored harness (28 cases) — must pass before delivery
+node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty      # the mirrored harness (29 cases) — must pass before delivery
 node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty      # the 5b-only harness (a manual phase after an automation phase) — must pass before delivery
 ```
 
@@ -68,8 +68,10 @@ only for a phase that stopped before execution, without Stages / Results) · `En
 A2 secrets file` (names only, never a value) · `Started` · `Duration: hh:mm:ss (manual run · one
 session per account)` (the parentheses are deliberate — the renderer then shows this text instead
 of a plan estimate) · `Run file` · `Progress log` · `Screenshots` · `Compliance: — (manual run)`
-· `Azure DevOps` · `Data changes: {authorized | not authorized} · {n} made · {n} cleaned up · {n}
-left` · `Previous phase: .runs/phase-{N-1}.json (skill 5 | skill 5b) | none`.
+· `Azure DevOps` · `Data changes: {authorized | not authorized} · {n} made ({t} by TCs · {p}
+preparations) · {n} cleaned up · {n} kept · {n} left` · `Data preparation: e2e {n} · api helper
+{n} · api from source {n} (user yes) · db {n} (user yes) · kept {n} · cleaned up {n}` (only when
+an item was prepared) · `Previous phase: .runs/phase-{N-1}.json (skill 5 | skill 5b) | none`.
 
 `### Stages` — required for every executed outcome:
 `| Stage | Total | Passed | Failed | Incomplete | Skipped | Not run[ | Partial] |` with the rows
@@ -100,9 +102,15 @@ one row per TC of the document, document order:
 Optional sub-sections you write: `### Bugs` (cross-reference `Bug · TC-ID · Severity · Status`,
 ids only, or `none`) · `### Skips and residual failures` (`TC-ID · Status · Reason`, or `none`)
 · `### Open questions` (`# · Source · Ambiguity · TCs · Decision · By`, or `none`) · `### Test-data
-readiness` (`**Verdict:** …` + the D-items you looked at, or `all ready`) · `### Deviations`
-(bullets routed to skill 3 `--revision`, incl. "repeats share one conversation" and any 3b / 3c
-state this run contradicts, or `- none`). You never write `Run plan`, `Coverage`, `Unverified
+readiness` (`**Verdict:** READY | READY-WITH-SKIPS ({n} TCs)[ — {p} gaps prepared]` + one row per
+`D{n}` item you looked at — `Gap · TCs · Decision · Source · Provisioning · Identifiers / names ·
+Effective stamped values · Verified on · Cleanup`, `Decision` ∈ `READY` · `prepared (api|ui|db)` ·
+`skip — data_missing` · `skip — not creatable` · `skip — QC declined` (`test-data-preparation.md`
+§5; the renderer counts them and shows a `Decisions:` line) — or `all ready`) · `### Deviations`
+(bullets routed to skill 3 `--revision`, incl. "repeats share one conversation", any 3b / 3c
+state this run contradicts, every stamped-value substitution `D{n} "{item}": {field} — TC says
+{literal}, the system stamped {value}; the observation used the stamped value — route to skill 3
+--revision`, every record left behind, or `- none`). You never write `Run plan`, `Coverage`, `Unverified
 assumptions` or `Heal log`.
 
 ## 5. `BUG-REPORT-{feature}.md`
@@ -140,14 +148,20 @@ after a passing retest in this phase; a bug whose TC did not run → `not-checke
                                  "attempts": [ { "attempt", "stage", "status", "evidence_screenshot", "failure_screenshot" } ] } ] } ],
   "bugs": [ { "id", "title", "tc_id", "req_id", "severity", "status" } ],
   "skips": [ { "tc_id", "status", "reason" } ], "deviations": [ "…" ],
+  "data_readiness": { "verdict": "READY | READY-WITH-SKIPS",
+                      "gaps": [ { "gap", "tcs": [], "decision": "READY | prepared (api|ui|db) | skip — data_missing | skip — not creatable | skip — QC declined",
+                                  "source", "provisioning", "identifiers", "stamped_values", "verified_on", "cleanup": "kept | cleaned up | left | null" } ],
+                      "predicted_skips": [] },
   "manual_run": { "skill": "link-qc-5b-test-run-manual-cli", "tool": "playwright-cli", "tool_version", "login_methods": { "A1": "attended" } } }
 ```
 
-Paths are POSIX, relative to `{automation_root}`, exactly as skill 5 writes them. Not written:
-`compliance`, `run_plan`, `open_questions`, `data_readiness`, `coverage_snapshot`, `merged`,
-`heal_log`, `unverified_assumptions`, `timeouts`, `watchdog_events` (the renderer ignores them;
-skill 5's coverage delta skips a file without `coverage_snapshot`). Created with `status:
-planning` at step 7, updated after each stage, final at step 12, then immutable.
+Paths are POSIX, relative to `{automation_root}`, exactly as skill 5 writes them. `data_readiness`
+holds the same rows as the phase's `### Test-data readiness` table (skill 5's shape plus
+`identifiers`, `stamped_values`, `verified_on`); it is written only when at least one item was
+looked at. Not written: `compliance`, `run_plan`, `open_questions`, `coverage_snapshot`,
+`merged`, `heal_log`, `unverified_assumptions`, `timeouts`, `watchdog_events` (the renderer
+ignores them; skill 5's coverage delta skips a file without `coverage_snapshot`). Created with
+`status: planning` at step 7, updated after each stage, final at step 12, then immutable.
 
 ## 7. Evidence, provenance, comments
 

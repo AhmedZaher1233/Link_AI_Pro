@@ -71,8 +71,13 @@ data, locale differences, tricks) go to the shared sections, not to a model sect
   skill's `#### Knowledge`. Grep the same tags first; update or dedupe instead of appending twins.
 - Test data: an item confirmed `READY` live that the file did not know → one `[type: data]` line
   under `## Test Data` (`Fixture "{plain name}" — {what exists}; environment {env}; seen live on
-  {date}`). `MISSING` / `IMPOSSIBLE` / `UNKNOWN` statuses are NOT written here — skill 5 records
-  the final outcome.
+  {date}`). An item a validator (3b / 3c) prepared → one `[type: data]` line naming what exists,
+  where, its identity, the values the system stamped, how it was created (in words — "through
+  the automation project's order helper", "by e2e scenario TC-…", "through the application's
+  order-creation endpoint", "in the database"), kept or removed, and the date. Evidence that a
+  state cannot exist on an environment (`NOT CREATABLE`) and "the screen is not the rule" facts
+  → one `[type: env]` line each, with the evidence in words. `MISSING` / `IMPOSSIBLE` / `UNKNOWN`
+  statuses are NOT written here — skill 5 records the final outcome.
 - A module / page / element that behaves like an existing one → add `[similar: …]` on both
   entries instead of copying text; update the `## Index` row for every module touched.
 - Update any entry contradicted by live observation or by the spec — never leave conflicting or

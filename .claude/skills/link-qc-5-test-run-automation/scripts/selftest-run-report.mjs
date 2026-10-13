@@ -611,6 +611,30 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   }
 }
 
+/* 29 — test-data readiness decisions (skills 5 and 5b): READY / prepared (api|ui|db) / skip — data_missing / skip — not creatable / skip — QC declined are counted per phase and shown under the verdict; the legacy bare words still parse; another word warns, never BLOCKs; a bare `all ready` body renders as the verdict. */
+{
+  const p = [];
+  const base = render({ reportPath: REPORT, root: here });
+  const r1 = base.payload.document.phases[0].readiness; const r2 = base.payload.document.phases[1].readiness;
+  if (!r1 || r1.skipped.qc_declined !== 1 || r1.rows !== 1) p.push('phase 1 readiness counts ' + JSON.stringify(r1));
+  if (!r2 || r2.prepared.api !== 1 || r2.prepared.total !== 1 || r2.skipped.qc_declined !== 1 || r2.rows !== 2) p.push('phase 2 readiness counts ' + JSON.stringify(r2));
+  if (!/Decisions: ready 0 · prepared 1 \(api 1 · ui 0 · db 0\) · skipped 1 \(data_missing 0 · not creatable 0 · QC declined 1\)/.test(base.html || '')) p.push('the Decisions line is not rendered for phase 2');
+  if (wkinds(base).includes('unknown-readiness-decision')) p.push('fixture warns on a readiness decision');
+  const ROW = '| customer without orders | TC-020 | skip — QC declined | qc | — | — | — | — | — |';
+  const swap = (dec) => (s) => { if (!s.includes(ROW)) throw new Error('fixture readiness row moved'); return s.replace(ROW, ROW.replace('skip — QC declined', dec)); };
+  const t1 = tmpCopy(swap('skip')); const t2 = tmpCopy(swap('skip — not creatable (approvals need an active approver)')); const t3 = tmpCopy(swap('maybe later'));
+  const t4 = tmpCopy((s) => { const i = s.indexOf('### Test-data readiness'); const j = s.indexOf('### Deviations', i); return s.slice(0, i) + '### Test-data readiness\nall ready\n\n' + s.slice(j); });
+  try {
+    const x1 = render({ reportPath: t1.report, root: here }); const x2 = render({ reportPath: t2.report, root: here }); const x3 = render({ reportPath: t3.report, root: here }); const x4 = render({ reportPath: t4.report, root: here });
+    if (x1.payload.document.phases[0].readiness.skipped.unspecified !== 1 || wkinds(x1).includes('unknown-readiness-decision')) p.push('legacy bare skip not accepted');
+    if (x2.payload.document.phases[0].readiness.skipped.not_creatable !== 1) p.push('skip — not creatable with evidence not counted');
+    if (!wkinds(x3).includes('unknown-readiness-decision')) p.push('an unknown decision does not warn');
+    if (kinds(x3).includes('unknown-readiness-decision') || x3.payload.gate === 'BLOCKED') p.push('an unknown decision must never BLOCK');
+    if (x4.payload.document.phases[0].readiness !== null || !/Verdict: all ready/.test(x4.html || '')) p.push('a bare `all ready` body is not rendered as the verdict: ' + JSON.stringify(x4.payload.document.phases[0].readiness));
+  } finally { t1.cleanup(); t2.cleanup(); t3.cleanup(); t4.cleanup(); }
+  check('29 test-data readiness decisions counted and rendered', p, { phase1: r1, phase2: r2 });
+}
+
 const out = {
   tool: 'selftest-render-run-report',
   skill: path.basename(path.resolve(here, '..')),

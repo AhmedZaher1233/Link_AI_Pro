@@ -5,10 +5,13 @@ phase 1 written by skill 5 (automation: TC-001 PASS, TC-002 app_bug → BUG-1, T
 its reply differs every run) and phase 2 written by this skill (manual run through playwright-cli:
 TC-001 and TC-002 PASS — BUG-1 resolved by the manual retest —, TC-AI-01 FAIL `ai_rubric_failure`
 with two repeats `manual-cli--none--r0` / `r1`, each with its `reply.md` beside the screenshot, → BUG-2
-in the assistant voice, TC-030 `PARTIAL — human step pending`). It proves that the mirrored renderer
-renders a manual phase after an automation phase with the shared phase counter and bug numbering,
-the `manual run — playwright-cli` Run bullets, the `— (manual run)` compliance line, the new
-classification without a warning and the reply links as plain evidence links.
+in the assistant voice, TC-030 `PARTIAL — human step pending`, TC-040 `SKIP` because its data is
+`not creatable` on UAT; one data item `prepared (api)` through the automation project's helper with a
+system-stamped value substituted for the run and routed to skill 3 as a Deviation). It proves that the
+mirrored renderer renders a manual phase after an automation phase with the shared phase counter and bug
+numbering, the `manual run — playwright-cli` Run bullets, the `— (manual run)` compliance line, the new
+classification without a warning, the reply links as plain evidence links, and the test-data readiness
+decisions (`prepared (api)` · `skip — not creatable`) counted on a `Decisions:` line.
 
 ```text
 automation/

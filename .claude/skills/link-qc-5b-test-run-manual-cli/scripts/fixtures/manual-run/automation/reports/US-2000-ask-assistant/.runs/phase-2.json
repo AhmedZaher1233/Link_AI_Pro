@@ -47,11 +47,11 @@
       "not_run": 0
     },
     "negative": {
-      "total": 1,
+      "total": 2,
       "passed": 0,
       "failed": 0,
       "incomplete": 0,
-      "skipped": 0,
+      "skipped": 1,
       "not_run": 0,
       "partial": 1
     }
@@ -63,18 +63,18 @@
     "cycles": 0
   },
   "totals": {
-    "total": 4,
+    "total": 5,
     "passed": 2,
     "failed": 1,
     "incomplete": 0,
-    "skipped": 0,
+    "skipped": 1,
     "not_run": 0,
     "partial": 1
   },
   "variant_totals": {
     "passed": 3,
     "failed": 1,
-    "skipped": 0,
+    "skipped": 1,
     "not_run": 0,
     "partial": 1
   },
@@ -243,6 +243,25 @@
           ]
         }
       ]
+    },
+    {
+      "tc_id": "TC-040",
+      "req_id": "REQ-05",
+      "test_name": "Reject a return older than the window",
+      "status": "SKIP",
+      "duration_ms": 0,
+      "classification": "—",
+      "error_message": null,
+      "root_cause": null,
+      "run_group": "negative",
+      "run_mode": "serial",
+      "evidence_screenshot": null,
+      "failure_screenshot": null,
+      "severity": "N/A",
+      "attempts": 0,
+      "missing_variants": [],
+      "outcome_check": "not executed — the data it needs cannot exist on UAT (readiness row)",
+      "variants": []
     }
   ],
   "bugs": [
@@ -263,8 +282,16 @@
       "status": "open"
     }
   ],
-  "skips": [],
-  "deviations": [],
+  "skips": [
+    {
+      "tc_id": "TC-040",
+      "status": "SKIP",
+      "reason": "not creatable — a return older than the window cannot exist on UAT: the archiving job removes such returns nightly (configuration, checked 2026-10-10)"
+    }
+  ],
+  "deviations": [
+    "D2 \"a conversation with an earlier return question\": started at — TC-AI-01 says 2026-01-05 09:00, the system stamped 2026-10-10 10:52; the observation used the stamped value — route to skill 3 --revision"
+  ],
   "manual_run": {
     "skill": "link-qc-5b-test-run-manual-cli",
     "tool": "playwright-cli",
@@ -272,5 +299,39 @@
     "login_methods": {
       "A1": "attended"
     }
+  },
+  "data_readiness": {
+    "verdict": "READY-WITH-SKIPS",
+    "gaps": [
+      {
+        "gap": "a conversation with an earlier return question",
+        "tcs": [
+          "TC-AI-01"
+        ],
+        "decision": "prepared (api)",
+        "source": "learning",
+        "provisioning": "the automation project's conversation helper",
+        "identifiers": "conversation \"qa-ask-assistant-2026-10-10\"",
+        "stamped_values": "started at = 2026-10-10 10:52",
+        "verified_on": "assistant panel history list, 2026-10-10",
+        "cleanup": "kept"
+      },
+      {
+        "gap": "a return older than the window",
+        "tcs": [
+          "TC-040"
+        ],
+        "decision": "skip — not creatable",
+        "source": "read-only look 2026-10-10",
+        "provisioning": null,
+        "identifiers": null,
+        "stamped_values": null,
+        "verified_on": null,
+        "cleanup": null
+      }
+    ],
+    "predicted_skips": [
+      "TC-040"
+    ]
   }
 }

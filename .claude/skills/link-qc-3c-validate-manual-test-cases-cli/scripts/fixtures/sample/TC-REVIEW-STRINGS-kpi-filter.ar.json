@@ -275,6 +275,30 @@
       "en": "accept UNKNOWN until the story ships",
       "ar": "قبول UNKNOWN حتى تُسلَّم القصة"
     },
+    "data.D4.name": {
+      "en": "A KPI whose strategy was deleted",
+      "ar": "مؤشر حُذفت استراتيجيته"
+    },
+    "data.D4.look": {
+      "en": "strategy removed, KPI still listed",
+      "ar": "الاستراتيجية محذوفة والمؤشر ما زال مدرجًا"
+    },
+    "data.D4.way": {
+      "en": "none — not creatable (see Problems #2)",
+      "ar": "لا يوجد — غير قابل للإنشاء (انظر المشكلات #2)"
+    },
+    "problem.2.problem": {
+      "en": "not creatable — deleting a strategy removes its KPIs with it (application rule, checked on staging 2026-09-25)",
+      "ar": "غير قابل للإنشاء — حذف الاستراتيجية يحذف مؤشراتها معها (قاعدة التطبيق، فُحصت على staging بتاريخ 2026-09-25)"
+    },
+    "problem.2.why": {
+      "en": "the state TC-KPI-03 assumes cannot exist",
+      "ar": "الحالة التي تفترضها TC-KPI-03 لا يمكن أن توجد"
+    },
+    "problem.2.decision": {
+      "en": "reword TC-KPI-03 (skill 3 --revision)",
+      "ar": "إعادة صياغة TC-KPI-03 (المهارة 3 --revision)"
+    },
     "log.1.2": {
       "en": "Step 4 label \"Filters\" → \"Filter panel\"",
       "ar": "تسمية الخطوة 4 \"Filters\" → \"Filter panel\""

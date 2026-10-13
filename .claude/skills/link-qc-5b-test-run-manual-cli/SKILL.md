@@ -11,7 +11,11 @@ description: >
   server), asks ONCE for the application base URL, the username per role, the LOGIN METHOD per
   role (attended login in a headed browser, or a secrets file whose secret NAMES are typed — a
   password is never typed in chat or on a command line), environment notes and whether this run
-  may create / modify / delete data, then EXECUTES EVERY test case in full and separately in the
+  may create / modify / delete data, PREPARES missing test data itself instead of skipping (an
+  existing automation helper, a UI journey, an endpoint read from the application's source code
+  or a database write — the last two only after an explicit "yes"; verified on its oracle, the
+  values the system stamped read back, kept unless the QC asks to clean up; "not creatable" with
+  evidence instead of "data missing"), then EXECUTES EVERY test case in full and separately in the
   RUNNING application — a real test run, not discovery: no common-flow short-cut, no sampling, no
   scope question — smoke first behind the 30% smoke gate (no self-heal: an application-error
   majority stops the run), then positive, then negative, with a live progress line per TC. Each TC
@@ -78,7 +82,8 @@ that tests an **AI assistant** whose reply differs every run (`references/ai-res
 3. **Every TC, in full, separately.** No common-flow-once short-cut, no "inferred", no sampling,
    no skip set, no narrowing flag: a flag or sentence that narrows the set gets one line ("this
    skill runs every TC") and the full run. The only unexecuted statuses are `SKIP` (pending
-   implementation · data missing · data changes not authorized) and `NOT_RUN` (smoke gate stop ·
+   implementation · data missing after every way to prepare it was searched · data not creatable
+   · data preparation declined · data changes not authorized) and `NOT_RUN` (smoke gate stop ·
    run blocked), each with its reason in the Skips table (`references/execution-rules.md` §3).
 4. **Order: smoke → gate → positive → negative, no self-heal.** Fail% is computed over the smoke
    set; above 30 % you classify every failure: an `app_bug` majority is `FAILED-STOPPED` (the
@@ -117,9 +122,23 @@ that tests an **AI assistant** whose reply differs every run (`references/ai-res
     not read-only runs only on "yes"; every record you create or change is identified before the
     change, reverted through the UI after its assertion-point screenshot when a way exists, and
     listed in the final message (`**Data changes:** …`). "No", or production named in the
-    environment note → those TCs are `SKIP — data changes not authorized`. Nothing is ever
-    prepared through an API or the database; a `MISSING` item → its dependents `SKIP —
-    data_missing` (`references/execution-rules.md` §4-§5).
+    environment note → those TCs are `SKIP — data changes not authorized`. **Missing test data
+    is prepared, not skipped** (`references/test-data-preparation.md`): a `MISSING` item is
+    searched for an existing way — the learning file, the automation project's helpers (manifest
+    paths, then search), the application's source code, a UI journey, a database helper — and
+    prepared by you before its dependents, under the consent its way needs: a UI journey needs no
+    question; an existing helper runs under this same "yes"; an endpoint from the source code and
+    a database write each need an explicit "yes" naming the item, asked ONCE together after
+    discovery; the seed is a temporary script in the scratch folder (project helpers imported by
+    absolute path, deleted afterwards — never new code in the repository); the item is `READY`
+    only after its oracle confirmed it; values the system stamped are read back and used for this
+    run (each substitution a `### Deviations` bullet for skill 3); records are kept by default
+    and cleaned up only on the ONE post-run question. Never with invented values, never a
+    pre-existing record modified, never on production, never around a permission refusal. The
+    dependents skip only with a precise reason — `data_missing` (no way found after the search,
+    or the preparation failed / was not confirmed), `not creatable` (evidence the state cannot
+    exist), `QC declined` — and `TEST-DATA` is still never written
+    (`references/execution-rules.md` §4-§5).
 11. **AI TCs are judged from the reply TEXT against the TC's own `AI Oracle`.** Hard checks first
     (deterministic), then the rubric per repeat (Claude's judgement with a one-line reason per
     criterion), then the threshold; the reply is read with `eval`, never from a screenshot; every
@@ -157,17 +176,19 @@ that tests an **AI assistant** whose reply differs every run (`references/ai-res
 | 3 | **Probe playwright-cli FIRST** — absent → BLOCKED. Then ONE combined ask: base URL — the `[E1]` row (unless recorded), the username of each referenced account still `unknown`, login method per account (attended / secrets-file names), implementation status (only when the header says not yet checked), environment notes, data changes allowed (yes / no, naming the data-changing TCs) — WAIT. Record every answer except anything secret. | `references/browser-cli.md` §1, `references/intake.md` §3 |
 | 4 | **Parse the set** — stage per TC, smoke set, AI set (`AI Oracle` present; repeats and threshold per TC), human-step set, data-changing set, data items referenced, open `Q-*` of the document (read-only hints), the reviewer's open comments on the REPORT (`REVIEW-COMMENTS-{feature}.md` beside it) — hints for the run, never a state. | `references/run-plan.md` §1 |
 | 5 | **Implementation gate** — one targeted entry-point look + the answer; not-implemented parts → their TCs `SKIP — pending implementation`, never a defect. | `references/execution-rules.md` §1 |
-| 6 | **Test-data look** — one read-only look per `[D{n}]` item on its listing screen before the stage that needs it; `MISSING` → dependents `SKIP — data_missing`; nothing is prepared, TEST-DATA is never written. | `references/execution-rules.md` §4 |
-| 7 | **Plan line + run file** — state the plan in one line (all `N` executable TCs, stage counts, AI TCs, human-step TCs, data-changing TCs and the authorization), create `.runs/phase-{N}.json` (`status: planning`) and the progress log. No WAIT. | `references/run-plan.md` §2-§3, `references/run-report-manual.md` §6 |
+| 6 | **Test-data look and preparation** — one read-only look per `[D{n}]` item on its listing screen before the stage that needs it; `MISSING` → discover a way (learning file → automation helpers → application source → UI journey → database helper) and **prepare it** through the nine steps (temporary seed or UI journey, identifiers captured, verified on the oracle, stamped values read back, seed deleted) before its dependents; skip only with `data_missing` / `not creatable` / `QC declined`; TEST-DATA is never written. | `references/execution-rules.md` §4, `references/test-data-preparation.md` §1-§3, §5 |
+| 6b | **Consent ask** — only when a `MISSING` item's decided way is an endpoint from the source code or the database: ONE message naming each such item, what would be done and the TCs it unblocks — WAIT. UI journeys and existing helpers are listed for information, never asked. | `references/test-data-preparation.md` §4 |
+| 7 | **Plan line + run file** — state the plan in one line (all `N` executable TCs, stage counts, AI TCs, human-step TCs, data-changing TCs and the authorization, items to prepare), create `.runs/phase-{N}.json` (`status: planning`) and the progress log. No WAIT. | `references/run-plan.md` §2-§3, `references/run-report-manual.md` §6 |
 | 8 | **Smoke stage** — every `Smoke: YES` TC in full; sessions per account, login per method, every token through its row, outcome rule, assertion-point screenshot, one progress line per TC. | `references/execution-rules.md` §2-§3, `references/browser-cli.md` §2-§8 |
 | 9 | **Smoke gate** — fail% over the smoke set; ≤ 30 % continue; > 30 % classify, `app_bug` majority → `FAILED-STOPPED` (remaining TCs `NOT_RUN`, Outcome `SMOKE GATE FAILED`), otherwise continue with the reason. No heal, no re-run. | `references/run-plan.md` §4 |
 | 10 | **Positive stage, then negative stage** — same rules; AI TCs per the AI rules (send, wait for a stable reply, read the text, hard checks, rubric, threshold, `reply.md` per repeat); data-changing TCs per the authorization, cleanup after the screenshot. | `references/execution-rules.md`, `references/ai-response-rules.md`, `references/run-plan.md` §5 |
-| 11 | **Reconcile and close** — revert every record this run changed where a way exists, list what is left; close every run session; delete the run's snapshot files. | `references/execution-rules.md` §5, `references/browser-cli.md` §8 |
-| 12 | **Self-review → write → render → deliver** — the twelve checks; then the run file (final status), the phase section + header + run-history row of `TEST-RUN-REPORT-{feature}.md`, the bug entries / Status / History of `BUG-REPORT-{feature}.md`, the renderer with `--write` (gate PASS), both harnesses, the reviewer's comments handled (Status / Response only), the learning file, the final message + structured return. | `references/self-review.md`, `references/run-report-manual.md`, `references/learning-file.md` |
+| 11 | **Reconcile and close** — revert every record a data-changing TC changed where a way exists; ONE keep / clean-up question for the records this run prepared (default keep), clean up only what the user named, list what is left; close every run session; delete the run's snapshot files. | `references/execution-rules.md` §5, `references/test-data-preparation.md` §4, `references/browser-cli.md` §8 |
+| 12 | **Self-review → write → render → deliver** — the fourteen checks; then the run file (final status), the phase section + header + run-history row of `TEST-RUN-REPORT-{feature}.md`, the bug entries / Status / History of `BUG-REPORT-{feature}.md`, the renderer with `--write` (gate PASS), both harnesses, the reviewer's comments handled (Status / Response only), the learning file, the final message + structured return. | `references/self-review.md`, `references/run-report-manual.md`, `references/learning-file.md` |
 
 Load a reference only when its step runs. A default run needs `intake.md`, `browser-cli.md`,
-`learning-file.md`, `run-plan.md`, `execution-rules.md`, `ai-response-rules.md` (when the set
-holds an AI TC), `self-review.md` and `run-report-manual.md`, in that order
+`learning-file.md`, `run-plan.md`, `execution-rules.md`, `test-data-preparation.md` (when an item
+is `MISSING`), `ai-response-rules.md` (when the set holds an AI TC), `self-review.md` and
+`run-report-manual.md`, in that order
 (`open-questions.md` whenever a question arises). `--audit` stops after step 7's plan line and
 writes nothing.
 
@@ -187,10 +208,16 @@ automation-logs folder and `{learning_file}`; `Bash` **only** for the three scri
 skill's `scripts/` folder and for `playwright-cli` (global) / `npx --no-install playwright-cli`
 (project-local) commands inside the run's own named sessions (`references/browser-cli.md` §2).
 Never `state-save`, never `--persistent`, never `install`, never `npm`, never a command against
-a session you did not open. No MCP server of any kind. Deleting the run's snapshot files and
-reverting the records you changed go through the normal permission flow and are listed in the
-final message. Skill 5's automation code and page objects are read (Glob / Grep / Read) only as
-evidence of where a screen or a label lives — never run, never edited.
+a session you did not open. No MCP server of any kind. Running a temporary seed
+(`references/test-data-preparation.md` §3 — a script composed in the session scratch folder that
+imports the automation project's own helpers or calls an endpoint found in the application's
+source, deleted afterwards; never pre-approved), deleting the run's snapshot files, reverting the
+records you changed and cleaning up the records you prepared go through the normal permission
+flow and are listed in the final message; a refusal by the permission layer stops that step and
+is reported, never worked around. Skill 5's automation code, its page objects and the
+application's source are read (Glob / Grep / Read) as evidence of where a screen or a label
+lives and of a way to create data, and a helper is imported by the temporary seed — never edited,
+never given a new file.
 
 ## Downstream contract
 
@@ -216,11 +243,12 @@ never set a TC's `Validation` state.
 | `references/browser-cli.md` | playwright-cli: availability probe, `qa5b-` sessions per account, login A / B, step → command map incl. the chatbot rows, reading the page, stale refs, evidence + screenshots + `reply.md`, hygiene, mid-run failure | steps 3, 8-11 |
 | `references/run-plan.md` | set analysis, plan line, progress line, the smoke gate without heal, AI repeats as variants, re-runs | steps 4, 7, 9 |
 | `references/execution-rules.md` | implementation gate, per-TC execution, the outcome rule and the status / classification table, test data, data changes + reconciliation, failure rule, bug entry rule | steps 5, 6, 8, 10, 11 |
+| `references/test-data-preparation.md` | the twelve preparation principles + consent by way (shared with 3b, 3c, 5), the inventory of record, the five statuses incl. `NOT CREATABLE`, the nine preparation steps (discover → temporary seed → verify → stamped values → delete → keep / clean up), the two questions, the readiness decisions and where they are recorded, worked example | steps 6, 6b, 11 |
 | `references/ai-response-rules.md` | the AI testing rules: reading the reply, hard checks, rubric, verdict and threshold, repeats, `reply.md`, bug voice, what never happens | step 10 |
 | `references/run-report-manual.md` | what a manual phase writes into skill 5's report set: commands, gate, folder, `### Run` bullets, Stages / Results, bug file, run file subset, provenance and comments | steps 7, 12 |
 | `references/open-questions.md` | search-first rule, the `Q-{n}` shape, where a question lives here (the phase, never the document), never-act-unanswered | any ask |
 | `references/learning-file.md` | the section `### Manual Run Model (skill 5b)`, what is read and written, never a reply or a credential | steps 2, 12 |
-| `references/self-review.md` | the twelve self-review checks | step 12 |
+| `references/self-review.md` | the fourteen self-review checks | step 12 |
 | `scripts/render-run-report.mjs` · `scripts/selftest-run-report.mjs` · `scripts/scan-lib.mjs` · `assets/*.template.html` · `scripts/fixtures/run-report/` | the renderer, its harness, the text engine, both templates and the fixture — byte-identical mirrors of skill 5's | step 12 |
 | `scripts/selftest-manual-run.mjs` · `scripts/fixtures/manual-run/` | the 5b-only harness: a story with a skill-5 phase followed by a manual phase (AI repeats, `ai_rubric_failure`, a PARTIAL row, `reply.md` links) rendered through the mirrored renderer | step 12 |
 
@@ -233,7 +261,7 @@ never set a TC's `Validation` state.
 **Source document:** {path} · revision {sha12} · Status {APPROVED | APPROVED — set this run on the user's instruction | {value} — run without approval (user decision, {date})}
 **Environment:** {env} · build {build | unknown} · **Tool:** playwright-cli {version} · sessions {n} (closed)
 **Phase:** {N} ({first | re-run of phase N-1 by skill {5 | 5b}}) · {date time} · duration hh:mm:ss
-**Plan:** Running all {N} executable TCs (of {T}; {s} smoke · {p} positive · {n} negative · {a} AI · {h} stop at [HUMAN] · {d} data-changing {authorized|not authorized}) · phase {N} · tool cli
+**Plan:** Running all {N} executable TCs (of {T}; {s} smoke · {p} positive · {n} negative · {a} AI · {h} stop at [HUMAN] · {d} data-changing {authorized|not authorized} · {p} items to prepare) · phase {N} · tool cli
 **Smoke gate:** {passed | FAILED-STOPPED} — fail% {x}% — {reason}
 **Outcome:** {GREEN | FAILURES | INCOMPLETE | SMOKE GATE FAILED}
 
@@ -249,7 +277,8 @@ never set a TC's `Validation` state.
 | … | k / n | all passed / {check} failed on r{k} | met / {criterion} not met on r{k} / cannot judge → Q-{n} | PASS / FAIL (app_bug | ai_rubric_failure) / INCOMPLETE | {variant folders} |
 
 **Bugs:** {new BUG-ids with TC + title} · retested {ids: resolved / open} · not checked {ids}
-**Data changes:** {authorized | not authorized} · {n} made · {n} cleaned up · {n} left ({identities})
+**Data changes:** {authorized | not authorized} · {n} made ({t} by TCs · {p} preparations) · {n} cleaned up · {n} kept · {n} left ({identities})
+**Test data:** ready {n} · prepared {p} (api {a} · ui {u} · db {d}) · skipped {s} (data_missing {x} · not creatable {y} · QC declined {z}) · stamped values substituted: {n} · left behind: {identities | none}
 **Skips:** {TC-ID — reason, …} | none
 **Open questions:** {Q-n — one line each} | none
 **Needs a human run:** {TC-IDs with their pending step} | none

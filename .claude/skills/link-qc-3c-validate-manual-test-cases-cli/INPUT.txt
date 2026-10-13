@@ -8,8 +8,11 @@ is asked) — sets each TC's validation state with evidence (including what
 was actually observed for the expected result), corrects labels and missing steps, records
 potential bugs with a screenshot, updates the test-data statuses and decides how each data item
 is obtained (from evidence first — the learning file, the automation project's existing
-fixtures, what the walk showed; prepares a missing item through a documented e2e scenario when
-you allow data changes, and reverts it; asks once for what stays undecided), and patches the
+helpers, the application's source code, what the walk showed; PREPARES a missing item itself —
+a UI journey without asking, an existing helper under your data-changes "yes", an endpoint found
+in the source code or a database write only after your explicit "yes" —, verifies it on its
+oracle, reads back the values the system stamped, keeps the records unless you ask to clean up,
+records "not creatable" with evidence; asks once for what stays undecided), and patches the
 same files in place (markdown, test-data file, re-rendered HTML page). Before or after human approval. It is
 NOT a gate: skills 4 and 5 accept a document that never went through it. 3b remains the default
 validator; this skill exists to be compared with it (references/cli-vs-mcp-comparison.md).
@@ -93,17 +96,31 @@ ASKED DURING THE RUN — ONE message, after the playwright-cli probe:
                                              identified before the change, reverted through the
                                              UI where a way exists, and listed at the end; the
                                              same "yes" lets the skill PREPARE a missing data
-                                             item through an e2e scenario named in TEST-DATA
-                                             (a TC of the set or a known flow, values already
-                                             known) before the TCs that need it, reverted at the
-                                             end — the message names the candidates;
+                                             item through the automation project's existing
+                                             helper (a UI journey named by a TC of the set, a
+                                             known flow or a creation screen is prepared
+                                             without any answer — the message lists it);
                                              no: those TCs stay draft (reason recorded) and
-                                             nothing is prepared
+                                             no helper is run; production → forced to no
+
+ASKED ONCE BEFORE THE WALK — only when such a way was found:
+  8b. May the skill create {item} through     — the application's create endpoint read from the
+      an endpoint found in the source code,      source code (no helper exists), or a database
+      or write it in the database?               write for a state no API or UI can reach; one
+                                                 message naming each item, what would be done
+                                                 and the TCs it unblocks; yes per item; no →
+                                                 those TCs stay draft (data missing — declined)
   8. Revision authorization                — only for an APPROVED document when changes are
                                              expected and --authorize-revision was not given;
                                              asked once with the concrete list of changes
 
-ASKED ONCE AFTER THE WALK — only if evidence could not decide:
+ASKED ONCE AFTER THE WALK — one message, only when something was prepared or stays undecided:
+  9a. Keep or clean up the prepared records — every record this run created is listed with its
+                                             way and identity; default keep (recorded in the
+                                             learning file); "clean up D{n}" removes it through
+                                             an existing helper or the UI; a kept item is
+                                             delivered READY, a removed one MISSING with the
+                                             recreate note; anything left behind is listed
   9. How to get the undecided data items   — one list ordered by priority (High / Medium / Low
                                              from the test cases that need each item) with a
                                              recommended way each (e2e scenario / api / db /
@@ -147,13 +164,16 @@ OUTPUT — WHAT YOU GET (same folder, patched in place)
                                  Design fields, TC IDs, coverage score, traceability and
                                  manual-only tables: UNCHANGED.
     TEST-DATA-{feature}.md    <- item statuses from one read-only look each (READY / MISSING /
-                                 UNKNOWN), exact values and states seen, extra accounts,
+                                 UNKNOWN; NOT CREATABLE with evidence when the state cannot
+                                 exist), exact values and states seen, extra accounts,
                                  creation ways confirmed available, problems closed or added,
                                  "Environment: {env} checked {date}"; per item HOW it is
                                  handled (the way decided from evidence or your answer, its
                                  priority High / Medium / Low, what it was decided from), items
-                                 prepared this run (reverted at the end, or left in place and
-                                 listed), test-data questions closed by evidence or still open
+                                 prepared this run (kept → READY, with the identity and the
+                                 values the system stamped; removed on your answer → MISSING
+                                 with the recreate note), test-data questions closed by
+                                 evidence or still open
     TC-REVIEW-{feature}.html  <- re-rendered by scripts/render-tc-review.mjs (never hand-edited),
                                  in English unless you pass --lang ar; Arabic pages reuse
                                  TC-REVIEW-STRINGS-{feature}.ar.json — only changed strings need

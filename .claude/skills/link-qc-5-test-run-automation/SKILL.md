@@ -352,11 +352,12 @@ NEVER written to the file.
   page (a pattern in words, plus the `data-testid` values used, each explained), which pages
   already have a page object (page name only), waits that work, environment quirks and their
   fixes, run slicing. Grep the same tags first; update or dedupe instead of appending twins.
-- Every fixture the QC chose to **keep** (PHASE 2.6) and every fixture found to exist → one
-  `[type: data]` line under `## Test Data`:
-  `- [module: X] [type: data] Fixture "{plain name}" — {what exists: entity, state, count, identifiers}; environment {env}; created by {api | ui journey | db | manual} on {YYYY-MM-DD}, kept.`
-  Every QC provisioning decision → a `[type: qa]` line in this skill's Q&A, so the next run
-  reuses it without asking.
+- Every fixture kept after the run (PHASE 2.6 — the default) and every fixture found to exist →
+  one `[type: data]` line under `## Test Data`:
+  `- [module: X] [type: data] Fixture "{plain name}" — {what exists: entity, state, count, identifiers}; environment {env}; stamped values: {field = value}; created through {the automation project's … helper | the … setup journey | the application's … endpoint | the database} on {YYYY-MM-DD}, kept.`
+  Every QC consent and keep / clean-up decision → a `[type: qa]` line in this skill's Q&A, so the
+  next run reuses it without asking; not-creatable evidence and "the screen is not the rule"
+  facts → `[type: env]` lines.
 - Pages that follow the same identification pattern → `[similar: …]` on both entries; update
   the `## Index` row for every module touched.
 - Entries contradicted by the live run → correct them. The approved TC document and the
@@ -1087,8 +1088,11 @@ Checklist (all of these, plus `references/compliance-checkpoints.md` §2):
       learning-file reuse, or a tagged `@unverified-assumption`; every answer already written
       back to the learning file as a generic rule
 - [ ] Static coverage measured (PHASE 2.5) and the gate verdict recorded before any run
-- [ ] Test-data readiness resolved (PHASE 2.6): every predicted skip has a QC decision or the
-      pipeline default; every skip guard in the specs traces to one of them
+- [ ] Test-data readiness resolved (PHASE 2.6): every `MISSING` gap was searched for a way
+      (learning file, automation helpers through the manifest paths and by search, the
+      application's source code, UI journeys, a DB helper) and prepared when one existed; every
+      remaining skip is `data_missing` (no way found), `not creatable` (evidence) or `QC declined`,
+      never a default; every skip guard in the specs traces to one of them
 - [ ] **Every assertion verifies the outcome its TC requires** — a visibility check only where
       visibility or access IS the requirement; values, calculations, permissions and state changes
       assert those outcomes (`references/automation-rules.md` §2)
@@ -1387,21 +1391,97 @@ as plain-English `[type: env]` / `[type: trick]` lines under `### Automation Mod
 
 ---
 
-## PHASE 2.6 — PRECONDITION & TEST-DATA READINESS (QC decision gate)
+## PHASE 2.6 — PRECONDITION & TEST-DATA READINESS (prepare first, skip only with a reason)
 
 <data_readiness>
 **Runs after PHASE 2.5 and BEFORE anything executes.** A TC that would skip because its
-precondition cannot be met or its data is absent from the environment is **decided here by the
-QC — never discovered by the run.** The run must not be the first place a "no data" skip appears.
+precondition cannot be met or its data is absent from the environment is **decided here — never
+discovered by the run.** The run must not be the first place a "no data" skip appears, and a gap
+the project itself can create is **prepared by this skill, never left as "data missing"**. The
+twelve principles and the consent table below are word for word the ones of skills 3b / 3c
+(`references/test-data-resolution.md`) and 5b (`references/test-data-preparation.md`); edit every
+copy together.
+
+## P. Test-data preparation — the twelve principles
+
+`{env}` is the target environment, `{item}` a data item (`D{n}`), `{entity}` the record type it
+needs, `{automation_root}` the automation project (`paths.automationRoot` of
+`Testing/qa-manifest.json`, fallback `Testing/Automation`).
+
+1. **Discover before skipping.** For every `MISSING` / `UNKNOWN` item, look for an existing way to
+   create it, in this order: (1) the learning file's `[type: data]` / `[type: env]` lines and
+   recorded decisions; (2) the automation project's test-data helpers — the manifest paths first,
+   then a search for create / seed / fixture / factory / pre-request / setup modules and API
+   clients under `{automation_root}`; (3) the application's own create endpoints, read from its
+   source code when the repository holds it (skill 10's `.project-profile.md` first when present,
+   otherwise routes / controllers / API definitions outside `{automation_root}` and `Testing/`);
+   (4) a UI setup journey — a creating TC of this set, a learning-file common flow, a creation
+   screen seen live; (5) a database helper the project already has; (6) manual. Record where each
+   way was found. A way is **available** only when existing code, a screen seen live or a recorded
+   decision proves it; API documentation alone stays `to be confirmed`.
+2. **The skill prepares the item itself, with the consent its way needs.** It never asks the QC to
+   run a script, a seed or an import. A UI journey needs no question; an existing helper runs
+   under the run's data-changes "yes"; an endpoint taken from the source code and a database write
+   each need an explicit "yes" naming the item — asked ONCE, together, after discovery and before
+   the dependents; keep or clean up is asked ONCE after the run. Production named in the
+   environment note stops every preparation (stated, never asked).
+3. **A temporary seed, never new code in the repository.** The preparation script is composed in
+   the session scratch folder, imports the project's own helpers by absolute path, selects `{env}`
+   through the project's own mechanism (environment variable, configuration profile or
+   command-line flag), is run once, its created identifiers captured, and is then deleted. It
+   becomes a reusable fixture only when the QC asks, and then follows skill 5's placement and
+   code rules.
+4. **Database writes are a separate consent.** The database is used only for a state no API or UI
+   can reach, after an explicit "yes" naming the item; only records this run created are touched,
+   every write is read back, and no pre-existing record is ever modified.
+5. **Dedicated, right-sized fixtures.** Every item gets its own clearly named, isolated parent
+   record so items never interfere with each other or with existing data; it is sized to the
+   TC's boundary (more rows than the upper limit the TC tests, exactly the count a count TC
+   expects); one preparation serves several items only when they are compatible.
+6. **Verify before use.** An item is `READY` only after its oracle confirmed it: the screen the TC
+   reads, plus a read-only API or database read when the screen hides the value (paginated
+   lists, details-only fields). Dependents run, or are walked, only after that verification.
+7. **Read back what the system decided.** Values the seed cannot choose — creation or publish
+   dates, the current period, generated codes, sequence numbers — are read back, and the
+   effective values are used for this run in place of the TC's literal values; every substitution
+   is recorded and routed to skill 3 `--revision` when the TC text should change.
+8. **Check the real rule, not just the screen.** A permission, visibility or ownership
+   precondition is verified against the rule's source as well (code, configuration or database),
+   because a list may show everything while the API filters; a TC whose oracle relies on a
+   misleading screen is a finding for skill 3, never a reason to skip.
+9. **"Not creatable" is its own outcome.** When evidence proves the state cannot exist on `{env}`,
+   the item is `NOT CREATABLE` with its evidence (never "data missing"), and the evidence goes to
+   the learning file.
+10. **A permission-system refusal stops the step.** When the host's permission layer refuses a
+    bulk creation, a database write or a credential-bearing command, the skill stops, reports
+    exactly what was refused and why, and asks the QC to allow it (a permission rule or a
+    one-time approval). It never works around a refusal.
+11. **No secrets anywhere.** Credentials stay in the project's existing secret mechanism; they are
+    never printed, logged, stored or passed on a command line; token and password lines are
+    filtered from every captured output before anything is recorded.
+12. **Keep or clean up — asked once, after the run.** Default keep, recorded in the learning file.
+    Clean-up only through an existing helper or the UI; everything left behind is listed in the
+    final message.
+
+**Consent by way** — the same table in all four skills:
+
+| Way | Found by | Before preparing | After the run |
+|---|---|---|---|
+| `e2e scenario` — a UI journey (a creating TC of this set, a learning-file common flow, a creation screen seen live) | principle 1 steps 1, 4 | **no question** — prepared automatically, before its dependents; the only guard is production named in the environment note | ONE keep / clean-up question, listing every record created |
+| `api` — an existing project helper (fixture / factory / pre-request / seed module under `{automation_root}` or a manifest path) | step 2 | the run's data-changes "yes", nothing more | same |
+| `api` — an endpoint read from the application's source code (no helper) | step 3 | **explicit "yes" per item**, asked ONCE with every other such item after discovery: the endpoint in plain words, the request summary, the authentication through the project's existing secret mechanism, the TCs it unblocks | same |
+| `db` — a project database helper, or a connection variable the QC names | step 5 | **separate explicit "yes"** naming the item; own records only, read back | same |
+| nothing found · `NOT CREATABLE` · the QC declined | — | skip with the precise reason (`no way found` · `not creatable — {evidence}` · `QC declined`) | — |
 
 **1. Collect the requirements** — start from skill 3's
 `{tc_output_folder}/TEST-DATA-{feature}.md` when it exists: take its environment rows (`## 0.
 Environment`, `E{n}`), data items (`D{n}`), TC mapping, accounts (`## 1. Accounts`, `A{n}`),
-statuses (`READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN`), Problems table and recommended ways as
-the inventory of record — **do not rebuild the inventory from scratch**. Every ID a TC references
-is a requirement of its own: `[E2]` is the mail sandbox row, not the base URL; `[A2]` is that
-account, not "an Administrator"; a referenced ID with no row is a gap to list here, never a
-substitution.
+statuses (`READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN` / `NOT CREATABLE`), Problems table,
+recommended ways and — when 3b / 3c wrote them — the per-item `How we handle it` / `Decided from`
+/ `Prepared this run` / `Stamped values` bullets as the inventory of record — **do not rebuild
+the inventory from scratch**. Every ID a TC references is a requirement of its own: `[E2]` is the
+mail sandbox row, not the base URL; `[A2]` is that account, not "an Administrator"; a referenced
+ID with no row is a gap to list here, never a substitution.
 Add only requirements the approved TC document carries that the file lacks (a Preconditions /
 Data Oracle / Shared data sentence or a role with no data item), and say which were added.
 Skill 3 owns that file — never edit it; record outcomes in the learning file and
@@ -1413,16 +1493,21 @@ the generated code already doubts — do not re-derive them.
 
 **2. Probe the environment — cheap, once per distinct requirement, never per TC.** Items the
 test-data file marks `READY` are re-confirmed from the learning file only; probe the `MISSING`
-/ `UNKNOWN` items (and `IMPOSSIBLE` ones only to look for a way the file did not know). A way
-the file marks "to be confirmed" (`api` / `db`) is offered to the QC only after step 4 finds
-it:
+/ `UNKNOWN` items (and `IMPOSSIBLE` ones only to look for a way the file did not know; a
+`NOT CREATABLE` item is re-checked only when its evidence line is older than the build). A way
+the file marks "to be confirmed" (`api` / `db`) is offered only after step 4 finds it:
 1. `Testing/project-learning.md` first: `[type: data]` lines (`## Test Data`), `[type: env]`
-   lines, and this skill's Q&A. A recorded fixture or a recorded decision is reused — say so.
+   lines (incl. not-creatable evidence), and this skill's Q&A. A recorded fixture or a recorded
+   decision is reused — say so.
 2. Accounts: the env layer of the automation project keyed by account ID (`helpers/test-data.ts`
    `accounts['A1']` → `A1_USER` / `A1_PASSWORD`); a role-keyed legacy layer is read for the
    username only and the ID-keyed entry is added — never "any user of that role".
-3. Existing provisioning: `prerequest/*PreRequest.ts` fixtures, DB-oracle helpers in `pages/`,
-   `00-setup-*.spec.ts` journeys from earlier stories.
+3. Existing test-data helpers, **wherever they live** (principle 1 step 2): the paths
+   `Testing/qa-manifest.json` names first (`paths.automationRoot`, any fixtures / helpers path),
+   then a search across `{automation_root}` for create / seed / fixture / factory / pre-request /
+   setup modules and API clients (`prerequest/*PreRequest.ts`, DB-oracle helpers in `pages/`,
+   `00-setup-*.spec.ts` journeys from earlier stories are the conventional names, not the only
+   ones). Record where each was found; a helper counts as a way only when it creates the entity.
 4. One read probe per remaining data need: an existing API GET through the project's request
    helper, or ONE Playwright MCP look at the listing screen for that entity. Nothing the
    learning file already answers is probed again.
@@ -1431,81 +1516,158 @@ it:
 
 | Status | Meaning | Effect |
 |---|---|---|
-| `READY` | Present in the environment (or a fixture reliably creates it) | nothing to decide |
-| `MISSING` | Absent, but creatable (entity, state, count, role assignment) | QC decision |
-| `IMPOSSIBLE` | Needs a background job, an external system, a role that exists in no environment, or a state the app cannot reach through any interface | QC: `manual` or `skip` only |
-| `UNKNOWN` | Could not be probed (screen unreachable, no read access) | QC decision, flagged |
+| `READY` | Present in the environment (or a kept fixture a learning-file line confirms) | nothing to decide |
+| `MISSING` | Absent, but creatable (entity, state, count, role assignment) | **prepared** through the first available way of step 4, under the consent that way needs |
+| `IMPOSSIBLE` | Skill 3's word: needs a background job, an external system, a role that exists in no environment, or a state the app cannot reach through any interface | prepared when step 4 finds a way the file did not know; otherwise `skip — not creatable` with the Problems-row reason, or `manual` |
+| `UNKNOWN` | Could not be probed (screen unreachable, no read access) | the QC decides, flagged |
+| `NOT CREATABLE` | Evidence proves the state cannot exist on `{env}` — a rule in the code or configuration, a role no environment has, a job that never runs here (written by 3b / 3c in the file, or found by step 4 here) | `skip — not creatable — {evidence}`; the evidence → `[type: env]`. Distinct from `IMPOSSIBLE`: it names the evidence |
 
-Every TC touching a non-`READY` requirement goes on the **predicted-skip list** with the reason.
+Every TC touching a non-`READY` requirement goes on the **predicted-skip list** with the reason
+until its gap is prepared and verified.
 
-**4. Discover the provisioning options per `MISSING` gap** (state what was found and where):
-- `api` — a create endpoint in the app or automation project: controllers / routes, swagger or
-  openapi files, an existing `prerequest` fixture that already creates the entity.
+**4. Discover the way per `MISSING` gap** (principle 1 — state what was found and where):
+- `api (helper)` — an existing helper of the automation project that creates the entity (step
+  2.3). **Available.**
+- `api (source code)` — no helper, but the repository holds the application: a create route /
+  controller / endpoint with its request shape, read from the source (skill 10's
+  `.project-profile.md` names the layers when present; otherwise routes / controllers / API
+  definitions outside `{automation_root}` and `Testing/`). Available **pending the QC's "yes"**.
+  Swagger / openapi files or an API-documentation page alone → `to be confirmed`.
 - `ui` — a common flow in the learning file (`## Common Flows`) or an approved TC that creates
-  the entity through the screens → can become a setup journey built from page objects.
-- `db` — offered only when `{db_access}` is `helper`, or the QC names a connection env var.
+  the entity through the screens → a setup journey built from page objects. **Available, no
+  question.**
+- `db` — a DB helper the project has, or a connection env var the QC names. Available only with
+  the separate "yes".
 - `manual` — always available (the QC inserts the data; the skill re-checks).
-Recommended default: `api` when found → else `ui` → `db` only when the QC grants it → `manual`.
+Fixed order, first available wins: `ui` (a documented journey) → `api (helper)` → `api (source
+code)` → `db` → `manual`; the way the test-data file already decided (`How we handle it`) is
+taken when it is still available.
 
-**5. Ask the QC — ONE combined message** (the `<project_learning_file>` ask rule applies:
-learning file grepped first, nothing already answered is re-asked):
+**5. Ask the QC — ONE combined message, only for what needs an answer** (the
+`<project_learning_file>` ask rule applies: learning file grepped first, nothing already answered
+is re-asked). Gaps with a `ui` journey or an `api (helper)` way are **listed, not asked** — they
+are prepared automatically; rows that need a "yes" are the `api (source code)` and `db` ones;
+`UNKNOWN` / `IMPOSSIBLE` gaps with no way found are asked `manual | skip`:
 
 ```
-Test-data readiness — {N} TCs would be skipped without a decision
-| # | Gap (plain English)                         | Affected TCs        | Status     | Options found            | Recommended |
-|---|---------------------------------------------|---------------------|------------|--------------------------|-------------|
-| 1 | No order with line items in UAT             | TC-010, 011, 011b   | MISSING    | api (order create), ui   | api         |
-| 2 | No user with the Approver role              | TC-020, 020b        | IMPOSSIBLE | manual, skip             | skip        |
-Answer per gap:  api | ui | db | manual | skip   — add "keep" to leave created data in place
-Example: "1 api keep · 2 skip"
+Test-data readiness — {n} gaps; {p} will be prepared automatically, {m} need your yes
+| # | Gap (plain English)                         | Affected TCs        | Status     | Way found                         | Planned fixture                                  | Needs |
+|---|---------------------------------------------|---------------------|------------|-----------------------------------|--------------------------------------------------|-------|
+| 1 | No order with line items in UAT             | TC-010, 011, 011b   | MISSING    | api (helper — order creation)     | 1 order, 12 line items, in a dedicated customer; the order date will be whatever the system stamps | — (prepared) |
+| 2 | No customer without orders                  | TC-020              | MISSING    | ui (TC-CUS-01 journey)            | 1 customer "qa-{feature}-{date}"                 | — (prepared) |
+| 3 | No order with an expired approval           | TC-015              | MISSING    | api (source code — order endpoint) then db for the date | 1 order, approval date set to yesterday | your yes (endpoint from source + database write) |
+| 4 | No user with the Approver role              | TC-030, 030b        | NOT CREATABLE | — (roles are provisioned by the identity provider; none on UAT — configuration, checked) | — | — (skip — not creatable) |
+Answer per row that needs it: yes | no | manual | skip — "no" skips the dependents (skip — QC declined).
 db: also name the env var that holds the connection string (its value is never shown or stored).
 manual: reply "done" when the data is in — I re-check that gap before running.
+Keep or clean up is asked ONCE after the run (default keep).
 ```
 
 Interactive → **WAIT** for the answer; the QC's reply is the decision of record. Pipeline /
-non-interactive → apply recorded decisions from the learning file; gaps with none → `skip`
-with the precise reason (`source: pipeline-default`), the run continues with the rest.
+non-interactive → a `ui` or `api (helper)` way is prepared without an answer (`source:
+learning` when the learning file recorded it, `source: discovery` otherwise); `api (source
+code)` and `db` are prepared only with a recorded learning-file "yes" for this environment
+(`[type: qa]`), otherwise `skip — QC declined` with `no recorded authorization`; a gap with no
+way → `skip — data_missing` with `no way found — searched: {sources}` (`source:
+pipeline-default`); the run continues with the rest. Production named in the environment →
+nothing is prepared (stated).
 
 **6. Execute the decisions** — under the PHASE 2 rules (POM mandatory, no banned patterns,
-never app business logic, never a credential in code, logs, or the learning file):
+never app business logic, never a credential in code, logs, or the learning file) and the twelve
+principles:
 
 | Decision | How | Teardown |
 |---|---|---|
-| `api` | `prerequest/{Entity}PreRequest.ts` — create + delete functions, find-or-create so re-runs are idempotent; wired through `beforeAll` / `afterAll` in the owning spec (single-line delegation only, per `<pom_mandatory>`) | delete in `afterAll` |
-| `ui` | `tests/{Area}_Tests/00-setup-{entity}.spec.ts` — an end-to-end journey built ONLY from page objects (login → navigate → create → assert it exists), tagged `@setup @run:setup-{entity}`; the run plan schedules it FIRST as its own serial setup group, before smoke | UI delete journey in `afterAll`, or the api/db delete when one exists |
-| `db` | `{db_access} = helper` → the project's DB helper; otherwise SQL through Bash (`sqlcmd` / `psql` / `mysql`) reading the connection string from the QC-named env var **at run time** — refuse if unset; never echo, log, write, or paste the value anywhere. Insert script + matching delete script, both idempotent, both under `{data_setup_layer}` | delete script in `afterAll` |
+| `api (helper)` | a **temporary seed** composed in the session scratch folder: imports the helper by absolute path, selects `{env}` through the project's own mechanism (env var / config profile / CLI flag), creates the planned fixture, prints the identifiers; run once, output filtered for token / password lines, then deleted. It becomes a `prerequest/{Entity}PreRequest.ts` fixture (create + delete functions, find-or-create so re-runs are idempotent, wired through `beforeAll` / `afterAll` by single-line delegation per `<pom_mandatory>`) **only when the QC asks to keep it as code** | per the keep / clean-up answer (step 7); a kept fixture's delete function exists but is not wired to run |
+| `api (source code)` | the same temporary seed, calling the endpoint found in the source with the project's own request helper and secret mechanism — after the QC's "yes" | same |
+| `ui` | `tests/{Area}_Tests/00-setup-{entity}.spec.ts` — an end-to-end journey built ONLY from page objects (login → navigate → create → assert it exists), tagged `@setup @run:setup-{entity}`; the run plan schedules it FIRST as its own serial setup group, before smoke; **no question needed** | UI delete journey, or the api / db delete when one exists — run only on "clean up" |
+| `db` | `{db_access} = helper` → the project's DB helper; otherwise SQL through Bash (`sqlcmd` / `psql` / `mysql`) reading the connection string from the QC-named env var **at run time** — refuse if unset; never echo, log, write, or paste the value anywhere; **only records this run created are touched, every write is read back**; insert + matching delete, both idempotent, both under `{data_setup_layer}` | delete script — run only on "clean up" |
 | `manual` | wait for the QC's "done", then re-probe THAT requirement only | none (QC owns the data) |
-| `skip` | skip guard on every dependent TC with the gap's exact wording; counted as `SKIP` with reason | — |
+| `skip — data_missing` / `skip — not creatable` / `skip — QC declined` | skip guard on every dependent TC with the gap's exact wording and reason; counted as `SKIP`, never a failure | — |
 
-Cleanup default is **delete** after the run. `keep` → no teardown, and the fixture is written
-to `## Test Data` as a `[type: data]` line (plain English: what exists, counts, identifiers,
-environment, how it was created, date) so future runs and skill 3 find it.
+Rules that hold for every preparation:
+- **Dedicated, right-sized fixtures** (principle 5): each gap gets its own clearly named,
+  isolated parent record (`uniqueName(prefix)` from the test-data layer), sized to the TC's
+  boundary (more rows than the upper limit the TC tests; exactly the count a count TC expects);
+  one preparation serves several gaps only when they are compatible.
+- **Seed once**: a failed test never re-seeds; the preparation runs before the first stage, and a
+  re-run of a stage re-uses the records it created (find-or-create).
+- **Verify before use** (principle 6): a gap is `MISSING→READY` only after its oracle confirmed
+  it — the screen the TCs read (one MCP look) plus a read-only API or DB read when the screen
+  hides the value (paginated lists, details-only fields). Not confirmed → `skip — data_missing`
+  with `prepared but not confirmed on {screen}`, the records listed for clean-up.
+- **Read back what the system decided** (principle 7): creation / publish dates, the current
+  period, generated codes, sequence numbers are read back after the seed; the effective values
+  are propagated into the generated specs **through the test-data layer** (`helpers/test-data.ts`
+  exposes them per gap id — never a literal in a spec); every substitution is a `### Deviations`
+  bullet `R{n}: {field} — TC says {literal}, system stamped {value}` and a step-wording finding
+  for skill 3 `--revision`, never a silent change of the expected result.
+- **Check the real rule, not just the screen** (principle 8): a permission / visibility /
+  ownership precondition is verified against the rule's source as well (code, configuration or
+  DB); a TC whose oracle relies on a misleading screen is a Deviation for skill 3, never a skip.
+- **A refusal stops the step** (principle 10): the host's permission layer refusing the seed, a
+  bulk creation, a DB write or a credential-bearing command → stop, report exactly what was
+  refused and why, ask the QC to allow it; never worked around.
+- **No secrets** (principle 11): credentials stay in the project's secret mechanism; nothing is
+  printed, logged, stored or passed on a command line; captured output is filtered.
+- **No app business logic in tests, no banned patterns** — the seed imports helpers; it never
+  re-implements the application's rules.
 
-**7. Re-probe → verdict** `READY` · `READY-WITH-SKIPS ({n} TCs)` · `BLOCKED` (interactive
-QC chose to stop, or a chosen provisioning failed and the QC declined the alternatives).
-Update `{run_file}.run_plan`: setup groups first; TCs whose data was created → `serial:{gap}` after their
-setup group. Write the `data_readiness` object into `{run_file}`:
+**7. Keep or clean up — asked ONCE after the run (principle 12), default keep.** Every record a
+preparation created is listed (gap, identity, stamped values, the clean-up way); "clean up R{n}"
+runs that gap's delete through an existing helper or the UI journey; everything else is kept and
+registered in `## Test Data` as a `[type: data]` line (plain English: what exists, counts,
+identifiers, stamped values, environment, how it was created, date). A record that could not be
+removed is `left` and listed in the final message.
+
+**8. Re-probe → verdict** `READY` · `READY-WITH-SKIPS ({n} TCs)[ — {p} gaps prepared]` ·
+`BLOCKED` (interactive QC chose to stop, or a chosen preparation failed and the QC declined the
+alternatives). Update `{run_file}.run_plan`: setup groups first; TCs whose data was created →
+`serial:{gap}` after their setup group. Write the `data_readiness` object into `{run_file}`:
 
 ```json
 {
-  "measuredAt": "ISO-8601", "verdict": "READY-WITH-SKIPS",
-  "requirements": [
-    { "id": "R1", "text": "An order with line items exists in UAT", "status": "MISSING→READY",
-      "tcs": ["TC-010", "TC-011", "TC-011b"], "decision": "api", "source": "qc",
-      "provisioning": "prerequest/OrderPreRequest.ts (find-or-create)", "cleanup": "delete" },
-    { "id": "R2", "text": "A user with the Approver role", "status": "IMPOSSIBLE",
-      "tcs": ["TC-020", "TC-020b"], "decision": "skip", "source": "qc", "provisioning": null, "cleanup": null }
+  "verdict": "READY-WITH-SKIPS",
+  "gaps": [
+    { "gap": "An order with line items exists in UAT", "tcs": ["TC-010", "TC-011", "TC-011b"],
+      "decision": "prepared (api)", "source": "learning", "provisioning": "the automation project's order helper",
+      "identifiers": "order no. 10231 in customer \"qa-create-order-2026-05-02\"", "stamped_values": "order date = 2026-05-02",
+      "verified_on": "order list + read-only API read, 2026-05-02", "cleanup": "kept" },
+    { "gap": "A user with the Approver role", "tcs": ["TC-030", "TC-030b"],
+      "decision": "skip — not creatable", "source": "discovery", "provisioning": null,
+      "identifiers": null, "stamped_values": null, "verified_on": null, "cleanup": null }
   ],
-  "predictedSkips": [ { "tc": "TC-020", "reason": "no Approver user exists in any environment (QC: skip)" } ]
+  "predicted_skips": ["TC-030", "TC-030b"]
 }
 ```
 
-Live progress line (the `<live_progress>` format, stage `Data readiness`):
-`Data readiness: {ready}/{total} requirements ready — {n} TCs would skip — {awaiting QC decision | provisioning via api/ui/db | waiting for manual insert | READY | READY-WITH-SKIPS}`
+The same rows are the phase's `### Test-data readiness` table (`Gap · TCs · Decision · Source ·
+Provisioning · Identifiers / names · Effective stamped values · Verified on · Cleanup`,
+`references/run-report.md` §4); `Decision` ∈ `READY` · `prepared (api|ui|db)` · `skip —
+data_missing` · `skip — not creatable` · `skip — QC declined` — the renderer counts them and
+warns on any other word.
 
-**8. Learning write-back:** every QC decision → `[type: qa]` line in this skill's Q&A; kept
-fixtures → `[type: data]` in `## Test Data`; environment facts ("no user exists for role X in
-any environment", "entity Y has no empty state anywhere") → `[type: env]`. Plain English only.
+Live progress line (the `<live_progress>` format, stage `Data readiness`):
+`Data readiness: {ready}/{total} requirements ready — {n} TCs would skip — {awaiting QC decision | preparing via api/ui/db | waiting for manual insert | READY | READY-WITH-SKIPS}`
+
+**9. Learning write-back:** every QC decision (consent, keep / clean-up) → `[type: qa]` line in
+this skill's Q&A; kept fixtures → `[type: data]` in `## Test Data` (with the stamped values);
+environment facts ("no user exists for role X in any environment", "entity Y has no empty state
+anywhere") and not-creatable evidence → `[type: env]`; "the screen is not the rule" facts →
+`[type: env]`. Plain English only.
+
+**Worked example — four `MISSING` gaps, no "data missing" outcome.** Story "order approval",
+UAT: (1) *an order with 12 line items* — the automation project already creates orders through
+its API helper → `prepared (api)` without a question, temporary seed in scratch, order no. 10231
+read back, **order date stamped by the system** and propagated through the test-data layer, a
+Deviation for the TC that expected a literal date; (2) *a customer without orders* — TC-CUS-01
+of the document creates one → `prepared (ui)`, the setup journey runs first; (3) *an order whose
+approval expired yesterday* — no helper sets dates; the source holds the order endpoint, the
+expiry date is only reachable in the DB → asked once, both "yes" → `prepared (db)` on the order
+the same seed created, read back; (4) *an order approved by a user who no longer exists* —
+approvals are removed with their approver (code, checked) → `skip — not creatable`, `[type: env]`
+line. Verdict `READY-WITH-SKIPS (1 TC) — 3 gaps prepared`; post-run keep / clean-up asked once,
+all kept and registered.
 </data_readiness>
 
 ---
@@ -1928,7 +2090,7 @@ worked in the learning file.
    | `assertion_failure` | Element found, assertion wrong — test-code defect (bad wait, wrong expected mapping from the TC doc) | SELF-HEAL: fix wait strategy / assertion mapping |
    | `app_bug` | Test is correct; the application violates the approved TC | DO NOT TOUCH THE TEST — add to bug list |
    | `environment_failure` | Service down, auth expired, VPN/proxy/tunnel errors | ENVIRONMENT_BLOCKED path |
-   | `data_missing` | The data a TC needs is absent at run time. Requirement was `READY` in PHASE 2.6 → environment regression (ENVIRONMENT_BLOCKED path, name the requirement). Requirement was a `skip` decision → the TC is `SKIP` with that reason — not a failure, not healed. Provisioning created it but it is gone → re-run that setup group once, then treat as regression | per the two cases |
+   | `data_missing` | The data a TC needs is absent at run time. Requirement was `READY` / `prepared` and verified in PHASE 2.6 → environment regression (ENVIRONMENT_BLOCKED path, name the requirement). Requirement was a `skip — data_missing` / `skip — not creatable` / `skip — QC declined` decision → the TC is `SKIP` with that reason — not a failure, not healed. A preparation created it but it is gone → re-run that setup group once (seed-once still holds: find-or-create), then treat as regression | per the two cases |
    | `timeout_failure` | A step deadline, a TC budget, the outer ceiling or the watchdog fired. The record carries TC-ID, step, elapsed, expected condition, trace / screenshot path | **Calibrate from evidence (step 2b), never by number.** Open the trace: the operation legitimately completes after the deadline → raise THAT key in `timeouts.ts` with the reason; a broken locator / failed operation → `selector_failure` / `assertion_failure` heal; a frozen step (no progress, Playwright's timeout could not act) → environment / driver defect, report it, never re-time it. A timeout on one run alone never establishes the required duration; retries are never added to absorb one |
    | `evidence_failure` | Test passed but its `attempt-{a}.png` shows a post-cleanup / post-navigation screen instead of the verified state (the `captureEvidence` call sits after teardown, after a delete, or after leaving the page) | SELF-HEAL: move the call to the assertion point; re-run the TC (a new attempt — the earlier image stays); never an app_bug |
    | `unverified_assumption` | The test is tagged `@unverified-assumption` (PHASE 2.4 had no user answer) and it failed — **the interpretation is suspect before the application is** | DO NOT self-heal it into passing and **NEVER reclassify it as `app_bug`**. Re-ask the user with the observed behaviour as a new candidate; answered → regenerate the test and drop the tag. Unanswered → report as-is, excluded from the smoke-gate `app_bug` majority, never filed as a bug |
@@ -2390,13 +2552,14 @@ separate skill 4 and is not required for this run.`
 **Open-questions file:** {run_file}.open_questions
 
 ### Test-data readiness (PHASE 2.6)
-**Verdict:** {READY | READY-WITH-SKIPS ({n} TCs) | BLOCKED} · **QC asked:** {yes — {n} gaps in one message | no — all requirements ready or already decided in the learning file}
-| # | Gap | Affected TCs | Status | Decision | Source | Provisioning | Cleanup |
-|---|-----|--------------|--------|----------|--------|--------------|---------|
-{one row per non-READY requirement; Source = qc / learning / pipeline-default}
+**Verdict:** {READY | READY-WITH-SKIPS ({n} TCs)[ — {p} gaps prepared] | BLOCKED} · **QC asked:** {yes — {m} rows needed a yes in one message | no — every gap prepared automatically, ready or already decided in the learning file}
+| # | Gap | Affected TCs | Status | Decision | Source | Provisioning | Identifiers / names | Effective stamped values | Verified on | Cleanup |
+|---|-----|--------------|--------|----------|--------|--------------|---------------------|--------------------------|-------------|---------|
+{one row per non-READY requirement; Decision = READY / prepared (api|ui|db) / skip — data_missing / skip — not creatable / skip — QC declined; Source = qc / learning / discovery / pipeline-default}
 **Predicted skips carried into the run:** {TC-IDs + reason — or "none"}
 **Setup groups run first:** {setup:{entity} → spec path — or "none"}
-**Created data:** {n} fixtures — deleted after run {n} · kept {n} (registered in `## Test Data`)
+**Created data:** {n} fixtures — kept {n} (registered in `## Test Data`) · cleaned up on request {n} · left {n}
+**Stamped values substituted:** {R{n}: field — TC literal → system value, routed to skill 3 — or "none"}
 **Readiness file:** {run_file}.data_readiness
 
 ### Screenshots
@@ -2450,7 +2613,7 @@ Smoke {x}% · Positive {x}% · Negative {x}% · Full {n} · Partial {n} · None 
 | Negative | {passed}/{total} |
 | Static coverage (pre-run) | {x}% weighted — target {t}% — {PASS \| user override \| report-only} |
 | Coverage folder | {results_root}/coverage/ (3 CSVs, replaced); snapshot/delta in the run file |
-| Test-data readiness (pre-run) | {READY \| READY-WITH-SKIPS ({n} TCs)} — {n} gaps decided by QC, {n} provisioned ({api}/{ui}/{db}/{manual}), {n} skipped |
+| Test-data readiness (pre-run) | {READY \| READY-WITH-SKIPS ({n} TCs)} — {n} prepared ({api}/{ui}/{db}), {n} manual, {n} skipped ({data_missing}/{not creatable}/{QC declined}), {n} stamped values substituted |
 | Total execution time | {hh:mm:ss} |
 | Planned vs actual duration | ~{planned} vs {actual} (serial-only would be ~{serial}) |
 | Headed / workers | {yes \| no} / parallel ×{N}, serial ×1 — shared playwright.config.ts, Chrome |
@@ -2629,11 +2792,18 @@ Before returning AUTOMATION COMPLETE:
       one repair pass, re-measure, then the user asked — never silently run; override reported**
 - [ ] **Three coverage CSVs written; snapshot/delta in run file; Coverage section rendered**
 - [ ] **Test-data readiness resolved BEFORE the first run: requirements extracted per TC, probed once
-      each (learning file first), predicted skips listed, and the QC asked in ONE message per gap
-      (api / ui / db / manual / skip, + keep) — pipeline mode skipped undecided gaps with reason**
-- [ ] **Provisioning only through `prerequest/` fixtures, `00-setup-*.spec.ts` page-object journeys,
-      or the DB helper / CLI with a QC-named env var; teardown by default, `keep` registered in
-      `## Test Data`; no connection string or credential echoed, logged, or written anywhere**
+      each (learning file first), a way searched per MISSING gap in the principle-1 order, UI journeys and
+      existing helpers prepared without a question, the QC asked in ONE message only for an endpoint from
+      the source code / a DB write (yes / no) and for gaps with no way (manual / skip) — pipeline mode
+      prepared the automatic ways and skipped the rest with the precise reason**
+- [ ] **Preparation only through a temporary seed in the scratch folder that imports the project's own
+      helpers or calls an endpoint found in the source (deleted afterwards, kept as code only on request),
+      `00-setup-*.spec.ts` page-object journeys, or the DB helper / CLI with a QC-named env var touching
+      only records this run created; every prepared gap verified on its oracle before any dependent ran;
+      stamped values read back and propagated through the test-data layer with a Deviation per substitution;
+      keep by default, cleaned up only on the ONE post-run answer, kept fixtures registered in `## Test Data`;
+      no connection string or credential echoed, logged, or written anywhere; a permission refusal reported,
+      never worked around**
 - [ ] **`{run_file}.data_readiness` written; every skip guard in the specs traces to a
       readiness decision; decisions recorded in the learning file Q&A**
 - [ ] First run: every failure classified; only test-code defects healed (≤2 iterations); Heal Log kept

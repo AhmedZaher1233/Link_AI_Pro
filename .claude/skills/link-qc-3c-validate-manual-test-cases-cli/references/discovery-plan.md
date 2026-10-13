@@ -5,8 +5,9 @@ flow is walked once, every TC's unique tail is walked, and nothing is skipped be
 run (by this skill or by 3b) already looked at it. No scope question is ever asked, nothing is
 recommended, nothing is "left unvalidated by choice". The only TCs that end a run unobserved are
 the ones the application itself keeps out of reach: `not-implemented` (`walk-rules.md` §1),
-`draft (data changes not authorized)` (`walk-rules.md` §3a), `draft (data missing — D{n})`
-(`test-data-resolution.md` §4), `draft (screen could not be driven | app unreachable)`
+`draft (data changes not authorized)` (`walk-rules.md` §3a), `draft (data missing — D{n})` /
+`draft (data not creatable — D{n})` (`test-data-resolution.md` §4 — only after every way was
+searched and none could be run), `draft (screen could not be driven | app unreachable)`
 (`walk-rules.md` §7) — each with its reason, each listed.
 
 ## 1. Analyse the whole TC set FIRST — no browser yet
@@ -38,11 +39,14 @@ Read every TC (`tc-format-contract.md`) and build the **discovery plan**:
 7. **Locale-sensitive points** — every element label referenced in any step, plus screens whose
    secondary-locale behaviour must be walked live (`walk-rules.md` §4).
 8. **Data plan** (`test-data-resolution.md` §1-§4) — per data item of `TEST-DATA` §2: its
-   status from the file, the ways already confirmed by the learning file and by skill 5's
-   automation fixtures (read, never run), its priority (High / Medium / Low from the using
-   TCs), and whether it is a **preparation candidate** (`MISSING` or `UNKNOWN` in the file, an
-   e2e way naming a TC of this set or a common flow, exact values complete). Preparations form
-   the **first group of the walk**, because their dependents need them; the data plan never
+   status from the file, the ways already proven by the learning file, by the automation
+   project's helpers (manifest paths first, then search), by the application's source code and
+   by creating TCs, its priority (High / Medium / Low from the using TCs), and whether it is a
+   **preparation candidate** (`MISSING` or `UNKNOWN` in the file — the look at step 8 confirms
+   `MISSING` before anything is prepared —, an available way, exact values complete) and which
+   consent that way needs (none for a UI journey, the run's "yes" for a helper, an explicit
+   "yes" for an endpoint from the source or the database → step 4b). Preparations form the
+   **first group of the walk**, because their dependents need them; the data plan never
    excludes a TC.
 
 ## 2. Flags — accepted, never a question
@@ -68,7 +72,7 @@ No WAIT here — nothing to answer.
 
 | Walk | States |
 |---|---|
-| each common flow once (primary locale, `walk-rules.md` §3), **every** unique tail in the executable set, locale policy §4 | per `walk-rules.md` §6-§6a — `validated` / `enhanced` / `discrepancy` (outcome observed) / `not-implemented` / `draft` (app unreachable, data changes not authorized, screen could not be driven, stale and unreachable — reason in parentheses); `inferred` only when the tail could not be driven this run but a fresh earlier observation confirms those exact steps on that exact screen — and then it is listed as needing the reviewer's extra care |
+| each common flow once (primary locale, `walk-rules.md` §3), **every** unique tail in the executable set, locale policy §4 | per `walk-rules.md` §6-§6a — `validated` / `enhanced` / `discrepancy` (outcome observed) / `not-implemented` / `draft` (app unreachable, data changes not authorized, data missing — D{n}, data not creatable — D{n}, screen could not be driven, stale and unreachable — reason in parentheses); `inferred` only when the tail could not be driven this run but a fresh earlier observation confirms those exact steps on that exact screen — and then it is listed as needing the reviewer's extra care |
 
 The implementation-status gate runs first; preparations run before their dependents
 (`test-data-resolution.md` §4); the test-data look (`patch-rules.md` §3) covers every

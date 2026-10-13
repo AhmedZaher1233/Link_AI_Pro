@@ -57,14 +57,23 @@ then patch the files. There is no separate reviewer agent — the next gate is t
     nothing kept from 3b, nothing skipped.
 12. **Test data resolved honestly** (`test-data-resolution.md`) — every item carries a way
     decided from named evidence, a user answer or an open `Q-{n}`, in the fixed order
-    `e2e scenario → api → db → set directly → manual`; no `api` / `db` chosen without
-    confirmation; nothing seen on an API-documentation page or an import screen counted as
-    available; the priority follows the using TCs; every preparation ran under the run's "yes"
-    with values the file already named, before its dependents, and is listed as reverted or
-    left behind; a prepared-and-reverted item is delivered `MISSING`; evidence-closed facts are
-    in `## Test Data`, never in the Q&A; at most one batched data ask, after the walk, only for
-    undecided items; nothing prepared in COMPARISON mode; no path, endpoint, table or fixture
-    name anywhere in the file.
+    `e2e scenario → api → db → set directly → manual`; every `MISSING` item was searched for a
+    way in the principle-1 order (learning file, automation helpers through the manifest paths
+    and by search, the application's source code, UI journeys, a database helper) before any
+    `data missing` state remained; nothing seen on an API-documentation page or an import
+    screen counted as available; the priority follows the using TCs; every preparation ran
+    before its dependents under the consent its way needs (none for a UI journey, the run's
+    "yes" for a helper, the user's explicit "yes" for an endpoint from the source or a database
+    write — never worked around a refusal), with values the file already named, through a
+    temporary seed that is no longer in the scratch folder and never entered the repository,
+    was verified on its oracle before any dependent was walked, had its stamped values read
+    back (each substitution a Deviation + a finding for skill 3), and is listed as kept or
+    removed; a kept item is delivered `READY`, a removed one `MISSING` with the recreate note,
+    an impossible state `NOT CREATABLE` with its evidence; no credential or secret line in any
+    captured output, deliverable or learning line; evidence-closed facts are in `## Test Data`,
+    never in the Q&A; at most one consent ask (before the walk) and one post-walk ask (keep /
+    clean-up + undecided items); nothing prepared in COMPARISON mode; no path, endpoint, table
+    or fixture name anywhere in the file.
 
 Anything you cannot fix yourself (an unreachable screen, a contradiction, an unclear
 requirement) is listed under **Open Findings for the Human Reviewer** — never silently resolved.

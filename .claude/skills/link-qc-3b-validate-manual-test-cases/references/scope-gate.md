@@ -14,7 +14,8 @@ Read every TC (`tc-format-contract.md`) and build the **discovery plan**:
    (`patch-rules.md` §1). These are NOT rediscovered.
 4. **Executable set** `N` — TCs that are not `not-implemented` after the implementation-status
    gate (`mcp-pass.md` §1), minus TCs excluded by a CUSTOM list.
-5. **Risk signals** — per TC: `Smoke: YES`, `Type: negative`, `Data effect` other than read-only,
+5. **Risk signals** — per TC: `Smoke: YES`, `Type: negative`, `Data effect` other than read-only
+   (runs only when the data-changes answer was "yes" — `mcp-pass.md` §3a),
    a role no other TC uses, a unique tail longer than the prefix, a locale variant whose labels
    are not in the learning file, a `discrepancy` from an earlier run, an open `Q-*` naming it.
 6. **Gaps** — missing navigation, preconditions, test data, filters/selections, async waits or
@@ -23,6 +24,15 @@ Read every TC (`tc-format-contract.md`) and build the **discovery plan**:
    count those TCs so the recommendation can say they end `draft (human step pending)`.
 7. **Locale-sensitive points** — every element label referenced in any step, plus screens whose
    secondary-locale behaviour must be walked live (`mcp-pass.md` §4).
+8. **Data plan** (`test-data-resolution.md` §1-§4) — per data item of `TEST-DATA` §2: its
+   status from the file, the ways already proven by the learning file, by the automation
+   project's helpers (manifest paths first, then search), by the application's source code and
+   by creating TCs, its priority (High / Medium / Low from the using TCs), whether it is a
+   **preparation candidate** (`MISSING` or `UNKNOWN` in the file — the look at step 8 confirms
+   `MISSING` before anything is prepared —, an available way, exact values complete) and which
+   consent that way needs (none for a UI journey, the run's "yes" for a helper, an explicit
+   "yes" for an endpoint from the source or the database → step 4b). Preparations run before
+   their dependents and only for items whose dependents are inside the chosen scope (§4).
 
 ## 2. An explicit instruction is respected — no question
 
@@ -71,8 +81,11 @@ recommended scope leaves unvalidated.
 | **CUSTOM** | the listed TCs as FULL (their flows once + their tails); nothing else | listed TCs per FULL; every other TC, its stamp and its log rows untouched |
 
 Whatever the mode: the implementation-status gate runs first; the test-data look
-(`patch-rules.md` §3) covers every item whose listing screen the walk reaches; the coverage
-tables are never recomputed by the walk itself (SKILL.md invariant 6).
+(`patch-rules.md` §3) covers every item whose listing screen the walk reaches; a `MISSING` item
+is prepared before its dependents (`test-data-resolution.md` §4) **only when at least one of
+those dependents is inside the chosen scope** — in SHARED-FLOWS-ONLY nothing is prepared (no
+tail is walked), in CUSTOM only the listed TCs' items; the coverage tables are never recomputed
+by the walk itself (SKILL.md invariant 6).
 
 ## 5. Re-run defaults (document already stamped by 3b)
 

@@ -138,14 +138,24 @@ use the item — never create, edit or delete anything to find out):
 | a state the item must be in that the design did not name | same |
 | an additional account / role the screens require | §1 Accounts row with the next free `A{n}` ID (username only), mapped to the TCs; the inserted step references it as `{role} [A{n}]` |
 | the base URL or another environment value you asked for at intake (§0 row was `unknown — asked by 3b/3c`) | that row's `Value` + `Status: READY` — the TC keeps `[E{n}]`; a service the walk needed that had no row (a mail sandbox reached for an OTP) gets a new `E{n}` row, never a literal in a step |
-| a creation screen / setting that makes an `e2e scenario` or `set directly` way available | §5 row `available — seen live {date}`; never `api` / `db` from observation (those need confirmation, `tc-design.md` rules) |
-| an item that cannot be reached or created in this environment | §4 Problems row, status `IMPOSSIBLE` only after the ways were considered |
+| a creation screen / setting that makes an `e2e scenario` or `set directly` way available | §5 row `available — seen live {date}`; never `api` / `db` from observation (those need confirmation, `tc-design.md` rules) — an API-documentation page or an import / seed screen seen live makes that way `to be confirmed — {what was seen}` with a recommendation, never available (`test-data-resolution.md` §1) |
+| an item that cannot be reached or created in this environment | §4 Problems row; status `IMPOSSIBLE` (skill 3's word) only after the ways were considered; status `NOT CREATABLE` when evidence proves the state cannot exist on this environment (`test-data-resolution.md` principle 9 — the Problems row names the evidence) |
 | a problem row now solved (item exists) | row marked `closed {date}` |
 
-Then recompute the header counts and set `Environment: {env} checked {date}`. Items confirmed
-`READY` that the learning file did not know → one `[type: data]` line under `## Test Data`.
-`MISSING` / `IMPOSSIBLE` / `UNKNOWN` statuses are NOT written to the learning file — skill 5
-records the final outcome.
+**Then resolve** (`test-data-resolution.md` §2-§6): for every item the way (fixed order, first
+available wins), the priority, the §3 bullets `How we handle it` / `Decided from` / `Prepared
+this run` / `Stamped values`, the §5 recommended way and availability cells, and the §6 closures
+by evidence. The delivered status follows the table of `test-data-resolution.md` §4 — a
+prepared item **kept** (default) is `READY`, a prepared item the QC had **removed** is `MISSING`
+with the recreate note; `NOT CREATABLE` carries its evidence. These TEST-DATA write rules are
+identical in skill 3c (`3c/references/test-data-resolution.md`, the `SHARED-3B-3C` blocks).
+
+Then recompute the header counts (`ready · missing · impossible · unknown · not creatable`) and
+set `Environment: {env} checked {date}`. Items confirmed `READY` that the learning file did not
+know, items prepared this run, and ways confirmed this run (by evidence or by the user) →
+`[type: data]` lines under `## Test Data`; not-creatable evidence → `[type: env]`
+(`test-data-resolution.md` §5). `MISSING` / `IMPOSSIBLE` / `UNKNOWN` statuses are NOT written to
+the learning file — skill 5 records the final outcome.
 
 ## 4. Render the page — `html-page.md`
 
@@ -188,8 +198,16 @@ Never a credential, never an unanswered recommendation.
    unchanged (or changed because of a recorded gap / authorized update — say which).
 5. Potential bugs: open / resolved this run / not checked this run, each with its PB id and TC.
 6. `inferred` cards need the reviewer's extra care; `discrepancy` cards point at their PB.
-7. Test data before → after (ready / missing / impossible / unknown) and the advanced facts added.
-8. Open questions repeated with the recommended answer and what stays pending.
+7. Test data before → after (ready / missing / impossible / unknown / not creatable), the
+   advanced facts added, the ways decided (by evidence / by the user / undecided), the items
+   prepared this run (kept / removed, the way and consent each used, the stamped values
+   substituted) and the not-creatable items with their evidence — ordered by priority
+   (`test-data-resolution.md` §3).
+7b. Data changes: made (by TCs / by preparations: e2e / api helper / api from source / db) /
+    cleaned up / kept / left behind (with the record identities), or "none — not authorized" /
+    "none — no data-changing TC and nothing to prepare".
+8. Open questions repeated with the recommended answer and what stays pending, plus the ones
+   closed by evidence this run (each with its evidence).
 9. Approved document that changed → now `PENDING HUMAN REVIEW`, re-review needed; `--republish`
    only when `ADO-MAP.md` exists. Unchanged → still approved.
 10. Next: approve (or re-approve) → skills 4 (optional) and 5, independently; coverage gaps →
@@ -207,12 +225,13 @@ Never a credential, never an unanswered recommendation.
 **Needs a human run:** {n} — {TC-IDs (human step pending) | none}
 **Freshness:** {n} stale ({reasons}) re-queued · {n} skipped (fresh evidence)
 **Cross-validator:** {no 3c evidence in scope | asked → {answer} | answered by the instruction} · **Kept from 3c:** {n} — {TC-IDs | none} · **Stale, not re-validated:** {TC-IDs | none}
+**Data changes:** {authorized | not authorized} · {n} made ({t} by TCs · {p} preparations: {e} e2e · {a} api helper · {s} api from source · {d} db) · {n} cleaned up · {n} kept · {n} left ({record identities | none})
 **MCP validation:** {v/e/i/d/ni/dr} → {v/e/i/d/ni/dr} · **App validation progress:** {a}/{N} → {b}/{N}
 **Requirement coverage:** {x}% — unchanged {| recomputed because {gap / authorized update}}
 **Common flows walked:** {list}
 **Potential bugs:** {n} open ({PB-ids}) · {n} resolved this run · {n} not checked this run
-**Test data:** ready {a}→{b} · missing {a}→{b} · impossible {a}→{b} · unknown {a}→{b} · advanced facts added: {n}
-**Open questions:** {N} — {Q-ids with the recommended answer, or "none"}
+**Test data:** ready {a}→{b} · missing {a}→{b} · impossible {a}→{b} · unknown {a}→{b} · not creatable {a}→{b} · advanced facts added: {n} · ways decided: {e} by evidence · {u} by user · {q} undecided ({Q-ids}) · prepared this run: {p} (kept {k} · removed {c}) · stamped values substituted: {n}
+**Open questions:** {N} open — {Q-ids with the recommended answer, or "none"} · {c} closed by evidence this run
 **Files patched:** TEST-CASES {TC-IDs + header} · TEST-DATA {items} · page re-rendered ({English | Arabic}, gate {PASS | preview}{; Arabic sidecar on disk — pass --lang ar to render it}) · summary {columns | n/a} — or "none (read-only)"
 **Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge"}
 **Open findings for the reviewer:** {gaps / defects / pending / blockers / unclear, or "None"}
@@ -226,6 +245,7 @@ Never a credential, never an unanswered recommendation.
 **Playwright MCP:** {attached | absent → BLOCKED}
 **Set:** {T} TCs · {N} executable · {F} common flows · risk: {signals}
 **Recommended scope:** {mode} — {reason}; leaves unvalidated: {TC-IDs}
+**Data plan:** {n} items · {e} ways decided from evidence · {q} undecided (asked once after the walk) · {p} preparation candidates ({e} e2e — no question · {a} api helper · {s} api from source + {d} db — need a yes; not in audit)
 **Would write:** {files and what in them} · **Authorization needed:** {yes (approved) | no}
 **Learning file:** not touched (audit)
 ```
@@ -233,7 +253,7 @@ Never a credential, never an unanswered recommendation.
 ## 8. Quality checklist — before returning TEST CASES VALIDATED
 
 - [ ] Playwright MCP probed BEFORE any ask; absent → BLOCKED, no credentials asked
-- [ ] ONE combined ask (URL only if not recorded, credentials per role, implementation status only if unknown, env notes, authorization only if approved and needed); every question in the `open-questions.md` shape; no unanswered recommendation acted on
+- [ ] ONE combined ask (URL only if not recorded, credentials per role, implementation status only if unknown, env notes, data-changes permission, authorization only if approved and needed); every question in the `open-questions.md` shape; no unanswered recommendation acted on
 - [ ] Document located and classified (pending / approved / re-validate / legacy / invalid); `tc_output_folder` stated once and unchanged
 - [ ] Approved document: read-only unless authorized; `Status` flipped only when something actually changed; `--republish` mentioned only when `ADO-MAP.md` exists
 - [ ] Implementation status established live (probe + answer + report) and recorded with evidence; not-implemented TCs never marked validated, enhanced or as defects
@@ -250,7 +270,9 @@ Never a credential, never an unanswered recommendation.
 - [ ] Every discrepancy has a PB entry: five lines, stable id, requirement-based expected result copied not rewritten, meta with status; resolved only after a successful retest; not retested → "not checked in this run"
 - [ ] Gaps / defects / pending / blockers / unclear in five separate buckets; coverage gaps handed to skill 3, never fixed here
 - [ ] Coverage score, traceability, manual-only tables untouched (or recomputed only for a recorded gap / authorized update, stated)
-- [ ] Test data: one read-only look per reachable item; statuses from evidence only (`MISSING` only when checked and absent); advanced facts written; counts and `Environment` line updated; `READY` items to the learning file
+- [ ] Data changes: mutating TCs run only on "yes" (never on production), records identified before the change, reverted through the UI where a way exists, made / cleaned up / kept / left listed; "no" → those TCs `draft (data changes not authorized)`
+- [ ] Test data: one read-only look per reachable item; statuses from evidence only (`MISSING` only when checked and absent); advanced facts written; counts and `Environment` line updated; `READY` items and confirmed ways to the learning file
+- [ ] Test-data resolution: every item carries a way decided from named evidence, a user answer or an open `Q-{n}` (fixed order e2e scenario → api → db → set directly → manual); every `MISSING` item with an in-scope dependent searched in the principle-1 order before any `data missing` state remained; an API-documentation page or an import screen never counted as available; priority derived from the using TCs; every preparation ran before its dependents under the consent its way needs (none for a UI journey, the run's "yes" for a helper, an explicit "yes" for an endpoint from the source or a database write), with values the file already named, through a temporary seed that was deleted, verified on its oracle, stamped values read back (each substitution a Deviation + a finding for skill 3), and is listed as kept or removed; kept → `READY`, removed → `MISSING` with the recreate note, impossible state → `NOT CREATABLE` with evidence; every Q closed this run names its evidence; facts in `## Test Data`, nothing evidence-closed in the Q&A; at most ONE consent ask before the walk and ONE post-walk ask (keep / clean-up + undecided items); nothing prepared in a 3b-vs-3c comparison run
 - [ ] Page re-rendered by the script with `gate: PASS` (or MISMATCH fixed then PASS); Arabic complete or delivered explicitly as a preview with the outstanding keys; no hand edit
 - [ ] `node scripts/selftest.mjs` passes in this skill folder after any renderer / template change (mirror case 0 passes or `skipped`)
 - [ ] Learning file: base URL as `[type: env]`, flows / labels / locale / data / tricks in the shared sections, confirmed answers under Validation Model Q&A; no credentials, no code identifiers, no unanswered recommendation

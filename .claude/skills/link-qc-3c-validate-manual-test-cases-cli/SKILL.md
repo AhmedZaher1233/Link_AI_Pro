@@ -27,10 +27,14 @@ description: >
   contradiction as a concise Potential Bug with one screenshot under evidence/, checks each
   test-data item with one read-only look and updates TEST-DATA-{feature}.md, decides from
   evidence how every data item is handled (way order e2e scenario → api → db → set directly →
-  manual, item priority High / Medium / Low from the TCs that use it), prepares a MISSING item
-  through a documented e2e scenario before the TCs that need it when the run may change data
-  (reverted at the end), closes test-data questions that evidence turned into facts and asks
-  ONCE, after the walk, for whatever stays undecided, asks every other open
+  manual, item priority High / Medium / Low from the TCs that use it), PREPARES a MISSING item
+  itself before the TCs that need it — through a UI journey without asking, through the
+  automation project's own helper under the run's data-changes "yes", through an endpoint found
+  in the application's source code or the database only after an explicit "yes" — verifies it on
+  its oracle, reads back the values the system stamped, asks ONCE after the walk whether to keep
+  or clean up, records "not creatable" with evidence instead of "data missing", closes test-data
+  questions that evidence turned into facts and asks ONCE, after the walk, for whatever stays
+  undecided, asks every other open
   question in one structured shape and never acts on an unanswered one, then patches
   TEST-CASES / TEST-DATA in place and re-renders TC-REVIEW-{feature}.html with
   scripts/render-tc-review.mjs (Arabic pages reuse the persisted translation sidecar). Design
@@ -156,8 +160,8 @@ optional for skill 5.
     custom list, no re-run skip set (`references/discovery-plan.md`). `--full` is accepted as the
     behaviour it already is; a narrowing flag or sentence gets one line ("this skill always walks
     every TC") and the full walk. A TC ends unobserved only when the application keeps it out of
-    reach (not implemented, data changes not authorized, data missing — D{n}, screen could not
-    be driven) — with the reason, listed.
+    reach (not implemented, data changes not authorized, data missing — D{n} after every way was
+    searched, data not creatable — D{n}, screen could not be driven) — with the reason, listed.
 13. **The page is rendered, never written by hand** — `scripts/render-tc-review.mjs` per
     `references/html-page.md`; an Arabic page with untranslated strings is a preview. Language
     rule, verbatim in skills 2, 3, 3b and 3c: *"The output language of a run is English unless
@@ -184,7 +188,9 @@ optional for skill 5.
     not read-only runs only on "yes"; every record you create or change is identified before the
     change, reverted through the UI when a way exists, and listed in the final message; a record
     left behind is an Environment-blockers line. "No" (or production named in the environment
-    note) → those TCs stay `draft — not app-validated (data changes not authorized)`.
+    note) → those TCs stay `draft — not app-validated (data changes not authorized)`. The same
+    "yes" covers a preparation through an existing automation helper (invariant 18); a UI
+    preparation needs no answer, and production stops every preparation.
 17. **Cross-validator handling.** Two validators write the same states — 3b (Playwright MCP) and
     3c (playwright-cli). Because you walk every TC, evidence written by 3b (`tool: mcp` or no
     `tool` key) is never asked about, never skipped and never silently dropped: every such TC is
@@ -192,23 +198,32 @@ optional for skill 5.
     records the replacement, and the final message lists the TC-IDs that carried 3b evidence
     (current vs stale at intake) so the two runs stay comparable
     (`references/patch-rules.md` §1b).
-18. **Test data is decided from evidence, prepared only through the UI, asked about once.** For
-    every data item you decide *how* it is handled: the first available way in the fixed order
-    `e2e scenario → api → db → set directly → manual`, where "available" means confirmed by a
-    learning-file `[type: data]` / `[type: env]` line, by skill 5's existing automation
-    fixtures (read with Read / Grep / Glob, never run, described in words), by a creating TC or
-    common flow, or seen live — an API-documentation page or an import screen is `to be
-    confirmed`, never available; an unconfirmed `api` / `db` is never chosen. Each item gets a
-    priority (High / Medium / Low) from the TCs that use it. A `MISSING` item whose decided way
-    is an e2e scenario with known exact values is prepared **before its dependents** under this
-    run's data-changes "yes", identified, reconciled and reverted at the run's end like any
-    record of invariant 16 — never through an API or the database, never with invented values,
-    never in COMPARISON mode; a prepared-and-reverted item is delivered `MISSING`. A test-data
+18. **Test data is decided from evidence, prepared by you, verified before use, asked about
+    once.** For every data item you decide *how* it is handled: the first available way in the
+    fixed order `e2e scenario → api → db → set directly → manual`, where "available" means
+    proven by a learning-file `[type: data]` / `[type: env]` line, by an existing helper of the
+    automation project (fixture / factory / pre-request / seed module — found through the
+    manifest paths, then by search; read, described in words), by a create endpoint read from
+    the application's source code when the repository holds it, by a creating TC or common
+    flow, by a database helper the project has, or seen live — an API-documentation page or an
+    import screen is `to be confirmed`, never available. Each item gets a priority (High /
+    Medium / Low) from the TCs that use it. A `MISSING` item is **prepared by you, before its
+    dependents**, under the consent its way needs: a UI journey needs no question; a helper runs
+    under this run's data-changes "yes"; an endpoint from the source code and a database write
+    each need an explicit "yes" naming the item, asked ONCE together after discovery; the seed
+    is a temporary script in the scratch folder (project helpers imported by absolute path,
+    deleted afterwards — never new code in the repository), the item is `READY` only after its
+    oracle confirmed it, values the system stamped are read back and used for this run (each
+    substitution a step-wording finding for skill 3, never a silent rewrite), a record is kept by
+    default and cleaned up only on the ONE post-walk question. Never with invented values, never
+    a pre-existing record modified, never on production, never in COMPARISON mode, never around
+    a permission refusal. A kept item is delivered `READY`, a removed one `MISSING` with the
+    recreate note; evidence that the state cannot exist is `NOT CREATABLE` with that evidence,
+    never "data missing"; a walked TC's stamp says `data: prepared this run ({way})`. A test-data
     question is closed only when evidence makes it a fact (`answered … (by evidence: …)`); facts
     go to the learning file's `## Test Data`, never to the Q&A as "confirmed by user". Whatever
-    evidence could not decide is asked in ONE batched message after the walk; unanswered →
-    `manual` recommended, question open, dependents unchanged
-    (`references/test-data-resolution.md`).
+    evidence could not decide is asked in the same post-walk message; unanswered → `manual`
+    recommended, question open, dependents unchanged (`references/test-data-resolution.md`).
 
 ## Workflow
 
@@ -217,15 +232,16 @@ optional for skill 5.
 | 1 | **Intake** — locate the document(s) (path / feature / story id / SPEC folder), read the header (`Status`, `Implementation status`, `MCP validation` stamp, `Review page language`), classify the document state (pending / approved / already validated / validated by 3b / legacy / not a TC document), resolve the profile; state `tc_output_folder`. | `references/intake.md` §1-2 |
 | 2 | **Learning file + previous answers** — Index + tag grep (`[type: env]`, `[type: trick]`, `[type: data]`, `## Common Flows`, `## Locale Knowledge`), the model sections' Q&A (3, 3b, 3c). | `references/learning-file.md`, `references/open-questions.md` §1 |
 | 3 | **Probe playwright-cli FIRST** — absent → BLOCKED (`/sync-skills --tools`). Then ONE combined ask: base URL — the `[E1]` row (unless recorded), the username of each referenced account still `unknown` in `TEST-DATA` §1, login method per account (attended / secrets file with `A{n}_USER` / `A{n}_PASSWORD` names), implementation status (only when the header says not yet checked), environment notes, data changes allowed (yes / no), and the revision authorization when the document is APPROVED and you expect changes — WAIT. Record every answer except anything secret. | `references/browser-cli.md` §1, `references/intake.md` §3 |
-| 4 | **Parse the set** — TCs and their current `Validation` + evidence stamps (and which validator wrote each), common flows (shared step prefixes) and unique tails, executable count, risk signals (they order the walk, never exclude), data-changing TCs, data items from `TEST-DATA`, open `PB-*` and `Q-*` entries, and the reviewer's open comments (`REVIEW-COMMENTS-{feature}.md` beside the document, `Reviewer comment` lines, or text pasted in chat) — each is a hint for the walk (what to look at, what the reviewer doubts), never a state and never a design change; the **data plan** — per item the ways evidence already confirms (learning file + skill 5's automation fixtures + creating TCs), its priority and the preparation candidates. | `references/discovery-plan.md` §1, `references/tc-format-contract.md`, `references/test-data-resolution.md` §1-§3 |
+| 4 | **Parse the set** — TCs and their current `Validation` + evidence stamps (and which validator wrote each), common flows (shared step prefixes) and unique tails, executable count, risk signals (they order the walk, never exclude), data-changing TCs, data items from `TEST-DATA`, open `PB-*` and `Q-*` entries, and the reviewer's open comments (`REVIEW-COMMENTS-{feature}.md` beside the document, `Reviewer comment` lines, or text pasted in chat) — each is a hint for the walk (what to look at, what the reviewer doubts), never a state and never a design change; the **data plan** — per item the ways evidence already confirms (learning file + the automation project's helpers found through the manifest paths and by search + the application's source code + creating TCs), its priority and the preparation candidates. | `references/discovery-plan.md` §1, `references/tc-format-contract.md`, `references/test-data-resolution.md` §1-§3 |
+| 4b | **Consent ask** — only when a `MISSING` item's decided way is an endpoint from the source code or the database: ONE message naming each such item, what would be done and the TCs it unblocks — WAIT. UI journeys and existing helpers are listed for information, never asked. | `references/test-data-resolution.md` §4b |
 | 5 | **Implementation status** — one targeted entry-point look + the answer + an optional skill-4 report; classify the story and, where they differ, each AC (a classification, not a question — unbuilt parts become `not-implemented`, never defects). | `references/walk-rules.md` §1 |
 | 6 | **Freshness pass** — every previously observed TC: recompute the content and requirement-text hashes, compare env / build / open questions; stale → `draft (stale — …)` and reported; nothing is skipped either way. | `references/patch-rules.md` §1 |
 | 7 | **Plan line** — no gate: state in one line that all `N` executable TCs will be walked (`F` flows once, data-changing TCs per the answer); a narrowing flag or sentence gets the one-line "this skill always walks every TC". No WAIT. | `references/discovery-plan.md` §2-§4 |
 | 7b | **Cross-validator handling** — every TC's own stamp: evidence written by 3b (`tool: mcp` or no `tool` key) is noted (current / stale at intake), re-validated this run and replaced on observation; listed in the final message; never asked about. | `references/patch-rules.md` §1b |
-| 8 | **Walk — every TC** — sessions per account, login per the chosen method, discovery plan, targeted budget (snapshot once per new screen, each common flow once, every TC's unique tail), every token resolved per ID, stop at a `[HUMAN]` step (`draft — not app-validated (human step pending)`), data-changing rules, secondary-locale policy, correction rules, outcome rule, validation states, failure rule; one progress line per screen; **prepare** a `MISSING` item with an executable e2e way before its dependents (authorized runs only). | `references/walk-rules.md` §2-§7, `references/browser-cli.md` §2-§9, `references/test-data-resolution.md` §4 |
-| 9 | **Test-data resolution** — one read-only look per item on its listing screen → READY / MISSING / UNKNOWN; advanced facts (exact values, required states, extra accounts, creation ways actually available) noted for the patch; then decide the way and priority of every item, log the preparations, close data questions by evidence, and ONE batched ask for what stays undecided — WAIT only when something is undecided. | `references/patch-rules.md` §3, `references/test-data-resolution.md` §5-§7 |
+| 8 | **Walk — every TC** — sessions per account, login per the chosen method, discovery plan, targeted budget (snapshot once per new screen, each common flow once, every TC's unique tail), every token resolved per ID, stop at a `[HUMAN]` step (`draft — not app-validated (human step pending)`), data-changing rules, secondary-locale policy, correction rules, outcome rule, validation states, failure rule; one progress line per screen; **prepare** every `MISSING` item with an available way before its dependents (the nine steps: temporary seed or UI journey, identifiers captured, verified on the oracle, stamped values read back, seed deleted). | `references/walk-rules.md` §2-§7, `references/browser-cli.md` §2-§9, `references/test-data-resolution.md` §4 |
+| 9 | **Test-data resolution** — one read-only look per item on its listing screen → READY / MISSING / UNKNOWN; advanced facts (exact values, required states, extra accounts, creation ways actually available) noted for the patch; then decide the way and priority of every item, log the preparations (kept → `READY`, removed → `MISSING`; `NOT CREATABLE` with evidence), close data questions by evidence, and ONE post-walk ask — keep / clean-up for every prepared record plus whatever stays undecided — WAIT only when something was prepared or is undecided. | `references/patch-rules.md` §3, `references/test-data-resolution.md` §5-§7 |
 | 10 | **Self-review** — the twelve checks; own findings fixed in place. | `references/self-review.md` |
-| 11 | **Write back** — authorization check → `TEST-CASES` patch (states + stamps with `tool: cli` and `outcome-check`, wording, header counts + progress, enhancement log append, PB upsert with screenshots, Q entries, findings) → `TEST-DATA` patch (statuses, ways, priorities, prepared-this-run, closed / open Qs) → comments: each handled entry `answered` / `declined` with a one-line Response (a design change it asks for is `answered` with the route `skill 3 --revision`; `html-page.md` §7b) → render (English by default; under `--lang ar`: `--write-skeleton` → fill `ar` → `--write`) → learning file → revert the prepared records → close every run session, delete the run's snapshot files → final message (incl. "Needs a human run") + structured return. | `references/patch-rules.md`, `references/html-page.md`, `references/browser-cli.md` §8, `references/test-data-resolution.md` §4, §6 |
+| 11 | **Write back** — authorization check → `TEST-CASES` patch (states + stamps with `tool: cli` and `outcome-check`, wording, header counts + progress, enhancement log append, PB upsert with screenshots, Q entries, findings) → `TEST-DATA` patch (statuses, ways, priorities, prepared-this-run, closed / open Qs) → comments: each handled entry `answered` / `declined` with a one-line Response (a design change it asks for is `answered` with the route `skill 3 --revision`; `html-page.md` §7b) → render (English by default; under `--lang ar`: `--write-skeleton` → fill `ar` → `--write`) → learning file → clean up only the prepared records the user asked to remove (default keep) → close every run session, delete the run's snapshot files → final message (incl. "Needs a human run") + structured return. | `references/patch-rules.md`, `references/html-page.md`, `references/browser-cli.md` §8, `references/test-data-resolution.md` §4, §6 |
 
 Load a reference only when its step runs. A default run needs `intake.md`, `browser-cli.md`,
 `learning-file.md`, `discovery-plan.md`, `walk-rules.md`, `patch-rules.md`,
@@ -241,9 +257,9 @@ never opens a screen beyond the probe.
 |------|---------|-----------|
 | **VALIDATE** | default — the document carries no 3c stamp | the story folder files (patched in place) + rendered page + learning file |
 | **RE-VALIDATE** | the header carries a 3c or 3b stamp | same; the walk set is still every TC — stale, `draft`, `inferred`, `discrepancy` (PB retest), `not-implemented` (re-gate) **and** `validated` / `enhanced` with fresh evidence; every observed TC gets a fresh stamp; header stamp gains `re-run {n}` |
-| **READ-ONLY** | `Status: APPROVED` without revision authorization | nothing — observe every TC, report what would change (incl. the test-data decisions and closures), offer the authorization once; a preparation under the data-changes "yes" only when its cleanup way exists — reported, not written |
-| **AUDIT** | `--audit` | nothing — probe only; reports doc state, computed flows, executable count, risk signals, the plan line (all `N` TCs), the data plan (ways from evidence, undecided items, preparation candidates) and planned writes |
-| **COMPARISON** | the task names the 3b-vs-3c comparison | a normal VALIDATE run plus the `comparison/` copies and report per `references/cli-vs-mcp-comparison.md` (3b is invoked with `--full` so both runs walk the same set); no preparation — the run lists what it would prepare |
+| **READ-ONLY** | `Status: APPROVED` without revision authorization | nothing — observe every TC, report what would change (incl. the test-data decisions and closures), offer the authorization once; a preparation only when a clean-up way exists — reported, not written |
+| **AUDIT** | `--audit` | nothing — probe only; reports doc state, computed flows, executable count, risk signals, the plan line (all `N` TCs), the data plan (ways from evidence, undecided items, preparation candidates and which of them would need a yes) and planned writes |
+| **COMPARISON** | the task names the 3b-vs-3c comparison | a normal VALIDATE run plus the `comparison/` copies and report per `references/cli-vs-mcp-comparison.md` (3b is invoked with `--full` so both runs walk the same set); no preparation in either run — the run lists what it would prepare |
 
 ## Permissions
 
@@ -253,10 +269,14 @@ scripts in this skill's `scripts/` folder and for `playwright-cli` (global) /
 (`references/browser-cli.md` §2). Never `state-save`, never `--persistent`, never `install`,
 never `npm`, never a command against a session you did not open. No MCP server of any kind: no
 Playwright MCP (that is skill 3b), no Azure DevOps or Docx MCP — you never read a story or a Word
-document; that is skill 3's job. Deleting the run's snapshot files at the end and any cleanup of
-records you created or prepared go through the normal permission flow and are listed in the
-final message. Skill 5's automation code is read (Glob / Grep / Read) only as evidence that a
-seeding way exists — never run, never edited.
+document; that is skill 3's job. Running a temporary seed (`references/test-data-resolution.md`
+§4 — a script composed in the session scratch folder that imports the automation project's own
+helpers or calls an endpoint found in the application's source, deleted afterwards), deleting
+the run's snapshot files at the end and any clean-up of records you created or prepared go
+through the normal permission flow and are listed in the final message; a refusal by the
+permission layer stops that step and is reported, never worked around. The automation code and
+the application source are read (Glob / Grep / Read) to find a way and to import a helper —
+never edited, never given a new file.
 
 ## Downstream contract
 
@@ -300,7 +320,7 @@ that file exists.
 | `references/walk-rules.md` | implementation-status classification, browser budget, data-changing TCs, secondary-locale policy, correction rules, outcome rule, validation states, failure rule | steps 5, 8 |
 | `references/validation-states.md` | the six states, who writes them, stale rules (mirrored) | steps 6, 8 |
 | `references/patch-rules.md` | authorization, freshness, cross-validator handling (§1b), TEST-CASES / TEST-DATA patch rules incl. the read-only look, advanced test-data facts (the decision itself delegated to `test-data-resolution.md`) and Potential Bugs, render, final message, structured returns, quality checklist | steps 6, 7b, 9, 11 |
-| `references/test-data-resolution.md` | evidence sources, the way decision order, item priority, the preparation run, question closure by evidence + the one batched ask, what is written where in TEST-DATA, return lines | steps 4, 8, 9 |
+| `references/test-data-resolution.md` | the twelve preparation principles + consent by way (shared with 3b, 5, 5b), evidence sources, the way decision order, item priority, the nine-step preparation run + the consent ask, delivered statuses incl. `NOT CREATABLE`, question closure by evidence + the one post-walk ask (keep / clean-up + undecided), what is written where in TEST-DATA, return lines | steps 4, 8, 9 |
 | `references/self-review.md` | the twelve self-review checks | step 10 |
 | `references/html-page.md` | the renderer: commands, gate, parsing contract, derived numbers, compatibility, Arabic sidecar, provenance, run metadata (mirrored) | step 11 |
 | `references/cli-vs-mcp-comparison.md` · `assets/validation-comparison.template.md` | the 3b-vs-3c comparison protocol: identical inputs, separate outputs, measures, case matrix, report | COMPARISON mode only |

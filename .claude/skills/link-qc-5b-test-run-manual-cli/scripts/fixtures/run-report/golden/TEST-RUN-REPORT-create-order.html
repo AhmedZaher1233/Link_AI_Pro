@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- render-run-report v1.1 · report=4a2749e22980dbc936a744126aaa515b3a9267c153e38679e9755cc6139fd20e · bugs=9665ed9d16deaecfd7d333170b8a000f60993b5a8db7a7405e992886c31e995f · runs=b7748010f903a586cb874377bd9230b249f99bb1046bdfa4aa4a7c2fb0a29d7a · comments=none · page=67d931c9fd6c29b437fe3bd8a0ff7c2f1d20ab769174733f7a75d4c37870e5ec -->
+<!-- render-run-report v1.1 · report=29d6a476eb86e7283d1b13e8d426e2529571dd37f6f00f3acb9418e1773e8d9b · bugs=9665ed9d16deaecfd7d333170b8a000f60993b5a8db7a7405e992886c31e995f · runs=768b12f829b653fd56785b787416fec77201ccfaa4dfa920dc013f81973d9310 · comments=none · page=3ba76c1b6ff4938b809447aee31378058830998b541b2a4a71f92beb238a2603 -->
 <!-- MIRROR — byte-identical copies live in five skill folders, each under assets/:
      link-qc-3-generate-manual-test-cases ↔ link-qc-3b-validate-manual-test-cases ↔
      link-qc-3c-validate-manual-test-cases-cli ↔ link-qc-5-test-run-automation ↔ link-qc-5b-test-run-manual-cli.
@@ -156,6 +156,7 @@ tr.attempts-row td { background: var(--panel-2); padding: 8px 14px 14px; }
 .badge.d-missing { border-color: var(--amber); color: var(--amber); }
 .badge.d-impossible { border-color: var(--red); color: var(--red); }
 .badge.d-unknown { border-color: var(--muted); }
+.badge.d-not-creatable { border-color: var(--red); color: var(--red); border-style: dotted; }
 .badge.stale, .badge.orphan { border-color: var(--red); color: var(--red); } .badge.stale { border-style: dashed; }
 .badge.human { border-color: var(--purple); color: var(--purple); }
 .badge.s-pass, .badge.s-green { border-color: var(--green); color: var(--green); }
@@ -590,6 +591,7 @@ footer code { font-family: var(--mono); color: var(--text); }
 
         <h3 class="sub-head">Test-data readiness</h3>
         <p class="line">Verdict: READY-WITH-SKIPS (1 TC)</p>
+        <p class="line">Decisions: ready 0 · prepared 0 (api 0 · ui 0 · db 0) · skipped 1 (data_missing 0 · not creatable 0 · QC declined 1)</p>
         <div class="tablewrap"><table>
           <thead><tr>
             <th>Gap</th>
@@ -597,14 +599,20 @@ footer code { font-family: var(--mono); color: var(--text); }
             <th>Decision</th>
             <th>Source</th>
             <th>Provisioning</th>
+            <th>Identifiers / names</th>
+            <th>Effective stamped values</th>
+            <th>Verified on</th>
             <th>Cleanup</th>
           </tr></thead>
           <tbody>
             <tr>
               <td>customer without orders</td>
               <td>TC-020</td>
-              <td>skip</td>
+              <td>skip — QC declined</td>
               <td>qc</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
               <td>—</td>
               <td>—</td>
             </tr>
@@ -787,7 +795,8 @@ footer code { font-family: var(--mono); color: var(--text); }
 
 
         <h3 class="sub-head">Test-data readiness</h3>
-        <p class="line">Verdict: READY-WITH-SKIPS (1 TC)</p>
+        <p class="line">Verdict: READY-WITH-SKIPS (1 TC) — 1 gap prepared</p>
+        <p class="line">Decisions: ready 0 · prepared 1 (api 1 · ui 0 · db 0) · skipped 1 (data_missing 0 · not creatable 0 · QC declined 1)</p>
         <div class="tablewrap"><table>
           <thead><tr>
             <th>Gap</th>
@@ -795,16 +804,33 @@ footer code { font-family: var(--mono); color: var(--text); }
             <th>Decision</th>
             <th>Source</th>
             <th>Provisioning</th>
+            <th>Identifiers / names</th>
+            <th>Effective stamped values</th>
+            <th>Verified on</th>
             <th>Cleanup</th>
           </tr></thead>
           <tbody>
             <tr>
               <td>customer without orders</td>
               <td>TC-020</td>
-              <td>skip</td>
+              <td>skip — QC declined</td>
               <td>learning</td>
               <td>—</td>
               <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>order with 12 line items</td>
+              <td>TC-010</td>
+              <td>prepared (api)</td>
+              <td>learning</td>
+              <td>the automation project&#39;s order helper</td>
+              <td>order no. 10231 in customer &quot;qa-create-order&quot;</td>
+              <td>order date = 2026-05-02</td>
+              <td>order list + read-only API read, 2026-05-02</td>
+              <td>kept</td>
             </tr>
           </tbody>
         </table></div>
@@ -925,7 +951,7 @@ footer code { font-family: var(--mono); color: var(--text); }
   </div>
   <div class="viewer-pane" id="viewer-pane"><img id="viewer-img" alt=""></div>
 </dialog>
-<script type="application/json" id="report-data">{"pageKind":"run-report","feature":"create-order","page":"TEST-RUN-REPORT-create-order.html","source":"TEST-RUN-REPORT-create-order.md","sourceRev":"4a2749e22980","commentsFile":"REVIEW-COMMENTS-create-order.md","strings":{"theme":"Theme","theme_auto":"auto","theme_light":"light","theme_dark":"dark","viewer":"Screenshot","drafts":"{n} unsaved comment(s)","saved":"Saved — {n} open comment(s). Tell the chat: \"read my comments\".","downloaded":"Downloaded — {n} open comment(s). Move the file from Downloads beside this page, then tell the chat: \"read my comments\".","copied":"Copied — paste it into the chat.","copy_failed":"Copy failed — use Save comments instead.","no_storage":"This browser does not keep drafts for local files — save before closing the page.","file_title":"Review comments"},"comments":{"fileRev":"none","reviewer":"","entries":[]}}</script>
+<script type="application/json" id="report-data">{"pageKind":"run-report","feature":"create-order","page":"TEST-RUN-REPORT-create-order.html","source":"TEST-RUN-REPORT-create-order.md","sourceRev":"29d6a476eb86","commentsFile":"REVIEW-COMMENTS-create-order.md","strings":{"theme":"Theme","theme_auto":"auto","theme_light":"light","theme_dark":"dark","viewer":"Screenshot","drafts":"{n} unsaved comment(s)","saved":"Saved — {n} open comment(s). Tell the chat: \"read my comments\".","downloaded":"Downloaded — {n} open comment(s). Move the file from Downloads beside this page, then tell the chat: \"read my comments\".","copied":"Copied — paste it into the chat.","copy_failed":"Copy failed — use Save comments instead.","no_storage":"This browser does not keep drafts for local files — save before closing the page.","file_title":"Review comments"},"comments":{"fileRev":"none","reviewer":"","entries":[]}}</script>
 <script>
 (function () {
   'use strict';

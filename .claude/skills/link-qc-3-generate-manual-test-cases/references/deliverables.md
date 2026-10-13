@@ -84,7 +84,8 @@ and never "E1 = the URL"). Written in every mode that writes the TC document (fr
 Case 1, Case 2, each story of a multi-story run). Skill 5 reads it as the starting inventory of
 its test-data readiness gate (environment entries keyed by E-ID, accounts by A-ID), 3b / 3c patch
 it with live statuses and fill an `unknown` E-row `Value` they asked for, and skill 4 copies the
-rows a TC references into that TC's published "Test data" block — so the four status words, the
+rows a TC references into that TC's published "Test data" block — so the five status words
+(`READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN`, plus `NOT CREATABLE` written only by 3b / 3c), the
 five way names and the three ID prefixes are frozen.
 
 **Audience: QC / QA and PO.** Short sentences. Simple words. No locator names, API endpoint
@@ -153,11 +154,11 @@ Filling rules:
 | **Environment rows** | `E1` is always the application base URL; one further row per service the TCs reach out of the browser (mail sandbox, SMS test provider, admin portal…) — only rows some TC references (`[E{n}]`). `Value` from a learning-file `[type: env]` line → `READY`; otherwise `unknown — asked by 3b/3c` → `UNKNOWN`. Never a credential in a value. |
 | **Accounts** | One row per account (`A{n}`), never per role — a role with two accounts has two rows. Username from the learning file or `unknown`; `Used by TCs` lists every TC that references `[A{n}]`. Every row is referenced by ≥1 TC (self-review check 14). |
 | **References** | Every `[E{n}]` / `[A{n}]` / `[D{n}]` token in the TC document resolves to a row here (check 12); no TC carries an environment value, a username or a shared item's identifier as a literal (the renderer warns `data-literal` / `data-ref-unresolved`). |
-| **Status** | `READY` = confirmed to exist by a learning-file `[type: data]` / `[type: env]` line. `IMPOSSIBLE` = cannot be created with any available or allowed way. `UNKNOWN` = everything else (not checked — this skill never checks live; story not implemented; spec silent on the value). **`MISSING` is never written by this skill** — it means "checked and absent", which only 3b or skill 5 can establish. |
+| **Status** | `READY` = confirmed to exist by a learning-file `[type: data]` / `[type: env]` line. `IMPOSSIBLE` = cannot be created with any available or allowed way. `UNKNOWN` = everything else (not checked — this skill never checks live; story not implemented; spec silent on the value). **`MISSING` is never written by this skill** — it means "checked and absent", which only 3b / 3c or skill 5 can establish. **`NOT CREATABLE` is never written by this skill either** — 3b / 3c write it when evidence proves the state cannot exist on the environment (the Problems row carries the evidence); a kept item they prepared comes back `READY`, a removed one `MISSING` with a recreate note. |
 | **Best way / §5** | `e2e scenario` preferred when a UI flow exists · `api` only when API seeding is already available or explicitly confirmed · `db` only when DB seeding is confirmed AND the QC has access · `set directly` only for settings · `manual` otherwise. Unconfirmed `api` / `db` → written as `to be confirmed`, never recommended, never counted as an available way. |
 | **Shared data** | "Shared" means the TCs use the same data item. State execution order only when one TC depends on another TC's result. |
 | **Not implemented story** | Items still listed; status `UNKNOWN`; note "pending implementation". |
-| **Environment** | Always `not checked` from this skill; 3b replaces it with `{env} checked {date}`. |
+| **Environment** | Always `not checked` from this skill; 3b / 3c replace it with `{env} checked {date}`. |
 | **Counts** | Header counts equal the table rows (self-review check 14). |
 
 ## 3. Update `{learning_file}`

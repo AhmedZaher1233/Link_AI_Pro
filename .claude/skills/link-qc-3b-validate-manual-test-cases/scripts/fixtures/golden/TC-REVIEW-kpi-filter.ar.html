@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- render-tc-review v1.1 · source=8f90061b5ed124b34201537cbdd34f35130508c9d58a00e9d6e670ece3c1cadc · data=c07192701c989626d288039a029ad8dfaef89d48da5f6c7eb783b3d9c8f09ea6 · strings=7d2830425e93fecd3b539a6de6264134d746043a58120ff10b82c4f4add05aa6 · comments=none · lang=ar · page=4e35adbbb065f7a75c0235312d10342c48b833a87f34d5cc25602f301d557255 -->
+<!-- render-tc-review v1.1 · source=8f90061b5ed124b34201537cbdd34f35130508c9d58a00e9d6e670ece3c1cadc · data=68fcee15a22f4de8039436f5301c9c7e380e8d34d22a4a275ba19706b56ff018 · strings=b5cf52b08a19d7408f84212ad3092064b6b413933aac865c5e4a41b2d9c21dcf · comments=none · lang=ar · page=280df9869f2488ea926aad8c5ebd45b9bf4c4e8ff5532a7acb52249579fbf5da -->
 <!-- MIRROR — byte-identical copies live in five skill folders, each under assets/:
      link-qc-3-generate-manual-test-cases ↔ link-qc-3b-validate-manual-test-cases ↔
      link-qc-3c-validate-manual-test-cases-cli ↔ link-qc-5-test-run-automation ↔ link-qc-5b-test-run-manual-cli.
@@ -156,6 +156,7 @@ tr.attempts-row td { background: var(--panel-2); padding: 8px 14px 14px; }
 .badge.d-missing { border-color: var(--amber); color: var(--amber); }
 .badge.d-impossible { border-color: var(--red); color: var(--red); }
 .badge.d-unknown { border-color: var(--muted); }
+.badge.d-not-creatable { border-color: var(--red); color: var(--red); border-style: dotted; }
 .badge.stale, .badge.orphan { border-color: var(--red); color: var(--red); } .badge.stale { border-style: dashed; }
 .badge.human { border-color: var(--purple); color: var(--purple); }
 .badge.s-pass, .badge.s-green { border-color: var(--green); color: var(--green); }
@@ -306,7 +307,7 @@ footer code { font-family: var(--mono); color: var(--text); }
     <div class="tile "><b>4</b><span>مرشّحة للأتمتة</span></div>
     <div class="tile "><b>1/0/1/1/1/1</b><span>متحقَّق / محسَّن / مستنتَج / تعارض / غير منفَّذ / مسودة</span></div>
     <div class="tile "><b>2/5</b><span>تقدّم التحقق من التطبيق · شوهد حيًا (40%)</span></div>
-    <div class="tile "><b>3 · 2/0/0/1</b><span>عناصر بيانات الاختبار · جاهزة / مفقودة / مستحيلة / غير معروفة</span></div>
+    <div class="tile "><b>4 · 2/0/0/1</b><span>عناصر بيانات الاختبار · جاهزة / مفقودة / مستحيلة / غير معروفة / غير قابلة للإنشاء</span></div>
     <div class="tile "><b>1/0/0</b><span>أخطاء محتملة · مفتوحة / لم تُفحص / محلولة</span></div>
     <div class="tile human"><b>1</b><span>خطوات بشرية · حالات فيها خطوة يجب أن ينفذها أو يلاحظها شخص (<span class="ltr">1</span>)</span></div>
   </div>
@@ -389,19 +390,21 @@ footer code { font-family: var(--mono); color: var(--text); }
   </section>
 
   <section>
-    <div class="sec-head"><h2>بيانات الاختبار</h2><span class="note"><span class="ltr">3</span> · <span class="ltr">2</span> / <span class="ltr">0</span> / <span class="ltr">0</span> / <span class="ltr">1</span> — التفاصيل في <span class="ltr">TEST-DATA-kpi-filter.md</span></span></div>
+    <div class="sec-head"><h2>بيانات الاختبار</h2><span class="note"><span class="ltr">4</span> · <span class="ltr">2</span> / <span class="ltr">0</span> / <span class="ltr">0</span> / <span class="ltr">1</span> / <span class="ltr">1</span> — التفاصيل في <span class="ltr">TEST-DATA-kpi-filter.md</span></span></div>
     <div class="tablewrap"><table>
       <thead><tr><th>#</th><th>عنصر البيانات</th><th>يجب أن يبدو كـ</th><th>تستخدمه الحالات</th><th>الحالة</th><th>أفضل طريقة للحصول عليه</th></tr></thead>
       <tbody>
         <tr><td><span class="ltr">D1</span></td><td>المؤشر &quot;Revenue&quot; بـ 12 قيمة شهرية لسنة 2026</td><td>12 صفًا، يناير…ديسمبر، الاستراتيجية &quot;Growth 2026&quot;</td><td><span class="ltr">TC-KPI-01, TC-KPI-01b, TC-KPI-04</span></td><td><span class="badge d-ready">READY</span></td><td>—</td></tr>
         <tr><td><span class="ltr">D2</span></td><td>قيم المؤشر &quot;Revenue&quot; للسنوات 2024-2026</td><td>36 صفًا</td><td><span class="ltr">TC-KPI-02</span></td><td><span class="badge d-ready">READY</span></td><td>—</td></tr>
         <tr><td><span class="ltr">D3</span></td><td>ملف مؤشر مُصدَّر</td><td>Excel، 12 صفًا</td><td><span class="ltr">TC-KPI-04</span></td><td><span class="badge d-unknown">UNKNOWN</span></td><td>للفحص — بانتظار التنفيذ</td></tr>
+        <tr><td><span class="ltr">D4</span></td><td>مؤشر حُذفت استراتيجيته</td><td>الاستراتيجية محذوفة والمؤشر ما زال مدرجًا</td><td><span class="ltr">TC-KPI-03</span></td><td><span class="badge d-not-creatable">NOT CREATABLE</span></td><td>لا يوجد — غير قابل للإنشاء (انظر المشكلات #2)</td></tr>
       </tbody>
     </table></div>
     <div class="tablewrap"><table>
       <thead><tr><th>#</th><th>عنصر البيانات</th><th>المشكلة</th><th>السبب</th><th>ما يجب أن يقرره QC / PO</th></tr></thead>
       <tbody>
         <tr class="prio-high"><td><span class="ltr">1</span></td><td><span class="ltr">D3</span></td><td>التصدير غير مبني بعد</td><td>AC-3 بانتظار التنفيذ</td><td>قبول UNKNOWN حتى تُسلَّم القصة</td></tr>
+        <tr class="prio-high"><td><span class="ltr">2</span></td><td><span class="ltr">D4</span></td><td>غير قابل للإنشاء — حذف الاستراتيجية يحذف مؤشراتها معها (قاعدة التطبيق، فُحصت على staging بتاريخ 2026-09-25)</td><td>الحالة التي تفترضها TC-KPI-03 لا يمكن أن توجد</td><td>إعادة صياغة TC-KPI-03 (المهارة 3 --revision)</td></tr>
       </tbody>
     </table></div>
   </section>

@@ -9,7 +9,7 @@
 **Latest phase:** 2
 **Latest run:** 2026-10-10 11:20
 **Status:** FAILURES
-**Latest results:** 2 passed · 1 failed · 0 incomplete · 0 skipped · 0 not run · 1 partial of 4 TCs
+**Latest results:** 2 passed · 1 failed · 0 incomplete · 1 skipped · 0 not run · 1 partial of 5 TCs
 **Compliance:** — (manual run)
 **Azure DevOps:** local
 **Bug report:** BUG-REPORT-ask-assistant.md
@@ -23,7 +23,7 @@
 | Phase | Date | Outcome | Passed | Failed | Incomplete | Skipped | Not run | Partial | Total | Duration | Bugs |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | 2026-10-08 | FAILURES | 1 | 1 | 0 | 1 | 0 | 0 | 3 | 00:03:10 | BUG-1 |
-| 2 | 2026-10-10 | FAILURES | 2 | 1 | 0 | 0 | 0 | 1 | 4 | 00:28:40 | BUG-1, BUG-2 |
+| 2 | 2026-10-10 | FAILURES | 2 | 1 | 0 | 1 | 0 | 1 | 5 | 00:28:40 | BUG-1, BUG-2 |
 
 ## Phase 1 — 2026-10-08
 
@@ -88,7 +88,8 @@
 - **Screenshots:** ../../screenshots/US-2000-ask-assistant/phase-2/
 - **Compliance:** — (manual run)
 - **Azure DevOps:** local
-- **Data changes:** not authorized · 0 made · 0 cleaned up · 0 left
+- **Data changes:** authorized · 1 made (0 by TCs · 1 preparation) · 0 cleaned up · 1 kept · 0 left
+- **Data preparation:** e2e 0 · api helper 1 · api from source 0 · db 0 · kept 1 · cleaned up 0
 - **Previous phase:** .runs/phase-1.json (skill 5)
 
 ### Stages
@@ -96,8 +97,8 @@
 |---|---|---|---|---|---|---|---|
 | Smoke | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
 | Positive | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
-| Negative | 1 | 0 | 0 | 0 | 0 | 0 | 1 |
-| **Total** | 4 | 2 | 1 | 0 | 0 | 0 | 1 |
+| Negative | 2 | 0 | 0 | 0 | 1 | 0 | 1 |
+| **Total** | 5 | 2 | 1 | 0 | 1 | 0 | 1 |
 
 **Smoke gate:** passed — fail% 0% — no action needed
 
@@ -108,6 +109,7 @@
 | TC-002 | REQ-02 | Clear the conversation | PASS | positive | 00:02:10 | — | [attempt-1.png](../../screenshots/US-2000-ask-assistant/phase-2/TC-002/manual-cli--none--r0/attempt-1.png) |
 | TC-AI-01 | REQ-03 | Ask for the return window | FAIL | positive | 00:04:30 | ai_rubric_failure | [attempt-1.png](../../screenshots/US-2000-ask-assistant/phase-2/TC-AI-01/manual-cli--none--r1/attempt-1.png) · [failed](../../screenshots/US-2000-ask-assistant/phase-2/TC-AI-01/manual-cli--none--r1/attempt-1-failed.png) · [reply](../../screenshots/US-2000-ask-assistant/phase-2/TC-AI-01/manual-cli--none--r1/reply.md) |
 | TC-030 | REQ-04 | Escalate to a human agent by phone call-back | PARTIAL — human step pending | negative | 00:03:15 | human step: 4 | [attempt-1.png](../../screenshots/US-2000-ask-assistant/phase-2/TC-030/manual-cli--none--r0/attempt-1.png) |
+| TC-040 | REQ-05 | Reject a return older than the window | SKIP | negative | — | — | — |
 
 ### Bugs
 | Bug | TC-ID | Severity | Status |
@@ -116,13 +118,20 @@
 | BUG-2 | TC-AI-01 | High | open |
 
 ### Skips and residual failures
-none
+| TC-ID | Status | Reason |
+|---|---|---|
+| TC-040 | SKIP | not creatable — a return older than the window cannot exist on UAT: the archiving job removes such returns nightly (configuration, checked 2026-10-10) |
 
 ### Open questions
 none
 
 ### Test-data readiness
-all ready
+**Verdict:** READY-WITH-SKIPS (1 TC) — 1 gap prepared
+
+| Gap | TCs | Decision | Source | Provisioning | Identifiers / names | Effective stamped values | Verified on | Cleanup |
+|---|---|---|---|---|---|---|---|---|
+| a conversation with an earlier return question | TC-AI-01 | prepared (api) | learning | the automation project's conversation helper | conversation "qa-ask-assistant-2026-10-10" | started at = 2026-10-10 10:52 | assistant panel history list, 2026-10-10 | kept |
+| a return older than the window | TC-040 | skip — not creatable | read-only look 2026-10-10 | — | — | — | — | — |
 
 ### Deviations
-- none
+- D2 "a conversation with an earlier return question": started at — TC-AI-01 says 2026-01-05 09:00, the system stamped 2026-10-10 10:52; the observation used the stamped value — route to skill 3 --revision

@@ -231,7 +231,19 @@ what stays unvalidated. Writes back **in place**: validation states + stamps, co
 and the reveal / wait / trigger steps the app really needs, an appended enhancement log, concise
 **Potential Bugs** (stable `PB-n` ids, updated on recurrence, resolved only after an actual
 successful retest, history in non-rendered metadata), test-data statuses from one read-only look
-per item plus the advanced facts it finds, and the re-rendered page. Design fields, TC ids and the
+per item plus the advanced facts it finds, and the re-rendered page. It asks once whether the run
+may create / modify / delete data (data-changing TCs run only on "yes", records identified and
+reverted through the UI) and **prepares missing test data itself** for the in-scope TCs
+(`references/test-data-resolution.md`, the same contract as 3c's): the way is decided from
+evidence — the learning file, the automation project's existing helpers found through the
+manifest paths and by search, the application's source code, a creating TC or common flow, a
+database helper — a UI journey is prepared without asking, an existing helper under the
+data-changes "yes", an endpoint read from the source code or a database write only after an
+explicit "yes" asked once; the seed is a temporary script that imports the project's own helpers
+and is deleted afterwards, the item is `READY` only after its oracle confirmed it, values the
+system stamped are read back (each substitution a finding for skill 3), records are kept unless
+the reviewer asks once after the walk to clean up, and a state that provably cannot exist is
+`NOT CREATABLE` with its evidence — never "data missing". Design fields, TC ids and the
 coverage tables are never changed ("validation alone does not change design coverage"). On an
 **approved** document it validates read-only by default; modifying it needs the reviewer's
 revision authorization, and `Status` returns to `PENDING HUMAN REVIEW` only when something
@@ -252,12 +264,17 @@ carried it). And the tool: named CLI sessions per role, **no
 password ever typed** (you log in yourself in the headed browser it opens, or it types the
 secret *names* from the file `set-playwright-secrets.ps1` created), a per-run **data-changes
 authorization** for TCs that create / modify / delete (with UI cleanup and a list of every
-record), a **test-data resolution** pass (`references/test-data-resolution.md`: decides from
-the learning file, skill 5's existing automation fixtures and what the walk showed how each
-data item is obtained — fixed way order `e2e scenario → api → db → set directly → manual`,
-item priority High / Medium / Low from the TCs that need it — prepares a missing item through a
-documented e2e scenario under that same "yes" and reverts it at the end, closes test-data
-questions that evidence turned into facts and asks once, after the walk, for the rest), an
+record), a **test-data resolution** pass (`references/test-data-resolution.md`, shared
+word-for-word with 3b: decides from the learning file, the automation project's existing helpers,
+the application's source code and what the walk showed how each data item is obtained — fixed
+way order `e2e scenario → api → db → set directly → manual`, item priority High / Medium / Low
+from the TCs that need it — and **prepares a missing item itself** before its dependents: a UI
+journey without asking, an existing helper under that same "yes", an endpoint read from the
+source code or a database write only after an explicit "yes" asked once; a temporary seed that
+imports the project's helpers and is deleted afterwards, verified on the oracle, the values the
+system stamped read back, records kept unless the reviewer asks once after the walk to clean up,
+`NOT CREATABLE` with evidence instead of "data missing"; closes test-data questions that evidence
+turned into facts and asks once, after the walk, for the rest), an
 **outcome rule** (a TC is `validated` only after its expected result was positively
 observed and written to the stamp as `outcome-check` — a command that merely succeeded proves
 nothing), one **screenshot per potential bug** under `evidence/`, and run metadata (`tool: cli`,
@@ -310,7 +327,14 @@ automation with a mandatory Page Object Model from the original approved documen
 `[HUMAN]` steps runs up to the human step and is reported `PARTIAL — human step pending`, never
 PASS), builds a
 per-story run plan (parallel vs serial groups), measures static coverage against the L3
-target, resolves test-data readiness with the QC, then runs headed in priority order (smoke
+target, resolves test-data readiness — searching a way to create every missing item (the
+learning file, the automation project's helpers wherever the manifest or a search finds them, the
+application's source code, a UI journey, a DB helper) and **preparing it itself** through a
+temporary seed or a setup journey, asking the QC once only for an endpoint taken from the source
+code or a database write, verifying each item on its oracle, reading back system-stamped values
+into the test-data layer, keeping the records unless told once after the run to clean up, and
+skipping only with `data_missing` (no way found), `not creatable` (evidence) or `QC declined` —
+then runs headed in priority order (smoke
 behind a 30 % failure gate, then positive, then negative) with live progress and ETA, and takes
 an **assertion-point screenshot** per TC — captured while the verified state is still on screen,
 before any teardown or cleanup runs, kept as immutable per-attempt history. It runs from the
@@ -379,10 +403,22 @@ renderer — sharing one phase counter and continuing `BUG-{n}` numbering with s
 tells the story's whole run history. It never writes into the TC document: a design problem goes
 to skill 3 `--revision`. It is not a gate for anything, asks no learning questions beyond its own
 `### Manual Run Model (skill 5b)` section, and has no MCP server of any kind (`allowed-tools`:
-its three scripts plus `playwright-cli`). Prerequisites: `playwright-cli` (BLOCKED with the
+its three scripts plus `playwright-cli`). **Missing test data is prepared, not skipped**
+(`references/test-data-preparation.md`, the same twelve principles as 3b / 3c / 5): a `MISSING`
+item is searched for a way — the learning file, the automation project's helpers, the
+application's source code, a UI journey, a DB helper — and prepared before its TCs run: a UI
+journey without asking, an existing helper under the run's data-changes "yes", an endpoint from
+the source code or a database write only after an explicit "yes" asked once; a temporary seed in
+the session scratch folder that imports the project's helpers and is deleted afterwards, the item
+verified on its oracle, system-stamped values read back and reported as Deviations for skill 3,
+records kept unless the QC answers "clean up" to the one post-run question; the phase's
+`### Test-data readiness` table and the run file's `data_readiness` record every item as `READY`
+/ `prepared (api|ui|db)` / `skip — data_missing` / `skip — not creatable` / `skip — QC declined`
+(the renderer counts them). Prerequisites: `playwright-cli` (BLOCKED with the
 `/sync-skills --tools` hint when missing) and, optionally, the secrets file for unattended logins.
 What it never does: heal, re-run smoke on its own, switch tool mid-run, touch Azure DevOps, read
-a password, or change a TC's design, state or status.
+a password, modify a record it did not create, leave a seed script in the repository, or change a
+TC's design, state or status.
 
 ### 6 — ui-testing (visual UI audit, beside the chain)
 Compares an implemented screen with its approved design and writes a **UI Visual QA Bug

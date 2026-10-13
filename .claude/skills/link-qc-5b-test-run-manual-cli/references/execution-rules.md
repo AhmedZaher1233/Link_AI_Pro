@@ -113,7 +113,9 @@ returned without error only says the action was issued. Before a TC becomes `PAS
 | the assertion-point image exists but shows a post-cleanup / post-navigation screen | `INCOMPLETE` — the file stays (nothing under `screenshots/` is overwritten), no new attempt (attempts are for environment failures only) | `evidence_failure` | the next phase runs the TC again |
 | the session died mid-TC (`browser-cli.md` §9) | `INCOMPLETE` | `interrupted: session lost at step {n}` | not re-run this phase |
 | the first `[HUMAN]` step reached and every step before it passed | `PARTIAL — human step pending` | `human step: {n}` | image of the last executed step; listed under "Needs a human run"; never `PASS`, never counted as passed; the phase is `INCOMPLETE` at best |
-| data the TC needs is `MISSING` (§4) or a token has no row | `SKIP` | `data_missing` | `### Test-data readiness` row |
+| data the TC needs is `MISSING` and no way to prepare it was found after the whole search (§4), the preparation failed / was not confirmed, or a token has no row | `SKIP` | `data_missing` | `### Test-data readiness` row `skip — data_missing` + the Skips row with the precise reason |
+| data the TC needs is `NOT CREATABLE` — evidence that the state cannot exist on this environment (§4) | `SKIP` | `—` | reason `not creatable — {evidence}` in `### Skips and residual failures`; readiness row `skip — not creatable` |
+| the QC declined the preparation (endpoint from the source code / database) | `SKIP` | `—` | reason `QC declined (data preparation through {way})`; readiness row `skip — QC declined` |
 | data-changing TC, run not authorized | `SKIP` | `—` | reason `data changes not authorized` in `### Skips and residual failures` |
 | behind an absent part of a partially / not implemented story (§1) | `SKIP` | `—` | reason `pending implementation` |
 | smoke gate stopped the run (`run-plan.md` §4) | `NOT_RUN` | `—` | reason `smoke gate failed (application errors)` |
@@ -124,25 +126,30 @@ the one after an environment failure; a `FAIL · app_bug` (including a failed AI
 or `timeout_failure` on a reachable page is final for this phase. A `[HUMAN]` TC is never
 `PASS`; a TC without an image is never `PASS`.
 
-## 4. Test data — one read-only look per item, nothing prepared
+## 4. Test data — one read-only look per item, then prepare what is absent
 
 For every `D{n}` item the executable TCs reference, plan ONE read-only look at the listing
 screen the `TEST-DATA` file names (a targeted text / row lookup, before the first stage that
 needs the item, shared by every TC that uses it — never create, edit or delete anything to find
-out):
+out). What the look shows decides what happens next (`test-data-preparation.md` §2-§5):
 
 | Seen | Effect |
 |---|---|
-| the item is there with the values the TCs need | its TCs run |
-| the screen was reached and the item is absent, or the file already says `MISSING` / `IMPOSSIBLE` | every dependent TC is `SKIP · data_missing`, decided before its turn; a row in the phase's `### Test-data readiness` table (`Gap · TCs · Decision: skip · Source: read-only look {date} · Provisioning: none · Cleanup: —`), `**Verdict:** READY-WITH-SKIPS ({n} TCs)` |
-| the screen was not reached | the item is tried at execution; absent there → the same `SKIP · data_missing` at that moment |
+| the item is there with the values the TCs need | its TCs run; readiness row `Decision: READY` |
+| the screen was reached and the item is absent, or the file already says `MISSING` | **discover a way and prepare the item** before its dependents (`test-data-preparation.md` §3 — the learning file, the automation project's helpers, the application's source code, a UI journey, a database helper; the consent its way needs; a temporary seed; verified on the oracle; stamped values read back); row `Decision: prepared (api \| ui \| db)` with the identifiers, the stamped values, where it was verified and `kept` / `cleaned up`; the dependents run |
+| no way exists after the whole search, or the preparation failed / was not confirmed | every dependent TC is `SKIP · data_missing`, decided before its turn, with the precise reason in the Skips table; row `Decision: skip — data_missing` |
+| evidence proves the state cannot exist on `{env}` (the file says `NOT CREATABLE`, or the discovery found the rule) | dependents `SKIP`, classification `—`, Skips reason `not creatable — {evidence}`; row `Decision: skip — not creatable`; the evidence → learning file |
+| the QC answered "no" to the consent ask (endpoint from the source code / database) | dependents `SKIP`, classification `—`, Skips reason `QC declined (data preparation through {way})`; row `Decision: skip — QC declined` |
+| the file says `IMPOSSIBLE` | prepared like `MISSING` when the discovery finds a way the file did not know; otherwise `skip — not creatable` with the Problems-row reason |
+| the screen was not reached | the item is tried at execution; absent there → the same discovery and preparation at that moment, before the TC's steps are issued |
 
-Nothing is prepared, provisioned, imported or seeded by this run — not through the UI, not
-through an API or the database, not with a "yes" to data changes (that answer covers the TCs'
-own mutations, §5). `TEST-DATA-{feature}.md` is never written: a gap or a fact discovered live
-goes to the readiness table and, when project-wide and confirmed, to the learning file as a
-`[type: data]` line (`learning-file.md`); the final message tells the user which rows 3b / 3c or
-skill 3 `--revision` should update.
+`**Verdict:** READY` · `READY-WITH-SKIPS ({n} TCs)[ — {p} gaps prepared]`. The preparation itself
+is a temporary seed in the session scratch folder or a UI journey in the run's own session —
+never new code in the repository, never a password on a command line, never a pre-existing record
+modified, never on production (`test-data-preparation.md` principles). `TEST-DATA-{feature}.md` is
+never written: a gap, a fact discovered live or a status that should change goes to the readiness
+table and, when project-wide and confirmed, to the learning file (`learning-file.md`); the final
+message tells the user which rows 3b / 3c or skill 3 `--revision` should update.
 
 ## 5. Data-changing TCs — executed when authorized, always reconciled
 
@@ -166,8 +173,15 @@ The combined ask (`intake.md` §3) answered "may this run create / modify / dele
   ({identities})`; every record left behind (no way to revert, or the revert failed) is a
   `### Deviations` bullet `left in {env}: {record} — created/changed by TC-…`. The TC keeps its
   observed status either way — a failed cleanup never changes a `PASS`.
-- A TC that needs seeded fixture data that is absent is a `MISSING` data item (§4) and is
-  `SKIP · data_missing` — the run never invents data to make a TC pass.
+- The same "yes" covers a preparation through an existing automation helper (§4); a UI journey
+  preparation needs no answer; an endpoint from the application's source code and a database
+  write each need the explicit "yes" of the consent ask (`test-data-preparation.md` §4). A record
+  a preparation created is **kept by default** — the keep / clean-up decision is the ONE post-run
+  question, and only an existing helper or the UI removes it.
+- A TC that needs fixture data that is absent is a `MISSING` data item (§4): the item is prepared
+  through the first available way and the TC runs on it; it is `SKIP · data_missing` only when no
+  way exists or the preparation failed / was not confirmed — the run never invents data to make
+  a TC pass.
 
 ## 6. Failure rule
 
@@ -214,5 +228,5 @@ Written into `{bug_report_md}` in skill 5's shape (`run-report.md` §5, `<bug_re
   (`Bug · TC-ID · Severity · Status`) — details never live there; the header's `**Bugs:**`
   counts are recomputed from the entries. No bug this phase → `none`.
 - No bug for an `assertion_failure`, a `timeout_failure`, an `environment_failure`, a
-  `data_missing` skip or a pending implementation — those are Deviations, open questions,
-  residual failures or readiness rows, never defects.
+  `data_missing` / not-creatable / declined skip or a pending implementation — those are
+  Deviations, open questions, residual failures or readiness rows, never defects.

@@ -65,7 +65,9 @@ and stating what you reuse:
 | **Login method per account** — A) attended: you open a visible browser for that account and the user logs in themselves; B) secrets file: skill 1's `set-playwright-secrets` script was run with names that follow the account ID (`A1_USER` / `A1_PASSWORD` for `[A1]`) and you type only those NAMES (`browser-cli.md` §3) | always, per referenced account; state the recorded method for this environment as the recommendation when the learning file has one | a password — not in chat, not on a command line, not in a file; the run never receives one |
 | Implementation status (implemented / partially / not implemented / not sure) | the header says `not yet checked live` and no skill-4 report answers it | trusted over the live look — both are recorded |
 | Environment notes | always, one line: VPN / tenant / where the build number shows / anything that blocks screens / whether this is production | — |
-| **Data changes on {env}** — may this run create / modify / delete data (`walk-rules.md` §3a)? | always; name the TCs it concerns (`Data effect` ≠ read-only), **the data items this run would prepare if they turn out `MISSING`** (an e2e way naming a TC of this set or a common flow, exact values known — `test-data-resolution.md` §4) and what would be cleaned up; production named in the notes → "no" is stated, not asked | a mutation on "no"; a mutation on production |
+| **Data changes on {env}** — may this run create / modify / delete data (`walk-rules.md` §3a)? | always; name the TCs it concerns (`Data effect` ≠ read-only) and **the `MISSING` items an existing automation helper would create under this same "yes"** (`test-data-resolution.md` §4); a UI journey preparation needs no answer and is only listed; production named in the notes → "no" is stated, not asked | a mutation on "no"; a mutation on production |
+| Consent for an endpoint from the application's source code or a database write | never at intake — asked ONCE after step 4's data plan, before the first browser command, only when such a way was decided (`test-data-resolution.md` §4b) | a per-item question during the walk; a second intake message |
+| Keep or clean up the prepared records | never at intake — asked ONCE after the walk, together with the undecided items (`test-data-resolution.md` §5); default keep | — |
 | How to get a data item (its way) | never at intake — items evidence cannot decide are asked ONCE after the walk as a batched open question (`test-data-resolution.md` §5); a creation screen seen during the walk settles many of them | a per-item question during the walk; a second intake message |
 | Revision authorization (approved document, changes expected) | `Status: APPROVED` and no `--authorize-revision`; list the concrete changes you expect | re-asked in the same run |
 | Scope | never — this skill has no scope gate; every TC is walked (`discovery-plan.md`) | a scope question, a recommendation, a narrowing |
@@ -84,8 +86,8 @@ authorization → the run only.
 2. One probe, one combined ask for all stories (login method per account once; one attended login per account is reused across stories).
 3. Set analysis **per story** — one plan line each (`discovery-plan.md` §3); every TC of every
    story is walked; no scope question for any of them. One data plan per story; an item two
-   stories share (same plain name) is prepared once and reverted after its last dependent
-   across stories; one batched data ask for all stories (`test-data-resolution.md` §5).
+   stories share (same plain name) is prepared once before its first dependent across stories;
+   one consent ask and one post-walk ask for all stories (`test-data-resolution.md` §4b, §5).
 4. Shared common flows (login, navigation to a shared module) are walked ONCE and reused across
    stories; record them in the learning file once.
 5. Write back per story (`patch-rules.md`). When `TC-GENERATION-SUMMARY.md` exists in the spec

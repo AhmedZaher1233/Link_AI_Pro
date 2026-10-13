@@ -59,19 +59,27 @@ both skills' Q&A (`open-questions.md` §1) and stating what you reuse:
 | Application base URL — the `[E1]` row of `TEST-DATA` §0 | not recorded as `[type: env]` for the target environment (the row says `unknown — asked by 3b/3c`), or the user names another environment; the answer fills that row's `Value` / `Status`. Any other `[E{n}]` row still `unknown` (mail sandbox, SMS test provider…) is asked in the same message — each is its own service, never "the URL" | auto-detected; written into a TC as a literal |
 | Password per account the TCs reference (`[A{n}]` — role and username from `TEST-DATA` §1; a username still `unknown` there is asked too and filled in that row) | always (passwords are asked fresh every run) | written anywhere; a username never enters a step — the TC keeps `Login as {role} [A{n}]` |
 | Implementation status (implemented / partially / not implemented / not sure) | the header says `not yet checked live` and no skill-4 report answers it | trusted over the live probe — both are recorded |
-| Environment notes | always, one line: VPN / tenant / where the build number shows / anything that blocks screens | — |
+| Environment notes | always, one line: VPN / tenant / where the build number shows / anything that blocks screens / whether this is production | — |
+| **Data changes on {env}** — may this run create / modify / delete data (`mcp-pass.md` §3a)? | always; name the TCs it concerns (`Data effect` ≠ read-only) and **the `MISSING` items an existing automation helper would create under this same "yes"** (`test-data-resolution.md` §4); a UI journey preparation needs no answer and is only listed; production named in the notes → "no" is stated, not asked | a mutation on "no"; a mutation on production |
+| Consent for an endpoint from the application's source code or a database write | never at intake — asked ONCE after step 4's data plan and the scope decision, before the walk, only when such a way was decided for an item with an in-scope dependent (`test-data-resolution.md` §4b) | a per-item question during the walk; a second intake message |
+| Keep or clean up the prepared records | never at intake — asked ONCE after the walk, together with the undecided items (`test-data-resolution.md` §5); default keep | — |
+| How to get a data item (its way) | never at intake — items evidence cannot decide are asked ONCE after the walk as a batched open question (`test-data-resolution.md` §5); a creation screen seen during the walk settles many of them | a per-item question during the walk |
 | Revision authorization (approved document, changes expected) | `Status: APPROVED` and no `--authorize-revision`; list the concrete changes you expect | re-asked in the same run |
 | Scope | never here — it has its own step and its own shape (`scope-gate.md` §2-§3), and only when no explicit instruction was given | — |
 
 Record every answer except credentials before navigating: base URL → the `[E1]` row of
 `TEST-DATA` §0 and the learning file `[type: env]` (project-wide); other environment rows and
 usernames → their `TEST-DATA` rows; implementation status → header + return; environment notes → header stamp
-(`env {name}`) and learning file when project-wide; the authorization → the run only.
+(`env {name}`) and learning file when project-wide; the data-changes answer and the
+authorization → the run only.
 
 ## 4. Multi-story input — a SPEC folder or several IDs
 
 1. List the stories you found and state the split before anything else.
-2. One probe, one combined ask for all stories (credentials per role once).
+2. One probe, one combined ask for all stories (credentials per role once). One data plan per
+   story; an item two stories share (same plain name) is prepared once before its first in-scope
+   dependent across stories; one consent ask and one post-walk ask for all stories
+   (`test-data-resolution.md` §4b, §5).
 3. Set analysis and scope question **per story** — counts and recommendations differ — in one
    message with a per-story table when the user gave no `--scope`.
 4. Shared common flows (login, navigation to a shared module) are walked ONCE and reused across

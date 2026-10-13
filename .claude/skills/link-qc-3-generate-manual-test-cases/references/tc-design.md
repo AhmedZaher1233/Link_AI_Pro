@@ -271,8 +271,9 @@ For each data item record:
 
 | Status | Meaning |
 |---|---|
-| `READY` | The data is confirmed to exist — a learning-file `[type: data]` / `[type: env]` line (3b may also confirm it live on a listing screen). |
-| `MISSING` | The data is required, WAS checked live, and was not found. **Never written by this skill** — only 3b (one read-only look) or skill 5 can establish it. |
+| `READY` | The data is confirmed to exist — a learning-file `[type: data]` / `[type: env]` line (3b / 3c may also confirm it live on a listing screen, or prepare it and keep it). |
+| `MISSING` | The data is required, WAS checked live, and was not found. **Never written by this skill** — only 3b / 3c (one read-only look) or skill 5 can establish it. |
+| `NOT CREATABLE` | Evidence proves the state cannot exist on the environment (a rule in the code or configuration, a role no environment has, a job that never runs there). **Never written by this skill** — only 3b / 3c write it, with the evidence in the Problems row. |
 | `IMPOSSIBLE` | The data cannot be created by any available or allowed way (background job only, external system, a role that exists in no environment, a state the app cannot reach). Decided only after the ways below were considered. |
 | `UNKNOWN` | Not enough information to confirm — not checked (this skill checks nothing live), story not implemented, or the spec does not say the value. |
 
@@ -283,7 +284,7 @@ An item is never `MISSING` only because it was not checked: no check → `UNKNOW
 | Way | Use it when |
 |---|---|
 | `e2e scenario` | **Preferred.** An existing UI flow creates the data — another TC in this set, or a `## Common Flows` entry in the learning file. Name that TC-ID / flow in words. |
-| `api` | Only when API-based test-data creation/seeding is **already available** in the project (a learning-file `[type: data]` / `[type: env]` line or a recorded skill 5 setup fixture says so) or **explicitly confirmed** by the project / dev team. Otherwise write `api — to be confirmed`, never "available". |
+| `api` | Only when API-based test-data creation/seeding is **already available** in the project (a learning-file `[type: data]` / `[type: env]` line or a recorded skill 5 setup fixture says so) or **explicitly confirmed** by the project / dev team. Otherwise write `api — to be confirmed`, never "available" (3b / 3c, 5 and 5b later search the automation project's helpers and the application's source code themselves and may confirm it). |
 | `db` | Only when DB-based seeding is already available or explicitly confirmed **and** the QC has the required access. Otherwise `db — to be confirmed`. |
 | `set directly` | Only for settings / configuration values that can be changed directly in the app (admin settings, feature toggles). |
 | `manual` | When no suitable automated way is available — the QC creates the data by hand. |

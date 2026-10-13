@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- render-run-report v1.1 · report=34b2f694949f4da4395d5b515266047299b680894350bdac8d51af6114360060 · bugs=c7d57ac49c32311c8d1061e172c2ca9c021b0b57421389c2ff30739c38489d42 · runs=207a4787b0fc0bd5c36ef90651c49806b2df2497418df88585656cc3f330c9dd · comments=none · page=b97d1d4d3088dd17c2284b5f29f2a9190b62231ecbfab81a6997f378f5002cdf -->
+<!-- render-run-report v1.1 · report=3b317591fca138096a1bce79f72608cd9759c36909adbcdbae2b166175ab2d51 · bugs=c7d57ac49c32311c8d1061e172c2ca9c021b0b57421389c2ff30739c38489d42 · runs=ad7bfc943f00bbe0c87ee8103d88ff85b7f4b8cc5614cb88317a9b9808755666 · comments=none · page=3a3ed17e2b87c36b06a52091e01b8134a2ae04d9f03c9529f2726a03148e2962 -->
 <!-- MIRROR — byte-identical copies live in five skill folders, each under assets/:
      link-qc-3-generate-manual-test-cases ↔ link-qc-3b-validate-manual-test-cases ↔
      link-qc-3c-validate-manual-test-cases-cli ↔ link-qc-5-test-run-automation ↔ link-qc-5b-test-run-manual-cli.
@@ -156,6 +156,7 @@ tr.attempts-row td { background: var(--panel-2); padding: 8px 14px 14px; }
 .badge.d-missing { border-color: var(--amber); color: var(--amber); }
 .badge.d-impossible { border-color: var(--red); color: var(--red); }
 .badge.d-unknown { border-color: var(--muted); }
+.badge.d-not-creatable { border-color: var(--red); color: var(--red); border-style: dotted; }
 .badge.stale, .badge.orphan { border-color: var(--red); color: var(--red); } .badge.stale { border-style: dashed; }
 .badge.human { border-color: var(--purple); color: var(--purple); }
 .badge.s-pass, .badge.s-green { border-color: var(--green); color: var(--green); }
@@ -305,10 +306,10 @@ footer code { font-family: var(--mono); color: var(--text); }
     <div class="tile t-fail"><b>1</b><span>Failed</span></div>
     <div class="tile t-incomplete"><b>0</b><span>Incomplete</span></div>
     <div class="tile t-partial"><b>1</b><span>Partial · human step pending</span></div>
-    <div class="tile "><b>0</b><span>Skipped</span></div>
+    <div class="tile "><b>1</b><span>Skipped</span></div>
     <div class="tile "><b>0</b><span>Not run</span></div>
-    <div class="tile "><b>4</b><span>Test cases · phase 2</span></div>
-    <div class="tile "><b>3 / 1 / 0 / 0</b><span>Variants · passed / failed / skipped / not run</span></div>
+    <div class="tile "><b>5</b><span>Test cases · phase 2</span></div>
+    <div class="tile "><b>3 / 1 / 1 / 0</b><span>Variants · passed / failed / skipped / not run</span></div>
     <div class="tile "><b>00:28:40</b><span>Duration · manual run · one session per account</span></div>
     <div class="tile "><b>—</b><span>Static coverage · —</span></div>
     <div class="tile "><b>1 / 1 / 0</b><span>Bugs · open / resolved / not checked</span></div>
@@ -332,7 +333,7 @@ footer code { font-family: var(--mono); color: var(--text); }
       <thead><tr><th>Phase</th><th>Date</th><th>Outcome</th><th>Passed</th><th>Failed</th><th>Incomplete</th><th>Skipped</th><th>Not run</th><th>Partial</th><th>Total</th><th>Duration</th><th>Bugs</th></tr></thead>
       <tbody>
         <tr><td><a href="#phase-1">Phase 1</a></td><td>2026-10-08</td><td><span class="badge s-failures">FAILURES</span></td><td>1</td><td>1</td><td>0</td><td>1</td><td>0</td><td>0</td><td>3</td><td>00:03:10</td><td>BUG-1</td></tr>
-        <tr><td><a href="#phase-2">Phase 2</a></td><td>2026-10-10</td><td><span class="badge s-failures">FAILURES</span></td><td>2</td><td>1</td><td>0</td><td>0</td><td>0</td><td>1</td><td>4</td><td>00:28:40</td><td>BUG-1, BUG-2</td></tr>
+        <tr><td><a href="#phase-2">Phase 2</a></td><td>2026-10-10</td><td><span class="badge s-failures">FAILURES</span></td><td>2</td><td>1</td><td>0</td><td>1</td><td>0</td><td>1</td><td>5</td><td>00:28:40</td><td>BUG-1, BUG-2</td></tr>
       </tbody>
     </table></div>
   </section>
@@ -425,7 +426,7 @@ footer code { font-family: var(--mono); color: var(--text); }
       </div>
     </details>
     <details class="card phase" id="phase-2" open>
-      <summary><span class="card-id">Phase 2</span><span>2026-10-10</span><span class="badge s-failures">FAILURES</span><span class="card-counts">passed / failed / incomplete / skipped / not run / partial · 2 / 1 / 0 / 0 / 0 / 1 of 4</span></summary>
+      <summary><span class="card-id">Phase 2</span><span>2026-10-10</span><span class="badge s-failures">FAILURES</span><span class="card-counts">passed / failed / incomplete / skipped / not run / partial · 2 / 1 / 0 / 1 / 0 / 1 of 5</span></summary>
       <div class="card-body">
         <dl class="facts">
           <dt>Environment</dt><dd>UAT</dd>
@@ -440,7 +441,8 @@ footer code { font-family: var(--mono); color: var(--text); }
           <dt>Screenshots</dt><dd>../../screenshots/US-2000-ask-assistant/phase-2/</dd>
           <dt>Compliance</dt><dd>— (manual run)</dd>
           <dt>Azure DevOps</dt><dd>local</dd>
-          <dt>Data changes</dt><dd>not authorized · 0 made · 0 cleaned up · 0 left</dd>
+          <dt>Data changes</dt><dd>authorized · 1 made (0 by TCs · 1 preparation) · 0 cleaned up · 1 kept · 0 left</dd>
+          <dt>Data preparation</dt><dd>e2e 0 · api helper 1 · api from source 0 · db 0 · kept 1 · cleaned up 0</dd>
           <dt>Previous phase</dt><dd>.runs/phase-1.json (skill 5)</dd>
         </dl>
 
@@ -450,8 +452,8 @@ footer code { font-family: var(--mono); color: var(--text); }
           <tbody>
             <tr class=""><td>Smoke</td><td>1</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
             <tr class=""><td>Positive</td><td>2</td><td>1</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
-            <tr class=""><td>Negative</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td></tr>
-            <tr class="is-total"><td>Total</td><td>4</td><td>2</td><td>1</td><td>0</td><td>0</td><td>0</td><td>1</td></tr>
+            <tr class=""><td>Negative</td><td>2</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td><td>1</td></tr>
+            <tr class="is-total"><td>Total</td><td>5</td><td>2</td><td>1</td><td>0</td><td>1</td><td>0</td><td>1</td></tr>
           </tbody>
         </table></div>
         <p class="line"><b>Smoke gate:</b> <span class="badge s-pass">passed</span> — fail% 0% — no action needed</p>
@@ -491,6 +493,9 @@ footer code { font-family: var(--mono); color: var(--text); }
             <tr class="" id="tc-2-TC-030"><td>TC-030</td><td>REQ-04</td><td>Escalate to a human agent by phone call-back</td><td><span class="badge s-partial">PARTIAL — human step pending</span></td><td>negative</td><td>00:03:15</td><td>human step: 4</td><td>
               <span class="shot"><a class="view" href="../../screenshots/US-2000-ask-assistant/phase-2/TC-030/manual-cli--none--r0/attempt-1.png" data-viewer data-group="phase-2" data-title="TC-030 · attempt-1.png · phase 2"><img src="../../screenshots/US-2000-ask-assistant/phase-2/TC-030/manual-cli--none--r0/attempt-1.png" loading="lazy" alt="TC-030 · attempt-1.png · phase 2"></a><a class="view-link" href="../../screenshots/US-2000-ask-assistant/phase-2/TC-030/manual-cli--none--r0/attempt-1.png" data-viewer data-group="phase-2" data-title="TC-030 · attempt-1.png · phase 2">View screenshot</a></span>
             </td></tr>
+            <tr class="" id="tc-2-TC-040"><td>TC-040</td><td>REQ-05</td><td>Reject a return older than the window</td><td><span class="badge s-skip">SKIP</span></td><td>negative</td><td>—</td><td>—</td><td>
+              —
+            </td></tr>
           </tbody>
         </table></div>
 
@@ -505,9 +510,68 @@ footer code { font-family: var(--mono); color: var(--text); }
         </table></div>
 
 
+        <h3 class="sub-head">Skips and residual failures</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>TC-ID</th>
+            <th>Status</th>
+            <th>Reason</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>TC-040</td>
+              <td>SKIP</td>
+              <td>not creatable — a return older than the window cannot exist on UAT: the archiving job removes such returns nightly (configuration, checked 2026-10-10)</td>
+            </tr>
+          </tbody>
+        </table></div>
 
 
+        <h3 class="sub-head">Test-data readiness</h3>
+        <p class="line">Verdict: READY-WITH-SKIPS (1 TC) — 1 gap prepared</p>
+        <p class="line">Decisions: ready 0 · prepared 1 (api 1 · ui 0 · db 0) · skipped 1 (data_missing 0 · not creatable 1 · QC declined 0)</p>
+        <div class="tablewrap"><table>
+          <thead><tr>
+            <th>Gap</th>
+            <th>TCs</th>
+            <th>Decision</th>
+            <th>Source</th>
+            <th>Provisioning</th>
+            <th>Identifiers / names</th>
+            <th>Effective stamped values</th>
+            <th>Verified on</th>
+            <th>Cleanup</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>a conversation with an earlier return question</td>
+              <td>TC-AI-01</td>
+              <td>prepared (api)</td>
+              <td>learning</td>
+              <td>the automation project&#39;s conversation helper</td>
+              <td>conversation &quot;qa-ask-assistant-2026-10-10&quot;</td>
+              <td>started at = 2026-10-10 10:52</td>
+              <td>assistant panel history list, 2026-10-10</td>
+              <td>kept</td>
+            </tr>
+            <tr>
+              <td>a return older than the window</td>
+              <td>TC-040</td>
+              <td>skip — not creatable</td>
+              <td>read-only look 2026-10-10</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table></div>
 
+        <h3 class="sub-head">Deviations</h3>
+        <ul>
+          <li>D2 &quot;a conversation with an earlier return question&quot;: started at — TC-AI-01 says 2026-01-05 09:00, the system stamped 2026-10-10 10:52; the observation used the stamped value — route to skill 3 --revision</li>
+        </ul>
         <div class="comment-box" data-comment-id="phase-2" data-comment-kind="phase">
   <p class="comment-label">Reviewer comment</p>
   <textarea class="comment-input" data-comment-input data-comment-id="phase-2" rows="2" aria-label="Reviewer comment · phase-2" placeholder="Type a comment for the QA skill…"></textarea>
@@ -620,7 +684,7 @@ footer code { font-family: var(--mono); color: var(--text); }
   </div>
   <div class="viewer-pane" id="viewer-pane"><img id="viewer-img" alt=""></div>
 </dialog>
-<script type="application/json" id="report-data">{"pageKind":"run-report","feature":"ask-assistant","page":"TEST-RUN-REPORT-ask-assistant.html","source":"TEST-RUN-REPORT-ask-assistant.md","sourceRev":"34b2f694949f","commentsFile":"REVIEW-COMMENTS-ask-assistant.md","strings":{"theme":"Theme","theme_auto":"auto","theme_light":"light","theme_dark":"dark","viewer":"Screenshot","drafts":"{n} unsaved comment(s)","saved":"Saved — {n} open comment(s). Tell the chat: \"read my comments\".","downloaded":"Downloaded — {n} open comment(s). Move the file from Downloads beside this page, then tell the chat: \"read my comments\".","copied":"Copied — paste it into the chat.","copy_failed":"Copy failed — use Save comments instead.","no_storage":"This browser does not keep drafts for local files — save before closing the page.","file_title":"Review comments"},"comments":{"fileRev":"none","reviewer":"","entries":[]}}</script>
+<script type="application/json" id="report-data">{"pageKind":"run-report","feature":"ask-assistant","page":"TEST-RUN-REPORT-ask-assistant.html","source":"TEST-RUN-REPORT-ask-assistant.md","sourceRev":"3b317591fca1","commentsFile":"REVIEW-COMMENTS-ask-assistant.md","strings":{"theme":"Theme","theme_auto":"auto","theme_light":"light","theme_dark":"dark","viewer":"Screenshot","drafts":"{n} unsaved comment(s)","saved":"Saved — {n} open comment(s). Tell the chat: \"read my comments\".","downloaded":"Downloaded — {n} open comment(s). Move the file from Downloads beside this page, then tell the chat: \"read my comments\".","copied":"Copied — paste it into the chat.","copy_failed":"Copy failed — use Save comments instead.","no_storage":"This browser does not keep drafts for local files — save before closing the page.","file_title":"Review comments"},"comments":{"fileRev":"none","reviewer":"","entries":[]}}</script>
 <script>
 (function () {
   'use strict';
