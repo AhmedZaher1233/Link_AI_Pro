@@ -8,11 +8,14 @@
      (HTML-escaped); triple braces only where the renderer already escaped the value (the open attribute, comment
      boxes). Blocks are HTML comments carrying #each / #if / #unless openers and the matching closers. Screenshots are
      linked by RELATIVE path (thumbnail + "View screenshot"), never embedded. Never render a password, token, selector
-     or code identifier on this page. -->
-  <section>
+     or code identifier on this page. Every section carries a stable id and every phase card a data-toc-label (the shell's
+     contents panel links to them); a th may name its sort type with data-sort (natural / number / duration / date / rank +
+     data-sort-order / text / none) — without one the shell infers it from the column. The tracker cells and sections arrive
+     as HTML the renderer built from TC-STATUS-TRACKER-{feature}.md (read-only data). -->
+  <section id="sec-run-history">
     <div class="sec-head"><h2>Run history</h2><span class="note">one row per phase · earlier phases never rewritten</span></div>
     <div class="tablewrap"><table>
-      <thead><tr><th>Phase</th><th>Date</th><th>Outcome</th><th>Passed</th><th>Failed</th><th>Incomplete</th><th>Skipped</th><th>Not run</th><th>Partial</th><th>Total</th><th>Duration</th><th>Bugs</th></tr></thead>
+      <thead><tr><th data-sort="natural">Phase</th><th data-sort="date">Date</th><th data-sort="rank" data-sort-order="smoke gate failed|failures|incomplete|environment_blocked|blocked|green">Outcome</th><th data-sort="number">Passed</th><th data-sort="number">Failed</th><th data-sort="number">Incomplete</th><th data-sort="number">Skipped</th><th data-sort="number">Not run</th><th data-sort="number">Partial</th><th data-sort="number">Total</th><th data-sort="duration">Duration</th><th data-sort="natural">Bugs</th></tr></thead>
       <tbody>
 <!-- {{#each history}} -->
         <tr><td><a href="#phase-{{phase}}">Phase {{phase}}</a></td><td>{{date}}</td><td><span class="badge {{outcome_class}}">{{outcome}}</span></td><td>{{passed}}</td><td>{{failed}}</td><td>{{incomplete}}</td><td>{{skipped}}</td><td>{{notrun}}</td><td>{{partial}}</td><td>{{total}}</td><td>{{duration}}</td><td>{{bugs}}</td></tr>
@@ -22,7 +25,7 @@
   </section>
 
 <!-- {{#if has_coverage}} -->
-  <section>
+  <section id="sec-static-coverage">
     <div class="sec-head"><h2>Static coverage · latest phase</h2><span class="note">measured from the spec source before the run · not a pass rate</span></div>
 <!-- {{#each cov_stages}} -->
     <div class="story">
@@ -35,7 +38,7 @@
     <h3 class="sub-head">Requirement outcome coverage</h3>
     <p class="plain">Linkage is not coverage: a requirement is Full only when its required outcome is asserted; Assumed rests on an unverified-assumption test.</p>
     <div class="tablewrap"><table>
-      <thead><tr><th>Requirement</th><th>Outcome</th><th>Asserted by</th></tr></thead>
+      <thead><tr><th data-sort="natural">Requirement</th><th data-sort="rank" data-sort-order="missing|partial|assumed|full">Outcome</th><th>Asserted by</th></tr></thead>
       <tbody>
 <!-- {{#each cov_reqs}} -->
         <tr><td>{{id}}</td><td><span class="chip {{outcome_class}}"><span>{{outcome}}</span></span></td><td>{{asserted}}</td></tr>
@@ -46,11 +49,15 @@
   </section>
 <!-- {{/if}} -->
 
+<!-- {{#if has_tracker_section}} -->
+  {{{tracker_section}}}
+
+<!-- {{/if}} -->
   <section class="part" id="results">
     <p class="eyebrow">Part 1 · test results</p>
     <div class="sec-head"><h2>Phases</h2><span class="note">source: {{report_file}}</span></div>
 <!-- {{#each phases}} -->
-    <details class="card phase" id="phase-{{n}}"{{{open_attr}}}>
+    <details class="card phase" id="phase-{{n}}" data-toc-label="{{toc_label}}"{{{open_attr}}}>
       <summary><span class="card-id">Phase {{n}}</span><span>{{date}}</span><span class="badge {{outcome_class}}">{{outcome}}</span><span class="card-counts">{{summary_counts}}</span></summary>
       <div class="card-body">
         <dl class="facts">
@@ -65,7 +72,7 @@
 <!-- {{#if has_stages}} -->
         <h3 class="sub-head">Stages</h3>
         <div class="tablewrap"><table>
-          <thead><tr><th>Stage</th><th>Total</th><th>Passed</th><th>Failed</th><th>Incomplete</th><th>Skipped</th><th>Not run</th><th>Partial</th></tr></thead>
+          <thead><tr><th data-sort="text">Stage</th><th data-sort="number">Total</th><th data-sort="number">Passed</th><th data-sort="number">Failed</th><th data-sort="number">Incomplete</th><th data-sort="number">Skipped</th><th data-sort="number">Not run</th><th data-sort="number">Partial</th></tr></thead>
           <tbody>
 <!-- {{#each stages}} -->
             <tr class="{{row_class}}"><td>{{name}}</td><td>{{total}}</td><td>{{passed}}</td><td>{{failed}}</td><td>{{incomplete}}</td><td>{{skipped}}</td><td>{{notrun}}</td><td>{{partial}}</td></tr>
@@ -111,7 +118,7 @@
         <p class="cov-line">{{cov_target}}</p>
 <!-- {{#if has_cov_reqs}} -->
         <div class="tablewrap"><table>
-          <thead><tr><th>Requirement</th><th>Outcome</th><th>Asserted by</th></tr></thead>
+          <thead><tr><th data-sort="natural">Requirement</th><th data-sort="rank" data-sort-order="missing|partial|assumed|full">Outcome</th><th>Asserted by</th></tr></thead>
           <tbody>
 <!-- {{#each cov_reqs}} -->
             <tr><td>{{id}}</td><td><span class="chip {{outcome_class}}"><span>{{outcome}}</span></span></td><td>{{asserted}}</td></tr>
@@ -124,10 +131,10 @@
 <!-- {{#if has_results}} -->
         <h3 class="sub-head">Results · one row per test case</h3>
         <div class="tablewrap"><table>
-          <thead><tr><th>TC-ID</th><th>REQ</th><th>Name</th><th>Status</th><th>Group</th><th>Duration</th><th>Classification</th><th>Evidence</th></tr></thead>
+          <thead><tr><th data-sort="natural">TC-ID</th><th data-sort="natural">REQ</th><th data-sort="text">Name</th><th data-sort="rank" data-sort-order="fail|incomplete|partial|skip|not_run,not run|pass">Status</th><th data-sort="text">Group</th><th data-sort="duration">Duration</th><th data-sort="rank" data-sort-order="app_bug|ai_rubric_failure|assertion_failure|selector_failure|timeout_failure|evidence_failure|environment_failure|data_missing|unverified_assumption|incomplete,interrupted,cleanup_incomplete|human step|not started">Classification</th><th data-sort="none">Evidence</th>{{{tracker_th}}}</tr></thead>
           <tbody>
 <!-- {{#each results}} -->
-            <tr class="{{row_class}}" id="{{anchor}}"><td>{{tc}}</td><td>{{req}}</td><td>{{name}}</td><td><span class="badge {{status_class}}">{{status}}</span></td><td>{{group}}</td><td>{{duration}}</td><td>{{classification}}</td><td>
+            <tr class="{{row_class}}" id="{{anchor}}"><td class="nowrap">{{tc}}</td><td>{{req}}</td><td>{{name}}</td><td><span class="badge {{status_class}}">{{status}}</span></td><td>{{group}}</td><td>{{duration}}</td><td>{{classification}}</td><td>
 <!-- {{#unless has_evidence}} -->
               —
 <!-- {{/unless}} -->
@@ -142,9 +149,9 @@
               <span class="shot"><a href="{{href}}">{{label}}</a><span class="lbl">not a relative path</span></span>
 <!-- {{/if}} -->
 <!-- {{/each}} -->
-            </td></tr>
+            </td>{{{tracker_td}}}</tr>
 <!-- {{#if has_attempts}} -->
-            <tr class="attempts-row"><td colspan="8"><div class="attempts">
+            <tr class="attempts-row"><td colspan="{{results_cols}}"><div class="attempts">
               <span class="lbl">Variants and attempts of {{tc}} (from the run file){{missing_note}}</span>
               <table>
                 <thead><tr><th>Variant</th><th>Attempt</th><th>Stage</th><th>Status</th><th>Evidence</th><th>Error</th></tr></thead>
@@ -196,7 +203,7 @@
 <!-- {{#if has_bugrefs}} -->
         <h3 class="sub-head">Bugs found or retested in this phase</h3>
         <div class="tablewrap"><table>
-          <thead><tr><th>Bug</th><th>TC-ID</th><th>Severity</th><th>Status</th></tr></thead>
+          <thead><tr><th data-sort="natural">Bug</th><th data-sort="natural">TC-ID</th><th data-sort="rank" data-sort-order="critical|high|medium|low">Severity</th><th data-sort="rank" data-sort-order="open|not-checked,not checked|resolved">Status</th></tr></thead>
           <tbody>
 <!-- {{#each bugrefs}} -->
             <tr><td><a href="#{{anchor}}">{{id}}</a></td><td>{{tc}}</td><td>{{severity}}</td><td><span class="badge {{status_class}}">{{status}}</span></td></tr>
@@ -309,6 +316,11 @@
 <!-- {{/each}} -->
   </section>
 
+<!-- {{#if has_tracker}} -->
+  {{{not_run_section}}}
+
+<!-- {{/if}} -->
+
   <section class="part" id="bugs">
     <p class="eyebrow">Part 2 · bug report</p>
     <div class="sec-head"><h2>Bugs</h2><span class="note">source: {{bug_file}}</span></div>
@@ -385,3 +397,7 @@
 <!-- {{/if}} -->
 <!-- {{/if}} -->
   </section>
+<!-- {{#if has_tracker_section}} -->
+
+  {{{bug_index_section}}}
+<!-- {{/if}} -->

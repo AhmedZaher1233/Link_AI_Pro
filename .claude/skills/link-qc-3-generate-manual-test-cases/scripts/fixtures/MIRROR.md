@@ -20,6 +20,13 @@ on any drift (a sibling that is not installed is simply not compared).
 | `golden/TC-REVIEW-kpi-filter.en.html` | expected English page for the sample — byte-for-byte |
 | `golden/TC-REVIEW-kpi-filter.ar.html` | expected Arabic page for the sample — byte-for-byte, `arabicComplete: true` |
 | `golden/TC-REVIEW-legacy-login.en.html` | expected page for the legacy document, rendered with `compatibility[]` findings |
+| `tracker/TC-STATUS-TRACKER-kpi-filter.md` | a tracker for the sample — all 5 TCs, the four States, a `BUG-1 (#100231)` link, Summary and Bug index tables, a placeholder `Azure DevOps:` URL (`devops.example.com`) |
+| `tracker/TC-STATUS-TRACKER-kpi-filter.mismatch.md` | a tracker that lacks TC-KPI-01b and lists an unknown TC-KPI-09, with no Azure URL (the TC-mismatch case) |
+| `golden/TC-REVIEW-kpi-filter.tracker.en.html` | expected English page for the sample rendered with `--tracker tracker/TC-STATUS-TRACKER-kpi-filter.md` — byte-for-byte |
+
+The sample folder holds no tracker, so the three goldens above it are the "without a tracker" pages
+(one `tracker-missing` warning). Self-test case 30 places the trackers beside a temporary copy of the
+sample, and in a temporary `Testing/` project with a `.mcp.json`, to test discovery and the link base.
 
 Regenerate a golden only after a deliberate template or renderer change, from the same folder:
 
@@ -27,6 +34,7 @@ Regenerate a golden only after a deliberate template or renderer change, from th
 node scripts/render-tc-review.mjs --tc scripts/fixtures/sample/TEST-CASES-kpi-filter.md --write --force --out scripts/fixtures/golden/TC-REVIEW-kpi-filter.en.html
 node scripts/render-tc-review.mjs --tc scripts/fixtures/sample/TEST-CASES-kpi-filter.md --lang ar --write --force --out scripts/fixtures/golden/TC-REVIEW-kpi-filter.ar.html
 node scripts/render-tc-review.mjs --tc scripts/fixtures/legacy/TEST-CASES-legacy-login.md --write --force --out scripts/fixtures/golden/TC-REVIEW-legacy-login.en.html
+node scripts/render-tc-review.mjs --tc scripts/fixtures/sample/TEST-CASES-kpi-filter.md --tracker scripts/fixtures/tracker/TC-STATUS-TRACKER-kpi-filter.md --write --force --out scripts/fixtures/golden/TC-REVIEW-kpi-filter.tracker.en.html
 ```
 
 Broken-input cases (unknown enum, broken row, secret literal, orphan TCs, header mismatch, zero

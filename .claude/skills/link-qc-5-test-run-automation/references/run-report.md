@@ -28,11 +28,13 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-report.mj
 ```
 
 `--bugs`, `--runs` and `--comments` override the defaults (`BUG-REPORT-{feature}.md` next to the
-report, `.runs/` in the same folder and `REVIEW-COMMENTS-{feature}.md` next to the report). `--strict` maps the gate to an exit code for CI (PASS 0 · MISMATCH 1
+report, `.runs/` in the same folder and `REVIEW-COMMENTS-{feature}.md` next to the report). `--tracker`
+overrides where the tracker is looked for and `--ado-url {org-or-collection URL}/{project}` sets the
+Azure DevOps project its bug IDs link to (§5b). `--strict` maps the gate to an exit code for CI (PASS 0 · MISMATCH 1
 · BLOCKED 2 · NOT_RUN 3); without it the script always exits 0 and the result is the payload.
 
 Read the payload, never the HTML: `gate`, `gateReason`, `counts`, `mismatches[]`, `warnings[]`,
-`errors[]`, `writes[]`, `document.phases[]`, `document.bugs`, `document.legacyFiles[]`, `comments`.
+`errors[]`, `writes[]`, `document.phases[]`, `document.bugs`, `document.legacyFiles[]`, `comments`, `tracker`.
 
 ## 2. Gate — what each verdict means for the skill
 
@@ -45,7 +47,10 @@ Read the payload, never the HTML: `gate`, `gateReason`, `counts`, `mismatches[]`
 
 `readOnly: true` in the payload means nothing was written (dry run, or a refused write). A missing
 bug file, a missing run file, a missing screenshot file or a legacy artifact in the folder is a
-**warning**, never a block — the page renders and says so.
+**warning**, never a block — the page renders and says so. The same holds for the tracker (§5b):
+`tracker-missing`, `tracker-tc-mismatch`, `tracker-ado-url-missing`, `ado-url-invalid`,
+`tracker-unparsed`, `tracker-column-missing`, `tracker-duplicate-tc` and `tracker-broken-row` are
+warnings; only a password-shaped literal in it BLOCKs.
 
 ## 3. Folder contract
 
@@ -165,6 +170,34 @@ exists with `## Bugs` and `none`. The renderer BLOCKs on a missing required fiel
 Status / Severity, and reports `bug-ref-missing` / `bug-phase-unknown` / `bug-count` mismatches
 when the two files disagree.
 
+## 5b. The tracker — `TC-STATUS-TRACKER-{feature}.md` (read-only data source)
+
+The tracker lives beside `ADO-BUG-MAP.md` in the story's **TestCases** folder, never in the reports
+folder (the whitelist of §3 is unchanged). The renderer finds it with `--tracker`, else beside the
+header's `Source document` (resolved from the report folder), else in the TestCases folder that
+mirrors the report's leaf (`…/Automation/reports/[SPEC-*/]{leaf}` → `…/Manual_Test/TestCases/[SPEC-*/]{leaf}`).
+It only reads it: no value is copied into another file. Its shape (header date and `Azure DevOps:`
+URL, `## Summary`, `## Test cases` by TC-ID with `Covered · Reason not covered · State · Related
+bug(s) · Bug Azure state · Next action`, `## Bug index`) and the work-item link rule (`{base}/_workitems/edit/{id}`,
+base from `--ado-url`, the tracker header, or the project `.mcp.json` azure-devops entry — never a
+built-in host) are the same as skill 3's review page
+(`link-qc-3-generate-manual-test-cases/references/html-page.md` §3b; the parser lives in the shared
+renderer kit). On this page:
+
+- every phase's **Results** table gains the six columns (State colour-coded, always with its text;
+  Azure IDs linked; a `BUG-{n}` links to its bug card); the attempt rows span all columns;
+- **Not automated / not run** lists the tracker's TCs that have no Results row in any phase, with the
+  tracker's Title and the six columns — so every TC of the story is visible on one page;
+- a **Tracker** section (last-updated date + the Summary table) precedes Part 1, a **Bug index**
+  section follows the Bugs, and "Tracker last updated" joins the meta line.
+
+**Mismatch check.** When the `Source document` (or `TEST-CASES-{feature}.md` beside the tracker) is
+readable, its TC-IDs are compared with the tracker both ways; otherwise only a TC with a Results row
+but no tracker row is reported (the not-automated TCs are expected). Either way the warning is
+`tracker-tc-mismatch` with `onlyInTracker[]` / `onlyInSource[]`. No tracker → the page renders
+without any tracker markup and one `tracker-missing` warning. Payload: `tracker` (as skill 3's, plus
+`ranTcs` and `notRun`), `input.tracker`, `input.sourceDocument`, `hashes.tracker`.
+
 ## 6. Derived numbers — the page shows these, never the written ones
 
 | Number on the page | Computed from |
@@ -177,6 +210,7 @@ when the two files disagree.
 | Variants · attempts · missing variants · planned vs actual | `.runs/phase-N.json` (`results[].variants[].attempts[]`, `variant_totals`, `run_plan.estimate`) — additive; absent → `—` and a `run-file-missing` warning |
 | Bugs open / resolved / not checked | the bug file's entries (Status), never its header |
 | Test-data readiness decisions `Decisions: ready n · prepared n (api · ui · db) · skipped n (data_missing · not creatable · QC declined)` | the `Decision` column of the phase's readiness table (`document.phases[].readiness`); legacy bare words map to the same buckets (`skip` → unspecified) |
+| Not automated / not run `{n} tracker TC(s) with no Results row in any phase · {t} in the tracker · {r} in the run` | the tracker's TC-IDs minus every TC-ID with a Results row in any phase (`tracker.notRun`, `tracker.ranTcs`) |
 | — (not on the page) | the run file's `open_questions`, `data_readiness`, `compliance`, `merged.executions[]` — machine data for the ADO close-out and the checklist |
 
 ## 7. `.runs/phase-N.json` — schema `skill6-run/1` and its lifecycle
@@ -248,9 +282,9 @@ page therefore shows images only while the report and `screenshots/` keep their 
 ## 9. Provenance and hand edits
 
 Line 2 of every rendered page is `<!-- render-run-report v… · report=… · bugs=… · runs=… ·
-comments=… · page=… -->` (sha256 of the run report, of the bug file or `none`, of the run files
-read or `none`, of the comments file or `none`, and a self-hash of the page; a v1.0 line without
-`comments=` still verifies). On `--write` the script recomputes the existing page's self-hash: a
+comments=… · tracker=… · page=… -->` (sha256 of the run report, of the bug file or `none`, of the run files
+read or `none`, of the comments file or `none`, of the tracker or `none`, and a self-hash of the page; a
+v1.0 line without `comments=` and a v1.1 line without `tracker=` still verify). On `--write` the script recomputes the existing page's self-hash: a
 mismatch means a human edited the HTML, and the write is refused (`gate: BLOCKED`,
 `refused.reason: hand-edited`) until `--force` is given — tell the user what will be lost first. A
 page with no provenance comment (a hand-written `phase-N.html` from an older skill run, saved under
@@ -281,6 +315,19 @@ A comment is reviewer input, never a status source: "not a bug" on `BUG-2` does 
 5 answers it (`answered` / `declined` + Response); the Status of a bug changes only through the rules
 of §5 (an actual successful retest), and skills 8 and 9 apply the same rule.
 
+## 9c. Navigation, sorting and filtering — built in the browser, display only
+
+Same shell script as skill 3's review page (`html-page.md` §7c): a contents panel built from the
+page's `h2` sections and the phase cards (`data-toc-label="Phase {n} · {outcome}"`), sticky at the
+side from 1100 px, a "Contents" button at the top below that, the section in view highlighted, a
+closed phase card opened when the panel jumps into it, and a "Back to top" link. Sortable headers name
+their type with `data-sort`: TC-ID / REQ / Phase / Bug natural, Date by date, Duration as a duration,
+the counts numerically, Status by `FAIL · INCOMPLETE · PARTIAL · SKIP · NOT_RUN · PASS`, Classification
+by the catalogue order (`app_bug` first, `—` last), Outcome, Severity, State (`Fail · Skipped · Not
+tested · Pass`) and Bug Azure state (`New · Active · Resolved · Closed · Removed`) by fixed orders;
+Evidence and Related bug(s) get no sort button. Sorting keeps each attempt row under its TC row and a
+Total row last; a table with more than 15 rows gets a filter box. Display order only.
+
 ## 10. Templates — the body partial and the report shell
 
 Two passes. `assets/run-report.template.html` is the **body partial** (run history, coverage,
@@ -300,8 +347,10 @@ render, so a template edit is always caught. After any template or renderer chan
 `node scripts/selftest-run-report.mjs --pretty` (golden page, derived numbers, mismatch and
 false-PASS guards, evidence and viewer markup, bug cross-checks, provenance, exit codes,
 determinism, case 23 — a `PARTIAL — human step pending` row is its own bucket, never passed,
-never GREEN — case 24 reviewer comments, case 25 one shell per page, case 26 the shell mirror —
-28 cases) and regenerate the golden only for a deliberate change
+never GREEN — case 24 reviewer comments, case 25 one shell per page, case 26 the shell mirror,
+case 30 the tracker against its own golden (merged Results columns, not-automated table, links,
+missing / mismatch warnings, `.mcp.json` base, a secret BLOCKs), case 31 section ids, phase labels
+and typed sort headers — 31 cases) and regenerate the goldens only for a deliberate change
 (`scripts/fixtures/run-report/README.md`). A shell change is copied to skills 3, 3b and 3c.
 
 ## 11. Migration — projects set up before this layout

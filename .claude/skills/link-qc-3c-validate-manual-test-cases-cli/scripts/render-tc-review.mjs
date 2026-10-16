@@ -6,6 +6,7 @@
 // render-tc-review.mjs — deterministic renderer for the human review page.
 //   TEST-CASES-{feature}.md (+ TEST-DATA-{feature}.md, + TC-REVIEW-STRINGS-{feature}.ar.json)
 //   (+ REVIEW-COMMENTS-{feature}.md, the reviewer's comments saved from the page)
+//   (+ TC-STATUS-TRACKER-{feature}.md, the read-only test-case status tracker beside the source)
 //   → TC-REVIEW-{feature}.html, from assets/tc-review.template.html (the body partial) inside
 //   assets/report-shell.template.html (the one general report page, shared with skill 5).
 //
@@ -23,15 +24,15 @@
 //
 // Usage:
 //   node render-tc-review.mjs --tc <TEST-CASES-{feature}.md> [--data <TEST-DATA-{feature}.md>]
-//        [--out <path>] [--lang en|ar] [--strings <path>] [--comments <path>] [--write] [--write-skeleton]
-//        [--emit-keys] [--force] [--strict] [--pretty]
+//        [--out <path>] [--lang en|ar] [--strings <path>] [--comments <path>] [--tracker <path>] [--ado-url <url>]
+//        [--write] [--write-skeleton] [--emit-keys] [--force] [--strict] [--pretty]
 // Exit: 0 always, unless --strict: PASS 0 · MISMATCH 1 · BLOCKED 2 · NOT_RUN 3.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-export const SCHEMA_VERSION = '1.1';
+export const SCHEMA_VERSION = '1.2';
 export const TOOL = 'render-tc-review';
 
 // ---- copied verbatim from link-qc-1-generate-update-testing-structure/scripts/lib.mjs — must stay behaviourally identical ----
@@ -79,6 +80,8 @@ export const LIMITS = [
   'Rendering is deterministic: same inputs → same bytes. Nothing in the page depends on the clock.',
   'The optional `AI Oracle` sub-list of an assistant TC (Intent · Must contain · Must not contain · Language · Max length · Repeats / Pass threshold) is parsed, keyed (tc.{id}.ai.{n}) and displayed; the renderer never judges a reply — the manual CLI run (skill 5b) does.',
   'Run metadata is parsed, never rendered: the evidence-stamp keys tool / outcome-check, the pb-meta key screenshot and the header stamp tail ", tool cli" reach the payload (document.stamp, document.potentialBugs) only.',
+  'The tracker TC-STATUS-TRACKER-{feature}.md beside the source (or --tracker) is read-only data: its `## Test cases` table is merged by TC-ID (Covered · Reason not covered · State · Related bug(s) · Bug Azure state · Next action — columns found by name), its `## Summary` and `## Bug index` tables are shown as written. A missing tracker renders the page without those columns (tracker-missing warning); TC-IDs on one side only warn tracker-tc-mismatch; neither changes the gate. Its values are never translated, never sidecar keys and never copied into another file. Azure IDs link to {base}/_workitems/edit/{id}, the base from --ado-url, else an `Azure DevOps:` URL in the tracker header, else the project .mcp.json azure-devops entry — never a built-in host.',
+  'Navigation is built in the browser from the rendered page: a contents panel from the h2 / h3 headings (highlighting the section in view), sort buttons on sortable columns (natural TC / REQ ids, numbers, durations, dates, fixed orders for State and validation, text) and a filter box on tables of more than 15 rows. They change the display order only; without JavaScript the page reads as before.',
   'Reviewer comments come from REVIEW-COMMENTS-{feature}.md beside the source (or --comments): each `## {item-id}` entry is attached to the TC / PB / Q card with that id, "General" to the general box; an id not on the page is listed, never dropped (comment-unknown-id). The file is the reviewer\'s: the renderer only reads it. Comment text is never translated, never a sidecar key and never counted as narrative. Typing in the page never changes the page file, so its self-hash stays valid.',
 ];
 
@@ -107,7 +110,8 @@ export const CHROME = {
     h_problem: 'Problem', h_why: 'Why', h_decision: 'What the QC / PO must decide',
     s_existing: 'Existing-TC analysis', h_original: 'Original TC', h_disposition: 'Disposition', h_reason: 'Reason',
     s_selfreview: 'Self-review tables', s_negative: 'Negative coverage', s_standards: 'Standards alignment',
-    s_tcs: 'Test cases', s_tcs_note: 'tile numbers above match these cards', b_smoke: 'Smoke', b_auto_yes: 'Auto: yes', b_auto_no: 'Auto: no', b_orphan: 'orphan', b_stale: 'stale', b_human: 'human step',
+    s_tcs: 'Test cases', s_tcs_note: 'tile numbers above match these cards',
+    s_tc_summary: 'Test case summary', s_tc_summary_note: 'one row per test case · a TC-ID opens its card', h_description: 'Description', h_type: 'Type', h_locale: 'Locale', h_stage: 'Stage', b_smoke: 'Smoke', b_auto_yes: 'Auto: yes', b_auto_no: 'Auto: no', b_orphan: 'orphan', b_stale: 'stale', b_human: 'human step',
     t_human: 'Human steps · TCs with a step a person must perform or observe', cap_human: 'human step — a step marked [HUMAN] must be performed or observed by a person; no tool validates it and the automated part alone never counts as a full pass',
     tc_requirement: 'Requirement', tc_pre: 'Preconditions', tc_steps: 'Steps', tc_expected: 'Expected result', tc_oracle: 'Data oracle', tc_ai_oracle: 'AI oracle', tc_run: 'Run behaviour', tc_infer: 'let automation infer', tc_tags: 'Tags',
     tc_evidence: 'Evidence', ev_on: 'seen on', ev_env: 'environment', ev_build: 'build', ev_scope: 'scope',
@@ -148,7 +152,8 @@ export const CHROME = {
     h_problem: 'المشكلة', h_why: 'السبب', h_decision: 'ما يجب أن يقرره QC / PO',
     s_existing: 'تحليل الحالات الموجودة', h_original: 'الحالة الأصلية', h_disposition: 'القرار', h_reason: 'السبب',
     s_selfreview: 'جداول المراجعة الذاتية', s_negative: 'التغطية السلبية', s_standards: 'المواءمة مع المعايير',
-    s_tcs: 'حالات الاختبار', s_tcs_note: 'أرقام البلاطات أعلاه تطابق هذه البطاقات', b_smoke: 'دخان', b_auto_yes: 'أتمتة: نعم', b_auto_no: 'أتمتة: لا', b_orphan: 'يتيم', b_stale: 'قديم', b_human: 'خطوة بشرية',
+    s_tcs: 'حالات الاختبار', s_tcs_note: 'أرقام البلاطات أعلاه تطابق هذه البطاقات',
+    s_tc_summary: 'ملخص حالات الاختبار', s_tc_summary_note: 'صف لكل حالة · معرّف الحالة يفتح بطاقتها', h_description: 'الوصف', h_type: 'النوع', h_locale: 'اللغة', h_stage: 'المرحلة', b_smoke: 'دخان', b_auto_yes: 'أتمتة: نعم', b_auto_no: 'أتمتة: لا', b_orphan: 'يتيم', b_stale: 'قديم', b_human: 'خطوة بشرية',
     t_human: 'خطوات بشرية · حالات فيها خطوة يجب أن ينفذها أو يلاحظها شخص', cap_human: 'خطوة بشرية — الخطوة المعلَّمة [HUMAN] يجب أن ينفذها أو يلاحظها شخص؛ لا تتحقق منها أي أداة، والجزء المؤتمت وحده لا يُعدّ نجاحًا كاملًا',
     tc_requirement: 'المتطلب', tc_pre: 'الشروط المسبقة', tc_steps: 'الخطوات', tc_expected: 'النتيجة المتوقعة', tc_oracle: 'مرجع البيانات', tc_ai_oracle: 'مرجع الذكاء الاصطناعي', tc_run: 'سلوك التشغيل', tc_infer: 'تُستنتج بواسطة الأتمتة', tc_tags: 'الوسوم',
     tc_evidence: 'الدليل', ev_on: 'شوهد في', ev_env: 'البيئة', ev_build: 'الإصدار', ev_scope: 'النطاق',
@@ -794,13 +799,19 @@ function renderNodes(nodes, ctxs) {
  * Copied verbatim between scripts/render-tc-review.mjs (skills 3 / 3b / 3c) and
  * scripts/render-run-report.mjs (skill 5): /sync-skills copies one skill folder at a time, so neither
  * imports the other. Both harnesses compare this block between BEGIN and END against every sibling
- * present. Relies on escapeHtml, compile, renderNodes, sha256 and SECRET_RE, defined identically in
- * both scripts. It feeds assets/report-shell.template.html (the one general page) and owns the
- * reviewer-comments file REVIEW-COMMENTS-{feature}.md: parse, attach to page items, render the boxes.
+ * present. Relies on escapeHtml, compile, renderNodes, sha256, SECRET_RE, DASH, parseTables, col, cell,
+ * stripMd, isFile, readText, fs and path, defined identically in both scripts. It feeds
+ * assets/report-shell.template.html (the one general page), owns the reviewer-comments file
+ * REVIEW-COMMENTS-{feature}.md (parse, attach to page items, render the boxes) and reads the tracker
+ * TC-STATUS-TRACKER-{feature}.md (parse, merge by TC-ID, link Azure work items, render its sections).
  * ========================================================================================== */
 export const COMMENT_STATUSES = ['open', 'applied', 'answered', 'declined'];
 export const SHELL_STRINGS = {
   en: {
+    c_contents: 'Contents', c_top: 'Back to top',
+    tr_title: 'Tracker', tr_note: 'test-case status, read-only, from', tr_updated: 'Tracker last updated', tr_summary_none: 'The tracker has no Summary table.',
+    tr_tc: 'TC-ID', tr_name: 'Title', tr_covered: 'Covered', tr_reason: 'Reason not covered', tr_state: 'State', tr_bugs: 'Related bug(s)', tr_azure: 'Bug Azure state', tr_next: 'Next action',
+    tr_not_in: 'not in the tracker', tr_bug_index: 'Bug index', tr_bug_index_note: 'from the tracker · an Azure ID opens its work item', tr_bug_index_none: 'The tracker has no Bug index table.',
     c_toolbar: 'Reviewer comments', c_reviewer: 'Reviewer', c_save: 'Save comments', c_copy: 'Copy for chat', c_theme: 'Theme',
     c_general_title: 'Reviewer comments', c_general_note: 'type in any comment box on this page, then Save comments (the file goes beside this page) or Copy for chat — then tell the chat "read my comments"',
     c_title: 'Reviewer comment', c_note: 'Reviewer comment (in the markdown):', c_open: 'open comment', c_stale: 'written on an earlier revision',
@@ -814,9 +825,14 @@ export const SHELL_STRINGS = {
       downloaded: 'Downloaded — {n} open comment(s). Move the file from Downloads beside this page, then tell the chat: "read my comments".',
       copied: 'Copied — paste it into the chat.', copy_failed: 'Copy failed — use Save comments instead.',
       no_storage: 'This browser does not keep drafts for local files — save before closing the page.', file_title: 'Review comments',
+      sort: 'Sort by', filter: 'Filter rows…', filter_label: 'Filter the rows of', filter_count: '{n} of {m} rows', filter_total: '{m} rows',
     },
   },
   ar: {
+    c_contents: 'المحتويات', c_top: 'العودة إلى الأعلى',
+    tr_title: 'متتبّع الحالات', tr_note: 'حالة حالات الاختبار، للقراءة فقط، من', tr_updated: 'آخر تحديث للمتتبّع', tr_summary_none: 'لا يحتوي المتتبّع على جدول ملخص.',
+    tr_tc: 'معرّف الحالة', tr_name: 'العنوان', tr_covered: 'مغطّاة', tr_reason: 'سبب عدم التغطية', tr_state: 'نتيجة التنفيذ', tr_bugs: 'الأخطاء المرتبطة', tr_azure: 'حالة الخطأ في Azure', tr_next: 'الإجراء التالي',
+    tr_not_in: 'غير موجودة في المتتبّع', tr_bug_index: 'فهرس الأخطاء', tr_bug_index_note: 'من المتتبّع · معرّف Azure يفتح عنصر العمل', tr_bug_index_none: 'لا يحتوي المتتبّع على جدول فهرس الأخطاء.',
     c_toolbar: 'تعليقات المراجع', c_reviewer: 'المراجع', c_save: 'حفظ التعليقات', c_copy: 'نسخ للمحادثة', c_theme: 'المظهر',
     c_general_title: 'تعليقات المراجع', c_general_note: 'اكتب في أي مربع تعليق في هذه الصفحة ثم اضغط حفظ التعليقات (يُحفظ الملف بجوار الصفحة) أو نسخ للمحادثة — ثم اكتب في المحادثة "read my comments"',
     c_title: 'تعليق المراجع', c_note: 'تعليق المراجع (في ملف الماركداون):', c_open: 'تعليق مفتوح', c_stale: 'كُتب على نسخة سابقة',
@@ -830,6 +846,7 @@ export const SHELL_STRINGS = {
       downloaded: 'تم التنزيل — {n} تعليق مفتوح. انقل الملف من مجلد التنزيلات بجوار هذه الصفحة ثم اكتب في المحادثة: "read my comments".',
       copied: 'تم النسخ — الصقه في المحادثة.', copy_failed: 'فشل النسخ — استخدم حفظ التعليقات.',
       no_storage: 'هذا المتصفح لا يحتفظ بالمسودات للملفات المحلية — احفظ قبل إغلاق الصفحة.', file_title: 'Review comments',
+      sort: 'فرز حسب', filter: 'تصفية الصفوف…', filter_label: 'تصفية صفوف', filter_count: '{n} من {m} صفًا', filter_total: '{m} صفًا',
     },
   },
 };
@@ -940,13 +957,195 @@ export function renderShell(shellTpl, d) {
   };
   return renderNodes(compile(shellTpl), [vm]);
 }
+
+/* ---- Tracker — TC-STATUS-TRACKER-{feature}.md beside ADO-BUG-MAP.md in the story's TestCases folder. A read-only
+ * data source: its `## Test cases` table is merged into the page by TC-ID (Covered · Reason not covered · State ·
+ * Related bug(s) · Bug Azure state · Next action), its `## Summary` and `## Bug index` tables are shown as written,
+ * and none of its values is copied into another file. Columns are found by name, never by position. ---- */
+export const TRACKER_FIELDS = ['covered', 'reason', 'state', 'bugs', 'azure', 'next'];
+export const TRACKER_STATE_ORDER = 'fail,failed,failing|skip,skipped|not tested,not run,not_run,untested|pass,passed';
+export const AZURE_STATE_ORDER = 'new,proposed,to do|active,reopened,committed,approved,in progress,open|resolved|closed,done|removed';
+const TRACKER_LABEL = { covered: 'Covered', reason: 'Reason not covered', state: 'State', bugs: 'Related bug(s)', azure: 'Bug Azure state', next: 'Next action' };
+const plainCell = (s) => stripMd(String(s ?? '').replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1'));
+
+function trackerColumns(t) {
+  const find = (...res) => { for (const re of res) { const i = t.header.findIndex((h) => re.test(plainCell(h))); if (i >= 0) return i; } return -1; };
+  return {
+    id: find(/^(tc[- ]?id|test case id|id)$/i, /^(tc|test case)$/i), title: find(/^(title|name|description|scenario)$/i),
+    covered: find(/^covered\??$/i, /^covered/i), reason: find(/^reason not covered$/i, /reason/i),
+    state: find(/^state$/i, /^(tc state|latest state|run state|status|result|latest result)$/i),
+    bugs: find(/^related bugs?(\s*\(s\))?$/i, /^related bug/i, /^bugs?(\s*\(s\))?$/i),
+    azure: find(/^bug azure state$/i, /(azure|ado).*(state|status)/i, /(state|status).*(azure|ado)/i), next: find(/^next action$/i, /^next/i),
+  };
+}
+
+/** TC-STATUS-TRACKER-{feature}.md → { header, lastUpdated, adoUrl, summary, bugIndex, columns, rows Map(id → values), order, warnings, cells }. */
+export function parseTracker(text) {
+  const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const out = { title: null, header: {}, lastUpdated: null, adoUrl: null, summary: null, bugIndex: null, columns: null, rows: new Map(), order: [], warnings: [], cells: [] };
+  let end = lines.findIndex((l) => /^## /.test(l)); if (end < 0) end = lines.length;
+  for (const l of lines.slice(0, end)) {
+    const t = l.match(/^#\s+(.+?)\s*$/); if (t) { if (!out.title) out.title = plainCell(t[1]); continue; }
+    const m = l.match(/^\s*(?:[-*]\s+)?\*\*([^*]+?)\*\*\s*:?\s*(.*)$/) || l.match(/^\s*(?:[-*]\s+)?_?([A-Za-z][A-Za-z ()/-]{1,40}?):\s+(.+?)_?\s*$/);
+    if (m) out.header[m[1].replace(/:\s*$/, '').trim()] = m[2].trim();
+  }
+  const keys = Object.keys(out.header);
+  const pick = (re) => { const k = keys.find((x) => re.test(x)); return k ? plainCell(out.header[k]) || null : null; };
+  out.lastUpdated = pick(/updated/i) || pick(/^(as of|date|generated|last run|last sync(ed)?)$/i);
+  if (!out.lastUpdated) for (const l of lines.slice(0, end)) { const x = plainCell(l).match(/last updated\s*[:—–-]?\s*(.+)$/i); if (x) { out.lastUpdated = x[1].replace(/[_*]+$/, '').trim(); break; } }
+  for (const k of keys) if (/azure|\bado\b|devops|work ?items?/i.test(k)) { const u = String(out.header[k]).match(/https?:\/\/[^\s)<>|\]]+/i); if (u) { out.adoUrl = u[0]; break; } }
+  const secs = []; let cur = null;
+  lines.forEach((l, i) => { const h = l.match(/^## +(.+?)\s*$/); if (h) { cur = { title: plainCell(h[1]), start: i, lines: [] }; secs.push(cur); } else if (cur) cur.lines.push(l); });
+  const tableIn = (re) => { const s = secs.find((x) => re.test(x.title)); return s ? parseTables(s.lines, s.start + 1)[0] || null : null; };
+  out.summary = tableIn(/^summary\b/i);
+  out.bugIndex = tableIn(/^bugs? index\b|^bug list\b|^bugs$/i);
+  let tc = tableIn(/^(test cases?|tcs?|tc status|test case status)\b/i);
+  if (!tc) for (const s of secs) { const t = parseTables(s.lines, s.start + 1).find((x) => { const c = trackerColumns(x); return c.id >= 0 && c.state >= 0; }); if (t) { tc = t; break; } }
+  for (const [what, t] of [['Summary', out.summary], ['Bug index', out.bugIndex], ['Test cases', tc]]) if (t) for (const b of t.broken) out.warnings.push({ kind: 'tracker-broken-row', detail: 'tracker `' + what + '` row at line ' + b.line + ' has ' + b.cells + ' cells, header has ' + b.expected });
+  for (const t of [out.summary, out.bugIndex, tc]) if (t) for (const r of [t.header, ...t.rows]) out.cells.push(...r);
+  out.cells.push(...Object.values(out.header));
+  if (!tc) { out.warnings.push({ kind: 'tracker-unparsed', detail: 'the tracker has no `## Test cases` table with a TC-ID column — the page renders without the tracker columns' }); return out; }
+  const c = trackerColumns(tc); out.columns = c;
+  if (c.id < 0) { out.warnings.push({ kind: 'tracker-unparsed', detail: 'the tracker `## Test cases` table has no TC-ID column — the page renders without the tracker columns' }); out.columns = null; return out; }
+  const missing = TRACKER_FIELDS.filter((k) => c[k] < 0);
+  if (missing.length) out.warnings.push({ kind: 'tracker-column-missing', detail: 'the tracker `## Test cases` table has no ' + missing.map((k) => TRACKER_LABEL[k]).join(' / ') + ' column — rendered ' + DASH });
+  for (const r of tc.rows) {
+    const id = plainCell(cell(r, c.id)); if (!id) continue;
+    if (out.rows.has(id)) { out.warnings.push({ kind: 'tracker-duplicate-tc', id, detail: id + ' appears twice in the tracker — the first row is shown' }); continue; }
+    const v = (k) => (c[k] >= 0 ? plainCell(cell(r, c[k])) : '');
+    out.rows.set(id, { id, title: v('title'), covered: v('covered'), reason: v('reason'), state: v('state'), bugs: v('bugs'), azure: v('azure'), next: v('next') });
+    out.order.push(id);
+  }
+  return out;
+}
+
+/** A work-item link template `{base}/_workitems/edit/{id}`, or null. Only http(s), never credentials or an unfilled placeholder. */
+export function adoTemplate(raw) {
+  const s = String(raw ?? '').trim(); if (!s || /[{}$]/.test(s.replace('{id}', ''))) return null;
+  let u; try { u = new URL(s.replace('{id}', '0')); } catch { return null; }
+  if (!/^https?:$/.test(u.protocol) || u.username || u.password) return null;
+  if (s.includes('{id}')) return s;
+  return u.origin + u.pathname.replace(/\/+$/, '').replace(/\/_workitems(?:\/.*)?$/i, '') + '/_workitems/edit/{id}';
+}
+/** The project's own Azure DevOps — the `.mcp.json` at the project root (the parent of the nearest `Testing` folder above
+ *  `fromDir`): the azure-devops / azure-devops-attachments entry's org URL (or the cloud org argument) + default project.
+ *  Only those values are read; never a token. No `Testing` ancestor → not searched. */
+export function adoFromMcp(fromDir) {
+  if (!fromDir) return { template: null, file: null };
+  let dir = path.resolve(fromDir); let root = null;
+  for (let i = 0; i < 16; i++) { if (/^testing$/i.test(path.basename(dir))) { root = path.dirname(dir); break; } const up = path.dirname(dir); if (up === dir) break; dir = up; }
+  const f = root ? path.join(root, '.mcp.json') : null;
+  if (!f || !isFile(f)) return { template: null, file: null };
+  let j = null; try { j = JSON.parse(readText(f)); } catch { return { template: null, file: f }; }
+  const servers = (j && (j.mcpServers || j.servers)) || {};
+  const ok = (v) => (typeof v === 'string' && v.trim() && !/[{}$]/.test(v) ? v.trim() : null);
+  let org = null; let project = null;
+  for (const name of ['azure-devops', 'azure-devops-attachments']) {
+    const e = servers[name]; if (!e || typeof e !== 'object') continue;
+    const env = e.env && typeof e.env === 'object' ? e.env : {};
+    if (!org) org = ok(env.AZURE_DEVOPS_ORG_URL);
+    if (!org && Array.isArray(e.args)) { const a = e.args.map(String); const k = a.findIndex((x) => x.startsWith('@azure-devops/mcp')); const o = k >= 0 ? ok(a[k + 1]) : null; if (o && !o.startsWith('-')) org = 'https://dev.azure.com/' + encodeURIComponent(o); }
+    if (!project) project = ok(env.AZURE_DEVOPS_DEFAULT_PROJECT);
+  }
+  return { template: org ? adoTemplate(org.replace(/\/+$/, '') + (project ? '/' + encodeURIComponent(project) : '')) : null, file: f };
+}
+
+/** Tracker beside the source → the page's merged view. ids: the source document's TC-IDs (mismatch check); localBugs: bug-card ids on this page. */
+export function trackerModel({ text, file, ids = null, adoUrl = null, searchFrom = null, localBugs = null }) {
+  const out = { present: false, file: file || null, fileName: file ? path.basename(file) : '', lastUpdated: null, rows: new Map(), order: [], columns: null, summary: null, bugIndex: null, hasTitle: false, template: null, adoSource: null, onlyInTracker: [], onlyInSource: [], localBugs: localBugs || new Set(), warnings: [], errors: [] };
+  if (text === null || text === undefined) { if (file) out.warnings.push({ kind: 'tracker-missing', detail: 'no tracker at ' + file + ' — the page renders without the tracker columns' }); return out; }
+  const t = parseTracker(text);
+  out.warnings.push(...t.warnings);
+  if (t.cells.some((s) => SECRET_RE.test(String(s)))) { out.errors.push({ kind: 'secret-literal', detail: file + ' contains a password-shaped literal' }); return out; }
+  Object.assign(out, { present: true, lastUpdated: t.lastUpdated, rows: t.rows, order: t.order, columns: t.columns, summary: t.summary, bugIndex: t.bugIndex, hasTitle: !!(t.columns && t.columns.title >= 0) });
+  if (adoUrl) { out.template = adoTemplate(adoUrl); if (out.template) out.adoSource = 'flag'; else out.warnings.push({ kind: 'ado-url-invalid', detail: '--ado-url is not an http(s) URL without credentials — ignored' }); }
+  if (!out.template && t.adoUrl) { out.template = adoTemplate(t.adoUrl); if (out.template) out.adoSource = 'tracker'; }
+  if (!out.template) { const m = adoFromMcp(searchFrom); if (m.template) { out.template = m.template; out.adoSource = '.mcp.json'; } }
+  if (!out.template) out.warnings.push({ kind: 'tracker-ado-url-missing', detail: 'no Azure DevOps project URL (--ado-url, an `Azure DevOps:` line in the tracker header, or the azure-devops entry of the project .mcp.json) — Azure bug IDs are shown as plain text' });
+  if (out.columns && ids) {
+    const src = new Set(ids);
+    out.onlyInTracker = t.order.filter((x) => !src.has(x)); out.onlyInSource = [...src].filter((x) => !t.rows.has(x));
+    if (out.onlyInTracker.length || out.onlyInSource.length) out.warnings.push({ kind: 'tracker-tc-mismatch', onlyInTracker: out.onlyInTracker, onlyInSource: out.onlyInSource, detail: 'TC-IDs differ between ' + file + ' and the source document — in the tracker only: ' + (out.onlyInTracker.join(', ') || 'none') + '; in the source only: ' + (out.onlyInSource.join(', ') || 'none') });
+  }
+  return out;
+}
+export const emptyTracker = () => trackerModel({ text: null, file: null });
+export const trackerColumnsOn = (tm) => !!(tm && tm.present && tm.columns);
+
+/** Azure work-item IDs (`#123`, `AB#123`, or a bare number of 5+ digits) → links; `BUG-n` → the bug card on this page. */
+export function adoLinksHtml(text, tm) {
+  let h = escapeHtml(text);
+  if (tm && tm.template) h = h.replace(/(^|[^\w&/.:#-])(AB#|#)?(\d{3,})(?![\w/.:-])/g, (m, pre, mark, id) => (!mark && id.length < 5 ? m : pre + '<a class="ado" href="' + escapeHtml(tm.template.replace('{id}', id)) + '" target="_blank" rel="noopener">' + (mark || '') + id + '</a>'));
+  if (tm && tm.localBugs && tm.localBugs.size) h = h.replace(/\bBUG-\d+\b/g, (b) => (tm.localBugs.has(b) ? '<a href="#' + b + '">' + b + '</a>' : b));
+  return h;
+}
+export function trackerState(s) {
+  const low = String(s ?? '').trim().toLowerCase();
+  if (!low || low === DASH || low === '-') return { cls: '', key: '' };
+  if (/^fail(ed|ing)?\b/.test(low)) return { cls: 'st-fail', key: 'fail' };
+  if (/^skip(ped)?\b/.test(low)) return { cls: 'st-skipped', key: 'skipped' };
+  if (/^(not[\s_-]*(tested|run)|untested)\b/.test(low)) return { cls: 'st-not-tested', key: 'not tested' };
+  if (/^pass(ed)?\b/.test(low)) return { cls: 'st-pass', key: 'pass' };
+  return { cls: 'st-other', key: low };
+}
+const TRACKER_SORT = { covered: ' data-sort="text"', reason: '', state: ' data-sort="rank" data-sort-order="' + TRACKER_STATE_ORDER + '"', bugs: ' data-sort="none"', azure: ' data-sort="rank" data-sort-order="' + AZURE_STATE_ORDER + '"', next: '' };
+function trackerValueHtml(k, v, tm) {
+  if (!v) return DASH;
+  if (k === 'state') { const s = trackerState(v); return '<span class="badge ' + s.cls + '">' + escapeHtml(v) + '</span>'; }
+  if (k === 'bugs' || k === 'azure') return '<span class="ltr">' + adoLinksHtml(v, tm) + '</span>';
+  return escapeHtml(v);
+}
+/** The six header cells, with their sort types (reason / next: inferred — long free text gets no sort button). */
+export function trackerHeadHtml(lang) {
+  const S = SHELL_STRINGS[lang] || SHELL_STRINGS.en;
+  return TRACKER_FIELDS.map((k) => '<th' + TRACKER_SORT[k] + '>' + escapeHtml(S['tr_' + k]) + '</th>').join('');
+}
+/** The six body cells of one TC. A TC the tracker does not list says so in its first cell. */
+export function trackerCellsHtml(tm, id, lang) {
+  const S = SHELL_STRINGS[lang] || SHELL_STRINGS.en;
+  const r = tm.rows.get(id);
+  if (!r) return TRACKER_FIELDS.map((k, i) => '<td' + (k === 'state' ? ' data-sort=""' : '') + '>' + (i === 0 ? '<span class="badge orphan">' + escapeHtml(S.tr_not_in) + '</span>' : DASH) + '</td>').join('');
+  return TRACKER_FIELDS.map((k) => '<td' + (k === 'state' ? ' data-sort="' + escapeHtml(trackerState(r.state).key) + '"' : '') + '>' + trackerValueHtml(k, r[k], tm) + '</td>').join('');
+}
+/** The tracker's facts for one TC card. */
+export function trackerFactsHtml(tm, id, lang) {
+  const S = SHELL_STRINGS[lang] || SHELL_STRINGS.en;
+  const r = tm.rows.get(id);
+  if (!r) return '<p class="plain">' + escapeHtml(S.tr_not_in) + '</p>';
+  return '<dl class="facts">' + TRACKER_FIELDS.map((k) => '<dt>' + escapeHtml(S['tr_' + k]) + '</dt><dd>' + trackerValueHtml(k, r[k], tm) + '</dd>').join('') + '</dl>';
+}
+function trackerTableHtml(t, tm, linkCols) {
+  const linked = t.header.map((h) => linkCols && /azure|\bado\b|work ?item|^#$|^ids?$|bug/i.test(plainCell(h)) && !/title|description|summary|name/i.test(plainCell(h)));
+  return '    <div class="tablewrap"><table>\n      <thead><tr>' + t.header.map((h) => '<th>' + escapeHtml(plainCell(h)) + '</th>').join('') + '</tr></thead>\n      <tbody>\n'
+    + t.rows.map((r) => '        <tr>' + t.header.map((_, i) => { const v = plainCell(cell(r, i)); return '<td>' + (!v ? DASH : linked[i] ? '<span class="ltr">' + adoLinksHtml(v, tm) + '</span>' : escapeHtml(v)) + '</td>'; }).join('') + '</tr>\n').join('')
+    + '      </tbody>\n    </table></div>\n';
+}
+/** `## Tracker` section: the last-updated date and the tracker's Summary table as written. */
+export function trackerSectionHtml(tm, lang) {
+  const S = SHELL_STRINGS[lang] || SHELL_STRINGS.en; const e = escapeHtml;
+  return '<section id="sec-tracker">\n    <div class="sec-head"><h2>' + e(S.tr_title) + '</h2><span class="note">' + e(S.tr_note) + ' <span class="ltr">' + e(tm.fileName) + '</span></span></div>\n'
+    + '    <p class="line"><b>' + e(S.tr_updated) + ':</b> <span class="ltr">' + e(tm.lastUpdated || DASH) + '</span></p>\n'
+    + (tm.summary ? trackerTableHtml(tm.summary, tm, false) : '    <p class="plain">' + e(S.tr_summary_none) + '</p>\n') + '  </section>';
+}
+/** `## Bug index` section: the tracker's Bug index table as written, Azure IDs linked. */
+export function bugIndexSectionHtml(tm, lang) {
+  const S = SHELL_STRINGS[lang] || SHELL_STRINGS.en; const e = escapeHtml;
+  return '<section id="sec-bug-index">\n    <div class="sec-head"><h2>' + e(S.tr_bug_index) + '</h2><span class="note">' + e(S.tr_bug_index_note) + '</span></div>\n'
+    + (tm.bugIndex ? trackerTableHtml(tm.bugIndex, tm, true) : '    <p class="plain">' + e(S.tr_bug_index_none) + '</p>\n') + '  </section>';
+}
+/** The tracker block of the payload — counts and ids only; the values stay in the tracker. */
+export function trackerPayload(tm) {
+  return { file: tm.file, present: tm.present, columns: trackerColumnsOn(tm), lastUpdated: tm.lastUpdated, adoSource: tm.adoSource, adoTemplate: tm.template, tcs: tm.rows.size,
+    summaryRows: tm.summary ? tm.summary.rows.length : null, bugIndexRows: tm.bugIndex ? tm.bugIndex.rows.length : null, onlyInTracker: tm.onlyInTracker, onlyInSource: tm.onlyInSource };
+}
 /* ==== report-shell kit — END ==== */
 
 /* ============================================================================================
  * View model — everything the template needs, already localized.
  * ========================================================================================== */
-function viewModel(model, lang, strings, cm) {
+function viewModel(model, lang, strings, cm, tm = emptyTracker()) {
   const C = CHROME[lang] || CHROME.en;
+  const trk = trackerColumnsOn(tm);
   const K = strings && strings.keys ? strings.keys : {};
   const outstanding = [];
   // t() returns HTML-escaped text; in Arabic a missing / stale key falls back to the English string wrapped in
@@ -980,6 +1179,9 @@ function viewModel(model, lang, strings, cm) {
     has_evidence: !!x.evidence, evidence_on: x.evidence ? x.evidence['validated-on'] || DASH : '', evidence_env: x.evidence ? x.evidence.env || DASH : '', evidence_build: x.evidence ? x.evidence.build || DASH : '', evidence_scope: x.evidence ? x.evidence.scope || DASH : '',
     evidence_tool: x.evidence ? x.evidence.tool || '' : '', evidence_outcome: x.evidence ? x.evidence['outcome-check'] || '' : '', // metadata — not used by the template
     stage: x.stage, comment_box: commentBoxHtml(x.id, 'tc', cm, lang, x.note),
+    v_state: x.validation,
+    tracker_td: trk ? trackerCellsHtml(tm, x.id, lang) : '', tracker_facts: trk ? trackerFactsHtml(tm, x.id, lang) : '',
+    has_tracker_state: trk && !!(tm.rows.get(x.id) || {}).state, tracker_state: trk ? (tm.rows.get(x.id) || {}).state || '' : '', tracker_state_class: trk ? trackerState((tm.rows.get(x.id) || {}).state).cls : '',
   }));
   const bugs = model.potentialBugs.map((b) => ({
     id: b.id, title: t('pb.' + b.id + '.title', b.title), tc: b.tc || DASH, steps: b.steps.map((s, i) => ({ text: t('pb.' + b.id + '.step.' + (i + 1), s) })),
@@ -1021,6 +1223,9 @@ function viewModel(model, lang, strings, cm) {
     has_mismatch: model.mismatches.length > 0, mismatch_count: String(model.mismatches.length),
     has_orphans: c.orphans > 0,
     has_human: c.humanTcs > 0, n_human_tcs: num(c.humanTcs), n_human_steps: num(c.humanSteps),
+    has_tracker: trk, tracker_th: trk ? trackerHeadHtml(lang) : '', tracker_h: (SHELL_STRINGS[lang] || SHELL_STRINGS.en).tr_title,
+    tracker_section: tm.present ? trackerSectionHtml(tm, lang) : '', has_tracker_section: tm.present,
+    bug_index_section: tm.present ? bugIndexSectionHtml(tm, lang) : '',
   };
   vm.arabic_incomplete = lang === 'ar' && outstanding.length > 0;
   vm.outstanding_count = String(outstanding.length);
@@ -1028,7 +1233,7 @@ function viewModel(model, lang, strings, cm) {
 }
 
 /** The shell's generic header data for this page — meta line, banners, tiles, footer — built from the body view model. */
-function shellParts(vm, C) {
+function shellParts(vm, C, tm = emptyTracker(), lang = 'en') {
   const e = escapeHtml; const ltr = (s) => '<span class="ltr">' + e(s) + '</span>'; const code = (s) => '<code>' + e(s) + '</code>';
   const meta = [
     { label: C.l_status, html: ltr(vm.status) }, { label: C.l_generated, html: ltr(vm.generated) }, { label: C.l_language, html: e(vm.lang_word) },
@@ -1036,6 +1241,7 @@ function shellParts(vm, C) {
     { label: C.l_source, html: ltr('TEST-CASES-' + vm.feature + '.md') + ' ' + e(C.l_source_note) },
     { label: C.l_validation, html: vm.has_stamp ? e(vm.val_by) + ' ' + ltr(vm.stamp_date) + ' · ' + e(C.val_scope) + ' ' + ltr(vm.stamp_scope) : e(C.val_none) },
   ];
+  if (tm.present) meta.push({ label: (SHELL_STRINGS[lang] || SHELL_STRINGS.en).tr_updated, html: ltr(tm.lastUpdated || DASH) });
   const banners = [];
   if (vm.arabic_incomplete) banners.push({ cls: 'preview-banner', html: e(C.preview_banner) + ' (' + ltr(vm.outstanding_count) + ')' });
   if (vm.has_mismatch) banners.push({ cls: 'warn-strip', html: '<b>!</b> ' + e(C.warn_strip) + ' (' + ltr(vm.mismatch_count) + ')' });
@@ -1062,19 +1268,19 @@ function shellParts(vm, C) {
 /* ============================================================================================
  * Provenance + self-hash
  * ========================================================================================== */
-// v1.1 adds `comments=`; the group is optional so a v1.0 page still verifies and is re-rendered without --force.
-const PROV_RE = /<!-- render-tc-review v[^ ]+ · source=([0-9a-f]{64}) · data=([0-9a-f]{64}|none) · strings=([0-9a-f]{64}|none)(?: · comments=([0-9a-f]{64}|none))? · lang=(\w+) · page=([0-9a-f]{64}) -->/;
+// v1.1 adds `comments=`, v1.2 adds `tracker=`; both groups are optional so an older page still verifies and is re-rendered without --force.
+const PROV_RE = /<!-- render-tc-review v[^ ]+ · source=([0-9a-f]{64}) · data=([0-9a-f]{64}|none) · strings=([0-9a-f]{64}|none)(?: · comments=([0-9a-f]{64}|none))?(?: · tracker=([0-9a-f]{64}|none))? · lang=(\w+) · page=([0-9a-f]{64}) -->/;
 const BLANK = '0'.repeat(64);
 export function selfHash(html) { return sha256(html.replace(PROV_RE, (m) => m.replace(/page=[0-9a-f]{64}/, 'page=' + BLANK))); }
 function stampProvenance(html, hashes) {
-  const line = '<!-- render-tc-review v' + SCHEMA_VERSION + ' · source=' + hashes.source + ' · data=' + hashes.data + ' · strings=' + hashes.strings + ' · comments=' + hashes.comments + ' · lang=' + hashes.lang + ' · page=' + BLANK + ' -->';
+  const line = '<!-- render-tc-review v' + SCHEMA_VERSION + ' · source=' + hashes.source + ' · data=' + hashes.data + ' · strings=' + hashes.strings + ' · comments=' + hashes.comments + ' · tracker=' + hashes.tracker + ' · lang=' + hashes.lang + ' · page=' + BLANK + ' -->';
   const withBlank = html.replace(/^(<!DOCTYPE html>\n)/, '$1' + line + '\n');
   return withBlank.replace('page=' + BLANK, 'page=' + selfHash(withBlank));
 }
 export function pageState(existingHtml) {
   const m = existingHtml.match(PROV_RE);
   if (!m) return { provenance: false, handEdited: false };
-  return { provenance: true, handEdited: selfHash(existingHtml) !== m[6], recorded: { source: m[1], data: m[2], strings: m[3], comments: m[4] || null, lang: m[5] } };
+  return { provenance: true, handEdited: selfHash(existingHtml) !== m[7], recorded: { source: m[1], data: m[2], strings: m[3], comments: m[4] || null, tracker: m[5] || null, lang: m[6] } };
 }
 
 /* ============================================================================================
@@ -1086,20 +1292,20 @@ export const SHELL_PATH = path.join(here, '..', 'assets', 'report-shell.template
 const NO_COMMENTS = () => commentsModel({ text: null, known: new Map() });
 
 /** Two passes: the page's body partial, then the shared report shell around it. */
-export function renderHtml(model, { lang = 'en', strings = null, template, shell, cm = NO_COMMENTS(), sourceRev = '' } = {}) {
+export function renderHtml(model, { lang = 'en', strings = null, template, shell, cm = NO_COMMENTS(), sourceRev = '', tm = emptyTracker() } = {}) {
   const tpl = template ?? readText(TEMPLATE_PATH);
   const shellTpl = shell ?? readText(SHELL_PATH);
   const C = CHROME[lang] || CHROME.en;
-  const { vm, outstanding } = viewModel(model, lang, strings, cm);
+  const { vm, outstanding } = viewModel(model, lang, strings, cm, tm);
   const body = renderNodes(compile(tpl), [vm]).replace(/\n+$/, '');
-  const parts = shellParts(vm, C);
+  const parts = shellParts(vm, C, tm, lang);
   const html = renderShell(shellTpl, { lang, dir: vm.dir, pageKind: 'tc-review', pageTitle: 'Test Cases — ' + model.feature, eyebrow: C.eyebrow, title: model.feature, ...parts, body, cm,
     feature: model.feature, page: 'TC-REVIEW-' + model.feature + '.html', source: 'TEST-CASES-' + model.feature + '.md', sourceRev, commentsFile: 'REVIEW-COMMENTS-' + model.feature + '.md' });
   const leftovers = [...new Set((html.match(/\{\{[^}]*\}\}/g) || []))];
   return { html, outstanding, leftovers };
 }
 
-export function render({ tcPath, dataPath = null, stringsPath = null, commentsPath = null, lang = 'en', template, shell, root = process.cwd(), langSource = 'default' }) {
+export function render({ tcPath, dataPath = null, stringsPath = null, commentsPath = null, trackerPath = null, adoUrl = null, lang = 'en', template, shell, root = process.cwd(), langSource = 'default' }) {
   const compatibility = []; const warnings = []; const opts = { langSource };
   if (!tcPath || !isFile(tcPath)) return { payload: base({ root, gate: 'NOT_RUN', gateReason: tcPath ? 'TC document not found: ' + tcPath : 'no --tc given', input: { tc: tcPath || null } }), html: null, model: null };
   const tcText = readText(tcPath);
@@ -1137,9 +1343,14 @@ export function render({ tcPath, dataPath = null, stringsPath = null, commentsPa
   const cm = commentsModel({ text: commentsText, file: path.relative(root, cp), page: 'TC-REVIEW-' + model.feature + '.html', sourceRev, known });
   model.errors.push(...cm.errors); warnings.push(...cm.warnings);
   for (const x of [...model.tcs, ...model.potentialBugs, ...model.openQuestions]) if (x.note && SECRET_RE.test(x.note)) model.errors.push({ kind: 'secret-literal', line: x.line, detail: x.id + ' has a password-shaped literal in its Reviewer comment field' });
+  // Tracker — TC-STATUS-TRACKER-{feature}.md beside the source, or --tracker. Absent → tracker-missing warning, page without its columns.
+  const tp = trackerPath || path.join(dir, 'TC-STATUS-TRACKER-' + feature + '.md');
+  const trackerText = isFile(tp) ? readText(tp) : null;
+  const tm = trackerModel({ text: trackerText, file: path.relative(root, tp) || tp, ids: model.tcs.map((t) => t.id), adoUrl, searchFrom: path.dirname(tp) });
+  model.errors.push(...tm.errors); warnings.push(...tm.warnings);
   let html = null; let outstanding = []; let leftovers = [];
   let rendered = null;
-  try { rendered = renderHtml(model, { lang, strings, template, shell, cm, sourceRev }); html = rendered.html; outstanding = rendered.outstanding; leftovers = rendered.leftovers; } catch (e) { model.errors.push({ kind: 'template-error', detail: e.message }); }
+  try { rendered = renderHtml(model, { lang, strings, template, shell, cm, sourceRev, tm }); html = rendered.html; outstanding = rendered.outstanding; leftovers = rendered.leftovers; } catch (e) { model.errors.push({ kind: 'template-error', detail: e.message }); }
   if (leftovers.length) model.errors.push({ kind: 'placeholder-left', detail: leftovers.slice(0, 10).join(' ') });
   const stale = strings && strings.keys ? Object.entries(strings.keys).filter(([k, v]) => k in keys && v.stale).map(([k]) => k) : [];
   const missing = lang === 'ar' ? outstanding : [];
@@ -1151,12 +1362,13 @@ export function render({ tcPath, dataPath = null, stringsPath = null, commentsPa
   else { gate = 'PASS'; gateReason = model.counts.total + ' TC(s), header consistent' + (lang === 'ar' ? ', Arabic complete' : ''); }
   if (gate === 'BLOCKED') html = null;
 
-  const hashes = { source: sha256(tcText), data: dataText ? sha256(dataText) : 'none', strings: stringsText ? sha256(stringsText) : 'none', comments: commentsText ? sha256(commentsText) : 'none', lang };
+  const hashes = { source: sha256(tcText), data: dataText ? sha256(dataText) : 'none', strings: stringsText ? sha256(stringsText) : 'none', comments: commentsText ? sha256(commentsText) : 'none', tracker: trackerText !== null ? sha256(trackerText) : 'none', lang };
   if (html) html = stampProvenance(html, hashes);
   const payload = base({
     root, gate, gateReason,
-    input: { tc: path.relative(root, tcPath) || tcPath, data: dp ? path.relative(root, dp) : null, strings: lang === 'ar' ? path.relative(root, sp) : null, comments: commentsText !== null ? path.relative(root, cp) : null, lang, feature, template: path.relative(root, TEMPLATE_PATH), shell: path.relative(root, SHELL_PATH) },
+    input: { tc: path.relative(root, tcPath) || tcPath, data: dp ? path.relative(root, dp) : null, strings: lang === 'ar' ? path.relative(root, sp) : null, comments: commentsText !== null ? path.relative(root, cp) : null, tracker: trackerText !== null ? path.relative(root, tp) : null, lang, feature, template: path.relative(root, TEMPLATE_PATH), shell: path.relative(root, SHELL_PATH) },
     hashes,
+    tracker: trackerPayload(tm),
     counts: { ...model.counts, keys: Object.keys(keys).length, comments: { open: cm.open, handled: cm.handled } },
     comments: { file: cm.file, page: cm.page, sourceRev: cm.sourceRev, stale: cm.stale, ignored: cm.ignored, open: cm.open, handled: cm.handled,
       items: cm.entries.map((x) => ({ key: x.key, id: x.id, kind: x.id === 'General' ? 'general' : known.get(x.id) || null, status: x.status, statusDate: x.statusDate || null })),
@@ -1188,7 +1400,8 @@ export function main(argv) {
   const lang = args.lang === 'ar' ? 'ar' : 'en';
   if (args.lang && args.lang !== 'ar' && args.lang !== 'en') { const p = base({ root, gate: 'NOT_RUN', gateReason: '--lang must be en or ar' }); print(p, args); return exitFor(p.gate, args); }
   const tcPath = typeof args.tc === 'string' ? path.resolve(root, args.tc) : null;
-  const r = render({ tcPath, dataPath: typeof args.data === 'string' ? path.resolve(root, args.data) : null, stringsPath: typeof args.strings === 'string' ? path.resolve(root, args.strings) : null, commentsPath: typeof args.comments === 'string' ? path.resolve(root, args.comments) : null, lang, root, langSource: args.lang ? 'flag' : 'default' });
+  const r = render({ tcPath, dataPath: typeof args.data === 'string' ? path.resolve(root, args.data) : null, stringsPath: typeof args.strings === 'string' ? path.resolve(root, args.strings) : null, commentsPath: typeof args.comments === 'string' ? path.resolve(root, args.comments) : null,
+    trackerPath: typeof args.tracker === 'string' ? path.resolve(root, args.tracker) : null, adoUrl: typeof args['ado-url'] === 'string' ? args['ado-url'] : null, lang, root, langSource: args.lang ? 'flag' : 'default' });
   const p = r.payload;
   p.writes = [];
 

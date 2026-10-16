@@ -30,6 +30,8 @@ const SAMPLE_DATA = fx('sample', 'TEST-DATA-kpi-filter.md');
 const SAMPLE_STRINGS = fx('sample', 'TC-REVIEW-STRINGS-kpi-filter.ar.json');
 const LEGACY = fx('legacy', 'TEST-CASES-legacy-login.md');
 const SCRIPT = path.join(here, 'render-tc-review.mjs');
+const TRACKER = fx('tracker', 'TC-STATUS-TRACKER-kpi-filter.md');
+const TRACKER_MISMATCH = fx('tracker', 'TC-STATUS-TRACKER-kpi-filter.mismatch.md');
 
 /** Mirrored paths — identical in every mirror skill folder. Keep in step with CLAUDE.md "Mirrored files". */
 export const MIRRORED = ['references/learning-file.md', 'references/html-page.md', 'references/validation-states.md', 'references/open-questions.md', 'assets/tc-review.template.html', 'assets/report-shell.template.html', 'scripts/render-tc-review.mjs', 'scripts/selftest.mjs', 'scripts/fixtures'];
@@ -120,7 +122,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   if (c.testData.environment !== 1 || c.testData.accounts !== 1) p.push('environment/accounts ' + JSON.stringify(c.testData));
   if (JSON.stringify(r.payload.document.tags) !== JSON.stringify({ 'TC-KPI-01': ['uat', 'regression'] })) p.push('tags ' + JSON.stringify(r.payload.document.tags));
   if (r.payload.document.humanTcs.join() !== 'TC-KPI-04') p.push('humanTcs ' + r.payload.document.humanTcs.join());
-  if (r.payload.warnings.length) p.push('clean sample raised warnings: ' + r.payload.warnings.map((w) => w.kind).join(','));
+  if (r.payload.warnings.some((w) => w.kind !== 'tracker-missing')) p.push('clean sample raised warnings: ' + r.payload.warnings.map((w) => w.kind).join(','));
   if (JSON.stringify(c.byState) !== JSON.stringify({ validated: 1, enhanced: 0, inferred: 1, discrepancy: 1, 'not-implemented': 1, draft: 1 })) p.push('byState ' + JSON.stringify(c.byState));
   if (c.coverage.weighted !== 66.7 || c.coverage.full !== 1 || c.coverage.partial !== 2) p.push('coverage ' + JSON.stringify([c.coverage.weighted, c.coverage.full, c.coverage.partial]));
   if (c.testData.items !== 4 || c.testData.ready !== 2 || c.testData.unknown !== 1 || c.testData.notCreatable !== 1) p.push('testData ' + JSON.stringify(c.testData));
@@ -541,7 +543,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     // no file → silent, comments=none
     const r0 = render({ tcPath: t.tc, root: t.dir });
     if (r0.payload.hashes.comments !== 'none' || r0.payload.comments.file !== null || r0.payload.warnings.some((w) => /^comment/.test(w.kind))) p.push('absent comments file is not silent');
-    if (!/ · comments=none · lang=en · page=/.test(r0.html || '')) p.push('provenance lacks comments=none');
+    if (!/ · comments=none · tracker=none · lang=en · page=/.test(r0.html || '')) p.push('provenance lacks comments=none');
     const note = /<p class="comment-note"><b>Reviewer comment \(in the markdown\):<\/b> تحقق من الرسالة بالعربية<\/p>/.test(r0.html || '');
     if (!note) p.push('inline Reviewer comment field not shown on TC-KPI-02');
     if (Object.keys(deriveKeys(r0.model)).some((k) => /reviewer|comment/i.test(k)) || Object.values(deriveKeys(r0.model)).some((v) => /تحقق من الرسالة/.test(v))) p.push('inline comment became a translation key');
@@ -553,7 +555,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     if (r.payload.gate !== 'PASS') p.push('gate with comments ' + r.payload.gate + ' ' + r.payload.gateReason);
     if (r.payload.comments.open !== 3 || r.payload.comments.handled !== 1) p.push('counts open/handled ' + r.payload.comments.open + '/' + r.payload.comments.handled);
     if (r.payload.comments.unknownIds.join(',') !== 'TC-ZZZ-99' || !r.payload.warnings.some((w) => w.kind === 'comment-unknown-id')) p.push('unknown id not reported');
-    if (r.payload.hashes.comments === 'none' || !/ · comments=[0-9a-f]{64} · lang=en · page=/.test(html)) p.push('comments hash missing from provenance');
+    if (r.payload.hashes.comments === 'none' || !/ · comments=[0-9a-f]{64} · tracker=none · lang=en · page=/.test(html)) p.push('comments hash missing from provenance');
     if (!/data-entry="TC-KPI-01"[^>]*>Step 3 should name the grid\.\nSecond line\.<\/textarea>/.test(html)) p.push('open comment not pre-filled in TC-KPI-01');
     if (!/data-comment-id="TC-KPI-01" data-comment-kind="tc">\n  <p class="comment-label">Reviewer comment <span class="badge cm-open">open comment<\/span>/.test(html)) p.push('open badge missing on TC-KPI-01');
     if (!/<div class="comment-entry cm-answered"><p class="comment-text">Is this really a bug\? &#123;&#123;x&#125;&#125; &lt;b&gt;bold&lt;\/b&gt;<\/p>/.test(html)) p.push('handled PB-1 comment not rendered as escaped history');
@@ -675,6 +677,80 @@ for (const s5name of ['link-qc-5-test-run-automation', 'link-qc-5b-test-run-manu
     if (r.payload.gate !== 'BLOCKED' || !kinds(r).includes('unknown-enum')) p.push('a sixth status word did not BLOCK: ' + r.payload.gate);
   } finally { t.cleanup(); }
   check('29 NOT CREATABLE test-data status accepted, counted, badged; other words BLOCK', p, {});
+}
+
+/* 30 — tracker: TC-STATUS-TRACKER-{feature}.md merged by TC-ID (golden); absent → one tracker-missing warning and no tracker markup;
+      TC-IDs on one side → tracker-tc-mismatch listing them; found beside the source; Azure IDs linked from the tracker header, --ado-url
+      or the project .mcp.json (never a built-in host, never a URL with credentials); a password-shaped literal BLOCKs; Arabic chrome,
+      tracker values verbatim and never translation keys; the gate never changes for a missing or mismatched tracker. */
+{
+  const p = [];
+  const r = render({ tcPath: SAMPLE, trackerPath: TRACKER, root: here });
+  const html = r.html || '';
+  if (r.payload.gate !== 'PASS') p.push('gate ' + r.payload.gate + ': ' + r.payload.gateReason);
+  if (r.payload.warnings.length) p.push('warnings with a matching tracker: ' + r.payload.warnings.map((w) => w.kind).join(','));
+  const golden = fx('golden', 'TC-REVIEW-kpi-filter.tracker.en.html');
+  if (!fs.existsSync(golden)) p.push('tracker golden missing'); else if (norm(html) !== read(golden)) p.push('tracker page differs from golden');
+  const t = r.payload.tracker;
+  if (!t.present || !t.columns || t.tcs !== 5 || t.lastUpdated !== '2026-10-14 16:20' || t.adoSource !== 'tracker' || t.summaryRows !== 7 || t.bugIndexRows !== 1) p.push('tracker payload ' + JSON.stringify(t));
+  for (const h of ['Covered', 'Reason not covered', 'State', 'Related bug\\(s\\)', 'Bug Azure state', 'Next action']) if ((html.match(new RegExp('>' + h + '</th>', 'g')) || []).length !== 1) p.push('summary header ' + h + ' not exactly once');
+  const row = (html.match(/<tr><td class="nowrap"><a href="#TC-KPI-02">[^\n]*<\/tr>/) || [''])[0];
+  if (!/<td data-sort="fail"><span class="badge st-fail">Fail<\/span><\/td>/.test(row)) p.push('TC-KPI-02 State badge');
+  if (!/BUG-1 \(<a class="ado" href="https:\/\/devops\.example\.com\/ExampleCollection\/ExampleProject\/_workitems\/edit\/100231" target="_blank" rel="noopener">#100231<\/a>\)/.test(row)) p.push('TC-KPI-02 Azure link');
+  if (!/<td>Retest after the fix is deployed<\/td>/.test(row)) p.push('TC-KPI-02 next action');
+  const card = (html.match(/<details class="card tc" id="TC-KPI-04">[\s\S]*?<\/details>/) || [''])[0];
+  if (!/<span class="badge st-not-tested">Not tested<\/span>/.test(card) || !/<dt>Reason not covered<\/dt><dd>Export is not implemented yet \(AC-3\)<\/dd>/.test(card)) p.push('TC-KPI-04 card tracker block');
+  if (!/<section id="sec-tracker">/.test(html) || !/Tracker last updated:<\/b> <span class="ltr">2026-10-14 16:20<\/span>/.test(html) || !/<b>Tracker last updated<\/b>/.test(html)) p.push('tracker section / last-updated line / meta');
+  if (!/<section id="sec-bug-index">[\s\S]*?edit\/100231/.test(html)) p.push('bug index with a linked Azure ID');
+  if (!/ · tracker=[0-9a-f]{64} · lang=en · page=/.test(html) || r.payload.hashes.tracker === 'none') p.push('tracker hash missing from provenance');
+  const n0 = render({ tcPath: SAMPLE, root: here });
+  if (n0.payload.gate !== 'PASS' || n0.payload.warnings.filter((w) => w.kind === 'tracker-missing').length !== 1) p.push('no tracker → expected PASS + one tracker-missing');
+  if (/sec-tracker|sec-bug-index|>Bug Azure state<|badge st-/.test(n0.html || '')) p.push('tracker markup rendered without a tracker');
+  if (!/<section id="sec-tc-summary">/.test(n0.html || '')) p.push('the TC summary table is missing without a tracker');
+  const mm0 = render({ tcPath: SAMPLE, trackerPath: TRACKER_MISMATCH, root: here });
+  const w = mm0.payload.warnings.find((x) => x.kind === 'tracker-tc-mismatch');
+  if (mm0.payload.gate !== 'PASS' || !w || w.onlyInTracker.join() !== 'TC-KPI-09' || w.onlyInSource.join() !== 'TC-KPI-01b' || !/TC-KPI-09/.test(w.detail) || !/TC-KPI-01b/.test(w.detail)) p.push('mismatch warning ' + JSON.stringify(w));
+  const orphanRow = ((mm0.html || '').match(/<tr><td class="nowrap"><a href="#TC-KPI-01b">[^\n]*<\/tr>/) || [''])[0];
+  if (!/<span class="badge orphan">not in the tracker<\/span>/.test(orphanRow)) p.push('a TC missing from the tracker is not marked');
+  if (!mm0.payload.warnings.some((x) => x.kind === 'tracker-ado-url-missing') || /class="ado"/.test(mm0.html || '')) p.push('no URL → plain IDs + tracker-ado-url-missing');
+  const tc = tmpCopy((s) => s);
+  try {
+    fs.writeFileSync(path.join(tc.dir, 'TC-STATUS-TRACKER-kpi-filter.md'), read(TRACKER_MISMATCH));
+    const r1 = render({ tcPath: tc.tc, root: tc.dir, adoUrl: 'https://ado.example.org/Coll/Proj/' });
+    if (!r1.payload.tracker.present || r1.payload.tracker.adoSource !== 'flag' || !/href="https:\/\/ado\.example\.org\/Coll\/Proj\/_workitems\/edit\/100231"/.test(r1.html || '')) p.push('discovery beside the source / --ado-url ' + JSON.stringify(r1.payload.tracker));
+    const r2 = render({ tcPath: tc.tc, root: tc.dir, adoUrl: 'https://user:pw@ado.example.org/x' });
+    if (!r2.payload.warnings.some((x) => x.kind === 'ado-url-invalid') || /pw@/.test(r2.html || '')) p.push('a URL with credentials is not refused');
+    fs.writeFileSync(path.join(tc.dir, 'TC-STATUS-TRACKER-kpi-filter.md'), read(TRACKER).replace('Prepare data D3 and rerun', 'password: Hunter22 then rerun'));
+    const r3 = render({ tcPath: tc.tc, root: tc.dir });
+    if (r3.payload.gate !== 'BLOCKED' || !kinds(r3).includes('secret-literal')) p.push('a password-shaped literal in the tracker did not BLOCK');
+  } finally { tc.cleanup(); }
+  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-tracker-'));
+  try {
+    const story = path.join(proj, 'Testing', 'Manual_Test', 'TestCases', 'US-1234-kpi-filter'); fs.mkdirSync(story, { recursive: true });
+    fs.copyFileSync(SAMPLE, path.join(story, 'TEST-CASES-kpi-filter.md'));
+    fs.writeFileSync(path.join(story, 'TC-STATUS-TRACKER-kpi-filter.md'), read(TRACKER_MISMATCH));
+    fs.writeFileSync(path.join(proj, '.mcp.json'), JSON.stringify({ mcpServers: { 'azure-devops': { command: 'npx', args: ['-y', '@tiberriver256/mcp-server-azure-devops'], env: { AZURE_DEVOPS_ORG_URL: 'https://devops.example.com/ExampleCollection', AZURE_DEVOPS_AUTH_METHOD: 'pat', AZURE_DEVOPS_PAT: '${AZURE_DEVOPS_PAT}', AZURE_DEVOPS_DEFAULT_PROJECT: 'ExampleProject' } } } }));
+    const r4 = render({ tcPath: path.join(story, 'TEST-CASES-kpi-filter.md'), root: proj });
+    if (r4.payload.tracker.adoSource !== '.mcp.json' || !/href="https:\/\/devops\.example\.com\/ExampleCollection\/ExampleProject\/_workitems\/edit\/100231"/.test(r4.html || '')) p.push('.mcp.json org URL + default project not used: ' + JSON.stringify(r4.payload.tracker));
+  } finally { fs.rmSync(proj, { recursive: true, force: true }); }
+  const ar = render({ tcPath: SAMPLE, trackerPath: TRACKER, lang: 'ar', root: here });
+  if (ar.payload.arabicComplete !== true || !/>نتيجة التنفيذ</.test(ar.html || '') || !/>Retest after the fix is deployed</.test(ar.html || '')) p.push('Arabic page with a tracker: arabicComplete ' + ar.payload.arabicComplete);
+  if (Object.values(deriveKeys(buildModel(parseTcDocument(read(SAMPLE)), parseTestData(read(SAMPLE_DATA)), { feature: 'kpi-filter' }))).some((v) => /Retest after the fix/.test(v))) p.push('a tracker value became a translation key');
+  check('30 tracker: merged by TC-ID (golden), missing → warning, mismatch → warning, Azure links from tracker / flag / .mcp.json, secret BLOCKs', p, { tracker: t });
+}
+
+/* 31 — navigation markup: every section has an id; the shell carries the contents panel, the Contents toggle, the back-to-top link
+      and the highlight / sort / filter script; the summary table names its sort types; the page makes no external request. */
+{
+  const p = [];
+  const r = render({ tcPath: SAMPLE, trackerPath: TRACKER, root: here }); const html = r.html || '';
+  if (/<section>/.test(html)) p.push('a section without an id');
+  for (const id of ['sec-coverage-depth', 'sec-traceability', 'sec-manual', 'sec-test-data', 'sec-tracker', 'sec-tc-summary', 'sec-test-cases', 'sec-enhancement-log', 'sec-potential-bugs', 'sec-bug-index', 'sec-open-questions', 'sec-self-review', 'sec-findings', 'reviewer-comments']) if ((html.match(new RegExp('id="' + id + '"', 'g')) || []).length !== 1) p.push('section id ' + id + ' not exactly once');
+  if (!/<nav class="toc" id="toc" aria-label="Contents" hidden>/.test(html) || !/id="toc-toggle" aria-expanded="false"/.test(html) || !/<a class="to-top" id="to-top" href="#top" hidden>/.test(html)) p.push('contents panel / toggle / back-to-top markup');
+  if (!/IntersectionObserver/.test(html) || !/aria-sort/.test(html) || !/table-filter/.test(html)) p.push('the script lacks the highlight / sort / filter code');
+  if (!/<th data-sort="natural">TC-ID<\/th><th data-sort="text">Description<\/th>/.test(html) || !/<th data-sort="rank" data-sort-order="fail,failed,failing\|skip,skipped\|not tested,not run,not_run,untested\|pass,passed">State<\/th>/.test(html) || !/<th data-sort="none">Related bug\(s\)<\/th>/.test(html)) p.push('typed sort headers on the summary table');
+  if (/<script[^>]+src=|<link[^>]+href=|@import|url\(http/i.test(html)) p.push('an external request');
+  check('31 navigation: section ids, contents panel, sort / filter script, typed headers, no external request', p, {});
 }
 
 const out = {

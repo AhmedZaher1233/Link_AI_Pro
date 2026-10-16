@@ -14,7 +14,15 @@ automation/
     BUG-REPORT-create-order.md        BUG-1 resolved (phase 2) with a screenshot, BUG-2 open with none captured
     .runs/phase-1.json, phase-2.json  schema skill6-run/1 — variants, attempts, totals, coverage snapshot, compliance
   screenshots/US-1234-create-order/phase-{1,2}/…/attempt-*.png   1×1 PNG stubs, not application evidence
-golden/TEST-RUN-REPORT-create-order.html   the page the renderer must reproduce byte for byte (case 1)
+tracker/
+  TC-STATUS-TRACKER-create-order.md           a tracker for the story: the 5 run TCs + TC-040 / TC-041 (not automated), the four
+                                              States, BUG-1 / BUG-2 with Azure IDs, Summary and Bug index, a placeholder
+                                              `Azure DevOps:` URL (devops.example.com)
+  TC-STATUS-TRACKER-create-order.mismatch.md  lacks TC-020 and lists an unknown TC-099, no Azure URL (the TC-mismatch case)
+  TEST-CASES-create-order.md                  the source TC document's summary table (7 TCs) — case 30 copies it into a
+                                              temporary Testing/Manual_Test/TestCases/ folder for the two-way mismatch check
+golden/TEST-RUN-REPORT-create-order.html          the page without a tracker (case 1; one tracker-missing warning)
+golden/TEST-RUN-REPORT-create-order.tracker.html  the page with tracker/TC-STATUS-TRACKER-create-order.md (case 30)
 ```
 
 Every harness case works on a temporary copy of `automation/`; the fixture itself is never written.
@@ -24,6 +32,7 @@ root, then re-run the harness and review the diff of the golden before committin
 
 ```bash
 node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs --report .claude/skills/link-qc-5-test-run-automation/scripts/fixtures/run-report/automation/reports/US-1234-create-order/TEST-RUN-REPORT-create-order.md --write --force --out .claude/skills/link-qc-5-test-run-automation/scripts/fixtures/run-report/golden/TEST-RUN-REPORT-create-order.html --strict
+node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs --report .claude/skills/link-qc-5-test-run-automation/scripts/fixtures/run-report/automation/reports/US-1234-create-order/TEST-RUN-REPORT-create-order.md --tracker .claude/skills/link-qc-5-test-run-automation/scripts/fixtures/run-report/tracker/TC-STATUS-TRACKER-create-order.md --write --force --out .claude/skills/link-qc-5-test-run-automation/scripts/fixtures/run-report/golden/TEST-RUN-REPORT-create-order.tracker.html --strict
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-report.mjs --pretty
 ```
 

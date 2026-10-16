@@ -25,6 +25,9 @@ const STORY = path.join('reports', 'US-1234-create-order');
 const REPORT = fx('automation', STORY, 'TEST-RUN-REPORT-create-order.md');
 const BUGS = fx('automation', STORY, 'BUG-REPORT-create-order.md');
 const GOLDEN = fx('golden', 'TEST-RUN-REPORT-create-order.html');
+const TRACKER = fx('tracker', 'TC-STATUS-TRACKER-create-order.md');
+const TRACKER_MISMATCH = fx('tracker', 'TC-STATUS-TRACKER-create-order.mismatch.md');
+const GOLDEN_TRACKER = fx('golden', 'TEST-RUN-REPORT-create-order.tracker.html');
 
 /** The two skill folders that own a byte-identical copy of the run-report renderer, this harness, scan-lib, both templates and fixtures/run-report/. */
 const RUN_REPORT_SKILLS = ['link-qc-5-test-run-automation', 'link-qc-5b-test-run-manual-cli'];
@@ -46,12 +49,12 @@ const wkinds = (r) => r.payload.warnings.map((w) => w.kind);
 const mm = (r, source) => r.payload.mismatches.filter((m) => m.source === source);
 function listFiles(dir) { const out = []; const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else out.push(p); } }; if (fs.existsSync(dir)) walk(dir); return out.sort(); }
 
-/* 1 — golden: byte-for-byte, PASS, no warnings. */
+/* 1 — golden: byte-for-byte, PASS, no warning but tracker-missing (this fixture has no tracker; case 30 renders one). */
 {
   const r = render({ reportPath: REPORT, root: here });
   const p = [];
   if (r.payload.gate !== 'PASS') p.push('gate ' + r.payload.gate + ' != PASS: ' + r.payload.gateReason);
-  if (r.payload.warnings.length) p.push('warnings on the fixture: ' + wkinds(r).join(','));
+  if (wkinds(r).join(',') !== 'tracker-missing') p.push('warnings on the fixture: ' + wkinds(r).join(','));
   if (!fs.existsSync(GOLDEN)) p.push('golden page missing — render it with the command in fixtures/run-report/README.md');
   else if (norm(r.html || '') !== read(GOLDEN)) p.push('page differs from golden');
   check('1 golden page', p, { bytes: (r.html || '').length });
@@ -341,7 +344,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     if (!/<a href="#phase-3">Phase 3<\/a><\/td><td>2026-09-22<\/td><td><span class="badge s-blocked">BLOCKED<\/span><\/td><td>—<\/td><td>—<\/td>/.test(r.html || '')) p.push('run-history row for the blocked phase does not show —');
     if (!/class="banner env-blocked"><b>BLOCKED<\/b>/.test(r.html || '') || !/the QC chose to stop/.test(r.html || '')) p.push('blocked banner with the reason not rendered');
     if (!/<b>2<\/b><span>Passed<\/span>/.test(r.html || '')) p.push('tiles did not fall back to the last phase with results');
-    if (!/<details class="card phase" id="phase-3" open>/.test(r.html || '') || /<details class="card phase" id="phase-2" open>/.test(r.html || '')) p.push('only the latest phase should be open');
+    if (!/<details class="card phase" id="phase-3" data-toc-label="[^"]*" open>/.test(r.html || '') || /<details class="card phase" id="phase-2"[^>]* open>/.test(r.html || '')) p.push('only the latest phase should be open');
     check('17 blocked outcome renders — for its counts, never 0', p, {});
   } finally { t.cleanup(); }
 }
@@ -441,10 +444,10 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   if (!ph2 || ph2.counts.partial !== 1 || ph2.counts.passed !== 2 || ph2.counts.total !== 5) p.push('phase 2 counts must hold partial=1, passed=2, total=5: ' + JSON.stringify(ph2 && ph2.counts));
   if (r.payload.counts.latest.partial !== 1) p.push('counts.latest.partial != 1');
   if (!/<span class="badge s-partial">PARTIAL — human step pending<\/span>/.test(html)) p.push('PARTIAL badge with the frozen wording not rendered');
-  if (!/<td>TC-030<\/td><td>REQ-05<\/td>[^\n]*human step: 4<\/td>/.test(html)) p.push('TC-030 row / classification not rendered');
+  if (!/<td class="nowrap">TC-030<\/td><td>REQ-05<\/td>[^\n]*human step: 4<\/td>/.test(html)) p.push('TC-030 row / classification not rendered');
   if (!/<div class="tile t-partial"><b>1<\/b><span>Partial · human step pending<\/span>/.test(html)) p.push('partial tile missing');
   if (!/<b>2<\/b><span>Passed<\/span>/.test(html)) p.push('the partial TC leaked into the Passed tile');
-  if (!/<th>Not run<\/th><th>Partial<\/th><th>Total<\/th>/.test(html) || !/<td>0<\/td><td>1<\/td><td>5<\/td><td>00:05:12<\/td>/.test(html)) p.push('run-history Partial column not rendered');
+  if (!/<th data-sort="number">Not run<\/th><th data-sort="number">Partial<\/th><th data-sort="number">Total<\/th>/.test(html) || !/<td>0<\/td><td>1<\/td><td>5<\/td><td>00:05:12<\/td>/.test(html)) p.push('run-history Partial column not rendered');
   if (!/passed \/ failed \/ incomplete \/ skipped \/ not run \/ partial · 2 \/ 0 \/ 1 \/ 1 \/ 0 \/ 1 of 5/.test(html)) p.push('phase summary counts do not carry the partial bucket');
   // (a) a phase whose only non-PASS row is PARTIAL is INCOMPLETE, never GREEN
   const a = tmpCopy((s) => s.replace('| TC-007 | REQ-02 | Order total recalculates | INCOMPLETE | parallel | 00:00:58 | incomplete: chromium--variation-b--r0 |', '| TC-007 | REQ-02 | Order total recalculates | PASS | parallel | 00:00:58 | — |'));
@@ -510,7 +513,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     const r0 = render({ reportPath: t.report, root: t.dir }); const h0 = r0.html || '';
     if (r0.payload.gate !== 'PASS') p.push('inline comments changed the gate: ' + r0.payload.gate + ' ' + r0.payload.gateReason);
     if (r0.payload.hashes.comments !== 'none' || r0.payload.comments.file !== null || wkinds(r0).some((k) => /^comment/.test(k))) p.push('absent comments file is not silent');
-    if (!/ · comments=none · page=/.test(h0)) p.push('provenance lacks comments=none');
+    if (!/ · comments=none · tracker=none · page=/.test(h0)) p.push('provenance lacks comments=none');
     if (!/<p class="comment-note"><b>Reviewer comment \(in the markdown\):<\/b> Confirmed with the developer\.<\/p>/.test(h0)) p.push('bug inline comment not shown');
     if (!/<p class="comment-note"><b>Reviewer comment \(in the markdown\):<\/b> Re-run TC-007 after the data fix\.<\/p>/.test(h0)) p.push('phase inline comment not shown');
     if (/<dt>Reviewer comment<\/dt>/.test(h0)) p.push('phase Reviewer comment rendered as a fact');
@@ -524,7 +527,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     if (r.payload.gate !== 'PASS') p.push('gate with comments ' + r.payload.gate + ' ' + r.payload.gateReason);
     if (r.payload.comments.open !== 3 || r.payload.comments.handled !== 1) p.push('counts ' + r.payload.comments.open + '/' + r.payload.comments.handled);
     if (r.payload.comments.unknownIds.join(',') !== 'BUG-9' || !wkinds(r).includes('comment-unknown-id')) p.push('unknown bug id not reported');
-    if (!/ · comments=[0-9a-f]{64} · page=/.test(html) || r.payload.hashes.comments === 'none') p.push('comments hash missing');
+    if (!/ · comments=[0-9a-f]{64} · tracker=none · page=/.test(html) || r.payload.hashes.comments === 'none') p.push('comments hash missing');
     if (!/data-comment-id="phase-2"[^>]*data-entry="phase-2"[^>]*>Why is TC-007 incomplete\?<\/textarea>/.test(html)) p.push('phase-2 comment not pre-filled');
     if (!/<div class="comment-entry cm-declined"><p class="comment-text">Not a bug — the spec allows it\.<\/p>/.test(html) || /data-entry="BUG-2"/.test(html)) p.push('declined BUG-2 comment not rendered as history');
     if (!/data-comment-id="General"[^>]*data-entry="General"[^>]*>Please add the Arabic run next time\.<\/textarea>/.test(html)) p.push('general comment not pre-filled');
@@ -633,6 +636,72 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
     if (x4.payload.document.phases[0].readiness !== null || !/Verdict: all ready/.test(x4.html || '')) p.push('a bare `all ready` body is not rendered as the verdict: ' + JSON.stringify(x4.payload.document.phases[0].readiness));
   } finally { t1.cleanup(); t2.cleanup(); t3.cleanup(); t4.cleanup(); }
   check('29 test-data readiness decisions counted and rendered', p, { phase1: r1, phase2: r2 });
+}
+
+/* 30 — tracker: TC-STATUS-TRACKER-{feature}.md merged into every Results table by TC-ID (golden); tracker TCs with no Results row are listed
+      under "Not automated / not run" so every TC is visible; Summary and Bug index shown as written; Azure IDs linked, BUG-n to its card;
+      absent → one tracker-missing warning and the page without tracker markup; found beside the Source document; checked against the
+      source TC document in both directions, or — without it — only the run TCs; Azure base from the project .mcp.json; a secret BLOCKs;
+      a missing or mismatched tracker never changes the gate. */
+{
+  const p = [];
+  const r = render({ reportPath: REPORT, trackerPath: TRACKER, root: here }); const html = r.html || '';
+  if (r.payload.gate !== 'PASS' || r.payload.warnings.length) p.push('with the tracker: ' + r.payload.gate + ' ' + wkinds(r).join(','));
+  if (!fs.existsSync(GOLDEN_TRACKER)) p.push('tracker golden missing — render it with the command in fixtures/run-report/README.md'); else if (norm(html) !== read(GOLDEN_TRACKER)) p.push('tracker page differs from golden');
+  const t = r.payload.tracker;
+  if (!t.present || !t.columns || t.tcs !== 7 || t.ranTcs !== 5 || t.notRun !== 2 || t.adoSource !== 'tracker' || t.lastUpdated !== '2026-09-22 09:30') p.push('payload ' + JSON.stringify(t));
+  if ((html.match(/<th data-sort="none">Evidence<\/th><th data-sort="text">Covered<\/th>/g) || []).length !== 2) p.push('both phases\' Results tables should carry the tracker columns');
+  if (!/<td colspan="14">/.test(html) || /<td colspan="8">/.test(html)) p.push('attempt rows must span the 14 columns');
+  const tc007 = (html.match(/id="tc-2-TC-007">[\s\S]*?<\/tr>/) || [''])[0];
+  if (!/<td data-sort="fail"><span class="badge st-fail">Fail<\/span><\/td><td><span class="ltr"><a href="#BUG-2">BUG-2<\/a> \(<a class="ado" href="https:\/\/devops\.example\.com\/ExampleCollection\/ExampleProject\/_workitems\/edit\/100512" target="_blank" rel="noopener">#100512<\/a>\)<\/span><\/td><td><span class="ltr">Active<\/span><\/td><td>Retest variation B after the fix is deployed<\/td>/.test(tc007)) p.push('TC-007 tracker cells / links');
+  const nr = (html.match(/<section id="sec-not-run">[\s\S]*?<\/section>/) || [''])[0];
+  if (!/2 tracker TC\(s\) with no Results row in any phase · 7 in the tracker · 5 in the run/.test(nr) || !/<tr id="nr-TC-040">/.test(nr) || !/<tr id="nr-TC-041">/.test(nr) || /nr-TC-001/.test(nr)) p.push('not-automated table');
+  if (!/<td>Print the order confirmation<\/td><td>No<\/td><td>The print dialog is outside the browser<\/td>/.test(nr)) p.push('title / covered / reason on a not-automated row');
+  if (!/<section id="sec-tracker">[\s\S]*?Tracker last updated:<\/b> <span class="ltr">2026-09-22 09:30<\/span>/.test(html) || !/<b>Tracker last updated<\/b> 2026-09-22 09:30/.test(html)) p.push('tracker section / meta line');
+  if (!/<section id="sec-bug-index">[\s\S]*?<a href="#BUG-1">BUG-1<\/a>[\s\S]*?edit\/100511/.test(html)) p.push('bug index links');
+  if (!/ · tracker=[0-9a-f]{64} · page=/.test(html) || r.payload.hashes.tracker === 'none') p.push('tracker hash missing from provenance');
+  const n0 = render({ reportPath: REPORT, root: here });
+  if (n0.payload.gate !== 'PASS' || wkinds(n0).filter((k) => k === 'tracker-missing').length !== 1) p.push('no tracker → expected PASS + one tracker-missing');
+  if (/sec-tracker|sec-not-run|sec-bug-index|>Covered<|badge st-/.test(n0.html || '') || !/<td colspan="8">/.test(n0.html || '')) p.push('tracker markup rendered without a tracker');
+  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-run-tracker-'));
+  try {
+    const auto = path.join(proj, 'Testing', 'Automation'); fs.cpSync(fx('automation'), auto, { recursive: true });
+    const story = path.join(proj, 'Testing', 'Manual_Test', 'TestCases', 'US-1234-create-order'); fs.mkdirSync(story, { recursive: true });
+    fs.copyFileSync(fx('tracker', 'TEST-CASES-create-order.md'), path.join(story, 'TEST-CASES-create-order.md'));
+    fs.copyFileSync(TRACKER_MISMATCH, path.join(story, 'TC-STATUS-TRACKER-create-order.md'));
+    const rep = path.join(auto, STORY, 'TEST-RUN-REPORT-create-order.md');
+    const r1 = render({ reportPath: rep, root: proj });
+    const w = r1.payload.warnings.find((x) => x.kind === 'tracker-tc-mismatch');
+    if (r1.payload.gate !== 'PASS' || !w || w.onlyInTracker.join() !== 'TC-099' || w.onlyInSource.join() !== 'TC-020,TC-040,TC-041') p.push('mismatch against the source document ' + JSON.stringify(w));
+    if (!r1.payload.input.sourceDocument || !r1.payload.input.tracker) p.push('tracker / source document not found via the Source document header line');
+    if (!r1.payload.warnings.some((x) => x.kind === 'tracker-ado-url-missing') || /class="ado"/.test(r1.html || '')) p.push('no URL → plain IDs + tracker-ado-url-missing');
+    fs.writeFileSync(path.join(proj, '.mcp.json'), JSON.stringify({ mcpServers: { 'azure-devops': { command: 'npx', args: ['-y', '@azure-devops/mcp', 'exampleorg', '--authentication', 'pat'], env: { PERSONAL_ACCESS_TOKEN: '${AZURE_DEVOPS_PAT_B64}' } }, 'azure-devops-attachments': { command: 'node', args: ['.claude/mcp-launchers/azure-devops-attachments.cjs'], env: { AZURE_DEVOPS_ORG_URL: 'https://dev.azure.com/exampleorg', AZURE_DEVOPS_AUTH_METHOD: 'pat', AZURE_DEVOPS_DEFAULT_PROJECT: 'Example Project' } } } }));
+    const r2 = render({ reportPath: rep, root: proj });
+    if (r2.payload.tracker.adoSource !== '.mcp.json' || !/href="https:\/\/dev\.azure\.com\/exampleorg\/Example%20Project\/_workitems\/edit\/100512"/.test(r2.html || '')) p.push('cloud .mcp.json not used ' + JSON.stringify(r2.payload.tracker));
+    fs.rmSync(path.join(story, 'TEST-CASES-create-order.md'));
+    const r3 = render({ reportPath: rep, root: proj });
+    const w3 = r3.payload.warnings.find((x) => x.kind === 'tracker-tc-mismatch');
+    if (!w3 || w3.onlyInSource.join() !== 'TC-020' || w3.onlyInTracker.length || r3.payload.gate !== 'PASS') p.push('without the source document only the run TCs are checked ' + JSON.stringify(w3));
+    fs.writeFileSync(path.join(story, 'TC-STATUS-TRACKER-create-order.md'), read(TRACKER).replace('Run by hand on the next regression cycle', 'token = abc12345'));
+    const r4 = render({ reportPath: rep, root: proj });
+    if (r4.payload.gate !== 'BLOCKED' || !kinds(r4).includes('secret-literal')) p.push('a password-shaped literal in the tracker did not BLOCK');
+  } finally { fs.rmSync(proj, { recursive: true, force: true }); }
+  check('30 tracker: merged into Results (golden), not-automated table, links, missing → warning, mismatch → warning, .mcp.json, secret BLOCKs', p, { tracker: t });
+}
+
+/* 31 — navigation markup: every section has an id and every phase card a contents label; Results / run-history headers name their sort
+      types (Evidence none); the shell carries the contents panel, back-to-top link and script; no external request. */
+{
+  const p = [];
+  const r = render({ reportPath: REPORT, trackerPath: TRACKER, root: here }); const html = r.html || '';
+  if (/<section>/.test(html)) p.push('a section without an id');
+  for (const id of ['sec-run-history', 'sec-static-coverage', 'sec-tracker', 'results', 'sec-not-run', 'bugs', 'sec-bug-index', 'reviewer-comments']) if ((html.match(new RegExp('<section[^>]* id="' + id + '"', 'g')) || []).length !== 1) p.push('section id ' + id + ' not exactly once');
+  if (!/<details class="card phase" id="phase-1" data-toc-label="Phase 1 · FAILURES">/.test(html) || !/<details class="card phase" id="phase-2" data-toc-label="Phase 2 · INCOMPLETE" open>/.test(html)) p.push('phase cards lack their contents label');
+  if (!/<th data-sort="natural">TC-ID<\/th><th data-sort="natural">REQ<\/th><th data-sort="text">Name<\/th><th data-sort="rank" data-sort-order="fail\|incomplete\|partial\|skip\|not_run,not run\|pass">Status<\/th><th data-sort="text">Group<\/th><th data-sort="duration">Duration<\/th><th data-sort="rank" data-sort-order="app_bug[^"]*">Classification<\/th><th data-sort="none">Evidence<\/th>/.test(html)) p.push('typed Results headers');
+  if (!/<th data-sort="date">Date<\/th>/.test(html) || !/<th data-sort="duration">Duration<\/th><th data-sort="natural">Bugs<\/th>/.test(html)) p.push('typed run-history headers');
+  if (!/<nav class="toc" id="toc" aria-label="Contents" hidden>/.test(html) || !/IntersectionObserver/.test(html) || !/<a class="to-top" id="to-top" href="#top" hidden>/.test(html)) p.push('contents panel / script / back-to-top');
+  if (/<script[^>]+src=|<link[^>]+href=|@import|url\(http/i.test(html)) p.push('an external request');
+  check('31 navigation: section ids, phase labels, typed headers, contents panel, no external request', p, {});
 }
 
 const out = {

@@ -41,12 +41,12 @@ function tmpCopy(mutate = (s) => s, mutateBugs = (s) => s) {
 const wkinds = (r) => r.payload.warnings.map((w) => w.kind);
 const section = (html, re) => (html.match(re) || [''])[0];
 
-/* 1 — golden: byte-for-byte, PASS, no warnings, no mismatches — a manual phase after an automation phase in the same files. */
+/* 1 — golden: byte-for-byte, PASS, no warning but tracker-missing (the fixture has no tracker), no mismatches — a manual phase after an automation phase in the same files. */
 {
   const r = render({ reportPath: REPORT, root: here });
   const p = [];
   if (r.payload.gate !== 'PASS') p.push('gate ' + r.payload.gate + ' != PASS: ' + r.payload.gateReason);
-  if (r.payload.warnings.length) p.push('warnings on the fixture: ' + wkinds(r).join(','));
+  if (wkinds(r).join(',') !== 'tracker-missing') p.push('warnings on the fixture: ' + wkinds(r).join(','));
   if (r.payload.mismatches.length) p.push('mismatches on the fixture: ' + JSON.stringify(r.payload.mismatches));
   if (!fs.existsSync(GOLDEN)) p.push('golden page missing — render it with the command in fixtures/manual-run/README.md');
   else if (norm(r.html || '') !== read(GOLDEN)) p.push('page differs from golden');

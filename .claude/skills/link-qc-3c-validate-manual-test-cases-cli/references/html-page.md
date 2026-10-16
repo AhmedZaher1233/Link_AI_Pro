@@ -30,13 +30,14 @@ node … --tc {path} --lang ar --write
 node … --tc {path} --write --force
 ```
 
-`--data`, `--strings` and `--comments` override the defaults (`TEST-DATA-{feature}.md`,
-`TC-REVIEW-STRINGS-{feature}.ar.json` and `REVIEW-COMMENTS-{feature}.md` next to the TC document). `--emit-keys` lists the derived
+`--data`, `--strings`, `--comments` and `--tracker` override the defaults (`TEST-DATA-{feature}.md`,
+`TC-REVIEW-STRINGS-{feature}.ar.json`, `REVIEW-COMMENTS-{feature}.md` and `TC-STATUS-TRACKER-{feature}.md` next to the TC
+document). `--ado-url {org-or-collection URL}/{project}` sets the Azure DevOps project the tracker's bug IDs link to (§3b). `--emit-keys` lists the derived
 translation keys. `--strict` maps the gate to an exit code for CI (PASS 0 · MISMATCH 1 ·
 BLOCKED 2 · NOT_RUN 3); without it the script always exits 0 and the result is the payload.
 
 Read the payload, never the HTML: `gate`, `gateReason`, `counts`, `mismatches[]`,
-`compatibility[]`, `warnings[]`, `errors[]`, `strings.missing[]`, `arabicComplete`, `comments`, `writes[]`.
+`compatibility[]`, `warnings[]`, `errors[]`, `strings.missing[]`, `arabicComplete`, `comments`, `tracker`, `writes[]`.
 
 ## 2. Gate — what each verdict means for the skill
 
@@ -57,6 +58,14 @@ input)`), `data-ref-unresolved` (a `[A/E/D{n}]` token with no TEST-DATA row), an
 page — quoted application labels never count). `review-lang-header-stale` means the `Review page
 language:` line records a different language than this run rendered: rewrite the line, it is a
 record, never an input.
+
+**Tracker warnings** (§3b) never change the gate either and are reported, not cleared — the tracker
+is not this skill's file: `tracker-missing` (no tracker beside the source — the page renders without
+the tracker columns and sections), `tracker-tc-mismatch` (TC-IDs in the tracker but not in the
+document, or the other way round; `onlyInTracker[]` / `onlyInSource[]` name them),
+`tracker-ado-url-missing` (no Azure DevOps project URL — bug IDs are plain text), `ado-url-invalid`,
+`tracker-unparsed`, `tracker-column-missing`, `tracker-duplicate-tc`, `tracker-broken-row`. A
+password-shaped literal in the tracker BLOCKs like one anywhere else.
 
 ## 3. Parsing contract — what the renderer reads from `TEST-CASES-{feature}.md`
 
@@ -89,6 +98,38 @@ Used by TCs · Status · Best way to get it`, rows `D{n}`) and the `## 4. Proble
 TEST-DATA without the Environment table or without the Accounts `ID` column renders with
 `compatibility[]` findings and its tokens stay unresolved.
 
+## 3b. The tracker — `TC-STATUS-TRACKER-{feature}.md` (read-only data source)
+
+The tracker sits beside `ADO-BUG-MAP.md` in the story's TestCases folder. No skill of this suite
+writes it, and the renderers only read it: its values are shown on the page and are **never copied
+into another file**, never translated, never a sidecar key and never counted as narrative. It is
+parsed by heading and column name, never by position:
+
+| Element | Shape the renderer expects |
+|---|---|
+| Header lines (before the first `##`) | `**Last updated:** {date}` (any key containing "updated", else `As of` / `Date` / `Generated`; a plain `Last updated: …` line also counts) → "Tracker last updated: {date}" on the page; `**Azure DevOps:** {https URL of the project}` (a key naming Azure / ADO / DevOps / work items) → the work-item link base |
+| `## Summary` | one table, rendered as written ("Tracker" section) |
+| `## Test cases` | one table, one row per TC-ID. Columns by name: `TC-ID` (or `ID`), `Covered`, `Reason not covered`, `State` (`Pass` · `Fail` · `Skipped` · `Not tested`; another word renders neutral), `Related bug(s)`, `Bug Azure state`, `Next action`, an optional `Title`; other columns are ignored. A missing column renders `—` (`tracker-column-missing`) |
+| `## Bug index` | one table, rendered as written ("Bug index" section) |
+
+**On the page.** The six columns are added to the **Test case summary** table (one row per TC, after
+Test data) and to each TC card (a "Tracker" block plus a State badge in the card's summary line); a
+TC the tracker does not list says "not in the tracker". State is colour-coded and always shows its
+text. "Tracker last updated" appears in the meta line and in the Tracker section. Azure work-item IDs
+(`#123`, `AB#123`, or a bare number of five or more digits) in `Related bug(s)`, `Bug Azure state`
+and the Bug index's ID / bug columns become links to `{base}/_workitems/edit/{id}`. The base comes,
+in this order, from `--ado-url`, the tracker's `Azure DevOps:` header line, or the project's
+`.mcp.json` (`azure-devops` / `azure-devops-attachments` entry: `AZURE_DEVOPS_ORG_URL` or the cloud
+org argument, plus `AZURE_DEVOPS_DEFAULT_PROJECT`; the project root is the parent of the nearest
+`Testing` folder; no token is ever read). There is no built-in host; a URL carrying credentials or an
+unfilled placeholder is refused. Without a base the IDs stay plain text.
+
+**Missing or mismatched.** No tracker → the page renders exactly as before plus the summary table,
+without tracker columns or sections, and one `tracker-missing` warning. TC-IDs on one side only →
+`tracker-tc-mismatch` naming them. Neither changes the gate. Payload: `tracker` (`file`, `present`,
+`columns`, `lastUpdated`, `adoSource`, `adoTemplate`, `tcs`, `summaryRows`, `bugIndexRows`,
+`onlyInTracker[]`, `onlyInSource[]`) and `hashes.tracker`.
+
 ## 4. Derived numbers — the page shows these, never the header's
 
 | Number on the page | Computed from |
@@ -104,6 +145,7 @@ TEST-DATA without the Environment table or without the Accounts `ID` column rend
 | Manual-only counts | the manual-only table rows and their Priority |
 | Human steps tile `{TCs} ({steps})`, `human step n` badge, purple step marker | every `[HUMAN]`-prefixed step / precondition / expected result (`counts.humanSteps`, `counts.humanTcs`, `document.humanTcs[]`); shown only when at least one exists |
 | Tags chips on a TC card | the `Tags` field / column (`document.tags`); never a translation key, never counted |
+| Test case summary table | the TC set above, one row per TC (TC-ID · Description · Type · Locale · Stage · Validation), plus the six tracker columns when a tracker is present (§3b) |
 | — (not on the page) | `counts.dataRefs` (`total` / `resolved` / `unresolved` / `literals`, `null` without TEST-DATA), `document.reviewLangHeader` (the header's recorded value) and `document.langSource` (`flag` / `default`) |
 
 ## 4b. Language — one rule
@@ -153,7 +195,8 @@ until a render returns `arabicComplete: true`.
 ## 7. Provenance and hand edits
 
 Line 2 of every rendered page is `<!-- render-tc-review v… · source=… · data=… · strings=… ·
-comments=… · lang=… · page=… -->` (a v1.0 line without `comments=` still verifies). `page=` is the sha256 of the page with that value blanked. On `--write` the
+comments=… · tracker=… · lang=… · page=… -->` (a v1.0 line without `comments=` and a v1.1 line
+without `tracker=` still verify). `page=` is the sha256 of the page with that value blanked. On `--write` the
 script recomputes the existing page's self-hash: a mismatch means a human edited the HTML, and the
 write is refused (`gate: BLOCKED`, `refused.reason: hand-edited`) until `--force` is given — tell
 the user what will be lost first. A page with no provenance comment (hand-written by an older
@@ -218,6 +261,30 @@ page, so ignored); `comment-status-unknown` (treated as open); `comments-header-
 `comments-file-missing` (only for an explicit `--comments`). A password-shaped literal in a comment
 BLOCKs. Comment text is never translated, never a sidecar key and never counted as narrative.
 
+## 7c. Navigation, sorting and filtering — built in the browser, display only
+
+The shell's script builds them from the rendered page, so the page needs no external file and works
+offline, at phone width and in light and dark mode:
+
+- **Contents.** Every section carries a stable id (`sec-…`; the findings buckets too). The contents
+  panel lists every `h2` (linking to its section) and every `h3` / `[data-toc-label]` element that has
+  an id, highlights the section in view (IntersectionObserver) and opens a closed card it jumps into.
+  At 1100 px and wider it is a sticky side panel; narrower, a sticky "Contents" button at the top
+  that opens and closes the list. A "Back to top" link appears after scrolling.
+- **Sorting.** A header gets a sort button (↕ unsorted · ▲ ascending · ▼ descending · back to the
+  original order) that sets `aria-sort` and works from the keyboard. The template names the type on
+  the `th` with `data-sort`: `natural` (TC-IDs, REQ-IDs — `TC-PO16-2` before `TC-PO16-10`), `number`,
+  `duration`, `date`, `rank` with `data-sort-order` (groups best-first, synonyms comma-separated:
+  State `Fail · Skipped · Not tested · Pass`, validation, priority, coverage and test-data statuses,
+  Bug Azure state `New · Active · Resolved · Closed · Removed`), `text` (localeCompare) or `none`.
+  Without `data-sort` the type is inferred from the column; images, link lists and long free text
+  (over 80 characters on average) get no button. A cell's `data-sort` value overrides its text.
+  Empty cells sort last in both directions; a Total row stays last.
+- **Filter.** A table with more than 15 rows gets a filter box with an "{n} of {m} rows" count.
+
+Sorting and filtering change the display order only — never the markdown, the page file or its
+self-hash.
+
 ## 8. Templates — the body partial and the report shell
 
 Two passes. `assets/tc-review.template.html` is the **body partial**, holding this page's sections
@@ -238,7 +305,10 @@ in the output and BLOCKs the render, so a template edit is always caught. After 
 renderer change run `node scripts/selftest.mjs --pretty` (golden EN / AR / legacy pages, the merge
 rule, the false-PASS guards, exit codes, the data-literal / data-reference cases, the language
 precedence cases, the human-step / Tags case, the reviewer-comments case, the one-shell case,
-case 28 (AI Oracle sub-list parsed, keyed and rendered; `[D{n}]` tokens inside it are checked) and
+case 28 (AI Oracle sub-list parsed, keyed and rendered; `[D{n}]` tokens inside it are checked), case
+29 (`NOT CREATABLE`), case 30 (the tracker: merged by TC-ID against a golden, missing → warning,
+mismatch → warning, Azure links from the tracker / `--ado-url` / `.mcp.json`, a secret BLOCKs, Arabic
+chrome), case 31 (section ids, contents panel, typed sort headers, no external request) and
 the mirror cases must all pass) and regenerate the goldens only for a deliberate change (see
 `scripts/fixtures/MIRROR.md`). The renderer, its harness, its fixtures, both templates and this file
 are mirrored in three skill folders (3, 3b, 3c); copy after every edit. The shell also goes to skill 5.
