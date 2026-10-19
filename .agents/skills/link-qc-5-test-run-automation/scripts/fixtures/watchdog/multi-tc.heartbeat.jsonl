@@ -1,4 +1,0 @@
-{"at":"2026-09-20T10:00:00Z","worker":1,"tc":"TC-001","event":"test-start"}
-{"at":"2026-09-20T10:00:00Z","worker":0,"tc":"TC-005,TC-006","event":"test-start"}
-{"at":"2026-09-20T10:00:05Z","worker":0,"tc":"TC-005,TC-006","step":"submit both requests","event":"start","deadline_ms":30000,"note":"both requests read Submitted"}
-{"at":"2026-09-20T10:00:06Z","worker":1,"tc":"TC-001","event":"test-end"}
