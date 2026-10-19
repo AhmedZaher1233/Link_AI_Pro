@@ -161,6 +161,51 @@ const wd = (args) => run({ plan: GROUP, grace: GRACE, ...args });
   check('10 NOT_RUN without a heartbeat; strict exit codes OK 0 · FROZEN 1 · BLOCKED 2 · NOT_RUN 3', p, {});
 }
 
+/* 11 — a test covering several TCs ("TC-005,TC-006" in the heartbeat) that hangs: BOTH TCs are interrupted, never "not started". */
+{
+  const r = wd({ heartbeat: fx('multi-tc.heartbeat.jsonl'), results: fx('multi-tc.results.jsonl'), now: '2026-09-20T10:02:00Z' });
+  const p = [];
+  if (r.verdict !== 'FROZEN') p.push('verdict ' + r.verdict + ' != FROZEN');
+  const ints = r.reconstruction ? r.reconstruction.interrupted : [];
+  for (const tc of ['TC-005', 'TC-006']) {
+    const row = ints.find((i) => i.tc === tc);
+    if (!row) p.push(tc + ' missing from interrupted[]');
+    else if (row.collateral !== false || !/watchdog at step "submit both requests"/.test(row.reason)) p.push(tc + ' not reported as the frozen test: ' + row.reason);
+  }
+  const ns = r.reconstruction ? r.reconstruction.not_started.map((x) => x.tc).join(' ') : '';
+  if (ns !== 'TC-002 TC-003 TC-004') p.push('not_started wrong: ' + ns);
+  const done = r.reconstruction ? r.reconstruction.completed.map((x) => x.tc + ':' + x.status).join(' ') : '';
+  if (done !== 'TC-001:PASS') p.push('completed wrong: ' + done);
+  check('11 a multi-TC test in flight is interrupted for every TC it covers', p, { interrupted: ints });
+}
+
+/* 12 — --stop-reason (the outer-ceiling kill, no frozen worker): reasons name the stop; without it the old wording stays. */
+{
+  const p = [];
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-watchdog-'));
+  try {
+    const base = { heartbeat: fx('ceiling.heartbeat.jsonl'), now: '2026-09-20T10:10:00Z' };
+    const legacy = wd(base);
+    if (legacy.verdict !== 'OK') p.push('verdict ' + legacy.verdict + ' != OK (no step is open)');
+    const li = legacy.reconstruction.interrupted.find((i) => i.tc === 'TC-001');
+    if (!li || !/^interrupted: collateral \(watchdog stop of worker \)$/.test(li.reason)) p.push('without --stop-reason the legacy wording must stay: ' + (li && li.reason));
+    if (legacy.reconstruction.not_started.some((x) => x.reason !== 'not started: watchdog stop')) p.push('without --stop-reason not_started must read "not started: watchdog stop"');
+    const out = path.join(tmp, 'smoke-parallel.watchdog.json');
+    const r = wd({ ...base, stopReason: 'outer ceiling stop after 420 s', write: true, out });
+    const ri = r.reconstruction.interrupted.find((i) => i.tc === 'TC-001');
+    if (!ri || ri.reason !== 'interrupted: outer ceiling stop after 420 s') p.push('ceiling reason not applied: ' + (ri && ri.reason));
+    if (r.reconstruction.not_started.length !== 5 || r.reconstruction.not_started.some((x) => x.reason !== 'not started: outer ceiling stop after 420 s')) p.push('not_started rows must carry the stop reason');
+    const file = JSON.parse(fs.readFileSync(out, 'utf8'));
+    if (file.stop_reason !== 'outer ceiling stop after 420 s' || file.source !== 'incremental+watchdog') p.push('written file lacks stop_reason / source');
+    const cli = spawnSync(process.execPath, [path.join(here, 'watchdog.mjs'), '--plan', GROUP, '--heartbeat', fx('ceiling.heartbeat.jsonl'), '--now', '2026-09-20T10:10:00Z', '--stop-reason', 'outer ceiling stop after 420 s'], { encoding: 'utf8' });
+    const c = JSON.parse(cli.stdout);
+    if (!c.reconstruction || c.reconstruction.interrupted[0].reason !== 'interrupted: outer ceiling stop after 420 s') p.push('--stop-reason not honoured on the CLI');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  check('12 --stop-reason names a non-freeze stop; default wording unchanged', p, {});
+}
+
 const out = {
   tool: 'selftest-watchdog',
   ran: cases.length,

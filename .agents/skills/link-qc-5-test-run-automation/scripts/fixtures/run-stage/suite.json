@@ -1,0 +1,15 @@
+{
+  "tests": [
+    { "file": "tests/Orders_Tests/00-setup-order-items.spec.ts", "describe": ["setup"], "title": "Set up an order with twelve line items", "tags": ["@setup", "@run:setup-order-items"], "outcome": "passed" },
+    { "file": "tests/Orders_Tests/03-create-order.spec.ts", "describe": ["REQ-01: create an order"], "title": "[TC-001] Validate that an order is created", "tags": ["@positive", "@smoke", "@run:parallel"], "outcome": "passed" },
+    { "file": "tests/Orders_Tests/03-create-order.spec.ts", "describe": ["REQ-01: create an order"], "title": "[TC-002] Validate that the order list opens", "tags": ["@positive", "@smoke", "@run:parallel"], "outcome": "passed" },
+    { "file": "tests/Orders_Tests/03-create-order.spec.ts", "describe": ["REQ-01: create an order"], "title": "[TC-003] Validate that an empty name is refused", "tags": ["@negative", "@smoke", "@run:parallel"], "outcome": "failed", "error": "expect(locator).toHaveText(expected) failed — Expected: \"Name is required\" Received: \"\"" },
+    { "file": "tests/Orders_Tests/03-create-order.spec.ts", "describe": ["REQ-02: totals"], "title": "[TC-004] Validate that the total is recalculated after an edit", "tags": ["@positive", "@run:parallel"], "outcome": "passed" },
+    { "file": "tests/Orders_Tests/03-create-order.spec.ts", "describe": ["REQ-03: list order"], "title": "[TC-005] Validate that the list is sorted newest first", "tags": ["@positive", "@unverified-assumption", "@run:parallel"], "outcome": "failed", "error": "the list is sorted oldest first" },
+    { "file": "tests/Orders_Tests/03-create-order.spec.ts", "describe": ["REQ-04: requests"], "title": "[TC-007][TC-008] Validate that both requests are submitted", "tags": ["@positive", "@run:parallel"], "outcome": "passed" },
+    { "file": "tests/Orders_Tests/03-create-order.spec.ts", "describe": ["REQ-01: create an order"], "title": "[TC-006] Validate that a duplicate order is refused", "tags": ["@negative", "@run:parallel"], "outcome": "passed" },
+    { "file": "tests/Orders_Tests/03-create-order.spec.ts", "describe": ["serial:orders"], "title": "[TC-010] Validate that a line item is added", "tags": ["@positive", "@smoke", "@run:serial-orders"], "outcome": "passed" },
+    { "file": "tests/Orders_Tests/03-create-order.spec.ts", "describe": ["serial:orders"], "title": "[TC-011] Validate that a locked order cannot be edited", "tags": ["@negative", "@run:serial-orders"], "outcome": "skipped" },
+    { "file": "tests/Orders_Tests/03-create-order.spec.ts", "describe": ["serial:orders-archive"], "title": "[TC-012] Validate that an archived order is read-only", "tags": ["@negative", "@run:serial-orders-archive"], "outcome": "passed" }
+  ]
+}

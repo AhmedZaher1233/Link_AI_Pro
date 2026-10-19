@@ -59,7 +59,8 @@ of the approved document" — and the full run follows.
 
 ## 3. Progress — one line per TC completion, and the log file
 
-**Chat**: skill 5's shape plus the tool, printed after every TC, no prose between refreshes:
+**Chat**: one line per TC (5b's own shape — skill 5 reports per stage instead), the tool appended,
+printed after every TC, no prose between refreshes:
 
 ```
 Smoke 4/9 · TC-ORD-05 running · 03:10 elapsed · ETA 04:00 · 0 failed · tool cli

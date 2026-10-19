@@ -5,7 +5,7 @@
 //
 // Usage: node validate-setup.mjs [--root <path>] [--pretty]
 //          [--mcp playwright=PASS,azure-devops=FAIL,docx=NOT_RUN[,figma=PASS][,azure-devops-attachments=PASS]]   ← Claude-side MCP probe results
-//          Rows for the browser tool of skills 3c and 5b (Playwright CLI, its browser, .gitignore, the secrets file) are WARN
+//          Rows for the browser tool of skills 3c, 5b and 9 (Playwright CLI, its browser, .gitignore, the secrets file) are WARN
 //          at worst — 3c and 5b are optional and their tool is never a prerequisite for 3b or any other skill. The same holds
 //          for link-qc-6-ui-testing's optional extras (Figma MCP, Python + Pillow) and for the optional
 //          `azure-devops-attachments` server of skills 8 / 9 (cloud projects): WARN at worst, never FAIL.
@@ -23,8 +23,8 @@ row('Node.js', tc.node ? (/^v(1[89]|[2-9]\d)\./.test(tc.node) ? 'PASS' : 'WARN')
 row('NPM', tc.npm && tc.packageJson && tc.packageJsonValid ? 'PASS' : (tc.npm ? 'WARN' : 'FAIL'), tc.npm ? (tc.packageJson ? (tc.packageJsonValid ? `npm ${tc.npm}, package.json parses` : 'package.json does not parse') : 'no package.json') : 'npm not found');
 row('Playwright', tc.playwright && tc.playwrightDependency ? 'PASS' : (tc.playwright || tc.playwrightDependency ? 'WARN' : 'FAIL'), tc.playwright ? `${tc.playwright}${tc.playwrightDependency ? '' : ' — not in package.json'}` : (tc.playwrightDependency ? 'dependency declared but npx playwright not runnable' : 'not installed'));
 row('Playwright cfg', tc.playwrightConfig ? (tc.testDir && tc.testDirExists === false ? 'WARN' : 'PASS') : 'FAIL', tc.playwrightConfig ? `${tc.playwrightConfig}; testDir=${tc.testDir ?? 'default'}${tc.testDirExists === false ? ' (folder missing)' : ''}` : 'no playwright.config.*');
-// The browser tool of skills 3c and 5b — optional, never FAIL. Absent → WARN with the opt-in install hint.
-row('Playwright CLI', tc.playwrightCli.version ? 'PASS' : 'WARN', tc.playwrightCli.version ? `playwright-cli ${tc.playwrightCli.version} (${tc.playwrightCli.where}) — used by link-qc-3c-validate-manual-test-cases-cli and link-qc-5b-test-run-manual-cli only` : 'not installed — needed only by link-qc-3c-validate-manual-test-cases-cli and link-qc-5b-test-run-manual-cli; /sync-skills --tools installs it (3b works without it)');
+// The browser tool of skills 3c, 5b and 9 — optional, never FAIL. Absent → WARN with the opt-in install hint.
+row('Playwright CLI', tc.playwrightCli.version ? 'PASS' : 'WARN', tc.playwrightCli.version ? `playwright-cli ${tc.playwrightCli.version} (${tc.playwrightCli.where}) — used by link-qc-3c-validate-manual-test-cases-cli, link-qc-5b-test-run-manual-cli and link-qc-9-retesting only` : 'not installed — needed only by link-qc-3c-validate-manual-test-cases-cli, link-qc-5b-test-run-manual-cli and link-qc-9-retesting (bugs without an automated TC); /sync-skills --tools installs it (3b works without it)');
 row('Playwright CLI browser', !tc.playwrightCli.version ? 'NOT_RUN' : tc.playwrightCliBrowser ? 'PASS' : 'WARN', !tc.playwrightCli.version ? 'playwright-cli absent' : tc.playwrightCliBrowser ? `chromium present in ${tc.playwrightCliBrowserDir} (cache check; 3c / 5b verify with their first open)` : `no chromium in the Playwright browsers cache${tc.playwrightCliBrowserDir ? ' (' + tc.playwrightCliBrowserDir + ')' : ''} — /sync-skills --tools runs playwright-cli install-browser`);
 // link-qc-6-ui-testing's static-image annotation fallback — optional, never FAIL. Live-URL audits need no Python at all.
 row('Python + Pillow', tc.python.ready ? 'PASS' : 'WARN', tc.python.ready ? `${tc.python.command} ${tc.python.version}, pillow ${tc.python.packages.pillow}, numpy ${tc.python.packages.numpy} — link-qc-6-ui-testing can annotate static design images` : tc.python.command ? `${tc.python.command} ${tc.python.version} found but ${Object.entries(tc.python.packages).filter(([, v]) => !v).map(([k]) => k).join(' + ')} missing — /sync-skills --tools installs them (link-qc-6-ui-testing static-image annotation only; live URLs need none)` : 'no Python interpreter — optional: link-qc-6-ui-testing annotates live pages in the DOM without it; install Python 3 and run /sync-skills --tools only to annotate static design images');
@@ -65,9 +65,9 @@ row('Azure DevOps hosting', hostingMismatch ? 'WARN' : hostingEvidence ? 'PASS' 
 const pat = scanPat(ado.present ? expectedPatVar : null);
 row('PAT env var', !pat.persisted && !pat.inProcess ? (ado.present ? 'FAIL' : 'WARN') : pat.sessionMissing ? 'WARN' : 'PASS', pat.persisted || pat.inProcess ? `${pat.name} ${pat.persisted ? `set (${pat.scope})` : 'present in this session only (not persisted)'}${pat.sessionMissing ? ` — saved on this machine but missing from this session: ${ENV_RESTART_HINT}` : ''}` : `${pat.checked.join(' / ')} not set — user runs ${pat.setupScript} (masked prompt; stores ${PAT_VAR_CLOUD} and ${PAT_VAR_SELF_HOSTED}), then must ${ENV_RESTART_HINT}`);
 
-// Browser secrets file (3c and 5b, optional): existence of the user-level variable and the file it names — the content is never read.
+// Browser secrets file (3c, 5b and 9, optional): existence of the user-level variable and the file it names — the content is never read.
 const bs = scanBrowserSecrets();
-row('Browser secrets file', bs.persisted && bs.fileExists ? 'PASS' : 'WARN', bs.persisted && bs.fileExists ? `${bs.name} set (${bs.scope}); file present — 3c and 5b can log in by secret name` : bs.persisted ? `${bs.name} set but the file it names is missing — re-run ${bs.setupScript}` : `${bs.name} not set — optional: attended login works without it; for unattended 3c / 5b logins the user runs ${bs.setupScript} (masked prompts, file outside the repo)`);
+row('Browser secrets file', bs.persisted && bs.fileExists ? 'PASS' : 'WARN', bs.persisted && bs.fileExists ? `${bs.name} set (${bs.scope}); file present — 3c, 5b and 9 can log in by secret name` : bs.persisted ? `${bs.name} set but the file it names is missing — re-run ${bs.setupScript}` : `${bs.name} not set — optional: attended login works without it; for unattended 3c / 5b / 9 logins the user runs ${bs.setupScript} (masked prompts, file outside the repo)`);
 
 // MCP reachability is probed by Claude through the MCP tools; results are passed in. Absent → NOT_RUN, never PASS.
 const probes = Object.fromEntries(String(args.mcp || '').split(',').filter(Boolean).map((kv) => kv.split('=')));
@@ -107,11 +107,16 @@ for (const [server, label] of [['playwright', 'Playwright MCP'], ['azure-devops'
 }
 
 const su = scanSuite(root);
-row('QA Skills', su.missing.length || su.invalid.length ? 'FAIL' : (su.uppercaseDir ? 'WARN' : 'PASS'), `${su.present.length}/${SKILLS.length} present` + (su.missing.length ? `; missing: ${su.missing.join(', ')}` : '') + (su.invalid.length ? `; invalid front-matter: ${su.invalid.join(', ')}` : '') + (su.uppercaseDir ? `; folder is .claude/${su.skillsDir.split('/').pop()} (canonical: .claude/skills)` : ''));
+row('QA Skills', su.missing.length || su.invalid.length ? 'FAIL' : (su.uppercaseDir ? 'WARN' : 'PASS'), `${su.present.length}/${SKILLS.length} present` + (su.missing.length ? `; missing: ${su.missing.join(', ')}` : '') + (su.invalid.length ? `; invalid front-matter: ${su.invalid.join(', ')}` : '') + (su.uppercaseDir ? `; folder is .claude/${su.skillsDir.split('/').pop()} (canonical: .claude/skills)` : '') + (Object.keys(su.versions).length ? `; versions: ${Object.entries(su.versions).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''));
 if (su.legacy.length) row('Legacy skill folders', 'WARN', su.legacy.map((l) => `${l.folder} → ${l.replacement}`).join(', ') + ' — renamed in this release; run /sync-skills (--apply removes them once the replacement is in place)');
 let sync = null;
 if (args['sync-report'] && isFile(args['sync-report'])) { try { sync = JSON.parse(read(args['sync-report'])); } catch {} }
-row('Skills current', sync ? (sync.summary?.updated || sync.summary?.new ? 'WARN' : (sync.error ? 'NOT_RUN' : 'PASS')) : 'NOT_RUN', sync ? (sync.error ? `sync check failed: ${sync.error}` : `vs ${sync.source?.ref ?? 'source'}: ${sync.summary?.current ?? 0} current, ${sync.summary?.updated ?? 0} behind, ${sync.summary?.new ?? 0} missing`) : 'no --sync-report given (run sync-qa-skills.mjs --check)');
+// versions[] (sync --check): a skill whose SKILL.md metadata.version is behind the source is BEHIND even when no file
+// count says so; an older report without versions[] keeps the file-count reading.
+const behindV = (sync?.versions || []).filter((v) => ['update-available', 'pre-versioning'].includes(v.versionStatus));
+const versioned = (sync?.versions || []).filter((v) => v.sourceVersion || v.installedVersion);
+const versionNote = versioned.length ? '; versions: ' + versioned.map((v) => `${v.skill} ${v.installedVersion ?? 'unversioned'} → ${v.sourceVersion ?? 'unversioned'} (${v.versionStatus})`).join(', ') : '';
+row('Skills current', sync ? (sync.summary?.updated || sync.summary?.new || behindV.length ? 'WARN' : (sync.error ? 'NOT_RUN' : 'PASS')) : 'NOT_RUN', sync ? (sync.error ? `sync check failed: ${sync.error}` : `vs ${sync.source?.ref ?? 'source'}: ${sync.summary?.current ?? 0} current, ${sync.summary?.updated ?? 0} behind, ${sync.summary?.new ?? 0} missing` + versionNote) : 'no --sync-report given (run sync-qa-skills.mjs --check)');
 row('sync-skills cmd', isFile(path.join(root, SYNC_COMMAND)) ? 'PASS' : 'FAIL', SYNC_COMMAND);
 
 const mf = scanManifest(root);

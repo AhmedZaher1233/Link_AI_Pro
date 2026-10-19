@@ -29,6 +29,9 @@
 //   interrupted[]  TCs with a heartbeat start / test-start and no result — INCOMPLETE, reason names
 //                  the step and elapsed time; other workers' in-flight TCs are `collateral`
 //   not_started[]  planned TCs with no record at all — NOT_RUN, reason `not started: watchdog stop`
+// A heartbeat `tc` of a test that covers several TCs is the joined list ("TC-01,TC-02"); every TC in
+// it is matched. --stop-reason names a stop that was NOT a freeze (run-stage.mjs's outer-ceiling
+// kill): with no frozen worker the reasons read `interrupted: {reason}` / `not started: {reason}`.
 //
 // Exit code is 0 by default (the verdict lives in the payload); --strict maps
 // OK 0 · FROZEN 1 · BLOCKED 2 · NOT_RUN 3 for a poll loop.
@@ -159,8 +162,11 @@ export function decide({ heartbeat, results, group, now, graceMs }) {
   return { workers, frozen };
 }
 
-export function reconstruct({ heartbeat, results, group, frozen }) {
-  const planned = group.tcs.slice();
+// a heartbeat `tc` is a string — one TC-ID, or the comma-joined list of a test that covers several
+const tcsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? v.split(',').map((s) => s.trim()).filter(Boolean) : []);
+
+export function reconstruct({ heartbeat, results, group, frozen, stopReason }) {
+  const planned = (group.tcs || []).slice();
   const completed = [];
   const seen = new Set();
   for (const r of [...results].sort((a, b) => a._at - b._at)) {
@@ -176,12 +182,15 @@ export function reconstruct({ heartbeat, results, group, frozen }) {
   const interrupted = [];
   const started = new Map();
   for (const h of [...heartbeat].sort((a, b) => a._at - b._at)) {
-    if (!h.tc || !planned.includes(h.tc) || seen.has(h.tc)) continue;
-    if (h.event === 'test-start' || h.event === 'start' || h.event === 'progress' || h.event === 'evidence') started.set(h.tc, h);
-    if (h.event === 'test-end') started.delete(h.tc);
+    for (const tc of tcsOf(h.tc)) {
+      if (!planned.includes(tc) || seen.has(tc)) continue;
+      if (h.event === 'test-start' || h.event === 'start' || h.event === 'progress' || h.event === 'evidence') started.set(tc, h);
+      if (h.event === 'test-end') started.delete(tc);
+    }
   }
+  const other = stopReason && !frozenWorkers.size ? stopReason : null;
   for (const [tc, h] of started) {
-    const f = frozen.find((x) => x.tc === tc);
+    const f = frozen.find((x) => tcsOf(x.tc).includes(tc));
     const openStep = f ? f.step : (h.step || null);
     interrupted.push({
       tc, status: 'INCOMPLETE', worker: h.worker, step: openStep,
@@ -189,11 +198,12 @@ export function reconstruct({ heartbeat, results, group, frozen }) {
       collateral: !f,
       reason: f
         ? 'interrupted: watchdog at step "' + f.step + '" after ' + Math.round(f.elapsed_ms / 1000) + ' s'
-        : 'interrupted: collateral (watchdog stop of worker ' + [...frozenWorkers].join(', ') + ')',
+        : other ? 'interrupted: ' + other
+          : 'interrupted: collateral (watchdog stop of worker ' + [...frozenWorkers].join(', ') + ')',
     });
   }
   const done = new Set([...seen, ...interrupted.map((i) => i.tc)]);
-  const not_started = planned.filter((tc) => !done.has(tc)).map((tc) => ({ tc, status: 'NOT_RUN', reason: 'not started: watchdog stop' }));
+  const not_started = planned.filter((tc) => !done.has(tc)).map((tc) => ({ tc, status: 'NOT_RUN', reason: 'not started: ' + (other || 'watchdog stop') }));
   return { completed, interrupted, not_started };
 }
 
@@ -201,11 +211,12 @@ export function reconstruct({ heartbeat, results, group, frozen }) {
 
 const HELP = {
   tool: 'watchdog',
-  usage: 'node watchdog.mjs --heartbeat <jsonl> --results <jsonl> --plan <group-or-run-plan.json> [--group <name>] [--stage <name>] [--now <ISO>] [--grace <ms>] [--out <watchdog.json>] [--write] [--pretty] [--strict]',
+  usage: 'node watchdog.mjs --heartbeat <jsonl> --results <jsonl> --plan <group-or-run-plan.json> [--group <name>] [--stage <name>] [--now <ISO>] [--grace <ms>] [--stop-reason <text>] [--out <watchdog.json>] [--write] [--pretty] [--strict]',
   notes: [
     'Read-only unless --write. Default exit code is 0; --strict maps OK 0 · FROZEN 1 · BLOCKED 2 · NOT_RUN 3.',
     'A freeze needs an open step past its OWN deadline + grace with no progress, no newer worker record and no newer result. Console silence and a stale stage JSON never count.',
     'Reconstruction (completed / interrupted / not_started) is always in the payload; the skill applies it only when it stops the command.',
+    '--stop-reason names a stop that was not a freeze (the outer-ceiling kill of run-stage.mjs); with no frozen worker it replaces "collateral (watchdog stop …)" / "watchdog stop" in the reasons.',
   ],
 };
 
@@ -219,6 +230,7 @@ export function run(args) {
   const planPath = str(args.plan);
   const now = args.now ? Date.parse(String(args.now)) : Date.now();
   const graceMs = args.grace !== undefined ? Number(args.grace) : DEFAULT_GRACE_MS;
+  const stopReason = str(args.stopReason) || str(args['stop-reason']) || null;
   const base = { tool: 'watchdog', schema: SCHEMA_VERSION, readOnly: true, now: new Date(now).toISOString(), grace_ms: graceMs, stage: str(args.stage) || null, group: str(args.group) || null };
   if (!planPath) return { ...base, verdict: 'NOT_RUN', reason: 'no --plan supplied', errors, warnings };
   if (Number.isNaN(now)) return { ...base, verdict: 'BLOCKED', reason: '--now is not a valid timestamp', errors, warnings };
@@ -235,7 +247,7 @@ export function run(args) {
     return { ...base, verdict: 'BLOCKED', reason: errors.length + ' malformed line(s) — a freeze verdict is never derived from a record that could not be read', errors, warnings, workers: [], frozen: [] };
   }
   const { workers, frozen } = decide({ heartbeat, results, group, now, graceMs });
-  const reconstruction = reconstruct({ heartbeat, results, group, frozen });
+  const reconstruction = reconstruct({ heartbeat, results, group, frozen, stopReason });
   const verdict = frozen.length ? 'FROZEN' : 'OK';
   const payload = {
     ...base, verdict,
@@ -250,6 +262,7 @@ export function run(args) {
     const file = {
       schema: SCHEMA_VERSION, stage: payload.stage, group: payload.group, decided_at: payload.now, verdict,
       grace_ms: graceMs, frozen, source: 'incremental+watchdog',
+      ...(stopReason ? { stop_reason: stopReason } : {}),
       completed: reconstruction.completed, interrupted: reconstruction.interrupted, not_started: reconstruction.not_started,
       counts: payload.counts,
     };

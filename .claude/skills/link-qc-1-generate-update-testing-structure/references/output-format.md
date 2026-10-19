@@ -7,7 +7,7 @@ the actions left for the user.
 ## QA Foundation — {NEW PROJECT: full setup | EXISTING PROJECT: Mode A audit | Mode B repair | Mode C restructure}
 
 **Project:** {name} · **Root:** {path} · **Preflight:** {classification} — {one-line evidence}
-**Skills suite:** {n}/9 present · {current | m behind | k missing} · folder {.claude/skills | .claude/Skills → migrated}
+**Skills suite:** {n}/15 present · {current | m behind | k missing} · versions {skill installed → source, per versioned skill | none declared} · folder {.claude/skills | .claude/Skills → migrated}
 
 ### Changes made            ← Mode A: "None — audit is read-only"
 Created:   {folders / files actually created, one per line}
@@ -33,7 +33,7 @@ Overall: {PASS | PARTIAL | FAIL}
 2. Reload the Claude Code session (skills / MCP server entries changed) and approve the new `docx` / `azure-devops-attachments` server(s) via /mcp
 3. Fill L3 placeholders: {keys}
 4. {supply missing L1/L2 document | az login | restart PC}
-5. Optional (skills 3c and 5b only): run scripts/set-playwright-secrets.ps1 in your own window if you want
+5. Optional (skills 3c, 5b and 9 only): run scripts/set-playwright-secrets.ps1 in your own window if you want
    unattended browser logins; attended login works without it
 
 **Learning file:** read {sections/tags} · updated {N added / M updated | "no new knowledge" | "not touched (audit)"}

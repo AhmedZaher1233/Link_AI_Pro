@@ -1,0 +1,427 @@
+<!-- MIRROR — byte-identical copies live in the sibling skill folders
+     (link-qc-3-generate-manual-test-cases ↔ link-qc-3b-validate-manual-test-cases ↔ link-qc-3c-validate-manual-test-cases-cli, each under assets/). Edit all three;
+     scripts/selftest.mjs case 0 sha256-compares every mirrored file.
+     TC review page — BODY PARTIAL. RENDERED ONLY BY scripts/render-tc-review.mjs — never filled by hand.
+     The renderer renders this partial first and inserts it at the body placeholder of assets/report-shell.template.html,
+     which owns the document, the one stylesheet and script, the header, meta line, banners, tiles, the general
+     reviewer-comment box and the footer. This file holds only the page-specific sections and uses only the
+     shell's class vocabulary (references/html-page.md §8). The markdown is the source of truth: every number
+     is recomputed from its tables and this page never adds, rewords or reorders content.
+     Placeholders: double-brace snake_case keys only (HTML-escaped); triple braces for HTML the renderer already
+     escaped (translated text, comment boxes). Blocks are HTML comments carrying #each / #if / #unless openers
+     and the matching closers. Never render a password, token, selector or code identifier. IDs, paths,
+     usernames, URLs, dates and the Status keyword stay Latin inside <span class="ltr">. Every section carries a
+     stable id (the shell's contents panel links to it); a th may name its sort type with data-sort (natural / number /
+     duration / date / rank + data-sort-order / text / none) — without one the shell infers it from the column. The
+     tracker cells and sections arrive as HTML the renderer built (TC-STATUS-TRACKER-{feature}.md, read-only data). -->
+  <div class="hero">
+    <div class="gauge-wrap">
+      <div class="gauge" style="--p: {{full_pct}}; --q: {{full_plus_partial_pct}}"><div class="gauge-num"><b>{{weighted_pct}}</b><span>{{gauge_label}}</span></div></div>
+    </div>
+    <div class="legend">
+      <div class="chip c-full"><b>{{n_full}}</b><span>{{chip_full}}</span></div>
+      <div class="chip c-partial"><b>{{n_partial}}</b><span>{{chip_partial}}</span></div>
+      <div class="chip c-none"><b>{{n_none}}</b><span>{{chip_none}}</span></div>
+    </div>
+    <p class="gauge-caption">{{gauge_caption}}</p>
+  </div>
+
+<!-- {{#if has_coverage}} -->
+  <section id="sec-coverage-depth">
+    <div class="sec-head"><h2>{{s_depth}}</h2><span class="note">{{s_depth_note}}</span></div>
+<!-- {{#each acs}} -->
+    <div class="story">
+      <div class="story-top"><span class="story-id ltr">{{req}}</span><span class="story-name">{{{ac}}}</span><span class="story-pct">{{status_word}}</span></div>
+      <div class="bar">
+        <div class="seg seg-happy" style="flex: {{w1}}"><b>{{seg_happy}} {{happy}}</b></div>
+        <div class="seg seg-neg" style="flex: {{w2}}"><b>{{seg_neg}} {{neg}}</b></div>
+        <div class="seg seg-loc" style="flex: {{w3}}"><b>{{seg_loc}} {{loc}}</b></div>
+<!-- {{#if has_missing}} -->
+        <div class="seg seg-gap" style="flex: {{w4}}"><b>{{seg_missing}}: {{{missing}}}</b></div>
+<!-- {{/if}} -->
+      </div>
+    </div>
+<!-- {{/each}} -->
+  </section>
+<!-- {{/if}} -->
+
+<!-- {{#if has_trace}} -->
+  <section id="sec-traceability">
+    <div class="sec-head"><h2>{{s_trace}}</h2><span class="note">{{s_trace_note}}</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>{{h_ac}}</th><th data-sort="natural">{{h_req}}</th><th data-sort="natural">{{h_tcs}}</th><th data-sort="rank" data-sort-order="not covered|partially covered,partial|fully covered,full">{{h_status}}</th><th>{{h_missing}}</th></tr></thead>
+      <tbody>
+<!-- {{#each trace}} -->
+<!-- {{#if gap}} -->
+        <tr class="gap"><td>{{{ac}}}</td><td><span class="ltr">{{req}}</span></td><td><span class="ltr">{{tcs}}</span></td><td>{{status}}</td><td>{{{missing}}}</td></tr>
+<!-- {{/if}} -->
+<!-- {{#unless gap}} -->
+        <tr><td>{{{ac}}}</td><td><span class="ltr">{{req}}</span></td><td><span class="ltr">{{tcs}}</span></td><td>{{status}}</td><td>{{{missing}}}</td></tr>
+<!-- {{/unless}} -->
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+  </section>
+<!-- {{/if}} -->
+
+  <section id="sec-manual">
+    <div class="sec-head"><h2>{{s_manual}}</h2><span class="note"><span class="ltr">{{n_manual}}</span> · High <span class="ltr">{{n_manual_high}}</span> · Medium <span class="ltr">{{n_manual_medium}}</span> · Low <span class="ltr">{{n_manual_low}}</span></span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th data-sort="text">{{h_category}}</th><th data-sort="natural">{{h_tcid}}</th><th>{{h_scenario}}</th><th>{{h_why_manual}}</th><th data-sort="rank" data-sort-order="high|medium|low">{{h_priority}}</th></tr></thead>
+      <tbody>
+<!-- {{#each manual}} -->
+        <tr class="{{prio_class}}"><td>{{{category}}}</td><td><span class="ltr">{{tc}}</span></td><td>{{{scenario}}}</td><td>{{{why}}}</td><td>{{priority}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+  </section>
+
+<!-- {{#if has_data}} -->
+  <section id="sec-test-data">
+    <div class="sec-head"><h2>{{s_data}}</h2><span class="note"><span class="ltr">{{n_data}}</span> · <span class="ltr">{{n_ready}}</span> / <span class="ltr">{{n_missing}}</span> / <span class="ltr">{{n_impossible}}</span> / <span class="ltr">{{n_unknown}}</span> / <span class="ltr">{{n_notcreatable}}</span> — {{s_data_note}} <span class="ltr">TEST-DATA-{{feature}}.md</span></span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th data-sort="natural">{{h_num}}</th><th data-sort="text">{{h_item}}</th><th data-sort="none">{{h_look}}</th><th data-sort="natural">{{h_used}}</th><th data-sort="rank" data-sort-order="missing|impossible|not creatable|unknown|ready">{{h_status}}</th><th data-sort="none">{{h_way}}</th></tr></thead>
+      <tbody>
+<!-- {{#each data_items}} -->
+        <tr><td><span class="ltr">{{num}}</span></td><td>{{{name}}}</td><td>{{{look}}}</td><td><span class="ltr">{{used}}</span></td><td><span class="badge {{d_class}}">{{status}}</span></td><td>{{{way}}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{#if problems}} -->
+    <div class="tablewrap"><table>
+      <thead><tr><th data-sort="natural">{{h_num}}</th><th data-sort="natural">{{h_item}}</th><th data-sort="none">{{h_problem}}</th><th data-sort="none">{{h_why}}</th><th data-sort="none">{{h_decision}}</th></tr></thead>
+      <tbody>
+<!-- {{#each problems}} -->
+        <tr class="prio-high"><td><span class="ltr">{{num}}</span></td><td><span class="ltr">{{item}}</span></td><td>{{{problem}}}</td><td>{{{why}}}</td><td>{{{decision}}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+  </section>
+<!-- {{/if}} -->
+
+<!-- {{#if has_existing}} -->
+  <section id="sec-existing">
+    <div class="sec-head"><h2>{{s_existing}}</h2></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th data-sort="natural">{{h_original}}</th><th data-sort="text">{{h_disposition}}</th><th>{{h_reason}}</th></tr></thead>
+      <tbody>
+<!-- {{#each existing}} -->
+        <tr><td><span class="ltr">{{original}}</span></td><td>{{{disposition}}}</td><td>{{{reason}}}</td></tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+  </section>
+<!-- {{/if}} -->
+
+<!-- {{#if has_tracker_section}} -->
+  {{{tracker_section}}}
+<!-- {{/if}} -->
+
+  <section id="sec-tc-summary">
+    <div class="sec-head"><h2>{{s_tc_summary}}</h2><span class="note">{{s_tc_summary_note}}</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th data-sort="natural">{{h_tcid}}</th><th data-sort="text">{{h_description}}</th><th data-sort="text">{{h_type}}</th><th data-sort="text">{{h_locale}}</th><th data-sort="text">{{h_stage}}</th><th data-sort="rank" data-sort-order="discrepancy|not-implemented|draft|inferred|enhanced|validated">{{h_validation}}</th>{{{tracker_th}}}</tr></thead>
+      <tbody>
+<!-- {{#each tcs}} -->
+        <tr><td class="nowrap"><a href="#{{id}}"><span class="ltr">{{id}}</span></a></td><td>{{{description}}}</td><td>{{type}}</td><td><span class="ltr">{{locale}}</span></td><td><span class="ltr">{{stage}}</span></td><td data-sort="{{v_state}}"><span class="badge {{v_class}}">{{v_word}}</span></td>{{{tracker_td}}}</tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="sec-test-cases">
+    <div class="sec-head"><h2>{{s_tcs}}</h2><span class="note">{{s_tcs_note}}</span></div>
+<!-- {{#each tcs}} -->
+    <details class="card tc" id="{{id}}">
+      <summary>
+        <span class="card-id ltr">{{id}}</span>
+        <span class="card-title">{{{description}}}</span>
+        <span class="badge type">{{type}}</span>
+        <span class="badge"><span class="ltr">{{locale}}</span></span>
+        <span class="badge"><span class="ltr">{{stage}}</span></span>
+<!-- {{#if smoke}} -->
+        <span class="badge smoke">{{b_smoke}}</span>
+<!-- {{/if}} -->
+<!-- {{#if auto_yes}} -->
+        <span class="badge auto-yes">{{b_auto_yes}}</span>
+<!-- {{/if}} -->
+<!-- {{#if auto_no}} -->
+        <span class="badge auto-no">{{b_auto_no}}</span>
+<!-- {{/if}} -->
+        <span class="badge {{v_class}}">{{v_word}}</span>
+<!-- {{#if has_tracker_state}} -->
+        <span class="badge {{tracker_state_class}}">{{tracker_state}}</span>
+<!-- {{/if}} -->
+<!-- {{#if stale}} -->
+        <span class="badge stale">{{b_stale}}</span>
+<!-- {{/if}} -->
+<!-- {{#if orphan}} -->
+        <span class="badge orphan">{{b_orphan}}</span>
+<!-- {{/if}} -->
+<!-- {{#if human}} -->
+        <span class="badge human">{{b_human}} <span class="ltr">{{n_human}}</span></span>
+<!-- {{/if}} -->
+<!-- {{#if has_run}} -->
+        <span class="badge run">{{{run}}}</span>
+<!-- {{/if}} -->
+      </summary>
+      <div class="card-body">
+<!-- {{#if is_inferred}} -->
+        <p class="caption">{{cap_inferred}}</p>
+<!-- {{/if}} -->
+<!-- {{#if is_discrepancy}} -->
+        <p class="caption discrepancy">{{cap_discrepancy}}</p>
+<!-- {{/if}} -->
+<!-- {{#if is_notimpl}} -->
+        <p class="caption notimpl">{{cap_notimpl}}</p>
+<!-- {{/if}} -->
+<!-- {{#if is_draft}} -->
+        <p class="caption draft">{{cap_draft}}</p>
+<!-- {{/if}} -->
+<!-- {{#if stale}} -->
+        <p class="caption stale">{{cap_stale}}</p>
+<!-- {{/if}} -->
+<!-- {{#if orphan_summary}} -->
+        <p class="caption orphan">{{cap_orphan_summary}}</p>
+<!-- {{/if}} -->
+<!-- {{#if orphan_section}} -->
+        <p class="caption orphan">{{cap_orphan_section}}</p>
+<!-- {{/if}} -->
+<!-- {{#if human}} -->
+        <p class="caption human">{{cap_human}}</p>
+<!-- {{/if}} -->
+        <h4>{{tc_requirement}}</h4><p><span class="ltr">{{requirement}}</span></p>
+<!-- {{#if has_tags}} -->
+        <h4>{{tc_tags}}</h4><p class="tags">
+<!-- {{#each tags}} -->
+          <span class="badge tag"><span class="ltr">{{{text}}}</span></span>
+<!-- {{/each}} -->
+        </p>
+<!-- {{/if}} -->
+        <h4>{{tc_pre}}</h4><ul>
+<!-- {{#each preconditions}} -->
+          <li{{{cls}}}>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ul>
+        <h4>{{tc_steps}}</h4><ol>
+<!-- {{#each steps}} -->
+          <li{{{cls}}}>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ol>
+        <h4>{{tc_expected}}</h4><p>{{{expected}}}</p>
+<!-- {{#if has_oracle}} -->
+        <h4>{{tc_oracle}}</h4><p class="oracle">{{{oracle}}}</p>
+<!-- {{/if}} -->
+<!-- {{#if has_ai_oracle}} -->
+        <h4>{{tc_ai_oracle}}</h4><ul class="oracle">
+<!-- {{#each ai_oracle}} -->
+          <li>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ul>
+<!-- {{/if}} -->
+        <h4>{{tc_run}}</h4>
+<!-- {{#if has_run}} -->
+        <p>{{{run}}}</p>
+<!-- {{/if}} -->
+<!-- {{#unless has_run}} -->
+        <p>{{tc_infer}}</p>
+<!-- {{/unless}} -->
+<!-- {{#if has_evidence}} -->
+        <p class="stamp">{{tc_evidence}}: {{ev_on}} <span class="ltr">{{evidence_on}}</span> · {{ev_env}} <span class="ltr">{{evidence_env}}</span> · {{ev_build}} <span class="ltr">{{evidence_build}}</span> · {{ev_scope}} <span class="ltr">{{evidence_scope}}</span></p>
+<!-- {{/if}} -->
+<!-- {{#if has_tracker}} -->
+        <h4>{{tracker_h}}</h4>
+        {{{tracker_facts}}}
+<!-- {{/if}} -->
+        {{{comment_box}}}
+      </div>
+    </details>
+<!-- {{/each}} -->
+  </section>
+
+  <section id="sec-enhancement-log">
+    <div class="sec-head"><h2>{{s_log}}</h2><span class="note">{{s_log_note}}</span></div>
+<!-- {{#if has_log}} -->
+    <div class="tablewrap"><table>
+      <thead><tr>
+<!-- {{#each log_header}} -->
+        <th>{{{text}}}</th>
+<!-- {{/each}} -->
+      </tr></thead>
+      <tbody>
+<!-- {{#each log_rows}} -->
+        <tr>
+<!-- {{#each cells}} -->
+          <td>{{{text}}}</td>
+<!-- {{/each}} -->
+        </tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+<!-- {{#unless has_log}} -->
+    <p class="sub">{{none}}</p>
+<!-- {{/unless}} -->
+  </section>
+
+  <section id="sec-potential-bugs">
+    <div class="sec-head"><h2>{{s_bugs}}</h2><span class="note">{{s_bugs_note}}</span></div>
+<!-- {{#each bugs}} -->
+    <div class="item-card pb {{status}}" id="{{id}}">
+      <div class="item-head"><span class="card-id ltr">{{id}}</span><h3>{{{title}}}</h3><span class="badge">{{status_word}}</span></div>
+      <dl>
+        <dt>{{pb_tc}}</dt><dd><span class="ltr">{{tc}}</span></dd>
+        <dt>{{pb_steps}}</dt><dd><ol>
+<!-- {{#each steps}} -->
+          <li>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ol></dd>
+        <dt>{{pb_expected}}</dt><dd>{{{expected}}}</dd>
+        <dt>{{pb_actual}}</dt><dd>{{{actual}}}</dd>
+      </dl>
+      <p class="item-meta">{{pb_first}} <span class="ltr">{{first}}</span> · {{pb_last}} <span class="ltr">{{last}}</span></p>
+      {{{comment_box}}}
+    </div>
+<!-- {{/each}} -->
+<!-- {{#unless has_bugs}} -->
+    <p class="sub">{{none}}</p>
+<!-- {{/unless}} -->
+  </section>
+
+<!-- {{#if has_tracker_section}} -->
+  {{{bug_index_section}}}
+<!-- {{/if}} -->
+
+<!-- {{#if has_questions}} -->
+  <section id="sec-open-questions">
+    <div class="sec-head"><h2>{{s_questions}}</h2><span class="note">{{s_questions_note}}</span></div>
+<!-- {{#each questions}} -->
+    <div class="item-card q" id="{{id}}">
+      <div class="item-head"><span class="card-id ltr">{{id}}</span><h3>{{{title}}}</h3><span class="badge"><span class="ltr">{{status}}</span></span></div>
+      <dl>
+        <dt>{{q_tcs}}</dt><dd><span class="ltr">{{tcs}}</span></dd>
+        <dt>{{q_gap}}</dt><dd>{{{gap}}}</dd>
+        <dt>{{q_why}}</dt><dd>{{{why}}}</dd>
+        <dt>{{q_evidence}}</dt><dd>{{{evidence}}}</dd>
+        <dt>{{q_recommended}}</dt><dd>{{{recommended}}}</dd>
+        <dt>{{q_alternatives}}</dt><dd>{{{alternatives}}}</dd>
+        <dt>{{q_pending}}</dt><dd>{{{pending}}}</dd>
+      </dl>
+      {{{comment_box}}}
+    </div>
+<!-- {{/each}} -->
+  </section>
+<!-- {{/if}} -->
+
+<!-- {{#if has_selfreview}} -->
+  <section id="sec-self-review">
+    <div class="sec-head"><h2>{{s_selfreview}}</h2></div>
+<!-- {{#if negative}} -->
+    <h4 class="sub">{{s_negative}}</h4>
+    <div class="tablewrap"><table>
+      <thead><tr>
+<!-- {{#each negative.header}} -->
+        <th>{{{text}}}</th>
+<!-- {{/each}} -->
+      </tr></thead>
+      <tbody>
+<!-- {{#each negative.rows}} -->
+        <tr>
+<!-- {{#each cells}} -->
+          <td>{{{text}}}</td>
+<!-- {{/each}} -->
+        </tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+<!-- {{#if standards}} -->
+    <h4 class="sub" style="margin-top:18px">{{s_standards}}</h4>
+    <div class="tablewrap"><table>
+      <thead><tr>
+<!-- {{#each standards.header}} -->
+        <th>{{{text}}}</th>
+<!-- {{/each}} -->
+      </tr></thead>
+      <tbody>
+<!-- {{#each standards.rows}} -->
+        <tr>
+<!-- {{#each cells}} -->
+          <td>{{{text}}}</td>
+<!-- {{/each}} -->
+        </tr>
+<!-- {{/each}} -->
+      </tbody>
+    </table></div>
+<!-- {{/if}} -->
+  </section>
+<!-- {{/if}} -->
+
+  <section id="sec-findings">
+    <div class="sec-head"><h2>{{s_findings}}</h2><span class="note">{{s_findings_note}}</span></div>
+    <div class="findings gaps">
+      <h3 id="sec-findings-gaps">{{f_gaps}}</h3>
+      <ul>
+<!-- {{#each f_gaps_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_gaps_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+    <div class="findings">
+      <h3 id="sec-findings-defects">{{f_defects}}</h3>
+      <ul>
+<!-- {{#each f_defects_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_defects_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+    <div class="findings pending">
+      <h3 id="sec-findings-pending">{{f_pending}}</h3>
+      <ul>
+<!-- {{#each f_pending_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_pending_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+    <div class="findings env">
+      <h3 id="sec-findings-env">{{f_env}}</h3>
+      <ul>
+<!-- {{#each f_env_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_env_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+    <div class="findings unclear">
+      <h3 id="sec-findings-unclear">{{f_unclear}}</h3>
+      <ul>
+<!-- {{#each f_unclear_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+<!-- {{#unless f_unclear_items}} -->
+        <li>{{none}}</li>
+<!-- {{/unless}} -->
+      </ul>
+    </div>
+<!-- {{#if f_other_items}} -->
+    <div class="findings">
+      <ul>
+<!-- {{#each f_other_items}} -->
+        <li>{{{text}}}</li>
+<!-- {{/each}} -->
+      </ul>
+    </div>
+<!-- {{/if}} -->
+  </section>

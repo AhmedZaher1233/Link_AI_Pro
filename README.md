@@ -23,7 +23,7 @@ This repository is the **canonical source**. Any project pulls the skills from h
     link-qc-4-publish-test-cases-azure/            beautify the approved TCs and publish them to Azure DevOps with verified tags / automation status (ADO-MAP.md); --suite-only places them in a Test Plan suite later
       SKILL.md INPUT.txt scripts/ (ado-sync-plan, tc-hash, selftest-ado-sync + fixtures)
     link-qc-5-test-run-automation/                 generate + run Playwright (POM, automation inventory), two compliance gates, coverage, reports
-      SKILL.md INPUT.txt references/ (5) scripts/ (11 + fixtures) assets/ (8)
+      SKILL.md (≈180 lines, orchestrator) INPUT.txt references/ (18, loaded per activity) scripts/ (13 + fixtures) assets/ (8)
     link-qc-5b-test-run-manual-cli/                OPTIONAL, manual twin of 5 through playwright-cli (no MCP): runs EVERY TC of an approved document in full, smoke gate without heal, AI chatbot TCs judged against their `AI Oracle` rubric, writes skill 5's report set into skill 5's story folder — report only, gates nothing
       SKILL.md INPUT.txt references/ (9) scripts/ (render-run-report, selftest-run-report, scan-lib + fixtures/run-report — mirrors of skill 5's; selftest-manual-run + fixtures/manual-run — 5b-only) assets/ (2: run-report body + report shell, mirrored)
     link-qc-6-ui-testing/                          visual UI audit of an implemented screen against its design (Figma MCP / screenshots / reference site) or, with no design, against tokens, consistency, WCAG, RTL — beside the chain
@@ -31,7 +31,7 @@ This repository is the **canonical source**. Any project pulls the skills from h
     link-qc-7-sync-tc-status-to-azure/             Azure loop: latest TC outcomes → one Test Plan run (cloud test-plan tools; else NOT_RUN)
     link-qc-8-sync-bugs-azure/                     Azure loop: two-way bug sync with a direction gate (md → Azure creates + pushes, evidence attached through an upload-capable MCP and verified; Azure → md pulls retest candidates); ADO-BUG-MAP.md
       SKILL.md INPUT.txt references/ (qc-contract — canonical copy, md-to-azure, azure-to-md)
-    link-qc-9-retesting/                           Azure loop: retest bugs live (Playwright MCP), close or reopen in Azure with evidence
+    link-qc-9-retesting/                           Azure loop: retest bugs (skill 5's automation for automated TCs, playwright-cli for the rest), update the latest run in place, close or reopen in Azure, then attach the evidence
     link-qc-10-white-box-testing/                  audit the code against the requirement: gaps, bugs, repro scenarios
     link-qc-11-discover-business-rules/            find rules the code enforces that the spec never states (PO approval gate)
     link-qc-12-adhd-output-style/                  ADHD-friendly CHAT output style with a QA-pipeline overlay — beside the chain, chat only, writes nothing
@@ -82,8 +82,8 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
    the same guide, `references/azure-mcp-troubleshooting.md` (mirrored in each of them): run
    `scripts/check-azure-devops-pat.ps1` (or `.sh`) — it prints booleans only — and apply the one
    fix for the matching row.
-5. Optional, for skills 3c and 5b only: `scripts/set-playwright-secrets.ps1` (or `.sh`) stores per-role
-   usernames and passwords in a file outside the repository so the CLI validator and the manual CLI run can log in by
+5. Optional, for skills 3c, 5b and 9 only: `scripts/set-playwright-secrets.ps1` (or `.sh`) stores per-role
+   usernames and passwords in a file outside the repository so the CLI validator, the manual CLI run and the CLI retest can log in by
    secret *name*; without it you log in yourself in the browser window they open.
 6. Optional, for link-qc-6-ui-testing only: if you audit against Figma designs, let skill 1 add the `figma` MCP
    entry (Figma's hosted server — you log in once through `/mcp`, no token in any file). Without
@@ -126,9 +126,9 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
           ┆ ADO-MAP.md only closes the loop in 5 ▲       │
           └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘       ▼  optional Azure loop
                               ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
-                              │ 7 TC outcomes →  │ │ 8 bugs ⇄ Azure   │ │ 9 retest live,   │
-                              │   Test Plan run  │ │  (direction gate,│ │   close / reopen │
-                              │                  │ │   ADO-BUG-MAP)   │ │   with evidence  │
+                              │ 7 TC outcomes →  │ │ 8 bugs ⇄ Azure   │ │ 9 retest (auto / │
+                              │   Test Plan run  │ │  (direction gate,│ │  cli), update run│
+                              │                  │ │   ADO-BUG-MAP)   │ │  close + evidence│
                               └──────────────────┘ └──────────────────┘ └──────────────────┘
 
    beside the chain, any time:  6 ui-testing (visual UI audit per screen → Testing/UI-Testing/)
@@ -160,7 +160,7 @@ it NEW or EXISTING before anything is touched; the mode is resolved from that sn
 never reports PASS for a check that did not run. Run modes on an existing project:
 **audit** writes nothing at all and lists what repair would change; **repair** syncs skills
 1-12, 3b, 3c and 5b, adds missing folders, steering layers, MCP entries and learning-file sections (and,
-only after you say yes, `playwright-cli` for skills 3c and 5b and Pillow + numpy for link-qc-6-ui-testing), normalizes
+only after you say yes, `playwright-cli` for skills 3c, 5b and 9 and Pillow + numpy for link-qc-6-ui-testing), normalizes
 names (steering files, `.claude/Skills` → `.claude/skills`, legacy learning heading) and writes
 the manifest; **restructure** adds a confirmed `git mv` migration to the canonical layout.
 Front-matter: `disable-model-invocation: true`, `model: inherit`, and `allowed-tools` limited
@@ -335,17 +335,49 @@ code or a database write, verifying each item on its oracle, reading back system
 into the test-data layer, keeping the records unless told once after the run to clean up, and
 skipping only with `data_missing` (no way found), `not creatable` (evidence) or `QC declined` —
 then runs headed in priority order (smoke
-behind a 30 % failure gate, then positive, then negative) with live progress and ETA, and takes
+behind a 30 % failure gate, then positive, then negative) — each stage as ONE call of
+`scripts/run-stage.mjs`, which runs the stage's group commands, watches them itself and returns once,
+so the chat gets one cumulative update per finished stage (and an immediate one if a stage stops),
+labelled with what the skill is doing ("Running Smoke Tests (first run)" / "(re-run)", never a phase number),
+while the live per-test detail and the ETA go to a tailable progress log — and takes
 an **assertion-point screenshot** per TC — captured while the verified state is still on screen,
 before any teardown or cleanup runs, kept as immutable per-attempt history. It runs from the
 project's **one shared `playwright.config.ts`** (Google Chrome, visible, 2 workers; dependent
 tests serial with a documented reason; an existing config updated in place, several consolidated
-only when safe, created only when none exists) with a **timeout policy** in `timeouts.ts` (TC
+only when safe, created only when none exists). **Parallelism never changes a status:** a TC that
+fails while other tests ran beside it is re-run alone inside the same stage call before it counts (the
+isolation check — passing alone is recorded as parallel interference, and the tests that ran beside it
+are re-checked alone too); a network guard notices when the application refuses requests (429 /
+`Retry-After`), the runner cools down and lowers the workers, a TC refused even alone is reported
+`rate_limited` (no verdict, never a bug), and known limits (learning file, the application's
+rate-limiter configuration, earlier runs) pace only the limited call — every test keeps logging in
+through the UI. After the first run the skill heals automation defects and **re-runs only the TCs those
+fixes touched** (decided per TC by `scripts/impact.mjs` from a code fingerprint of each test's page
+objects, helpers and timeout keys) plus the TCs without a verdict; their results are merged into the
+same phase, everything else keeps its first-run result, and Checkpoint B proves every reported result
+is fresh. The run uses a **timeout policy** in `timeouts.ts` (TC
 budget separate from per-step deadlines, initial values documented, calibrated after the first
 run from evidence and never raised to hide a broken step) and a **heartbeat watchdog** that stops
-only a genuinely hung worker while keeping every finished result. Code-writing conventions —
+only a genuinely hung worker while keeping every finished result (`run-stage.mjs` applies it, and
+also stops a command Playwright failed to stop at its own time ceiling). Its `SKILL.md` is a short
+orchestrator — workflow, the rules of every activity, a block index — and each activity loads only
+its own `references/` file, so a run carries far less instruction text per turn. Code-writing conventions —
 page objects, locator order, positional selectors, steps, fixtures, unique data, diagnostics —
-are in its `references/code-craft.md`, with three matching validator rules.
+are in its `references/code-craft.md`, with three matching validator rules. The references hold only
+this project's rules — standard Playwright behaviour (locators, auto-waiting, assertion retries, the
+runner's flags) is assumed known and not re-explained, and a rule stated in several places has one home
+with pointers elsewhere.
+
+**Scratch investigation.** When the source and the retained trace cannot explain a failure or settle an
+ambiguous selector, `scripts/scratch.mjs` runs ONE temporary probe with the project's own Playwright,
+shared config (through a generated one-worker overlay), page objects and env-layer login — from
+`test-results/qa-scratch/`, a folder the validator, `impact.mjs` and every Playwright run ignore. A
+probe is an investigation, never a result: it refuses evidence capture, its own screenshots,
+`storageState`, file writes, `process.env` and TC ids, filters credentials from its output, flags any
+write outside its folder, never runs while a stage is in flight, and is cleaned before Checkpoint B.
+
+**Version.** Skill 5 carries a semantic version in its `SKILL.md` front-matter (`metadata.version`,
+currently 1.1.0); `/sync-skills` shows the installed and the available version.
 
 **Two mandatory compliance checkpoints** bracket the run, and both must PASS before the skill
 claims the automation is compliant:
@@ -358,8 +390,9 @@ claims the automation is compliant:
 * **Checkpoint B**, on the final code after all debugging — the same review repeated, plus proof
   that the screenshots, reports and logs were actually produced and match that code.
 
-Each gate is recorded PASS / FAIL / BLOCKED against a content hash of the tested files, so a
-result from before a later change can never be reported as complete, and a check that did not run
+Each gate is recorded PASS / FAIL / BLOCKED against a content hash of the tested files, every
+reported result must match its TC's current code fingerprint (a TC a later change touched is re-run,
+never reported from before the change), and a check that did not run
 is never recorded as PASS. Compliance status stays separate from execution status. When the story
 *happens* to be published already, it also closes the loop in DevOps (`Custom.TestAutomated` and
 automated-test metadata on the work items skill 4 created, plus a summary comment); otherwise that
@@ -478,16 +511,25 @@ with the manual instruction — and counts only after read-back (`AttachedFile` 
 (canonical copy, mirrored in skills 7 and 9).
 
 ### 9 — retesting (Azure loop, optional)
-Re-executes a bug's own reproduction steps in the running application through the Playwright
-MCP (both configured languages), positively observes the Expected result, captures evidence,
-sets the local Status (`resolved (phase N)` only after an actual pass; `open` + History on a
-fail), then applies skill 8's push inline (close, or reopen with tag / assignee / mention; the
-retest screenshot attached through the same ladder and verified by read-back) and skill 7's outcome
-push for the related TC. Candidates come from skill 8's
-Azure → md pull (`--awaiting-retest`) or explicit bug IDs. Asks once before the browser opens
-(URL, role, environment, data-change authorization, language switch); the password is typed in
-the browser or named from the user-run secrets file. Incidental defects are logged in the
-producer format and created in Azure through skill 8's recipe.
+Retests a bug in the running application — never through the Playwright MCP. One route per bug:
+when its TC is automated (a test of skill 5's automation carries `[TC-ID]` and the latest phase's run
+plan holds it) the TC is re-run from that code through skill 5's `run-stage.mjs --run rerun` (every
+variant, the isolation check included — a test-code failure is no verdict and is reported for skill 5,
+never healed here); otherwise (no automated TC, a UI bug, a manual-run phase) it is retested through
+`playwright-cli` — the full TC when it has a row in the latest phase, else the bug's own reproduction
+steps. It positively observes the Expected result, captures evidence, then **updates the LATEST phase
+of the run report in place** (user decision 2026-10-19: the changed TC rows, a `(retest — skill 9)`
+stage row and the Total, the Outcome, the Bugs table, a Retest bullet, Deviations, the header pass
+rate and the run-history row, plus `.runs/phase-N.json` to match), sets the bug Status
+(`resolved (phase N)` only after an actual pass; `open` + History on a fail) and re-renders the page
+(delivered only at gate PASS). Then skill 8's push inline — close, or reopen with tag / assignee /
+mention — and **after** the state change the retest screenshot is uploaded through the attachment
+ladder (the `azure-devops-attachments` MCP on cloud projects) and verified by read-back; skill 7's
+outcome push for the TCs whose row changed. Candidates come from skill 8's Azure → md pull
+(`--awaiting-retest`) or explicit bug IDs. Asks once before anything executes (environment,
+data-change authorization; for playwright-cli bugs the URL, login method per role and language
+switch); a password is typed in the browser or named from the user-run secrets file. Incidental
+defects are logged in the producer format and created in Azure through skill 8's recipe.
 
 ### 10 — white-box-testing
 Stack-agnostic implementation audit. First run profiles the repository (languages,
@@ -611,7 +653,7 @@ carry placeholders only, and skill 1's validator flags product tokens in the ste
 
 | Server | Used by | Purpose |
 |---|---|---|
-| Playwright MCP | 3b (required), 4 (gap-filler only), 5, 6 (live URLs), 9 (retest) | live application discovery and automation — skill 3 never uses it; 3c and 5b use `playwright-cli` instead, no MCP (installed by `/sync-skills --tools`, never a prerequisite for 3b) |
+| Playwright MCP | 3b (required), 4 (gap-filler only), 5, 6 (live URLs) | live application discovery and automation — skill 3 never uses it; 3c, 5b and 9 use `playwright-cli` instead, no MCP (skill 9 re-runs automated TCs through skill 5's `run-stage.mjs`) (installed by `/sync-skills --tools`, never a prerequisite for 3b) |
 | Azure DevOps MCP | 2, 3, 4, 5, 7, 8, 9, 11 | read User Stories, publish Test Cases, update automation fields, comment results — cloud (`@azure-devops/mcp`: `wit_*`, `search_workitem`, `testplan_*`) or self-hosted Azure DevOps Server (`@tiberriver256/mcp-server-azure-devops`: `get_work_item`, `search_work_items`, `create_work_item`, `update_work_item`, `manage_work_item_link`; no test plan / suite tools — skill 4 places TCs in a suite through the REST API only when you name one, otherwise reports it skipped) |
 | Azure DevOps attachments MCP (optional, cloud only) | 8, 9 | upload evidence screenshots as Bug attachments (`create_work_item_attachment`, and `delete_work_item_attachment` for a file the skill itself attached in error) — `@tiberriver256/mcp-server-azure-devops` started by `.claude/mcp-launchers/azure-devops-attachments.cjs` against the same cloud organization with the same PAT (derived in memory from `AZURE_DEVOPS_PAT_B64`; no new variable), because the cloud server cannot upload a file from disk; written by skill 1 with every cloud `azure-devops` entry; self-hosted projects need nothing extra; without it attachments stay pending with manual instructions |
 | Docx MCP | 2, 3 | read requirement and test-case documents, and write review comments back into them |
@@ -637,7 +679,7 @@ variables), the 7-step "Set or replace the PAT", or a missing PAT scope. The use
 /sync-skills link-qc-5-test-run-automation      # one skill
 /sync-skills --dry-run                  # read-only check, nothing copied
 /sync-skills --force                    # with the "update only" answer: overwrite locally edited skill files
-/sync-skills --tools                    # also install playwright-cli + browser (skills 3c and 5b) and Pillow + numpy (link-qc-6-ui-testing, when Python exists) — opt-in
+/sync-skills --tools                    # also install playwright-cli + browser (skills 3c, 5b and 9) and Pillow + numpy (link-qc-6-ui-testing, when Python exists) — opt-in
 ```
 
 The command is a wrapper around `scripts/sync-qa-skills.mjs` (`--check` / `--apply`). It never
@@ -645,6 +687,12 @@ touches anything outside `.claude/skills/`, `.claude/commands/sync-skills.md`, t
 `.mcp.json` and — only with `--tools` — the global `@playwright/cli` package, its browser, the
 `.playwright-cli/` gitignore line and the `pillow` + `numpy` Python packages; never deletes
 local-only files, and skips locally edited files unless `--force` is given.
+
+**Versions.** A versioned skill declares `metadata: version: "x.y.z"` in its `SKILL.md` front-matter (skill
+5 so far). `--check` reports `versions[]` — installed vs source and `current` · `update-available` ·
+`ahead-of-source` · `not-installed` · `pre-versioning` · `unversioned` — and `/sync-skills` shows
+`installed → source` per skill; skill 1's `validate-setup.mjs` lists the installed versions and turns the
+`Skills current` row WARN when one is behind. What changed between versions is in `CHANGELOG.md`.
 
 **Clean replace, after confirmation.** `/sync-skills` (and skill 1 in repair / restructure / new-project
 mode) runs `--check` first and asks once: *this sync deletes the Link QA skill folders and downloads fresh
@@ -679,7 +727,11 @@ Edit the skill in this repository, keep `SKILL.md` and `INPUT.txt` in step, and 
 `assets/project-learning.template.md`, `sync-skills.md`, `CLAUDE.md` and this README when a
 skill is added or renamed. Skill front-matter needs `name`, `description` (this is what triggers
 the skill — keep the trigger phrases) and, where useful, `argument-hint`. Skills with side
-effects set `disable-model-invocation: true`. Commit, push to `main`, and every project picks
+effects set `disable-model-invocation: true`. A versioned skill bumps `metadata.version` in the same
+change: **MAJOR** when a consumer must change something or an existing delivery stops passing (a
+removed or renamed flag, script, output file or schema, stricter gate semantics, a newly required input
+or MCP server), **MINOR** for a backward-compatible capability, **PATCH** for wording, token trimming,
+pointer fixes or a script fix with unchanged contracts; the CHANGELOG entry names the new version. Commit, push to `main`, and every project picks
 the change up on its next `/sync-skills`.
 
 **Mirrored files.** Skills 3, 3b and 3c share the renderer, its self-test and fixtures, the page
@@ -701,8 +753,10 @@ each harness asserts the same golden hash for the same fixture.
 Scripts are zero-dependency ESM, Node ≥ 18, and return their result as a JSON payload. The
 reporting scripts are read-only and always exit 0 (`--strict` on skill 5's validator and on the
 two renderers is the opt-in exception, for CI); the renderers write only behind `--write` (skill
-3's also `--write-skeleton`); every `selftest*.mjs` is a test harness and exits non-zero on
-mismatch by design. After changing skill 5's validator or run-report renderer / template (mirrored in
+3's also `--write-skeleton`); skill 5's `run-stage.mjs` is the one runner — it starts the consumer
+project's Playwright, writes only under the story's `artifacts/` and appends to the run's progress
+log; every `selftest*.mjs` is a test harness and exits non-zero on
+mismatch by design. After changing skill 5's validator, run-stage / watchdog / impact scripts or run-report renderer / template (mirrored in
 5b), or the review-page renderer / template in skills 3, 3b and 3c, run the self-tests:
 
 ```bash
@@ -711,6 +765,11 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-report.mj
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-watchdog.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-config-inventory.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-tc-hash.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-stage.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-impact.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-scratch.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-references.mjs --pretty
+node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest.mjs --pretty
 node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty
 node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty
 node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/selftest-ado-sync.mjs --pretty
@@ -719,4 +778,4 @@ node .claude/skills/link-qc-3b-validate-manual-test-cases/scripts/selftest.mjs -
 node .claude/skills/link-qc-3c-validate-manual-test-cases-cli/scripts/selftest.mjs --pretty
 ```
 
-The optional Azure loop after publishing / automation is: skill 4 `--suite-only` (suite placement) → link-qc-7 (outcomes → one Test Plan run) → link-qc-8 md-to-azure (defects) → link-qc-8 azure-to-md (developer states, retest candidates) → link-qc-9 (retest; push rules inline) → link-qc-8 md-to-azure again for manual local changes. These steps gate nothing. All three use the Azure DevOps MCP only; link-qc-7 (and skill 4 `--suite-only`) need the cloud server's test-plan tools and report NOT_RUN when missing; link-qc-9 also uses the Playwright MCP. `ADO-BUG-MAP.md` lives beside `ADO-MAP.md` in TestCases, never at the report root.
+The optional Azure loop after publishing / automation is: skill 4 `--suite-only` (suite placement) → link-qc-7 (outcomes → one Test Plan run) → link-qc-8 md-to-azure (defects) → link-qc-8 azure-to-md (developer states, retest candidates) → link-qc-9 (retest; push rules inline) → link-qc-8 md-to-azure again for manual local changes. These steps gate nothing. All three use the Azure DevOps MCP only; link-qc-7 (and skill 4 `--suite-only`) need the cloud server's test-plan tools and report NOT_RUN when missing; link-qc-9 never uses the Playwright MCP — it re-runs automated TCs through skill 5's runner and retests the rest through playwright-cli, and it is the one skill that updates the latest run-report phase in place. `ADO-BUG-MAP.md` lives beside `ADO-MAP.md` in TestCases, never at the report root.

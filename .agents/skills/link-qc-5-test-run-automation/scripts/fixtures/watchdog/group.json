@@ -1,0 +1,1 @@
+{ "name": "parallel", "mode": "parallel", "workers": 2, "tcs": ["TC-001", "TC-002", "TC-003", "TC-004", "TC-005", "TC-006"] }

@@ -14,12 +14,12 @@ changes only how the CHAT around the skill reads.
 | 3b | `link-qc-3b-validate-manual-test-cases` (optional, before or after approval) | the same three files patched in place (validation states, corrected steps, Potential Bugs, test-data statuses) | none — not a gate. Scope choice (FULL / SHARED / CUSTOM) is the one question; an APPROVED document is read-only until the reviewer authorizes the revision, and goes back to `PENDING HUMAN REVIEW` only if something changed |
 | 3c | `link-qc-3c-validate-manual-test-cases-cli` (optional, evaluation twin of 3b through playwright-cli) | the same files patched in place, plus `evidence/` screenshots for potential bugs | none — not a gate, and NO scope gate: every TC is walked on every run (no scope choice, no cross-validator choice — 3b evidence is re-validated). Its only asks: attended login (one "done" per role), the data-changes yes/no, the revision authorization on an APPROVED document, and — after the walk, only when evidence could not decide — one batched list of data items with a recommended way each. Not installed CLI → BLOCKED with `/sync-skills --tools` |
 | 4 | `link-qc-4-publish-test-cases-azure` | beautified upload doc, `ADO-MAP.md`, ADO Test Case work items (tokens and `[HUMAN]` kept verbatim, tags = feature + smoke + automation/manual + human-step + the TC's `Tags:`), one outcome line of five | Entry: `Status: APPROVED` present |
-| 5 | `link-qc-5-test-run-automation` | `automation-inventory.md` (page-object reuse / extend / create decisions) before any code, Playwright specs + POM, run plan, progress log, screenshots, bug drafts, AUTOMATION COMPLETE report (`partial (human step: n)` for `[HUMAN]` TCs) | Entry: `Status: APPROVED` proceeds; otherwise ONE question — approve now (the skill sets it) / run without approval (recorded) / stop (ADO publishing optional) · Checkpoint A compliance gate (an undecided duplicate page object blocks it) · PHASE 2.6 test-data readiness · 30% smoke failure gate · Checkpoint B compliance gate |
+| 5 | `link-qc-5-test-run-automation` | `automation-inventory.md` (page-object reuse / extend / create decisions) before any code, Playwright specs + POM, run plan, progress log, screenshots, bug drafts, AUTOMATION COMPLETE report (`partial (human step: n)` for `[HUMAN]` TCs) | Entry: `Status: APPROVED` proceeds; otherwise ONE question — approve now (the skill sets it) / run without approval (recorded) / stop (ADO publishing optional) · Checkpoint A compliance gate (an undecided duplicate page object blocks it) · Preparing Test Data (readiness) · 30% smoke failure gate · Checkpoint B compliance gate |
 | 5b | `link-qc-5b-test-run-manual-cli` (optional, manual twin of 5 through playwright-cli — no MCP, never installs, never a password) | the SAME report set as 5 into the SAME story folder `Testing/Automation/reports/[SPEC-*/]{story}/` — `TEST-RUN-REPORT-*.md` + rendered `.html`, `BUG-REPORT-*.md`, `.runs/phase-N.json` (one phase counter and one `BUG-{n}` sequence shared with 5) — plus assertion-point screenshots and, for every AI chatbot TC (`AI Oracle` field), `reply.md` beside the screenshot; never the TC document except its `Status:` line on "approve now" (a design problem → skill 3 `--revision`) | Entry: the same approval rule as 5 — `APPROVED` proceeds, otherwise approve now / run without approval / stop (independent of 4 and 5; 5b gates nothing) · attended login (one "done" per role) or secret names · the data-changes yes/no · 30% smoke gate — application-error majority stops the run, NO heal · `PARTIAL — human step pending` for `[HUMAN]` TCs · `ai_rubric_failure` when a reply misses its rubric |
 | 6 | `link-qc-6-ui-testing` (beside the chain, per screen, any time) | `Testing/UI-Testing/Reports/UI-Visual-QA-<page>.md` + evidence crops, `Learning-UI.md`, `Coverage-Index.md` | none — not a gate. One combined ask before the browser opens (languages, role, credentials, environment); Open Questions answered by the product owner become bugs or rules |
 | 7 | `link-qc-7-sync-tc-status-to-azure` (optional) | one Azure test run with the latest phase's outcomes; no local file | none — not a gate. NOT_RUN when the attached server has no test-plan tools is a complete outcome |
 | 8 | `link-qc-8-sync-bugs-azure` (optional) | `ADO-BUG-MAP.md` beside `ADO-MAP.md`, Azure Bug items, BUG-REPORT Status/History (Azure → md only) | Direction gate: ONE question (md → Azure / Azure → md / both) unless `--direction`; missing bug fields asked as one list; evidence attachments verified by read-back or reported pending (never a question) |
-| 9 | `link-qc-9-retesting` (optional) | BUG-REPORT Status/History (+ new entries), retest evidence PNGs, ledger; Azure close / reopen | Pre-flight ask before the browser opens (URL, role, environment, data changes, language switch); `resolved` only after a positive observation |
+| 9 | `link-qc-9-retesting` (optional) | automated TCs re-run from skill 5's automation (run-stage.mjs), the rest through playwright-cli — never the Playwright MCP; the LATEST run-report phase updated in place (TC rows, totals, pass rate, run file, re-rendered page), BUG-REPORT Status/History (+ new entries), retest evidence, ledger; Azure close / reopen, THEN the evidence upload | Pre-flight ask before anything executes (environment, data changes; for playwright-cli bugs URL, login method per role, language switch); `resolved` only after a positive observation; page delivered at gate PASS |
 | 10 | `link-qc-10-white-box-testing` | project profile, Implementation Analysis report | none — report only |
 | 11 | `link-qc-11-discover-business-rules` | export doc `PENDING PO APPROVAL` in the story folder | PO fills the decision block -> re-run `--apply-approved` |
 
@@ -45,13 +45,16 @@ complete.
 Skill {n} · {Phase x of y} ({phase name}) · {US-id story name}[ · story a of b] · {one progress fact}
 ```
 
+Skill 5 fills the phase slot with its activity name (`Running Smoke Tests (first run)`,
+`Running Smoke Tests (re-run)`, `Re-running Fixed & Impacted Tests`, `Preparing Test Data`, …) — never `PHASE n`.
+
 Examples:
 
 - `Skill 2 · Dependency check · US-4410 Leave balance · 2 of 3 dependency REQs resolved`
 - `Skill 3 · Phase 2 of 4 (TC design) · US-1234 Yearly leave · story 2 of 4 · 18 TCs drafted`
 - `Skill 3b · Phase 3 of 4 (live walk) · US-1234 Yearly leave · scope FULL · 11/18 observed`
 - `Skill 3c · Phase 3 of 4 (live walk) · US-1234 Yearly leave · all 18 TCs · tool cli · 11/18 observed`
-- `Skill 5 · PHASE 3 first run · US-1234 Yearly leave · smoke 9/9 passed, positive 6/14`
+- `Skill 5 · Running Positive Tests (first run) · US-1234 Yearly leave · smoke 9/9 passed, positive 12/14 passed`
 - `Skill 5b · Phase 3 of 4 (smoke) · US-1234 Yearly leave · 4/9 run · 0 failed · tool cli`
 - `link-qc-6-ui-testing · Step 2C Pass 2 of 6 (computed styles) · Dashboard EN · Tier 1 · 1,847 elements measured`
 - `link-qc-6-ui-testing · Step 2D (states) · Dashboard AR · no design → heuristic · 7/11 states driven`
@@ -147,7 +150,7 @@ skips the DevOps close-out. Never tell the user to run skill 4 first.
 Decide: stop the run (4 of 9 smoke TCs failed, all four are application errors on the leave-balance
 endpoint — 500 after submit) or continue to positive/negative anyway.
 
-Skill 5 · PHASE 3 smoke gate · US-1234 Yearly leave · 9/9 run, 4 failed, 44% > 30%
+Skill 5 · Running Smoke Tests (first run) · smoke gate · US-1234 Yearly leave · 9/9 run, 4 failed, 44% > 30%
 Failure classes: application 4 · automation 0 · environment 0
 Failed: TC-ORD-001, -003, -005, -008 (same endpoint). Screenshots: screenshots/SPEC-leave/YearlyLeave/phase-1/…
 ```
@@ -207,16 +210,24 @@ Coverage: 12/12 regions · 9/11 states (error, session-timeout not reachable) ·
 Optional: a second round measures how complete this one was (about 10 min).
 ```
 
-## 4. Progress lines (skill 5 live progress, skill 5b manual CLI run, skill 3b live validation, skill 10/11 discovery, link-qc-6-ui-testing measurement)
+## 4. Progress lines (skill 5 stage messages, skill 5b manual CLI run, skill 3b live validation, skill 10/11 discovery, link-qc-6-ui-testing measurement)
 
-One line per refresh, fixed field order, no prose between refreshes:
+Skill 5 posts nothing per refresh: one message per finished stage, its `update` lines kept as they
+are (first line = the stage result, then failures / not run, the isolation check, the rate-limit
+line, blockers, the smoke gate or the phase-wide line), the activity name as the label. A re-run
+message states its subset first and the phase totals last:
 
 ```
-Smoke 4/9 · TC-ORD-012 running · 03:10 elapsed · ETA 04:00 · 0 failed
-Positive 6/14 · TC-ORD-031 running · 09:42 elapsed · ETA 11:30 · 1 failed (automation, self-healed)
+Smoke tests completed (first run): 12 passed, 2 failed, 0 skipped, 0 not run — 14 TCs, 03:10.
+Failed: TC-ORD-003, TC-ORD-009.
+Isolation check: 3 TCs re-run alone: 1 passed alone (parallel interference: TC-ORD-005), 2 failed again (confirmed: TC-ORD-003, TC-ORD-009).
+Blockers: none.
+Smoke gate: 14.3% failed (limit 30%) — Positive tests may continue.
 ```
 
-Skill 5b (manual CLI run) — same fields, `· tool cli` appended, never "self-healed":
+The others print one line per refresh, fixed field order, no prose between refreshes.
+
+Skill 5b (manual CLI run) — one line per TC, `· tool cli` appended, never "self-healed":
 
 ```
 Smoke 4/9 · TC-ORD-012 running · 03:10 elapsed · ETA 04:00 · 0 failed · tool cli
@@ -242,7 +253,7 @@ The per-run progress log file keeps the skill's full format; the chat shows the 
 | 3c | same as 3b | same as 3b, then data changes left behind | same as 3b, plus tool cli, the TC-IDs that carried 3b evidence (all re-validated), data changes made / cleaned / kept / left, items prepared (kept / removed, the way each used, stamped values substituted), not-creatable items with their evidence, ways decided / undecided, sessions closed |
 | 4 (publish) | verified / mismatch / conflict / not verified / not written | not written and mismatches first | the one outcome line with its counts, ADO-MAP path |
 | 5 (automation) | reuse / extend / create (inventory), then full / partial (human step) / manual | undecided duplicate candidates first, then partial TCs | inventory counts, coverage counts, run of record path |
-| 5 (run) | application / automation / environment | application failures first | passed/failed/skipped, run of record path |
+| 5 (run) | application / automation / environment (incl. rate limited) | application failures first, then parallel interference, then rate-limited TCs | passed/failed/skipped, re-run count (impacted / no verdict / not needed), results of record path |
 | 5b | application / assistant-rubric / environment / human step | application failures first, then `ai_rubric_failure`, then `PARTIAL` TCs, then test data (prepared items with stamped values, not-creatable skips with evidence, records kept / cleaned up) | PASS / FAIL / INCOMPLETE / SKIP / NOT_RUN / PARTIAL counts, repeats per AI TC, readiness decisions (ready / prepared api·ui·db / skipped data_missing·not creatable·QC declined), run of record path (same folder as 5) |
 | 11 | Contradicts / Not in spec / Partial / In spec | contradictions first | totals, export path |
 | link-qc-6-ui-testing | Severity 2 / 3 / 4 (then language, then mode: design comparison / heuristic) | Severity 2 first, then Open Questions | bug count per severity, match score or quality verdict, QA verdict, report path, tier used |
@@ -266,7 +277,7 @@ Point them at what the reader waits for, in minutes:
 - Skill 3b: FULL ~1 min per common flow + ~1 min per TC tail walked; SHARED ~1 min per flow only.
 - Skill 3c: same as 3b plus ~1 min per attended login; the comparison protocol runs both and reports the measured times.
 - Skill 4: ~20 s per TC published; re-run on an unchanged document: under 1 min.
-- Skill 5 generation: ~2 min per TC; runs: read the ETA from the progress line, do not guess.
+- Skill 5 generation: ~2 min per TC; runs: read the ETA from the progress log (or the last stage message), do not guess.
 - Skill 5b: ~1 min per TC + ~1 min per attended login + repeats × AI TCs (each repeat waits for one more reply); then read the ETA from the progress line.
 - link-qc-6-ui-testing: ~10 min per screen and language at Tier 1–3 (live URL), plus ~5 min for the state and width sweep; screenshot-only inputs ~15 min; the second round ~10 min.
 
@@ -274,5 +285,5 @@ Adjust from the actual elapsed time as soon as one is available; the reader trus
 
 ## Azure sync progress and grouping
 Status line: link-qc-8 · azure-to-md · 8/10 mapped bugs read · 2 retest candidates.
-Group link-qc-7 as Test Plan results; link-qc-8 as bug creation + state synchronization (report the direction that ran); link-qc-9 as observed retesting. Preserve the complete per-item result table and separate conflicts, failed writes and NOT_RUN.
-Timing: estimate link-qc-7 and link-qc-8 from item count and observed MCP latency; link-qc-9 from reproduction steps × language passes. Unknown timings stay unknown; never invent durations.
+Group link-qc-7 as Test Plan results; link-qc-8 as bug creation + state synchronization (report the direction that ran); link-qc-9 as observed retesting (route per bug: automation re-run / playwright-cli; report the pass rate before → after). Preserve the complete per-item result table and separate conflicts, failed writes and NOT_RUN.
+Timing: estimate link-qc-7 and link-qc-8 from item count and observed MCP latency; link-qc-9 from the re-run TCs' durations in the latest phase (automation) and reproduction steps × language passes (playwright-cli). Unknown timings stay unknown; never invent durations.

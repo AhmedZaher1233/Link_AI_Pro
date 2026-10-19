@@ -46,7 +46,7 @@ export const EXECUTED_OUTCOMES = ['GREEN', 'FAILURES', 'INCOMPLETE', 'SMOKE GATE
 // `PARTIAL — human step pending`. It is never counted as passed and never lets a phase be GREEN.
 export const RESULT_STATES = ['PASS', 'FAIL', 'INCOMPLETE', 'SKIP', 'NOT_RUN', 'PARTIAL'];
 export const PARTIAL_REASON = 'human step pending';
-export const CLASSIFICATIONS = ['app_bug', 'selector_failure', 'assertion_failure', 'environment_failure', 'data_missing', 'timeout_failure', 'evidence_failure', 'unverified_assumption', 'ai_rubric_failure'];
+export const CLASSIFICATIONS = ['app_bug', 'selector_failure', 'assertion_failure', 'environment_failure', 'rate_limited', 'data_missing', 'timeout_failure', 'evidence_failure', 'unverified_assumption', 'ai_rubric_failure'];
 export const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 export const BUG_STATUSES = ['open', 'resolved', 'not-checked'];
 // `partial` is an OPTIONAL column of the Stages / Run history tables and an optional ` · {n} partial`
@@ -260,8 +260,10 @@ export function parseReport(text) {
         if (!RESULT_STATES.includes(status) || (statusReason && status !== 'PARTIAL')) errors.push({ kind: 'unknown-enum', line: rt.line, detail: 'phase ' + n + ' ' + tc + ' Status "' + statusRaw + '" is not one of ' + RESULT_STATES.join(' / ') + ' (only PARTIAL carries a reason: `PARTIAL — ' + PARTIAL_REASON + '`)' });
         if (status === 'PARTIAL' && !new RegExp('^' + PARTIAL_REASON + '$', 'i').test(statusReason)) warnings.push({ kind: 'partial-without-reason', phase: n, id: tc, detail: 'PARTIAL row should read `PARTIAL — ' + PARTIAL_REASON + '`' + (statusReason ? ' (found "' + statusReason + '")' : '') });
         const cls = stripMd(cell(r, ci.cls));
-        if (cls && cls !== DASH && !/^incomplete:/i.test(cls) && !/^human step/i.test(cls) && !CLASSIFICATIONS.includes(cls)) warnings.push({ kind: 'unknown-classification', phase: n, id: tc, detail: 'classification "' + cls + '" is not in the catalogue' });
-        if (status === 'INCOMPLETE' && !/^incomplete:\s*\S/i.test(cls)) warnings.push({ kind: 'incomplete-without-variants', phase: n, id: tc, detail: 'INCOMPLETE row should name the missing variants as `incomplete: {slugs}`' });
+        // the documented reason forms (references/run-report.md §4) are not catalogue words and never warn as unknown
+        if (cls && cls !== DASH && !/^(?:incomplete|interrupted|not started):/i.test(cls) && !/^human step/i.test(cls) && cls !== 'cleanup_incomplete' && !CLASSIFICATIONS.includes(cls)) warnings.push({ kind: 'unknown-classification', phase: n, id: tc, detail: 'classification "' + cls + '" is not in the catalogue' });
+        // an INCOMPLETE row names its missing variants (`incomplete: {slugs}`) or one of the documented non-variant reasons
+        if (status === 'INCOMPLETE' && !/^(?:incomplete|interrupted):\s*\S/i.test(cls) && cls !== 'rate_limited' && cls !== 'cleanup_incomplete') warnings.push({ kind: 'incomplete-without-variants', phase: n, id: tc, detail: 'INCOMPLETE row should name the missing variants as `incomplete: {slugs}`' });
         if (status === 'PARTIAL' && !/^human step:\s*\S/i.test(cls)) warnings.push({ kind: 'partial-without-step', phase: n, id: tc, detail: 'PARTIAL row should name the pending step in Classification as `human step: {n}`' });
         results.push({ tc, req: stripMd(cell(r, ci.req)) || DASH, name: stripMd(cell(r, ci.name)), status, statusReason, group: stripMd(cell(r, ci.group)) || DASH, duration: stripMd(cell(r, ci.duration)) || DASH, classification: cls || DASH, evidenceRaw: cell(r, ci.ev), line: rt.line });
       }

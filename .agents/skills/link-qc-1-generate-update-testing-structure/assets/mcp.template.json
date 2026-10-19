@@ -1,0 +1,58 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp",
+        "--browser", "chrome",
+        "--headless",
+        "--test-id-attribute", "data-testid",
+        "--codegen", "typescript"
+      ]
+    },
+    "azure-devops": {
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "{ORG_NAME}", "--authentication", "pat"],
+      "env": { "PERSONAL_ACCESS_TOKEN": "${AZURE_DEVOPS_PAT_B64}" }
+    },
+    "docx": {
+      "command": "{UVX_PATH}",
+      "args": ["--from", "docx-mcp-server", "--with", "mcp<2", "docx-mcp-server"]
+    }
+  },
+  "_self_hosted_azure_devops_server": {
+    "azure-devops": {
+      "command": "npx",
+      "args": ["-y", "@tiberriver256/mcp-server-azure-devops"],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "{ORG_URL}",
+        "AZURE_DEVOPS_AUTH_METHOD": "pat",
+        "AZURE_DEVOPS_PAT": "${AZURE_DEVOPS_PAT}",
+        "AZURE_DEVOPS_DEFAULT_PROJECT": "{PROJECT_NAME}"
+      }
+    }
+  },
+  "_optional_azure_devops_attachments_server": {
+    "azure-devops-attachments": {
+      "command": "node",
+      "args": [".claude/mcp-launchers/azure-devops-attachments.cjs"],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/{ORG_NAME}",
+        "AZURE_DEVOPS_AUTH_METHOD": "pat",
+        "AZURE_DEVOPS_DEFAULT_PROJECT": "{PROJECT_NAME}"
+      }
+    }
+  },
+  "_optional_azure_resources_server": {
+    "azure": {
+      "command": "npx",
+      "args": ["-y", "@azure/mcp@latest", "server", "start"]
+    }
+  },
+  "_optional_figma_server_for_qc_ui": {
+    "figma": {
+      "type": "http",
+      "url": "https://mcp.figma.com/mcp"
+    }
+  }
+}

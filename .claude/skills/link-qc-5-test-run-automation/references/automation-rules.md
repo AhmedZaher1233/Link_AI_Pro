@@ -1,7 +1,8 @@
 # Automation rules — expected results, assertions, modifiers, waits, repairs, coverage
 
-Loaded by `SKILL.md` from `<source_of_truth>`, `<test_modifiers>`, `<wait_policy>`, `<first_run>`
-and `<coverage_measurement>`.
+Loaded by `SKILL.md` at **Writing Automation Code** and kept for the rest of the run:
+`<source_of_truth>`, `<test_modifiers>` and `<wait_policy>` (`code-generation.md`) are the short forms
+of §1-§4, `<coverage_measurement>` (`coverage.md`) relies on §6 and `<first_run>` (`execution.md`) on §5.
 
 ---
 
@@ -21,6 +22,9 @@ Everything else is evidence, not authority:
 | Observed behaviour (a live run, a Playwright MCP pass) | what the app currently does | an approved expectation |
 | `project-learning.md` entries | accumulated knowledge, of varying provenance | an override of an approved requirement |
 | Skill 11's discovered business rules | rules the code enforces | requirements, until the PO approves them |
+
+Use application code and observed behaviour to *form* a question or to confirm a selector — never to
+settle what a test should expect.
 
 **Weigh a learning-file entry, do not rank it.** Judge each by its source (was it a user answer, an
 observation, or a guess?), its approval (did a human confirm it?), and its relevance (same module,
@@ -74,15 +78,14 @@ suite-level (`test.describe.skip(...)`).
 
 | Modifier | Policy |
 |---|---|
-| `only` (and `fit`, `describe.only`) | **Never committed.** It silences every other test in the run, so a green result would be meaningless. This is not exemptible. |
+| `only` (and `fit`, `describe.only`) | **Never committed**, never exemptible. |
 | `skip` | Allowed with a reason that traces to a PHASE 2.6 readiness decision, an approved requirement, or an honoured exception. Counts as `SKIP`, never as a pass. |
 | `fixme` | Allowed with a reason. A known-broken test that must not be read as a pass. |
-| `fail` | Allowed with a reason. An **expected failure**: reported in its own row, never merged into the pass count, and it fails the run if it unexpectedly passes. |
-| `slow` | Allowed with a reason. It **extends the timeout**; it does not skip anything. Never report a `slow` test as skipped, and never use it to paper over an unexplained slowdown. |
+| `fail` | Allowed with a reason. An expected failure, reported in its own row, never merged into the pass count. |
+| `slow` | Allowed with a reason. Never reported as skipped, never used to paper over an unexplained slowdown. |
 
-**Targeted runs are preserved** — that is what the runner's own filters are for:
-`--grep` / `--grep-invert`, `--project`, `--last-failed`, `--repeat-each`, `--workers` — on the one
-shared config. Use those. Never edit a test file to focus a run, and never reach for `--config`.
+**Targeted runs** use `run-stage.mjs`'s filters on the one shared config — never an edited test file,
+never `--config`.
 
 **A missing prerequisite must stay visible.** A skipped or blocked test is reported against the
 original scope with its reason, in the run file, the report's phase section and the chat summary. It is never
@@ -92,9 +95,8 @@ removed from the scope, never counted as a pass, and never allowed to disappear 
 
 ## 4. Wait policy — specs, page objects, fixtures and helpers alike
 
-- **Prefer an observable condition**: a web-first assertion (`expect(locator).toBeVisible()`),
-  `waitForURL`, `waitForResponse`, a state the page object exposes.
-- **Bounded polling is fine** — `expect.poll`, `toPass({ timeout })`, an explicit retry with a limit.
+- **Prefer an observable condition** (a web-first assertion, a URL or response wait, a state the page
+  object exposes); bounded polling is fine.
 - **Timers are not banned.** A justified retry backoff, a debounce the UI genuinely has, or an
   explicit timing requirement from the spec is legitimate. State the reason on the line above, or in
   a `qa-allow`, so it is visible in the report rather than looking like a lazy sleep.
@@ -102,11 +104,8 @@ removed from the scope, never counted as a pass, and never allowed to disappear 
   is either known (say it) or unknown (investigate it, don't pad it).
 - These rules apply in every layer. A `waitForTimeout` moved from a spec into a page object is the
   same fixed wait in a different file.
-- **`networkidle` is not a readiness signal** (`waitForLoadState('networkidle')`, `waitUntil:
-  'networkidle'`): it never settles on pages that poll or stream and settles too early on lazy
-  pages. Wait for the loader to hide, for the response that carries the data, or for a web-first
-  assertion on the element the step needs (validator warning `wait-network-idle`; a justified
-  exception is stated on the line above).
+- **`networkidle` is not a readiness signal** (validator warning `wait-network-idle`; a justified
+  exception is stated on the line above) — wait for the application's own signal (code-craft §10).
 - **Every wait is bounded by the step's deadline** (`helpers/steps.ts`, values from `timeouts.ts`).
   A visible loader never extends it: a loader that outlives the deadline IS the timeout the step
   reports, with "loader still visible" as the observed condition.
@@ -130,8 +129,8 @@ reason is an acceptable value, a blank is not.
 | 5 Updated value | the exact new one |
 | 6 Reason | why the new value is correct |
 | 7 Approved-requirement reference | REQ/AC/TC id or the approved clarification. **Required** for any assertion or expected-value change; `n/a` for a pure locator repair |
-| 8 Verification performed | which checks were re-run (validator rules, project lint, semantic re-review) |
-| 9 Rerun result | the tests re-executed and their outcome, or `not re-run — reason` |
+| 8 Verification performed | which checks were re-run (validator rules, project lint, semantic re-review) and the burn-in that confirms the heal in the re-run (`--burn-in`, workers 1, `--repeat-each=3`) |
+| 9 Rerun result | the tests the re-run executed (burn-in included) and their outcome — any failing burn-in repeat is FAIL — or `not re-run — reason` |
 
 Rules:
 
@@ -154,17 +153,19 @@ Report all three separately. Never let one stand in for another.
 | Figure | What it answers | Where |
 |---|---|---|
 | **Requirement outcome coverage** | Are each requirement's required outcomes actually asserted? `Full` / `Partial` / `Missing` / `Assumed` | `### Coverage`, with the requirement ID on every row |
-| **TC automation coverage** | How much of the approved TC document is automated? The existing weighted % | The PHASE 2.5 gate — target, source and override path unchanged |
-| **Execution pass rate** | Of what ran, how much passed? | `### Second Run — Results` |
+| **TC automation coverage** | How much of the approved TC document is automated? The existing weighted % | The PHASE 2.5 gate — target, source, repair pass and user-override path unchanged |
+| **Execution pass rate** | Of what ran, how much passed? | `### Results of record (first run + re-run)` — the results of record (the latest attempt per TC over the phase, each fresh), never mixed into either number above |
 
 **Traceability is not coverage.** A requirement linked to one test is *traceable*; whether that test
 asserts the requirement's outcomes is a separate judgement (checklist item 7). A link plus a
-visibility assertion on a calculation requirement is `Partial`, not `Full`.
+visibility assertion on a calculation requirement is `Partial`, not `Full`. `@unverified-assumption`
+tests are `Assumed` — never `Full`, and excluded from confirmed requirement coverage.
 
 **IDs come from upstream.** Validate every referenced requirement ID against the resolved sources
 (the REQ file, the approved TC document, `ADO-MAP.md`). Report an ID you cannot resolve. **Never
 invent, derive or renumber a requirement ID during automation** — skill 2 owns REQ IDs, skill 3 owns
-TC IDs.
+TC IDs. `validate-automation.mjs --req-ids <REQ file>` flags titles referencing an unknown id;
+without the list that check is `notRun`, never a pass.
 
 **Requirement IDs belong in the artifacts.** `coverage-summary.csv`, `coverage-detail.csv`,
 `manual-scenarios.csv`, the Coverage section and `.runs/phase-{N}.json` each carry the requirement ID(s)
@@ -177,14 +178,15 @@ count. Extend the existing reports; do not replace them.
 
 The approved document marks each TC `validated` / `enhanced` / `inferred` / `discrepancy` /
 `not-implemented` / `draft`. Every state but `draft` comes from the optional
-`link-qc-3b-validate-manual-test-cases` or `link-qc-3c-validate-manual-test-cases-cli`; a document that never went through either is all `draft`, which is
-normal and never a reason to ask for it. Those labels were true when they were written and **may
-now be stale**.
+`link-qc-3b-validate-manual-test-cases` or `link-qc-3c-validate-manual-test-cases-cli` (the stamp key
+`tool: mcp | cli` says which); a document that never went through either is all `draft`, which is
+normal and never a reason to ask for it. Those labels were true when they were written (the evidence
+stamps say when and on which build) and **may now be stale**.
 
 - **Re-verify readiness where you can.** An `inferred` or `draft` TC whose screen you can now reach
   is worth re-checking before you trust its label.
-- **Genuinely unavailable implementation** → the TC is `pending / not covered for this run`, not a
-  failure and not an application defect.
+- **Genuinely unavailable implementation** → the TC is `pending — not covered for this run`, not a
+  failure and not an application defect, and it stays visible in the denominator.
 - **Investigate a draft or unvalidated TC before classifying its failure.** A draft TC failing does
   not by itself prove an application defect — the TC may simply be wrong. It may, however, reveal a
   real defect once verified. Verify first, classify second.

@@ -93,8 +93,13 @@ that); a `.mcp.json` that does not parse is left alone and reported.
    Python exists). A failed tool step is reported as `tool-failed` and never stops the skills copy.
 
 4. **Report** the script's `summary`, `applied` (`replaced` / `installed` / `legacy-removed` / `replace-failed` per folder), `localOnlySkills`, `legacySkills`, `mcp` and `hint` fields as a short
-   table (skill · result · files new/updated/current). When a `rerun` field is present, add one line
-   `sync updated itself and re-ran: pass 1 {n} files · pass 2 {m} files` — the table reflects pass 2.
+   table (skill · version · result · files new/updated/current). The version cell comes from `versions[]`
+   (the SKILL.md `metadata.version` of each side): `{installed} → {source}` when they differ (`--apply`:
+   `{installedBefore ?? installedVersion} → {installedAfter}`), `{v}` when `current`, `—` when `unversioned`; then one
+   line naming every skill whose `versionStatus` (after `--apply`: `statusAfter`) is `update-available` /
+   `pre-versioning` / `ahead-of-source`, or `versions: all current`. When a `rerun` field is present, add one line
+   `sync updated itself and re-ran: pass 1 {n} files · pass 2 {m} files` — the table reflects pass 2 (on the first
+   sync that installs version support, pass 1 ran the old code, so `installedBefore` may be absent).
    Then one `.mcp.json` line:
    `mcp: {actions performed | planned | none} · docx pinned {yes/no} · uvx {path | not found}`
    and one tools line from the `tools` field:

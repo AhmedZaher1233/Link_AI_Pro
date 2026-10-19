@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates the OPTIONAL browser secrets file used by skills link-qc-3c-validate-manual-test-cases-cli and
-# link-qc-5b-test-run-manual-cli (and by any Playwright MCP backend) on macOS / Linux, so a validation or
+# link-qc-5b-test-run-manual-cli and link-qc-9-retesting (and by any Playwright MCP backend) on macOS / Linux, so a validation or
 # manual run can log in without a password ever being typed in chat or on a command line.
 #
 # Run it yourself in a terminal (not through Claude). Per role it prompts for the role name, the

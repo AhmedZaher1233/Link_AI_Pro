@@ -159,7 +159,7 @@ the exact thing the reader must do, with the path, and nothing before it:
 - Skill 3c test-data ask (after the walk, only when evidence could not decide) -> the batched list of undecided items ordered by priority, each with its recommended way; items decided from evidence are not asked.
 - Skill 4 entry gate -> `Set Status: APPROVED in {path}` (the only document gate; publishing to Azure DevOps is optional and never a prerequisite for 5).
 - Skill 5 / 5b approval question (document not APPROVED) -> `{path} is {value}. A) approve now (I set Status: APPROVED for you) · B) run without approval (recorded in the report) · C) stop. Recommended: {A if you reviewed it | B}.` — one line, three letters, never a second question; `--approve` / `--unapproved` skip it.
-- Skill 5 PHASE 2.6 test-data readiness -> the missing data item and where to add it.
+- Skill 5 Preparing Test Data (test-data readiness) -> the missing data item and where to add it.
 - Skill 5 Checkpoint A / B -> the one compliance item still unresolved and what would close it (the skill repairs its own code defects; it only surfaces what needs a human).
 - Skill 5 30% smoke failure gate -> the majority failure class and the one decision (continue / stop).
 - Skill 5b attended login -> `Log in as {role} in the browser window that just opened, then reply done.` (one per role; the model never sees a password — same as 3c).
@@ -203,9 +203,14 @@ Environment failures (VPN, unreachable app, expired credentials) are never phras
 
 ### E. Long runs: progress lines, not prose
 
-Skill 5 live progress is one line per refresh:
-`Smoke 4/9 · TC-ORD-012 running · 03:10 elapsed · ETA 04:00 · 0 failed`.
-Skill 5b (manual CLI run) uses the same line and appends the tool:
+Skill 5 reports per finished stage, never per refresh: one message after Smoke, one cumulative
+after Positive, one with the phase totals after Negative (first run, then — only for the TCs a fix
+touched or that had no verdict — the re-run), labelled with the activity, never a phase number —
+the payload's `update` lines kept as they are, including the isolation-check and rate-limit lines:
+`Smoke tests completed (first run): 12 passed, 2 failed, 0 skipped, 0 not run — 14 TCs, 03:10.`
+`Positive tests completed (re-run): 3 TCs re-run → 3 passed, 0 failed, 0 skipped, 0 not run — 01:05.`
+The live per-test detail and the ETA stay in its progress log, never in the chat.
+Skill 5b (manual CLI run) keeps one line per TC and appends the tool:
 `Smoke 4/9 · TC-ORD-012 running · 03:10 elapsed · ETA 04:00 · 0 failed · tool cli`.
 Skill 3b / 3c live validation and skill 10/11 code discovery: `Validated 7/18 · flows 2/3 · 2 pending
 implementation · 1 stale · 0 blocked` (3c appends `· tool cli`) — no narration of each click, command or file.
@@ -222,8 +227,8 @@ holds everything; the chat holds what to act on.
 
 Completed work is stated as something the reader can open or click:
 `27 TCs ready for review: {path}.html` · `14 work items created, 3 updated, 0 duplicates —
-ADO-MAP.md written` · `Run of record: 25 passed, 2 failed (both application errors, bugs drafted
-in {folder})`.
+ADO-MAP.md written` · `Results of record: 25 passed, 2 failed (both application errors, bugs drafted
+in {folder}); 4 TCs re-run after the fixes, 26 kept from the first run`.
 
 ## When to break the rules
 
@@ -252,4 +257,4 @@ Then verify: if the reader reads only the first line and the last line, do they 
 
 If yes, send.
 
-Azure loop (skills 7 to 9): TC outcomes, two-way bug sync with its direction gate, retest. Use the three rows and the grouping/timing guidance in references/qa-pipeline.md. Status example: `link-qc-9 · retest · 2/5 observed · 1 pass, 1 fail, Azure push pending`. Preserve map identities and full summaries; a conflict has one next action: `link-qc-8 --direction azure-to-md`, then re-evaluate.
+Azure loop (skills 7 to 9): TC outcomes, two-way bug sync with its direction gate, retest. Use the three rows and the grouping/timing guidance in references/qa-pipeline.md. Status example: `link-qc-9 · retest · 2/5 observed (1 automation, 1 playwright-cli) · 1 pass, 1 fail · pass rate 46/50 → 47/50 · Azure push pending`. Preserve map identities and full summaries; a conflict has one next action: `link-qc-8 --direction azure-to-md`, then re-evaluate.

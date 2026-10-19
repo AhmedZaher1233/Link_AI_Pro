@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "link-qc-1-generate-update-testing-structure",
+  "generatedOn": "{YYYY-MM-DD}",
+  "projectName": "{project name}",
+  "paths": {
+    "testingRoot": "Testing",
+    "requirements": "Testing/Requirements",
+    "manualTestCases": "Testing/Manual_Test/TestCases",
+    "automationRoot": "Testing/Automation",
+    "pages": "Testing/Automation/pages",
+    "tests": "Testing/Automation/tests",
+    "reports": "Testing/Automation/reports",
+    "screenshots": "Testing/Automation/screenshots",
+    "automationLogs": "Testing/Automation/automation-logs",
+    "whiteBox": "Testing/White_Box_Testing",
+    "learningFile": "Testing/project-learning.md",
+    "skillsDir": ".claude/skills"
+  },
+  "steering": {
+    "dir": "docs/steering",
+    "readme": "docs/steering/README.md",
+    "L1": "docs/steering/L1-testing-foundation.md",
+    "L2": "docs/steering/L2-testing-qa-standards.md",
+    "L3": "docs/steering/L3-project-testing.md"
+  },
+  "framework": {
+    "runner": "playwright",
+    "configFile": "playwright.config.ts",
+    "browserProject": "chromium",
+    "language": "typescript"
+  },
+  "mcp": {
+    "configFile": ".mcp.json",
+    "servers": ["playwright", "azure-devops", "docx"]
+  },
+  "deviations": []
+}

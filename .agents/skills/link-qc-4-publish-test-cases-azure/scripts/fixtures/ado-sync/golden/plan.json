@@ -1,0 +1,307 @@
+{
+  "tool": "ado-sync-plan",
+  "schema": "ado-sync/1",
+  "hash": "tc-hash/1",
+  "mode": "plan",
+  "readOnly": true,
+  "gate": "PASS",
+  "reason": "plan computed — apply it through MCP, then read back and run verify",
+  "feature": "sync",
+  "conventionTags": [],
+  "source": {
+    "sha256": "0ae020735865f780b6e18494d21467187d540091ace49240c630f1da9950b6df",
+    "beautifiedSha256": null,
+    "dataFile": "TEST-DATA-sync.md",
+    "dataSha256": "d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0"
+  },
+  "header": {
+    "story": "4321",
+    "project": "Sample Project",
+    "hosting": "cloud"
+  },
+  "previousMap": {
+    "present": true,
+    "ownershipKnown": false,
+    "hashesKnown": false,
+    "sourceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "rowsNotInDocument": [
+      {
+        "tcId": "TC-SYNC-09",
+        "workItemId": "109",
+        "publishedSha256": null,
+        "automatedSha256": null,
+        "candidate": "YES",
+        "status": "Planned",
+        "introduced": null,
+        "suite": "skipped",
+        "note": "removed from document — work item left in place"
+      }
+    ]
+  },
+  "tcs": [
+    {
+      "tcId": "TC-SYNC-01",
+      "title": "Search the product list by name",
+      "workItemId": 101,
+      "hash": "d50801ac8fade8ed1f138f8dd3d460372d18c19a2a320ee2ba5752e989daf863",
+      "candidacy": "YES",
+      "smoke": true,
+      "humanSteps": 0,
+      "docTags": [],
+      "refs": [
+        "A1",
+        "D1",
+        "E1"
+      ],
+      "intendedTags": [
+        "automation",
+        "smoke",
+        "sync"
+      ],
+      "currentTags": [
+        "manual-review",
+        "sync"
+      ],
+      "tagsAdd": [
+        "automation",
+        "smoke"
+      ],
+      "tagsRemove": [],
+      "tagsPreserve": [
+        "manual-review",
+        "sync"
+      ],
+      "previouslyIntroduced": null,
+      "ownership": "unknown",
+      "status": {
+        "current": "Planned",
+        "intended": "Planned",
+        "action": "keep",
+        "reason": "already Planned"
+      },
+      "descriptionBlock": {
+        "file": "TEST-DATA-sync.md",
+        "sha": "d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0",
+        "ids": [
+          "A1",
+          "D1",
+          "E1"
+        ],
+        "unresolved": [],
+        "text": "Test data — TEST-DATA-sync.md (sha256 d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0)\n- [A1] Administrator — username: admin.user — used for login in every TC\n- [D1] Product \"Sample\" — must look like: active, price 10.00\n- [E1] application base URL — https://portal.example.com\nEach reference resolves to its own row of that file; passwords are never listed here."
+      },
+      "changes": [
+        "content",
+        "tags",
+        "test data"
+      ],
+      "unchanged": false,
+      "previous": {
+        "workItemId": "101",
+        "publishedSha256": null,
+        "automatedSha256": null,
+        "suite": "skipped",
+        "status": "Planned"
+      }
+    },
+    {
+      "tcId": "TC-SYNC-02",
+      "title": "A Viewer cannot add a product",
+      "workItemId": 102,
+      "hash": "1f64efc8b22cf4c48b029cfb8694dc233a5ed612c862aa7bad7875fdc05c69c2",
+      "candidacy": "NO",
+      "smoke": false,
+      "humanSteps": 0,
+      "docTags": [
+        "regression"
+      ],
+      "refs": [
+        "A2",
+        "D2",
+        "E1"
+      ],
+      "intendedTags": [
+        "manual",
+        "regression",
+        "sync"
+      ],
+      "currentTags": [
+        "automation",
+        "regression",
+        "sync"
+      ],
+      "tagsAdd": [
+        "manual"
+      ],
+      "tagsRemove": [],
+      "tagsPreserve": [
+        "automation",
+        "regression",
+        "sync"
+      ],
+      "previouslyIntroduced": null,
+      "ownership": "unknown",
+      "status": {
+        "current": "Planned",
+        "intended": "Not Automated",
+        "action": "write",
+        "reason": "Automation Candidate: NO → Not Automated"
+      },
+      "descriptionBlock": {
+        "file": "TEST-DATA-sync.md",
+        "sha": "d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0",
+        "ids": [
+          "A2",
+          "D2",
+          "E1"
+        ],
+        "unresolved": [],
+        "text": "Test data — TEST-DATA-sync.md (sha256 d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0)\n- [A2] Viewer — username: viewer.user — read-only role\n- [D2] Product list with 3 items — must look like: 3 rows\n- [E1] application base URL — https://portal.example.com\nEach reference resolves to its own row of that file; passwords are never listed here."
+      },
+      "changes": [
+        "content",
+        "tags",
+        "status",
+        "test data"
+      ],
+      "unchanged": false,
+      "previous": {
+        "workItemId": "102",
+        "publishedSha256": null,
+        "automatedSha256": null,
+        "suite": "skipped",
+        "status": "Planned"
+      }
+    },
+    {
+      "tcId": "TC-SYNC-03",
+      "title": "Placing an order sends the confirmation SMS",
+      "workItemId": "create",
+      "hash": "e65ece2cb8afd5dd6b25db70544c627c4a36fcac03f0cd73b26d5cd7481c0234",
+      "candidacy": "YES",
+      "smoke": false,
+      "humanSteps": 1,
+      "docTags": [],
+      "refs": [
+        "A1",
+        "D1",
+        "E1",
+        "E2"
+      ],
+      "intendedTags": [
+        "automation",
+        "human-step",
+        "sync"
+      ],
+      "currentTags": [],
+      "tagsAdd": [
+        "automation",
+        "human-step",
+        "sync"
+      ],
+      "tagsRemove": [],
+      "tagsPreserve": [],
+      "previouslyIntroduced": null,
+      "ownership": "unknown",
+      "status": {
+        "current": null,
+        "intended": "Planned",
+        "action": "write",
+        "reason": "Automation Candidate: YES → Planned"
+      },
+      "descriptionBlock": {
+        "file": "TEST-DATA-sync.md",
+        "sha": "d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0",
+        "ids": [
+          "A1",
+          "D1",
+          "E1",
+          "E2"
+        ],
+        "unresolved": [],
+        "text": "Test data — TEST-DATA-sync.md (sha256 d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0)\n- [A1] Administrator — username: admin.user — used for login in every TC\n- [D1] Product \"Sample\" — must look like: active, price 10.00\n- [E1] application base URL — https://portal.example.com\n- [E2] mail sandbox (reads OTP / notification mail) — https://mail.example.com\nEach reference resolves to its own row of that file; passwords are never listed here."
+      },
+      "changes": [
+        "create"
+      ],
+      "unchanged": false,
+      "previous": null
+    },
+    {
+      "tcId": "TC-SYNC-04",
+      "title": "Search with a name that matches nothing",
+      "workItemId": 104,
+      "hash": "d5597380fa54ba5b97a3a6c094758ccf38cbc4144cf66841667f78156658210b",
+      "candidacy": null,
+      "smoke": false,
+      "humanSteps": 0,
+      "docTags": [],
+      "refs": [
+        "A1",
+        "D1",
+        "E1"
+      ],
+      "intendedTags": [
+        "sync"
+      ],
+      "currentTags": [
+        "sync"
+      ],
+      "tagsAdd": [],
+      "tagsRemove": [],
+      "tagsPreserve": [
+        "sync"
+      ],
+      "previouslyIntroduced": null,
+      "ownership": "unknown",
+      "status": {
+        "current": "Planned",
+        "intended": null,
+        "action": "unknown",
+        "reason": "unknown (no candidacy field)"
+      },
+      "descriptionBlock": {
+        "file": "TEST-DATA-sync.md",
+        "sha": "d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0",
+        "ids": [
+          "A1",
+          "D1",
+          "E1"
+        ],
+        "unresolved": [],
+        "text": "Test data — TEST-DATA-sync.md (sha256 d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0)\n- [A1] Administrator — username: admin.user — used for login in every TC\n- [D1] Product \"Sample\" — must look like: active, price 10.00\n- [E1] application base URL — https://portal.example.com\nEach reference resolves to its own row of that file; passwords are never listed here."
+      },
+      "changes": [
+        "content",
+        "test data"
+      ],
+      "unchanged": false,
+      "previous": {
+        "workItemId": "104",
+        "publishedSha256": null,
+        "automatedSha256": null,
+        "suite": "skipped",
+        "status": "Automated"
+      }
+    }
+  ],
+  "counts": {
+    "tcs": 4,
+    "create": 1,
+    "update": 3,
+    "tagsAdd": 6,
+    "tagsRemove": 0,
+    "statusWrite": 2,
+    "statusKeep": 1,
+    "statusUnknown": 1,
+    "statusConflict": 0,
+    "current": 0,
+    "humanStep": 1,
+    "unresolvedRefs": 0
+  },
+  "warnings": [
+    "previous ADO-MAP.md has no \"Tags (introduced)\" column — tag ownership is unknown: nothing is removed this run; the column is initialised from this run's verified adds",
+    "previous ADO-MAP.md has no published_tc_sha256 / automated_tc_sha256 columns — an existing \"Automated\" has no provenance and is reported as a conflict"
+  ],
+  "errors": []
+}

@@ -1,0 +1,34 @@
+SKILL: link-qc-7-sync-tc-status-to-azure — Link (QC) skill 7
+WHAT IT DOES: Publish the latest test-case outcomes (skill 5's TEST-RUN-REPORT-{feature}.md latest phase, or an explicit TC-ID=PASS|FAIL list) to the Azure Test Plan points of the published test cases as ONE test run, through the azure-devops MCP. The attached server must expose test-point / run / result tools (cloud @azure-devops/mcp only); otherwise every outcome is NOT_RUN and nothing is created. Runs after skill 5, 3b / 3c with explicit results, or skill 9; not a gate.
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+ALWAYS REQUIRED:
+  1. The outcome source — TEST-RUN-REPORT-{feature}.md (latest phase, or --phase N) or --outcomes TC-x=PASS,TC-y=FAIL,…
+  2. ADO-MAP.md of the story (written by link-qc-4-publish-test-cases-azure; its Suite column says where the points live).
+
+OPTIONAL FLAGS / ARGUMENTS:
+  --phase N                     use phase N instead of the latest one
+  --outcomes TC=PASS,…          explicit list instead of the run report
+  plan/suite URL or IDs         when the Suite column is empty or ambiguous
+
+ASKED DURING THE RUN — ONE message, before any write:
+  3. Plan / suite when they cannot be resolved from ADO-MAP.md, the learning file or the task input.
+  4. The intended test point when a TC has several configurations or testers.
+  No credential or PAT in chat — ever.
+
+PREREQUISITES (checked by link-qc-1-generate-update-testing-structure):
+  - azure-devops MCP server in .mcp.json — the CLOUD server (@azure-devops/mcp) with test-plan tools; the self-hosted server has none → this skill reports NOT_RUN.
+  - Test cases published (ADO-MAP.md) and placed in a suite (skill 4, or skill 4 --suite-only).
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+Azure DevOps   — one test run named "Outcome sync — {feature} phase {N} — {date}" with one result per mapped point (Passed / Failed / Blocked), completed only when every outcome was verified
+No local file  — AutomationStatus / TestAutomated stay skill 5's linked-mode job
+Summary table  | Item | Source | ADO ID | Outcome | Before | After | Result |  + run ID, completion state, metrics
+
+WHEN TO RUN IT: after a skill 5 phase when the project records outcomes on test points; after 3b / 3c with explicit results; after skill 9 reopened or closed a bug and its TC result changed.
+
+HARD RULES: MCP only, never a PAT / .env / REST; INCOMPLETE and @unverified-assumption are never Passed; never sets AutomationStatus / TestAutomated; an incomplete run is reported with its ID and resumed, never duplicated; unmapped TCs are skipped with the reason.

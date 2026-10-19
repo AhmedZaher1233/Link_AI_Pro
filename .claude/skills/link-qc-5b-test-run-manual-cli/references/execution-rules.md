@@ -220,7 +220,8 @@ Written into `{bug_report_md}` in skill 5's shape (`run-report.md` §5, `<bug_re
   bug the reply excerpt that failed the rubric and the score) · `History` = `- phase {N} — FAIL:
   {note}`.
 - **History is appended, never replaced**; an entry is never rewritten. A bug is `resolved
-  (phase {M})` **only after an actual passing retest** of its TC in a later phase (History gets
+  (phase {M})` **only after an actual passing retest** of its TC in a later phase, or in skill 9's
+  retest of the latest phase (History gets
   `- phase {M} — PASS: {note}`); a bug whose TC did not run this phase becomes
   `not-checked-this-run` (History `- phase {N} — not run: {reason}`); seen again → stays `open`,
   History appended.

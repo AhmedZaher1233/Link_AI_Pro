@@ -161,7 +161,9 @@ holds the same rows as the phase's `### Test-data readiness` table (skill 5's sh
 looked at. Not written: `compliance`, `run_plan`, `open_questions`, `coverage_snapshot`,
 `merged`, `heal_log`, `unverified_assumptions`, `timeouts`, `watchdog_events` (the renderer
 ignores them; skill 5's coverage delta skips a file without `coverage_snapshot`). Created with
-`status: planning` at step 7, updated after each stage, final at step 12, then immutable.
+`status: planning` at step 7, updated after each stage, final at step 12, then immutable — except
+that skill 9's retest may update the LATEST phase in place (skill 5 `run-report.md` §3); while your
+run file is `planning` / `running`, that retest is blocked.
 
 ## 7. Evidence, provenance, comments
 

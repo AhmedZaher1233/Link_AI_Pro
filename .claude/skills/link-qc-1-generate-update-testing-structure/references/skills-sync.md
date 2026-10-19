@@ -10,9 +10,9 @@ wrapper around it. Never re-describe the procedure elsewhere — link here.
 | Mode A (audit) | `node ${CLAUDE_SKILL_DIR}/scripts/sync-qa-skills.mjs --check --target <project>` | no |
 | Mode B / C, new project — after the replace confirmation (below) | `node ${CLAUDE_SKILL_DIR}/scripts/sync-qa-skills.mjs --apply --replace --yes --target <project>` | yes — deletes and re-downloads OUR skill folders + the command; normal permission flow |
 | same, user chose "update only" / nothing of ours present yet | `node ${CLAUDE_SKILL_DIR}/scripts/sync-qa-skills.mjs --apply --target <project>` | yes — normal permission flow |
-| one skill only | add `--only link-qc-5-test-run-automation` | |
+| some skills only | add `--only link-qc-5-test-run-automation` — repeat `--only` (or give a comma list) for several | |
 | locally edited skill files, update-only | add `--force` (only when the user says so) | |
-| install the optional tools — playwright-cli for skills 3c and 5b, Pillow + numpy for link-qc-6-ui-testing (opt-in) | add `--tools` to `--apply` (only after the user said yes) | yes — global `@playwright/cli`, its chromium browser, the `.playwright-cli/` line in `.gitignore`, and `pip install pillow numpy` when a Python interpreter already exists |
+| install the optional tools — playwright-cli for skills 3c, 5b and 9, Pillow + numpy for link-qc-6-ui-testing (opt-in) | add `--tools` to `--apply` (only after the user said yes) | yes — global `@playwright/cli`, its chromium browser, the `.playwright-cli/` line in `.gitignore`, and `pip install pillow numpy` when a Python interpreter already exists |
 
 **Replace confirmation (Mode B / C / new project).** Run `--check` first. When `replace.needsConfirmation` is
 true, show `replace.deleteAndRedownload`, `replace.legacyRemoved`, `replace.lost` and `replace.keptUntouched`
@@ -46,7 +46,7 @@ What the script does:
    lists the planned actions under `mcp.actions`.
 6. Optional tools (**only with `--tools`** on `--apply`): `npm install -g
    @playwright/cli@latest`, `playwright-cli install-browser` (chromium) and the
-   `.playwright-cli/` line in `.gitignore` (inside a git repository) for skills 3c and 5b; and
+   `.playwright-cli/` line in `.gitignore` (inside a git repository) for skills 3c, 5b and 9; and
    `<python> -m pip install pillow numpy` for link-qc-6-ui-testing's static-image annotation — only when a
    Python interpreter is already present (the interpreter itself is never installed; without it
    link-qc-6-ui-testing annotates live pages in the DOM). `--check` always reports the tool status and the
@@ -56,7 +56,9 @@ What the script does:
 7. Owns nothing else: never touches `docs/`, `Testing/`, other `.mcp.json` servers, settings,
    tests, app code, the browser secrets file (user-run script only), or `.claude/mcp-launchers/`
    (the attachments launcher — skill 1 Mode B copies and refreshes it).
-8. Emits JSON: `files[]`, `summary`, `applied[]`, `localOnlySkills`, `replace` (the plan + `confirmText`), `mcp`, `tools`, `reloadRequired`. Pass the
+8. Emits JSON: `versions[]` (per skill: `installedVersion` / `sourceVersion` from the SKILL.md front-matter
+   `metadata.version`, `versionStatus` current · update-available · ahead-of-source · not-installed · pre-versioning ·
+   unversioned; `--apply` adds `installedAfter` / `statusAfter`, a self re-run `installedBefore`), `files[]`, `summary` (files per status: `new` · `updated` · `current` · `local_only` · `skipped` · `missing_in_source`), `applied[]`, `localOnlySkills`, `replace` (the plan + `confirmText`), `mcp`, `tools`, `reloadRequired`. Pass the
    `--check` output file to `validate-setup.mjs --sync-report` so the `Skills current` row is
    measured, not guessed.
 

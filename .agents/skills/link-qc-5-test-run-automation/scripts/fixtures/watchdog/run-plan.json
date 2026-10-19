@@ -1,0 +1,8 @@
+{
+  "user_story": "US-1234", "generated": "2026-09-20T10:00:00Z", "headed": true, "workers_parallel": 2,
+  "projects": ["chromium"],
+  "groups": [
+    { "name": "parallel", "mode": "parallel", "workers": 2, "tcs": ["TC-001", "TC-002", "TC-003", "TC-004", "TC-005", "TC-006"] },
+    { "name": "serial:orders", "mode": "serial", "workers": 1, "tcs": ["TC-010"], "reason": "deletes the shared draft order" }
+  ]
+}

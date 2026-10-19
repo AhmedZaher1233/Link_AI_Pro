@@ -131,7 +131,7 @@
 <!-- {{#if has_results}} -->
         <h3 class="sub-head">Results · one row per test case</h3>
         <div class="tablewrap"><table>
-          <thead><tr><th data-sort="natural">TC-ID</th><th data-sort="natural">REQ</th><th data-sort="text">Name</th><th data-sort="rank" data-sort-order="fail|incomplete|partial|skip|not_run,not run|pass">Status</th><th data-sort="text">Group</th><th data-sort="duration">Duration</th><th data-sort="rank" data-sort-order="app_bug|ai_rubric_failure|assertion_failure|selector_failure|timeout_failure|evidence_failure|environment_failure|data_missing|unverified_assumption|incomplete,interrupted,cleanup_incomplete|human step|not started">Classification</th><th data-sort="none">Evidence</th>{{{tracker_th}}}</tr></thead>
+          <thead><tr><th data-sort="natural">TC-ID</th><th data-sort="natural">REQ</th><th data-sort="text">Name</th><th data-sort="rank" data-sort-order="fail|incomplete|partial|skip|not_run,not run|pass">Status</th><th data-sort="text">Group</th><th data-sort="duration">Duration</th><th data-sort="rank" data-sort-order="app_bug|ai_rubric_failure|assertion_failure|selector_failure|timeout_failure|evidence_failure|environment_failure|rate_limited|data_missing|unverified_assumption|incomplete,interrupted,cleanup_incomplete|human step|not started">Classification</th><th data-sort="none">Evidence</th>{{{tracker_th}}}</tr></thead>
           <tbody>
 <!-- {{#each results}} -->
             <tr class="{{row_class}}" id="{{anchor}}"><td class="nowrap">{{tc}}</td><td>{{req}}</td><td>{{name}}</td><td><span class="badge {{status_class}}">{{status}}</span></td><td>{{group}}</td><td>{{duration}}</td><td>{{classification}}</td><td>

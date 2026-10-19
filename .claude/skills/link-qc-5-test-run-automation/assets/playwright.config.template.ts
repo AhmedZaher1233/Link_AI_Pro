@@ -7,12 +7,15 @@
 //
 //   PW_STAGE_JSON       this command's raw Playwright JSON (one file per stage / run-group command)
 //   PW_PROGRESS_FILE    this command's heartbeat file (helpers/steps.ts + helpers/progress-reporter.ts)
-//   PW_OUTPUT_DIR       Playwright outputDir for this story ({results_root}/artifacts/test-output)
+//   PW_OUTPUT_DIR       Playwright outputDir of this command ({results_root}/artifacts/test-output/phase-{N}/{command}/)
 //   PW_GLOBAL_TIMEOUT   outer wall-clock ceiling for this command (ms; 0 = none)
 //   PW_HEADLESS=1       run hidden (default: VISIBLE Chrome window)
 //   PW_WORKERS          parallel workers for this command (default 2; serial groups pass --workers 1)
 //   PW_VIDEO=1          keep video on failure while investigating a freeze (off by default)
 //   PW_PHASE / PW_STAGE_ATTEMPT   used by helpers/evidence.ts and helpers/test-data.ts
+//   PW_RATE_LIMIT_FILE  this command's rate-limit records (helpers/network-guard.ts: 429 / Retry-After / policy headers)
+//   PW_RATE_LIMIT_STATE the phase-wide pacing state shared by all workers (helpers/rate-limit.ts)
+//   PW_RATE_LIMITS      JSON of the run plan's rate_limits[] — the pace per service (empty: no pacing, detection only)
 //   BASE_URL / PW_LOCALE / PW_TZ  from the project's env layer (utils/env.ts) — never hardcoded here
 import { defineConfig, devices } from '@playwright/test';
 import { TIMEOUTS } from './timeouts';
@@ -21,9 +24,10 @@ const headless = process.env.PW_HEADLESS === '1' || process.env.PW_HEADLESS === 
 
 export default defineConfig({
   testDir: './tests',
-  // Parallelism: every test may run on any worker; genuinely dependent tests sit in a
-  // test.describe.configure({ mode: 'serial' }) block, and the skill runs each serial run-plan group
-  // as its own command with --workers 1 (the documented override — see the run plan's reason column).
+  // Parallelism: every test may run on any worker. The skill runs each serial run-plan group as its own
+  // command with --workers 1 (the documented override — see the run plan's reason column); only a true
+  // chain (a later test needs data an earlier one created) sits in a test.describe.configure({ mode: 'serial' })
+  // block. A FAIL beside other tests is re-run alone by the runner before it counts (the isolation check).
   fullyParallel: true,
   workers: Number(process.env.PW_WORKERS ?? 2),
   // A committed test.only would silence the rest of the suite; the validator catches it statically,

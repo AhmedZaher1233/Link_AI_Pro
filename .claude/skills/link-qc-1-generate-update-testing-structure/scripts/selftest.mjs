@@ -28,12 +28,18 @@
 //        node: builtins only, carries no real org / host and no token-looking literal.
 //   12   validate-setup.mjs row `Azure DevOps attachments MCP`: present + launcher → NOT_RUN "configured"; cloud entry
 //        without it → WARN "not configured"; present but launcher missing → WARN "missing"; self-hosted → PASS "not needed".
+//   13   Skill versions: skillVersion() reads only `metadata.version` (semver, quotes stripped), compareSemver(),
+//        versionStatus() matrix, scanSuite().versions, and validate-setup's QA Skills / Skills current rows (a version
+//        behind the source → WARN; a sync report without versions[] reads as before).
+//   14   sync-qa-skills arguments and summary: argValues() keeps every repeated --only (and a comma list) where
+//        parseArgs keeps only the last; syncSummary() keys every status with underscores (missing_in_source, never
+//        missing_in-source); the sync script derives `only` and `summary` through them.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { parseArgs, print, run, planMcpMigration, applyMcpMigration, detectAdoHosting, scanMcp, scanPat, inspectAdoEntry, inspectAdoAttachmentsEntry, scanAdoAttachments, adoAttachmentsLauncherAssetPath, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, PAT_VARS, DOCX_SERVER, DOCX_ARGS, planReplace, SKILLS, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER, ADO_ATTACHMENTS_PACKAGE_PIN } from './lib.mjs';
+import { parseArgs, print, run, planMcpMigration, applyMcpMigration, detectAdoHosting, scanMcp, scanPat, inspectAdoEntry, inspectAdoAttachmentsEntry, scanAdoAttachments, adoAttachmentsLauncherAssetPath, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, PAT_VARS, DOCX_SERVER, DOCX_ARGS, planReplace, SKILLS, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER, ADO_ATTACHMENTS_PACKAGE_PIN, skillVersion, compareSemver, versionStatus, scanSuite, argValues, syncSummary } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -253,6 +259,76 @@ for (const [id, fixture, expectDocxAction] of [[1, 'cloud.mcp.json', 'mcp-added'
     && stale?.status === 'WARN' && /outdated/.test(stale.reason)
     && selfHosted?.status === 'PASS' && /not needed/.test(selfHosted.reason);
   check(12, 'validate-setup row: present → NOT_RUN configured; cloud without it → WARN; launcher missing / outdated → WARN; self-hosted → PASS not needed', ok, { present, absent, missing, stale, selfHosted });
+}
+
+// ---- 13. Skill versions: metadata.version parser, semver compare, status matrix, scanSuite + validate-setup rows ----
+{
+  const fm = (body) => `---\nname: x\ndescription: y\n${body}---\n\n# x\n`;
+  const parse = {
+    quoted: skillVersion(fm('metadata:\n  version: "1.2.3"\n')) === '1.2.3',
+    unquoted: skillVersion(fm('metadata:\n  tags: a\n  version: 0.10.0\n')) === '0.10.0',
+    single: skillVersion(fm("metadata:\n  version: '2.0.1'\n")) === '2.0.1',
+    crlf: skillVersion(fm('metadata:\r\n  version: "1.0.0"\r\n').replace(/\n/g, '\r\n').replace(/\r\r/g, '\r')) === '1.0.0',
+    missing: skillVersion(fm('model: x\n')) === null,
+    invalid: skillVersion(fm('metadata:\n  version: "1.0"\n')) === null,
+    topLevelIgnored: skillVersion(fm('version: 1.0.0\n')) === null,
+    otherBlockIgnored: skillVersion(fm('other:\n  version: 1.0.0\n')) === null,
+    afterMetadataBlock: skillVersion(fm('metadata:\n  tags: a\nmodel: m\n  version: 9.9.9\n')) === null,
+    noFrontMatter: skillVersion('# just a heading') === null && skillVersion(null) === null,
+  };
+  const cmp = compareSemver('1.2.3', '1.2.3') === 0 && compareSemver('1.2.3', '1.10.0') === -1 && compareSemver('2.0.0', '1.99.99') === 1 && compareSemver('1.0', '1.0.0') === null;
+  const st = (installed, source, installedExists = true) => versionStatus({ installed, source, installedExists });
+  const matrix = st('1.0.0', '1.0.0') === 'current' && st('1.0.0', '1.1.0') === 'update-available' && st('1.2.0', '1.1.0') === 'ahead-of-source'
+    && st(null, '1.0.0') === 'pre-versioning' && st(null, '1.0.0', false) === 'not-installed' && st('1.0.0', null) === 'unversioned' && st(null, null, false) === 'unversioned';
+  // scanSuite reads the installed versions; validate-setup shows them and turns a version behind the source into WARN
+  const root = path.join(tmp, 'suite');
+  for (const s of SKILLS) {
+    fs.mkdirSync(path.join(root, '.claude', 'skills', s), { recursive: true });
+    fs.writeFileSync(path.join(root, '.claude', 'skills', s, 'SKILL.md'), fm(s === SKILLS[0] ? 'metadata:\n  version: "1.0.0"\n' : ''));
+  }
+  const su = scanSuite(root);
+  const suiteOk = su.present.length === SKILLS.length && stable(su.versions) === stable({ [SKILLS[0]]: '1.0.0' });
+  const validate = path.join(here, 'validate-setup.mjs');
+  const report = path.join(tmp, 'sync-report.json');
+  const rows = (sync) => {
+    fs.writeFileSync(report, JSON.stringify(sync));
+    const r = spawnSync(process.execPath, [validate, '--root', root, '--sync-report', report], { encoding: 'utf8' });
+    try { const j = JSON.parse(r.stdout); return { suite: j.rows.find((x) => x.item === 'QA Skills'), current: j.rows.find((x) => x.item === 'Skills current') }; } catch { return {}; }
+  };
+  const base = { source: { ref: 'abc_2026-10-19' }, summary: { current: 10 } };
+  const behind = rows({ ...base, versions: [{ skill: SKILLS[0], installedVersion: '1.0.0', sourceVersion: '1.1.0', versionStatus: 'update-available' }] });
+  const same = rows({ ...base, versions: [{ skill: SKILLS[0], installedVersion: '1.0.0', sourceVersion: '1.0.0', versionStatus: 'current' }] });
+  const legacy = rows(base);
+  const rowsOk = /versions: .*1\.0\.0/.test(behind.suite?.reason || '')
+    && behind.current?.status === 'WARN' && /1\.0\.0 → 1\.1\.0 \(update-available\)/.test(behind.current.reason)
+    && same.current?.status === 'PASS' && /\(current\)/.test(same.current.reason)
+    && legacy.current?.status === 'PASS' && !/versions:/.test(legacy.current.reason);
+  check(13, 'skill versions: metadata.version parsed (quoted / unquoted / CRLF; top-level, other blocks, invalid → null), semver compare, status matrix, scanSuite versions, validate-setup rows (behind → WARN, current → PASS, legacy report unchanged)',
+    Object.values(parse).every(Boolean) && cmp && matrix && suiteOk && rowsOk, { parse, cmp, matrix, suiteOk, behind, same, legacy });
+}
+
+// ---- 14. sync-qa-skills: repeated --only, summary keys ----
+{
+  const A = SKILLS[0], B = SKILLS[4], C = SKILLS[6];
+  const argv = ['--check', '--only', A, '--pretty', '--only', B, '--target', 'x'];
+  const onlyOk = {
+    repeated: stable(argValues(argv, 'only')) === stable([A, B]),
+    parseArgsKeepsLast: parseArgs(argv).only === B, // the reason argValues exists
+    single: stable(argValues(['--apply', '--only', A], 'only')) === stable([A]),
+    comma: stable(argValues(['--only', A + ',' + B, '--only', C], 'only')) === stable([A, B, C]),
+    dedup: stable(argValues(['--only', A, '--only', A], 'only')) === stable([A]),
+    none: stable(argValues(['--check', '--pretty'], 'only')) === '[]',
+    bare: stable(argValues(['--only', '--check'], 'only')) === '[]',
+    otherFlagValue: stable(argValues(['--target', 'only', '--only', A], 'only')) === stable([A]),
+  };
+  const files = ['NEW', 'UPDATED', 'UPDATED', 'CURRENT', 'LOCAL-ONLY', 'SKIPPED', 'MISSING-IN-SOURCE', 'MISSING-IN-SOURCE'].map((status) => ({ status }));
+  const sum = syncSummary(files);
+  const sumOk = stable(sum) === stable({ new: 1, updated: 2, current: 1, local_only: 1, skipped: 1, missing_in_source: 2 }) && !Object.keys(sum).some((k) => k.includes('-'));
+  // the sync script itself must use both (it needs the network to run, so its source is checked)
+  const src = fs.readFileSync(path.join(here, 'sync-qa-skills.mjs'), 'utf8');
+  const wired = /const only = argValues\(process\.argv\.slice\(2\), 'only'\)/.test(src) && /const summary = syncSummary\(files\)/.test(src) && !/args\.only/.test(src);
+  check(14, 'sync arguments and summary: repeated / comma / single --only kept (parseArgs keeps only the last), summary keys use underscores (missing_in_source), sync-qa-skills derives both through lib.mjs',
+    Object.values(onlyOk).every(Boolean) && sumOk && wired, { onlyOk, sum, wired });
 }
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}

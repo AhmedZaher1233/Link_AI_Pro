@@ -1,5 +1,5 @@
 SKILL: link-qc-9-retesting — Link (QC) skill 9
-WHAT IT DOES: Retests previously logged bugs in the RUNNING application through the Playwright MCP — re-executes each bug's own reproduction steps in the configured languages, positively observes the Expected result, captures evidence, sets the local Status (resolved only after an actual pass; open + History on a fail), then applies skill 8's md → Azure push inline (verified close, or reopen with [Reopened] + tag + first assignee + mention + attachment) and skill 7's outcome push for the related test case. Incidental new defects are logged in the producer format and created in Azure through skill 8's recipe. Runs after skill 8 (azure-to-md listed the candidates) or on explicit bug IDs; not a gate.
+WHAT IT DOES: Retests previously logged bugs in the RUNNING application — never through the Playwright MCP. A bug whose test case is automated is re-run from skill 5's Playwright automation code (run-stage.mjs, every variant); every other bug (no automated TC, a UI-audit bug, a manual-run phase) is retested through playwright-cli — the full test case when it has a row in the latest run, otherwise the bug's own reproduction steps. It positively observes the Expected result, captures evidence, updates the LATEST phase of the run report in place (TC status, stage totals, outcome, pass rate, run file) and the bug report (resolved only after an actual pass; open + History on a fail), re-renders the run report page, then applies skill 8's md → Azure push inline (verified close, or reopen with [Reopened] + tag + first assignee + mention) and, after the state change, uploads the retest evidence through the azure-devops-attachments MCP; plus skill 7's outcome push for the related test case. Incidental new defects are logged in the producer format and created in Azure through skill 8's recipe. Runs after skill 8 (azure-to-md listed the candidates) or on explicit bug IDs; not a gate.
 
 ============================================================
 INPUT — WHAT YOU MUST PROVIDE
@@ -9,28 +9,35 @@ ALWAYS REQUIRED (one of):
 
 OPTIONAL FLAGS / ARGUMENTS:
   --awaiting-retest        take the candidates from ADO-BUG-MAP.md
-  --locales en,ar          restrict the language passes
+  --locales en,ar          restrict the playwright-cli language passes (the automation runs every variant its test defines)
+  --headless               run the automation re-run without a visible browser window (default: headed, like skill 5)
 
-ASKED DURING THE RUN — ONE message, before the browser opens:
-  2. Application base URL (unless recorded in the learning file), role per bug, environment / build.
-  3. Whether reproduction steps that create / modify / delete data may run in this environment.
-  4. The language-switch flow in words, unless the learning file already records it.
-  5. Login: the user types the password in the browser, or names the secret from the user-run secrets file (set-playwright-secrets.ps1 / .sh). Never in chat.
+ASKED DURING THE RUN — ONE message, before anything executes, only what the chosen routes need:
+  2. Environment / build — and, when it differs from the environment of the latest run, whether to retest there anyway (recorded as a deviation).
+  3. Whether test cases / reproduction steps that create / modify / delete data may run in this environment.
+  4. playwright-cli bugs only: the application base URL (unless recorded in the learning file), the username and login method per role — you log in yourself in a headed browser window, or you name the secrets from the user-run secrets file (set-playwright-secrets.ps1 / .sh). Never a password in chat.
+  5. playwright-cli bugs only: the language-switch flow in words, unless the learning file already records it.
+  The automation route asks nothing more: it uses the automation project's own environment selection and credentials mechanism.
 
 PREREQUISITES (checked by link-qc-1-generate-update-testing-structure):
-  - playwright MCP server in .mcp.json (BLOCKED without it).
+  - Automated test cases: skill 5's automation project for the story (the shared playwright.config.ts, its installed node_modules, the latest run file .runs/phase-N.json with its run plan) and the link-qc-5-test-run-automation skill folder (its run-stage.mjs / impact.mjs / render-run-report.mjs are called by path). Missing → those bugs are NOT_RUN with the reason, or retested through playwright-cli when skill 5 is not installed at all.
+  - Everything else: playwright-cli (installed by /sync-skills --tools). Missing → those bugs are NOT_RUN with the install hint; the automated ones still run.
+  - No Playwright MCP server is used.
   - azure-devops MCP server in .mcp.json; the bugs were synced by link-qc-8-sync-bugs-azure (an unsynced bug is skipped with the reason).
-  - OPTIONAL, cloud projects only: the second server `azure-devops-attachments` in .mcp.json (added by skill 1 Mode B with its launcher; same PAT) — needed to attach the retest screenshot to the Azure Bug; without it the attachment stays pending in the ledger with a manual instruction (Bug id → absolute file path). The self-hosted server uploads by itself.
+  - OPTIONAL, cloud projects only: the second server `azure-devops-attachments` in .mcp.json (added by skill 1 Mode B with its launcher; same PAT) — needed to attach the retest screenshot to the Azure Bug after it is closed or reopened; without it the attachment stays pending in the ledger with a manual instruction (Bug id → absolute file path). The self-hosted server uploads by itself.
   - Skill 7's test-point tools only when the related TC result should reach the Test Plan (otherwise that step is NOT_RUN).
 
 ============================================================
 OUTPUT — WHAT YOU GET
 ============================================================
-BUG-REPORT-{feature}.md / ADO-BUG-MAP.md   — Status `resolved (phase N)` or `open`, appended History lines with evidence, recomputed Bugs header (UI bugs: ledger only)
-{evidence folder}/BUG-n-retest-{pass|fail}-{date-time}-{language}.png   — never overwritten
-Azure DevOps                               — verified close, or reopen ([Reopened] title, `reopened` tag, first assignee, mention comment); the retest evidence attached and verified by read-back, or pending with the manual instruction; incidental new bugs created and linked to the same story
-Summary tables                             — retests (pass / fail / unobserved separated from the Azure results) and incidental defects; metrics; pending actions
+TEST-RUN-REPORT-{feature}.md                — the LATEST phase updated in place: the retested TC rows (status, evidence), a "(retest — skill 9)" stage row, stage Total, Outcome, Bugs table, a Retest bullet, Deviations, header Status / Latest results (the pass rate) and the run-history row
+.runs/phase-N.json                          — the same changes, plus an append-only retests[] record
+TEST-RUN-REPORT-{feature}.html              — re-rendered by skill 5's renderer, delivered only at gate PASS
+BUG-REPORT-{feature}.md / ADO-BUG-MAP.md    — Status `resolved (phase N)` or `open`, appended History lines with evidence, recomputed Bugs header (UI bugs: ledger only)
+Evidence (never overwritten)                — automation: screenshots/…/phase-N/{TC}/{variant}/attempt-{a}.png · playwright-cli: screenshots/…/phase-N/{TC}/retest-cli--{lang}--r1/attempt-{a}.png · UI bug: BUG-n-retest-{pass|fail}-{date-time}-{language}.png
+Azure DevOps                                — verified close, or reopen ([Reopened] title, `reopened` tag, first assignee, mention comment); THEN the retest evidence attached and verified by read-back, or pending with the manual instruction; incidental new bugs created and linked to the same story
+Summary tables                              — retests (route, pass / fail / unobserved, TC row before → after) separated from the Azure results; pass rate before → after; the page gate; incidental defects; pending actions
 
 WHEN TO RUN IT: after skill 8 pulled developer states and listed retest candidates; whenever a specific bug should be re-verified; after a new build.
 
-HARD RULES: Playwright MCP + azure-devops MCP only (the optional azure-devops-attachments server for attachment upload / delete alone); attachments only through an upload-capable MCP tool, verified by read-back, never REST or inline base64; resolved only after a positive observation in every required language; no password anywhere; no fixed selector, role or path in the skill; TC results are edited only for the latest phase and only with explicit confirmation; nothing is created in Azure for a bug that was never synced.
+HARD RULES: never the Playwright MCP; never edits automation code (a test-code failure is reported for skill 5 and changes nothing); only the latest phase is updated, only the rows of TCs re-run in full with a product verdict, never a row added or removed, the page rendered and delivered at gate PASS; resolved only after a positive observation in every required variant / language; attachments only through an upload-capable MCP tool after the state transition, verified by read-back, never REST or inline base64; no password anywhere; no fixed selector, role or path in the skill; nothing is created in Azure for a bug that was never synced.

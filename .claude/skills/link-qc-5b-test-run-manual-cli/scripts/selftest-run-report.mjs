@@ -704,6 +704,41 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   check('31 navigation: section ids, phase labels, typed headers, contents panel, no external request', p, {});
 }
 
+/* 32 — rate_limited and the documented reason forms (references/run-report.md §4): an INCOMPLETE row classified `rate_limited`,
+      `interrupted: {reason}` or `cleanup_incomplete` and a NOT_RUN row `not started: {reason}` raise neither unknown-classification
+      nor incomplete-without-variants and never BLOCK; the phase derives INCOMPLETE; `rate_limited` is shown in the phase card; a
+      misspelt `rate_limit` still warns. */
+{
+  const p = [];
+  const ROW7 = '| TC-007 | REQ-02 | Order total recalculates | INCOMPLETE | parallel | 00:00:58 | incomplete: chromium--variation-b--r0 |';
+  const LAST = '| TC-030 | REQ-05 | Confirm the order by the code sent by SMS |';
+  const EXTRA = ['| TC-040 | REQ-01 | Print the order confirmation | INCOMPLETE | parallel | 00:00:21 | interrupted: watchdog stop | — |',
+    '| TC-041 | REQ-02 | Reorder from the order history | NOT_RUN | serial:orders | — | not started: depends on TC-001 (failed) | — |',
+    '| TC-042 | REQ-03 | Archive a confirmed order | INCOMPLETE | serial:orders | 00:00:33 | cleanup_incomplete | — |'];
+  const mut = (cls7) => (s) => {
+    if (!s.includes(ROW7)) throw new Error('fixture TC-007 row moved');
+    s = s.replace(ROW7, ROW7.replace('| incomplete: chromium--variation-b--r0 |', '| ' + cls7 + ' |'));
+    const i = s.indexOf(LAST, s.indexOf('## Phase 2')); if (i < 0) throw new Error('fixture TC-030 row moved');
+    const j = s.indexOf('\n', i); return s.slice(0, j + 1) + EXTRA.join('\n') + '\n' + s.slice(j + 1);
+  };
+  const t1 = tmpCopy(mut('rate_limited')); const t2 = tmpCopy(mut('rate_limit'));
+  try {
+    const r1 = render({ reportPath: t1.report, root: here }); const r2 = render({ reportPath: t2.report, root: here });
+    const mine = ['TC-007', 'TC-040', 'TC-041', 'TC-042'];
+    const bad = r1.payload.warnings.filter((w) => mine.includes(w.id) && (w.kind === 'unknown-classification' || w.kind === 'incomplete-without-variants'));
+    if (bad.length) p.push('documented forms warn: ' + bad.map((w) => w.id + ' ' + w.kind).join(', '));
+    if (r1.payload.gate === 'BLOCKED' || r1.payload.errors.length) p.push('gate ' + r1.payload.gate + ' errors ' + kinds(r1).join(','));
+    const ph = r1.payload.document.phases[1];
+    if (ph.outcome !== 'INCOMPLETE' || ph.counts.incomplete !== 3 || ph.counts.notrun !== 1) p.push('phase 2 derived ' + ph.outcome + ' ' + JSON.stringify(ph.counts));
+    const card = ((r1.html || '').match(/<details class="card phase" id="phase-2"[\s\S]*?<\/details>/) || [''])[0];
+    if (!/>rate_limited</.test(card)) p.push('rate_limited is not rendered in the phase 2 card');
+    if (!/data-sort-order="[^"]*\|environment_failure\|rate_limited\|data_missing\|/.test(r1.html || '')) p.push('rate_limited missing from the Classification sort order');
+    if (!r2.payload.warnings.some((w) => w.kind === 'unknown-classification' && w.id === 'TC-007')) p.push('a misspelt rate_limit does not warn');
+    if (kinds(r2).includes('unknown-classification') || r2.payload.gate === 'BLOCKED') p.push('a misspelt classification must never BLOCK');
+  } finally { t1.cleanup(); t2.cleanup(); }
+  check('32 rate_limited and documented reason forms (interrupted: / not started: / cleanup_incomplete) accepted', p, {});
+}
+
 const out = {
   tool: 'selftest-render-run-report',
   skill: path.basename(path.resolve(here, '..')),

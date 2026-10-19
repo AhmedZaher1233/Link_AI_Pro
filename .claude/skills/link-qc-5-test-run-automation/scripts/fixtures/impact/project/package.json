@@ -1,0 +1,8 @@
+{
+  "name": "impact-fixture-automation",
+  "private": true,
+  "description": "Mini Playwright POM project for selftest-impact.mjs — never installed, never executed.",
+  "devDependencies": {
+    "@playwright/test": "1.47.2"
+  }
+}

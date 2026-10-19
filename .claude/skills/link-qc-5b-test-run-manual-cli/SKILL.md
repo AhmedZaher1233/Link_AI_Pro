@@ -232,7 +232,8 @@ failures` / `Open questions` / `Test-data readiness` / `Deviations` sub-sections
 "manual-cli"`, `file_or_suite: "—"`, variants `manual-cli--none--r{k}`, one per AI repeat). Skill 5
 treats your phase as an ordinary earlier phase (it counts for `N`, is named by `Previous phase`,
 is skipped by its coverage delta); skills 7 / 8 / 9 read the latest phase and the bug file
-whichever skill wrote them. You never write `automated_tc_sha256`, never touch `ADO-MAP.md`,
+whichever skill wrote them, and skill 9's retest may update the latest phase in place (rows of the
+TCs it retested through playwright-cli, variant `retest-cli--{lang}--r1`). You never write `automated_tc_sha256`, never touch `ADO-MAP.md`,
 never set a TC's `Validation` state.
 
 ## Reference index

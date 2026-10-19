@@ -161,7 +161,7 @@ export const MANIFEST = 'Testing/qa-manifest.json';
 export const PLAYWRIGHT_CLI_PACKAGE = '@playwright/cli';
 export const PLAYWRIGHT_CLI_BIN = 'playwright-cli';
 export const PLAYWRIGHT_CLI_IGNORE = '.playwright-cli/';
-// Optional browser secrets file for 3c and 5b (and any Playwright MCP backend): written ONLY by the user through
+// Optional browser secrets file for 3c, 5b and 9 (and any Playwright MCP backend): written ONLY by the user through
 // scripts/set-playwright-secrets.ps1 / .sh. The scripts here check existence, never content.
 export const BROWSER_SECRETS_VAR = 'PLAYWRIGHT_MCP_SECRETS_FILE';
 export const BROWSER_SECRETS_FILE = path.join(os.homedir(), '.link-ai-pro', 'playwright-secrets.env');
@@ -177,6 +177,25 @@ export function parseArgs(argv) {
     } else out._.push(a);
   }
   return out;
+}
+
+// Every value of a flag that may repeat (`--only a --only b`) or carry a comma list (`--only a,b`), in order,
+// de-duplicated. parseArgs keeps only the LAST value of a repeated flag (its shape is copied verbatim into skill 5's
+// scan-lib, so it stays as it is); a script that accepts a repeated flag reads it through this.
+export function argValues(argv, name) {
+  const out = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] !== '--' + name) continue;
+    const next = argv[i + 1];
+    if (next !== undefined && !next.startsWith('--')) { out.push(next); i++; }
+  }
+  return [...new Set(out.flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean))];
+}
+
+// Count of sync files per status: NEW · UPDATED · CURRENT · LOCAL-ONLY · SKIPPED · MISSING-IN-SOURCE →
+// new · updated · current · local_only · skipped · missing_in_source (every dash, not only the first).
+export function syncSummary(files) {
+  return files.reduce((a, f) => { const k = String(f.status).toLowerCase().replace(/-/g, '_'); a[k] = (a[k] || 0) + 1; return a; }, {});
 }
 
 export const exists = (p) => { try { fs.accessSync(p); return true; } catch { return false; } };
@@ -205,6 +224,43 @@ export function frontMatter(text) {
     if (m) fm[m[1]] = m[2];
   }
   return fm;
+}
+
+/* ---------------- skill versions ---------------- */
+// The ONE source of a skill's version is its SKILL.md front-matter, Agent Skills form:
+//   metadata:
+//     version: "1.2.3"
+// Semantic Versioning; a skill without it is "unversioned". Nothing else stores the number.
+const SEMVER = /^(\d+)\.(\d+)\.(\d+)$/;
+
+export function skillVersion(text) {
+  if (!text || !text.startsWith('---')) return null;
+  const end = text.indexOf('\n---', 3);
+  if (end < 0) return null;
+  let inMeta = false;
+  for (const line of text.slice(3, end).split(/\r?\n/)) {
+    if (/^metadata:\s*$/.test(line)) { inMeta = true; continue; }
+    if (inMeta && /^\S/.test(line)) inMeta = false;
+    const m = inMeta && line.match(/^\s+version:\s*["']?([^"'\s]+)["']?\s*$/);
+    if (m) return SEMVER.test(m[1]) ? m[1] : null;
+  }
+  return null;
+}
+
+export function compareSemver(a, b) {
+  const x = SEMVER.exec(a || ''), y = SEMVER.exec(b || '');
+  if (!x || !y) return null;
+  for (let i = 1; i <= 3; i++) if (Number(x[i]) !== Number(y[i])) return Number(x[i]) < Number(y[i]) ? -1 : 1;
+  return 0;
+}
+
+// installed = the consumer's copy (null when the folder or the version is absent), source = the repo's.
+export function versionStatus({ installed, source, installedExists = true }) {
+  if (!source) return 'unversioned';
+  if (!installedExists) return 'not-installed';
+  if (!installed) return 'pre-versioning';
+  const c = compareSemver(installed, source);
+  return c === 0 ? 'current' : c < 0 ? 'update-available' : 'ahead-of-source';
 }
 
 /* ---------------- scanners ---------------- */
@@ -262,18 +318,21 @@ export function scanSuite(root) {
   const claude = path.join(root, '.claude');
   const dirName = actualName(claude, 'skills');
   const skillsDir = dirName ? path.join(claude, dirName) : null;
-  const present = [], missing = [], invalid = [];
+  const present = [], missing = [], invalid = [], versions = {};
   for (const s of SKILLS) {
     const f = skillsDir ? path.join(skillsDir, s, 'SKILL.md') : null;
     if (f && isFile(f) && nonEmpty(f)) {
-      const fm = frontMatter(read(f));
+      const text = read(f);
+      const fm = frontMatter(text);
       if (fm && fm.name && fm.description) present.push(s); else invalid.push(s);
+      const v = skillVersion(text);
+      if (v) versions[s] = v;
     } else missing.push(s);
   }
   return {
     skillsDir: skillsDir ? path.relative(root, skillsDir).replace(/\\/g, '/') : null,
     uppercaseDir: dirName !== null && dirName !== 'skills',
-    present, missing, invalid,
+    present, missing, invalid, versions,
     syncCommand: isFile(path.join(root, SYNC_COMMAND)),
     localOnly: skillsDir ? fs.readdirSync(skillsDir).filter((e) => isDir(path.join(skillsDir, e)) && !SKILLS.includes(e) && !(e in SKILL_RENAMES)) : [],
     legacy: skillsDir ? fs.readdirSync(skillsDir).filter((e) => isDir(path.join(skillsDir, e)) && e in SKILL_RENAMES).map((e) => ({ folder: e, replacement: SKILL_RENAMES[e] })) : [],
@@ -538,7 +597,7 @@ export function scanGitignore(root) {
   return { exists: true, ignoresPlaywrightCli: lines.some((l) => l === PLAYWRIGHT_CLI_IGNORE || l === PLAYWRIGHT_CLI_IGNORE.replace(/\/$/, '') || l === '/' + PLAYWRIGHT_CLI_IGNORE || l === '/' + PLAYWRIGHT_CLI_IGNORE.replace(/\/$/, '')) };
 }
 
-/** Existence-only check of the browser secrets file variable (3c and 5b, optional). The file is never read. */
+/** Existence-only check of the browser secrets file variable (3c, 5b and 9, optional). The file is never read. */
 export function scanBrowserSecrets(name = BROWSER_SECRETS_VAR) {
   const inProcess = process.env[name] || null;
   let persisted = null, value = null, scope = null;
@@ -560,7 +619,7 @@ export function scanBrowserSecrets(name = BROWSER_SECRETS_VAR) {
 }
 
 /**
- * Read-only plan of what `sync-qa-skills.mjs --apply --tools` would do for the browser tool of skills 3c and 5b and
+ * Read-only plan of what `sync-qa-skills.mjs --apply --tools` would do for the browser tool of skills 3c, 5b and 9 and
  * link-qc-6-ui-testing's annotation fallback.
  * actions: 'install:playwright-cli' (global npm package missing), 'install-browser:chromium' (no chromium in
  * the Playwright browsers cache), 'gitignore:.playwright-cli/' (line missing; only inside a git repo),

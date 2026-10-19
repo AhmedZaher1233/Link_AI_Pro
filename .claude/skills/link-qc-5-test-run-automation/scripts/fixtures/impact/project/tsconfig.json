@@ -1,0 +1,13 @@
+{
+  // Aliases used by the specs — impact.mjs resolves them through compilerOptions.paths + baseUrl.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@pages/*": ["pages/*"],
+      "@helpers/*": ["helpers/*"],
+    },
+  },
+}

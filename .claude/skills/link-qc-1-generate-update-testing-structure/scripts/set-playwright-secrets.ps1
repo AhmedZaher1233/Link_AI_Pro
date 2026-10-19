@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
   Creates the OPTIONAL browser secrets file used by skills link-qc-3c-validate-manual-test-cases-cli
-  and link-qc-5b-test-run-manual-cli (and by any Playwright MCP backend) so a validation or manual
+  link-qc-5b-test-run-manual-cli and link-qc-9-retesting (and by any Playwright MCP backend) so a validation or manual
   run can log in without ever typing a password in chat or on a command line.
 
 .DESCRIPTION

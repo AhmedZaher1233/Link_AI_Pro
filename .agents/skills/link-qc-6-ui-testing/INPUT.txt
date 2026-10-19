@@ -1,0 +1,95 @@
+SKILL: link-qc-6-ui-testing
+WHAT IT DOES: Visual UI QA audit. Compares an implemented screen (live URL through the
+Playwright MCP, or screenshots) against an approved design (Figma through the Figma MCP,
+design screenshots, or a live reference site) — or, with no design, against the codebase's own
+design tokens, internal consistency, WCAG and RTL rules — and writes a "UI Visual QA Bug
+Report" (.md) where every finding is a full, reproducible bug with red-boxed evidence
+screenshots. Runs at any point of the pipeline, per screen; it is not a gate for anything and
+nothing gates it.
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+
+ALWAYS REQUIRED:
+  1. The implemented UI                  — a live URL (preferred: computed styles, states and
+                                           breakpoints become measurable) or screenshot file(s).
+  2. A screen / page label per screen    — e.g. "Dashboard Desktop", "Login Mobile"; reused as the
+                                           file slug (dashboard_en.png, evidence/dashboard_en/).
+
+USUALLY REQUIRED (one of; absent → no-design heuristic audit, fully supported):
+  3. The approved design                 — Figma URL / node link(s) (exact tokens via the Figma
+                                           MCP; a screenshot export when the MCP is not attached),
+                                           design screenshot(s), or a live reference-site URL
+                                           (measured exactly like the implementation).
+
+OPTIONAL FLAGS / ARGUMENTS:
+  --lang en|ar|en,ar                     Language(s) to test; otherwise asked (Step 1A).
+  --screen <label>                       Screen label when only one screen is audited.
+  scope                                  Specific components to focus on (default: full audit).
+
+ASKED DURING THE RUN — ONE message, before the browser opens (Step 1A/1B):
+  4. Language(s) to test and language(s) the design covers (a single-locale product skips this)
+  5. Role to audit as                    — always, for any app with roles (role changes what renders)
+  6. Login credentials                   — only when the project has no test-credential mechanism;
+                                           never printed, never written to any file
+  7. Environment (QA / staging / prod) and app version when not discoverable
+  8. Figma access                        — only for a Figma link with no Figma MCP attached:
+                                           an exported image of the frame
+  9. Whether narrow widths are in scope  — only when the app's CSS has no width media queries
+
+PREREQUISITES (checked by link-qc-1-generate-update-testing-structure):
+  - Playwright MCP server in .mcp.json   — required for live URLs (validate-setup row "Playwright MCP")
+  - Figma MCP                            — optional, Figma designs only (row "Figma MCP";
+                                           mcp-setup.md §2c: remote OAuth server, no token in files)
+  - Python + Pillow (+ numpy)            — optional, static-image annotation fallback only
+                                           (row "Python + Pillow"; /sync-skills --tools installs the
+                                           packages when Python exists). Live URLs need no Python.
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+
+Written under <base>/UI-Testing/ (<base> = the Testing/ root from qa-manifest.json in a
+project set up by skill 1; otherwise the project's testing root or the repo root):
+
+  Expected-UI/<page-slug>_<lang>.png      approved design images + _sources.md (one row per image)
+  Actual-UI/<page-slug>_<lang>.png        implementation full-page capture (+ _segments/ per region,
+                                           _history/ keeps earlier captures for regression checks)
+  Reports/UI-Visual-QA-<page-slug>.md     the report — Environment, Coverage (counts, widths, states),
+                                           Coverage Limitations, Changes Since Last Run, one full bug
+                                           block per finding (Priority / Severity / Testing Type /
+                                           Bug Trigger / Impact / Classification / Confidence, System
+                                           Info, Steps to Reproduce, Expected, Actual, Source file:line
+                                           + Suggested fix, evidence pair), Correctly Implemented,
+                                           Accessibility (automated — axe-core, one bug per violated
+                                           rule), Console & Network Findings, Open Questions, Match
+                                           Score (design-compared) or UI/UX Quality Verdict (no
+                                           design), Final QA Verdict, Second Round
+  Reports/evidence/<page-slug>_<lang>/     bugNN_expected.png / bugNN_actual.png (red box, 4px #e00000)
+                                           + audit-log.md — one timestamped row per action the audit
+                                           performed (navigate, resize, state, capture, measurement,
+                                           axe run); the Coverage counts are derived from it
+  Learning-UI.md                          confirmed UI rules from answered questions (Rung 0 next run)
+  Coverage-Index.md                       which screens of the product were audited, which never
+
+When the project already has a bug-report home that other tooling scans, the report and its
+evidence go there instead and the report says so.
+
+Also updated: Testing/project-learning.md (UI Knowledge / Locale Knowledge facts and the
+`### UI Visual QA Model (skill 6)` Q&A) when the file exists.
+
+============================================================
+WHEN TO RUN IT
+============================================================
+
+  - After a screen is implemented and a design exists → design comparison (Tier 1 with Figma MCP,
+    Tier 2 with a live reference site, Tier 3/4 with screenshots).
+  - A screen with no design → heuristic audit; never ask for a design first.
+  - Re-run on the same screen → regression check against the previous capture and report.
+  - "What have we covered?" / "what's next?" → Coverage-Index.md answers it.
+
+HARD RULES: never print or store a credential; flag personal data seen in captures before the
+report is shared; the report is about the product, never about tooling; never Priority 1 /
+Severity 1 by default; no-design bugs never use "Design Conformance" / "Design nonconformance";
+the second round (Step 10) measures completeness — it is never promised as "more bugs".

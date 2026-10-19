@@ -1,7 +1,9 @@
 # Compliance checkpoints — the two mandatory gates
 
-Loaded by `SKILL.md` at `<checkpoint_a>` (before execution) and `<checkpoint_b>` (after the final
-run). Both gates must reach **PASS for the final delivered scope** before you may claim automation
+Loaded by `SKILL.md` at **Validating Automation Code** for `<checkpoint_a>` (§3a, before execution)
+and kept for **Re-running Fixed & Impacted Tests** — `<checkpoint_b>` (§4a, on the final code). The two
+procedure blocks are the checkpoints of record; §2-§5 are their reusable checklist, the derived
+procedure and the recording rules. Both gates must reach **PASS for the final delivered scope** before you may claim automation
 compliance. They are separate from execution status: compliant tests can expose application defects,
 and passing tests can still violate these rules.
 
@@ -66,7 +68,7 @@ actually checked.
 
 ## 2. The reusable checklist
 
-Derived from every rule `SKILL.md` encodes, not only from the validator's rule list. For each item:
+Derived from every rule `SKILL.md` and its references encode, not only from the validator's rule list. For each item:
 `M` = the validator can decide it, `S` = semantic review decides it, `A`/`B` = which checkpoint.
 Items marked `M+S` need both — a clean grep does not prove compliance.
 
@@ -78,7 +80,7 @@ Items marked `M+S` need both — a clean grep does not prove compliance.
 | 2 | Nothing chained off an exposed page-object locator — returning a `Locator` must not let a spec bypass the rule | M (`pom-chained-locator`) + S | A, B |
 | 3 | Composite UI flows live in the layer this project actually uses (page object / fixture / its own equivalent) — **not moved into an arbitrary helper just to make a grep clean** | S | A, B |
 | 4 | No spec-local function drives the screen; the one-line delegating fixture alias is allowed | M (`pom-spec-helper`) + S | A, B |
-| 5 | Existing page objects reused or extended rather than duplicated: the WHOLE automation root was scanned before writing (`<automation_inventory>`), `{reports_folder}/automation-inventory.md` holds one decision row per screen (`reuse` / `extend` / `create`) naming every candidate with the reason, the validator ran with `--inventory` and reports **no open `pom-duplicate-page`** (every candidate pair is `pom-duplicate-page-decided`); a `create` row with an unaddressed candidate, or a candidate pair with no row, is a **failure of this checkpoint**; new files in the Placement Manifest | M (`pom-duplicate-page`) + S | A, B |
+| 5 | Page objects reused / extended, never duplicated: the `<automation_inventory>` table holds a decision row per screen naming every candidate, and the validator (`--inventory`) reports **no open `pom-duplicate-page`** — a `create` row with an unaddressed candidate, or a pair without a row, **fails this checkpoint**; new files in the Placement Manifest | M (`pom-duplicate-page`) + S | A, B |
 | 6 | Constants have one source of truth; no tolerance/timeout/threshold redeclared in a spec | S | A, B |
 
 ### Assertions and expected behaviour
@@ -121,7 +123,7 @@ Runtime artifacts do not exist yet: record them as `scheduled for Checkpoint B`,
 
 | # | Check | How | Gate |
 |---|---|---|---|
-| 25 | Each test runs alone; no shared mutable state; the run plan's serial groups are honoured | S | A, B |
+| 25 | Each test runs alone; no shared mutable state; the run plan's groups are honoured — a serial group by its `@run:serial-{group}` tag and its own `--workers 1` command, a `mode: 'serial'` describe only around a true chain; an own-data TC in the parallel group only when no parallel TC asserts on a collection its record joins; a TC moved by the isolation check carries its new `@run:` tag and its `run_plan_adjustments[]` entry | S | A, B |
 | 26 | Every `api_setup` precondition has a matching teardown, and teardown runs after the evidence image | S | A, B |
 | 27 | Async operations awaited; no floating promises in specs or page objects | S | A, B |
 | 28 | Errors surfaced, never swallowed to obtain a pass | S | A, B |
@@ -153,74 +155,194 @@ Runtime artifacts do not exist yet: record them as `scheduled for Checkpoint B`,
 |---|---|---|---|
 | 40 | Every generated / updated test wraps each manual step in `step()` (validator run with `--require-steps`); `captureEvidence` is a top-level statement before the Assert step, never inside a step | M (`step-missing`) + S | A, B |
 | 41 | Positional selectors (`first` / `last` / `nth`) are scoped by `filter({ has \| hasText })` or a named container, or justified on the line above | M (`positional-unscoped`) + S | A, B |
-| 42 | No `networkidle` readiness in any layer; waits are bounded by the step deadline | M (`wait-network-idle`) + S | A, B |
-| 43 | Every timeout value comes from `timeouts.ts` (none inline); initial values and `playwright_version` recorded; calibration changes carry `{key, from, to, reason, evidence}`; no retry added to absorb a timeout | S | A (initial), B (calibration) |
-| 44 | ONE shared `playwright.config.ts` to the §8 contract; extra configs merged only when reproducible, references rewritten, deleted only after `config-inventory.mjs` listed them deletable; unmergeable ones reported; reporters additive (`line`, `json`, `progress-reporter` beside the project's own) | S (+ `config-inventory.mjs`) | A, B |
+| 42 | No `networkidle` readiness in any layer; every wait bounded by its step deadline — the start-of-test rate-limit reservation outside every step by `rate_limit.max_start_wait`, a `rateLimitSlot()` wait inside a step by `rate_limit.in_step_wait` | M (`wait-network-idle`) + S | A, B |
+| 43 | Every timeout value comes from `timeouts.ts` (none inline — the `rate_limit` keys included); initial values and `playwright_version` recorded; calibration changes carry `{key, from, to, reason, evidence}`; no retry added to absorb a timeout | S | A (initial), B (calibration) |
+| 44 | ONE shared `playwright.config.ts` to the code-craft §8 contract; extra configs consolidated per `<shared_config>` — deleted only when `config-inventory.mjs` lists them `deletable[]`, unmergeable ones reported; reporters additive | S (+ `config-inventory.mjs`) | A, B |
 | 45 | Created test data named by `uniqueName()` / cleaned by `runPrefix()`; teardown timeouts flagged `cleanup_incomplete` and swept | S | A, B |
 | 46 | Console guard attached in `beforeEach` and reported in `afterEach`; unexpected entries listed under Deviations, never a TC failure by themselves | S | A, B |
-| 47 | Page objects, component objects and locator chains follow `code-craft.md` §1-3 (readonly locators, intent-named methods, scoping `Locator` for components, testid → role → label → text → stable CSS, no build-generated attributes); fixtures (when present) wrap `prerequest/` functions; `.gitignore` lines present | S | A, B |
+| 47 | Page objects, component objects and locator chains follow `code-craft.md` §1-3 (locator order testid → role → label → text → stable CSS, no build-generated attributes); fixtures (when present) wrap `prerequest/` functions (§6); `.gitignore` lines present (§12) | S | A, B |
 | 48 | Watchdog stops are taken only on `FROZEN` verdicts from `watchdog.mjs`; completed results preserved, interrupted and not-started TCs named, the event classified `timeout_failure`; the consumer-project probe recorded PASS or NOT_RUN with the reason | S | **B only** |
+| 49 | The network guard is attached in every spec's `beforeEach` / `afterEach` beside the console guard; every limited mid-test call goes through `rateLimitSlot()` in the page-object method right before the triggering action; no other pacing sleep in any layer | S | A, B |
+| 50 | No scratch probe in the delivered scope: `scratch.mjs clean` returned `removed` / `absent`, and no scratch output is cited as a TC result, evidence, re-run, burn-in, isolation or freshness proof (`<scratch_investigation>`) | S | A, B |
 
 ---
 
 ## 3. Checkpoint A — before execution
 
-Runs after generation and before anything is executed. It is the first gate in
-`<environment_gate>`, ahead of the coverage and readiness gates.
+The procedure of record is §3a (`<checkpoint_a>`).
 
-1. **Review the full scope** — every test created, modified or selected for this run, plus the page
-   objects, fixtures, helpers, the shared configuration, `timeouts.ts` and evidence/reporting code
-   they touch.
-2. **Run the mechanical checks.** `validate-automation.mjs` over the in-scope files — specs AND the
-   page objects / helpers they touch, with `--require-steps` for generated or updated specs and
-   `--inventory {reports_folder}/automation-inventory.md` so every page-class candidate pair is
-   checked against a decision row — plus `config-inventory.mjs` and the project's own
-   lint/typecheck where it exists. Report `gate`, `counts`, `review[]`, `notRun[]`, `exceptions[]`
-   and `pageScan` together — never just "clean".
-3. **Run the semantic review** for every `S` item above. A clean grep proves nothing about items 3,
-   5, 7, 10, 11, 16, 39, 43, 44 or 47 — for item 5 the scanner only surfaces candidates; the
-   inventory row's reason is what the review judges.
-4. **Fix confirmed automation-code violations immediately.** They are repairs, not recommendations:
-   do not defer them, do not list them for the user to approve, do not ask anyone to say "fix 1".
-   Routine repairs need no approval. Only an unresolved *business* decision — one that changes what
-   the expected behaviour is — goes to the user.
-5. **Repeat the affected checks** after every repair. A repair invalidates the checks it touched.
-6. **Proceed with the compliant scope only.** Tests whose applicable pre-run checks pass may run.
-   Tests that remain blocked are isolated and reported against the original scope — never quietly
-   dropped from it, and never counted as passing.
-7. **Record the gate** per §5.
+## 3a. Checkpoint A — the procedure of record (`<checkpoint_a>`)
 
-## 4. Checkpoint B — after the final run
+<checkpoint_a>
+**CHECKPOINT A — MANDATORY PRE-RUN COMPLIANCE GATE.** Runs after generation and BEFORE anything
+executes; it is the first gate in `<environment_gate>`. Work the §2 checklist — it is derived from
+every rule in SKILL.md and its references, not only the items repeated below.
 
-Runs after execution and after all debugging, before `AUTOMATION COMPLETE`.
+**Scope:** every test created, modified or selected for this run, **plus** the page objects,
+fixtures, helpers, configuration and evidence/reporting code they touch.
 
-1. **Repeat the FULL review on the final code** — including every file that passed Checkpoint A.
-   Debugging changes code; A's results describe the code as it was then.
-2. **Confirm debugging introduced no shortcuts:** no weakened assertion, no broken POM boundary, no
-   removed evidence, no suppressed error, no new unjustified skip, no changed application setting,
-   no product-code edit.
-3. **Verify the artifacts exist.** Items 18, 19, 22, 32 and 33: the evidence images, the run file with its merged results, the `## Phase N` section of `TEST-RUN-REPORT-{feature}.md`, the `BUG-REPORT-{feature}.md` entries of this phase, the rendered HTML (renderer gate PASS, provenance verified) and the logs were actually written, are associated with the right TC, and
-   correspond to the final tested code — compare the recorded `scopeDigest` with the current one.
+**Procedure:**
 
-Verify renderer PASS, provenance, no missing evidence and new root entries within the
-run-report.md whitelist (legacy files untouched). These are semantic artifact checks.
+1. **Mechanical checks.** Run the project's own tooling first where it exists (ESLint with
+   `eslint-plugin-playwright`, `tsc`, an existing lint script), then:
+   ```bash
+   node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs \
+     --root . --pretty --files <in-scope specs + the page objects, components, fixtures and helpers they touch> \
+     --tc-ids <approved TC doc> --req-ids <REQ file> --require-steps \
+     --inventory {reports_folder}/automation-inventory.md
+   ```
+   `--files` carries the page objects and helpers too: the wait, positional-selector and
+   `networkidle` rules apply in every layer, and a file the scanner never sees is never checked.
+   `--inventory` is the `<automation_inventory>` decision table: the page-class pass walks the
+   whole automation root on its own, and a candidate pair no row covers is `pom-duplicate-page`
+   (review) that keeps the scanner gate BLOCKED — an unaddressed candidate fails this checkpoint.
+   `--require-steps` is passed for the specs this run generated or updated (legacy specs may
+   omit it; say so). Report `gate`, `counts`, `review[]`, `notRun[]` and `exceptions[]` together
+   — never just "clean". A `gate: PASS` means no banned pattern was found and **nothing more**.
+   If the script cannot run, report it **unavailable**, never passed.
+   Then: `node …/scripts/config-inventory.mjs --root . --pretty` must report `verdict: single`
+   (or `multiple` with every extra config listed under `Configurations not merged` with its
+   blocking setting — never an unexplained per-story file); and `playwright_version` is recorded
+   with the feature gates it implies (`references/code-craft.md` §14).
+2. **Semantic review** of every judgement the scanner cannot make: correct layer ownership,
+   whether each assertion verifies its required outcome, whether evidence sits at the assertion
+   point, and whether each honoured exception's cited source actually justifies it.
+   **A clean grep does not prove compliance.**
+3. **Fix confirmed automation-code violations immediately.** They are repairs, not
+   recommendations — never defer them, never list them for the user to approve, never ask anyone
+   to say "fix 1". Only an unresolved **business** decision (one that changes what the expected
+   behaviour is) goes to the user.
+4. **Repeat the affected checks after every repair** — a repair invalidates what it touched.
+5. **Proceed with the compliant scope only.** Tests still blocked are isolated and reported
+   against the original scope; the run continues for everything independent of them.
+6. **Record the gate** (`PASS` / `FAIL` / `BLOCKED`) per `compliance-checkpoints.md` §5, with the
+   `scopeDigest` from the validator's `fingerprint`.
 
-### When Checkpoint B finds an automation defect
+**Gate result.** `PASS` only when there are no confirmed violations in scope **and** every
+`review[]` / `notRun[]` item is closed — by the scanner, by other project tooling, or by
+documented semantic review against the same `scopeDigest`. Anything still unresolved →
+**BLOCKED for those items**, named one by one, while independent work continues.
 
-1. Repair it immediately.
-2. Re-run the relevant static checks.
-3. Re-run the affected tests.
-4. If a **shared** component changed (page object, fixture, helper, config), include every consumer.
-5. If the blast radius cannot be bounded reliably, run the full in-scope suite.
-6. **Repeat the full Checkpoint B review** on the result.
+**At this checkpoint you verify evidence and reporting IMPLEMENTATION AND CONFIGURATION ONLY.**
+The actual images, the completed run file and the report markdown / HTML do not exist yet: record them `scheduled for Checkpoint B`.
+Claiming they exist, or marking their runtime verification passed, is a false claim.
 
-**Any later code change invalidates the checks and results that change affects.** Refresh Checkpoint
-A's applicable checks before rerunning, and repeat Checkpoint B afterwards. Never claim completion
-from stale results — a recorded gate is only valid for the `scopeDigest` it names.
+Checklist (all of these, plus every §2 item gated A):
 
-**Do not rerun to make a failure go away.** An unchanged application defect or an environment
+- [ ] Placement Manifest complete; spec + page objects at the stated paths; spec registered (item 36)
+- [ ] Automation inventory written before any page object; validator run with `--inventory` reports
+      no open `pom-duplicate-page` (item 5)
+- [ ] POM: zero inline locators, the `<pom_mandatory>` self-check grep run and reported clean, no
+      spec-local screen driver, nothing chained off a page-object locator (items 1-4)
+- [ ] Every automation-candidate TC implemented or skip-guarded with a precise reason; a `[HUMAN]`
+      candidate implemented up to its first human step and listed `partial (human step: n)`, never
+      full coverage
+- [ ] Every `[E{n}]` / `[A{n}]` / `[D{n}]` resolved through its own ID-keyed entry — no role-to-account,
+      no "first E row", no literal URL or username in code
+- [ ] Coverage table matches the approved document exactly (no invented scenarios); AAA identifiable and
+      ≥ 1 assertion in every test; no banned pattern (`waitForTimeout`, `test.only`, hard-coded
+      credentials or URLs)
+- [ ] Evidence at the assertion point (items 14-16, `<result_organization>`): a direct OR indirect
+      capture is compliant; the validator's `evidence-*` result decides, never a direct-call grep;
+      placement against teardown is always a semantic item
+- [ ] Isolation and guards (items 25, 49); traceability header, REQ-ID in the describe, `[TC-ID]` +
+      polarity tag (+ `@smoke` where marked) in every title
+- [ ] Open questions resolved (PHASE 2.4): every parked TC generated from a user decision, a
+      learning-file reuse, or a tagged `@unverified-assumption`; every answer already written back to the
+      learning file as a generic rule
+- [ ] Static coverage measured (PHASE 2.5) and the gate verdict recorded before any run
+- [ ] Test-data readiness resolved (PHASE 2.6): every `MISSING` gap searched for a way (learning file,
+      automation helpers, the application's source code, UI journeys, a DB helper) and prepared when one
+      existed; every remaining skip is `data_missing` (no way found), `not creatable` (evidence) or `QC
+      declined`, never a default; every skip guard in the specs traces to one of them
+- [ ] Assertions, expected values, modifiers and waits per items 7, 11, 20-24
+- [ ] Validator result reported in full; every open item closed or the gate BLOCKED for it; every
+      honoured exception's source opened (item 39)
+- [ ] Gate recorded with the `scopeDigest`; runtime artifacts `scheduled for Checkpoint B`
+</checkpoint_a>
+
+## 4. Checkpoint B — after the re-run
+
+The procedure of record is §4a (`<checkpoint_b>`), including what to do when it finds an automation defect.
+
+## 4a. Checkpoint B — the procedure of record (`<checkpoint_b>`)
+
+<checkpoint_b>
+**CHECKPOINT B — MANDATORY POST-RUN COMPLIANCE GATE.** Runs after execution and after ALL
+debugging, before `AUTOMATION COMPLETE`. Work the §2 checklist again.
+
+1. **Repeat the FULL review on the FINAL code — including every file that passed Checkpoint A.**
+   Debugging changes code; A's results describe the code as it was then, not as it is now.
+   **Both halves again, not just the fast one:**
+   - *mechanical* — re-run `validate-automation.mjs` and the project's own tooling over the final
+     files, and record the new `scopeDigest`;
+   - *semantic* — re-review every `S` item of `references/compliance-checkpoints.md` §2 against
+     the final code: layer ownership, whether each assertion still verifies its required outcome,
+     evidence placement, and each honoured exception's substance. A clean re-scan is not a
+     repeated review.
+2. **Confirm debugging introduced no shortcuts:** no weakened assertion, no broken POM boundary,
+   no removed or relocated evidence, no suppressed error, no new unjustified skip or raised
+   timeout, no changed application setting, no product-code edit — and **no page class written
+   during debugging outside the inventory**: the re-run validator (with `--inventory`) reports no
+   open `pom-duplicate-page`, and every class it lists under `pageScan` has its
+   `automation-inventory.md` row — and **no scratch probe left behind or cited** (item 50).
+3. **Verify the artifacts were ACTUALLY produced** — this is the half Checkpoint A could not do:
+   - every executed attempt has its assertion-point image at the path `{run_file}` records, and
+     every failed attempt its failure image;
+   - each image is associated with the right TC-ID and variant, and the **evidence sanity check**
+     passes (no PASS image showing a cleaned-up screen);
+   - `{run_file}` (status final), the `## Phase {N}` section of `{run_report_md}`,
+     `{bug_report_md}` (one entry per `app_bug` of this phase, no bug marked resolved without a
+     passing retest), `{run_report_html}` and the progress log exist, are internally consistent
+     and **correspond to the final tested code** — compare the `scopeDigest` recorded for the run
+     against the current one;
+   - the renderer's last payload for this markdown says `gate: PASS`, its `writes[]` names the
+     HTML, the page's provenance self-hash verifies (no hand edit), and `warnings[]` carries no
+     `evidence-file-missing` / `bug-report-missing` / `run-file-missing`;
+   - the story folder's top level holds nothing outside the whitelist (legacy files untouched);
+   - expected failures (`fail`), extended timeouts (`slow`) and skips appear as themselves in the
+     report, never folded into the pass count;
+   - Requirement → TC → automated test → execution result is mappable end to end, and the three
+     coverage figures are reported separately (`<coverage_measurement>`).
+4. **Results-freshness check — every reported result ran on the code it reports.** Run
+   `node .claude/skills/link-qc-5-test-run-automation/scripts/impact.mjs select --root {automation_root}
+   --spec {spec files} --progress {results_root}/artifacts/progress --run-file {run_file}` on the
+   final code: `stale: []` for every TC reported with a result (a stale TC is re-run, or reported
+   `NOT_RUN` with `not started: code changed after its run`); every `fresh_by_member_only[]` TC
+   reviewed semantically (the changed member is truly unreachable from it — `verified-semantic` with
+   `file:line`, else re-run it); the outcome recorded in `{run_file}.impact`. This per-TC proof
+   replaces "any result older than the last code change"; an applicable check that did not run is
+   `unresolved`, never PASS.
+
+**If an automation defect is found here:** repair it immediately → re-run the relevant static
+checks → **rerun the affected tests**, selected by `impact.mjs select` (its closure includes every
+consumer of a changed shared component — page object, fixture, helper, config — and every
+`unknown[]` test is always selected) → if the selection cannot bound the blast radius, run the
+full in-scope suite → then **repeat the full Checkpoint B review** on the result.
+
+**Any later code change invalidates the checks and results it affects** — which results: per TC,
+by `impact.mjs`. Refresh Checkpoint A's applicable checks before rerunning and repeat B afterwards.
+A recorded gate is valid only for the `scopeDigest` it names — **never claim completion from stale
+results.**
+
+**Do not rerun to make a failure disappear.** An unchanged application defect or an environment
 failure is not fixed by repetition: preserve the evidence, classify it (`app_bug`,
-`environment_failure`), and report it as an unresolved blocker.
+`environment_failure`, `unverified_assumption`), and report it as an unresolved blocker. The
+automatic isolation check is the one exception, and it is a classification step, not a retry: a
+FAIL beside other tests becomes a verdict only once the TC ran alone, `retries` stays `0`, and the
+parallel attempt stays in the history and the report.
+
+**Gate result.** `PASS` only when there are no confirmed violations in the final delivered scope
+**and** every `review[]` / `notRun[]` item is closed — by the scanner, by other project tooling,
+or by documented semantic review against the same `scopeDigest` — **and** the results-freshness
+check found no stale TC with a reported result. Otherwise `FAIL` or `BLOCKED`,
+named item by item. Record it per `compliance-checkpoints.md` §5.
+
+**Both gates must PASS for the final delivered scope before claiming automation compliance**, and
+compliance status is reported separately from execution status: compliant tests can expose
+application defects, passing tests can still violate these rules, and an environment blocker can
+leave a gate BLOCKED with nothing wrong in the code.
+</checkpoint_b>
 
 ---
 

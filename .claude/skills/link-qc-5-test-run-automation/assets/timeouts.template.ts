@@ -38,6 +38,21 @@ export const TIMEOUTS = {
   } as Record<string, number>,
   /** Time the watchdog allows AFTER a step deadline for Playwright's own timeout and teardown to act before a worker is declared hung. */
   watchdog_grace: 60_000,
+  /**
+   * Rate-limit pacing (helpers/rate-limit.ts) and the runner's cool-downs (run-stage.mjs --cooldown / --cooldown-max).
+   * The pace itself is NOT here — it comes from the run plan's rate_limits[] (PW_RATE_LIMITS), so learning a limit
+   * never changes code.
+   */
+  rate_limit: {
+    /** Longest wait for a start-of-test slot (login), taken in beforeEach before any step opens; the test budget is extended by the wait. */
+    max_start_wait: 120_000,
+    /** Longest wait for a mid-test slot (rateLimitSlot inside a step) — must fit a step deadline. */
+    in_step_wait: 5_000,
+    /** Cool-down when the application refused without a Retry-After header. */
+    cooldown: 60_000,
+    /** Cap on any cool-down, whatever Retry-After says. */
+    cooldown_max: 120_000,
+  },
 } as const;
 
 /** Sanity: a stuck step must never be able to consume the whole TC budget. */

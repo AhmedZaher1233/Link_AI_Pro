@@ -1,0 +1,71 @@
+{
+  "TC-SYNC-01": {
+    "id": 101,
+    "tags": [
+      "manual-review",
+      "sync",
+      "automation",
+      "smoke"
+    ],
+    "automationStatus": "Planned",
+    "descriptionHasTestData": {
+      "ids": [
+        "A1",
+        "D1",
+        "E1"
+      ],
+      "sha": "d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0"
+    }
+  },
+  "TC-SYNC-02": {
+    "id": 102,
+    "tags": [
+      "automation",
+      "regression",
+      "sync",
+      "manual"
+    ],
+    "automationStatus": "Not Automated",
+    "descriptionHasTestData": {
+      "ids": [
+        "A2",
+        "D2",
+        "E1"
+      ],
+      "sha": "d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0"
+    }
+  },
+  "TC-SYNC-03": {
+    "id": 1002,
+    "tags": [
+      "automation",
+      "human-step",
+      "sync"
+    ],
+    "automationStatus": "Planned",
+    "descriptionHasTestData": {
+      "ids": [
+        "A1",
+        "D1",
+        "E1",
+        "E2"
+      ],
+      "sha": "d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0"
+    }
+  },
+  "TC-SYNC-04": {
+    "id": 104,
+    "tags": [
+      "sync"
+    ],
+    "automationStatus": "Planned",
+    "descriptionHasTestData": {
+      "ids": [
+        "A1",
+        "D1",
+        "E1"
+      ],
+      "sha": "d185e7966db40524ab6b044f8354f861bd5ca5afb324c47bcf9d61d7b108fbb0"
+    }
+  }
+}
