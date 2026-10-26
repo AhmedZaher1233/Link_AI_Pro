@@ -12,6 +12,14 @@ progress logs never change. Only the rows of TCs that were re-run IN FULL with a
 added or removed, so the phase's Total never changes. No new `###` sub-section, no new file in the
 story folder (skill 5's whitelist).
 
+**Run files from skill 5 2.0 (and older ones).** The steps below are the same for both. A 2.0 phase also has
+skill 5's gate records `.runs/phase-{N}.checkpoint-A.json` / `-B.json`, an `acceptance` object in the run file, a
+`- **Acceptance:**` bullet and drafts under `artifacts/drafts/phase-{N}/`: they are skill 5's record of the phase as
+it was checked and published — never edited, deleted or re-created here, never hashed into the amended page
+(render WITHOUT `--gate`, §4), and `run-data.mjs` / `check.mjs` are never called. The retest is recorded as an
+amendment (`retests[]`, the `Retest` bullet, `### Deviations`), not as a new checkpoint or a new acceptance
+decision. An older run file (no gate records, no `acceptance`) is updated the same way.
+
 ## 1. `TEST-RUN-REPORT-{feature}.md` — the `## Phase N` section
 
 | Part | Change |
@@ -78,9 +86,8 @@ UI bugs (skill 6 report) change nothing here: their result lives in the ledger (
 node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs --report {results_root}/TEST-RUN-REPORT-{feature}.md --pretty
 ```
 
-(skill 5 absent → the byte-identical copy under `link-qc-5b-test-run-manual-cli/scripts/`; neither →
-the page is `NOT_RUN (renderer not installed)`, the markdown stays updated, and the final message
-says so). Dry run first: `gate` must be `PASS` with `mismatches: []` and no warning this edit
+(no `--gate`: the amended page must not carry the Checkpoint B record of the page skill 5 published; skill 5
+absent cannot happen here — the run is BLOCKED without its coordination, coordination.md). Dry run first: `gate` must be `PASS` with `mismatches: []` and no warning this edit
 caused (`unknown-classification`, `evidence-file-missing`, `evidence-path-not-relative`) — a
 mismatch names the markdown line to fix; fix it and dry-run again. Then the same command with
 `--write`. `refused.reason: hand-edited` → tell the user what will be lost and re-render with

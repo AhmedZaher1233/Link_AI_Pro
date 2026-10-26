@@ -27,6 +27,23 @@ axes stay separate: design coverage (the TC exists in full — skill 3), automat
 / NO — the document), execution coverage (`full` / `partial (human step: n)` / `manual — not
 automated` — this skill) and validation status (3b / 3c).
 
+**First-draft card — write it so Checkpoint A has nothing to repair** (guidance only; the gates still
+decide, `compliance-checkpoints.md` §2 and `validator.md` stay the rules):
+- spec = test cases only; every locator, navigation, wait and composite flow in a page object (`<pom_mandatory>`);
+  page objects decided by the inventory row before they are written;
+- title `[TC-ID] …` + one polarity tag (+ `@smoke` only from the document) + one `@run:` tag; the describe
+  names the REQ id; one `step()` per manual step; `captureEvidence` a top-level statement right before the
+  Assert step;
+- every timeout a `TIMEOUTS.*` key (no literal `timeout: 5000`, no `test.setTimeout(30000)`), no constant
+  redeclared in a spec, no `networkidle`, positional selectors scoped or justified;
+- `afterEach`: `guard.report()` first (it writes the `teardown` heartbeat — the evidence must precede it),
+  then `net.report()`; `beforeEach` attaches both guards; no catch block left empty without the comment that
+  says why;
+- created data through `uniqueName()` / `runPrefix()`; a side-effecting fixture or `beforeAll` depends on
+  `workerAdmission` / `unitAdmission` (`code-craft.md` §6) when the project has `helpers/admission.ts`;
+- a TC whose expected result IS a refusal (lockout, rate limit) annotates `expects-refusal` so the runner
+  never reads its refusal as `rate_limited`.
+
 **Generate first, ask second.** An approved document can still read ambiguously in places. Such
 a TC is **NOT a failure and NOT a block** — this phase writes every TC it can and **parks** the
 rest as open questions for `PHASE 2.4`, which asks the user with concrete options and then
@@ -49,7 +66,7 @@ tagged `@unverified-assumption` and counted *Assumed*. Full rules: `references/a
    `tests/{Area}_Tests/` folders · `pages/` (+ `pages/components/`) · `prerequest/`
    · `helpers/` (the evidence hook `helpers/evidence.ts`, see `<result_organization>`; `steps.ts`,
    `progress-reporter.ts`, `console-guard.ts`, `test-data.ts` — copied from `assets/*.template.ts`
-   when absent; `network-guard.ts` and `rate-limit.ts` — always installed, `<shared_config>` step 6)
+   when absent; `network-guard.ts`, `rate-limit.ts` and `admission.ts` — always installed, `<shared_config>` step 6)
    · the env layer (`utils/env`) · the ONE `playwright.config.ts` + `timeouts.ts`
    (no `playwright.us-*.config.ts` may remain — see `<shared_config>`) · `.gitignore` per
    `references/code-craft.md` §12 · `reports/{spec_level}{user_story_name}/` ·
@@ -65,7 +82,8 @@ tagged `@unverified-assumption` and counted *Assumed*. Full rules: `references/a
      from the non-browser project's scope where the config requires it)
    - FIX any drift found (wrong folder, unregistered spec, locators inlined in a
      spec) before proceeding.
-4. Emit a **Placement Manifest** in the output EVERY run:
+4. Emit a **Placement Manifest** EVERY run, in the Writing Automation Code message (the final return links the
+   inventory instead of repeating it):
 
    | File | Path | Registered in config | Status (created / verified / moved / fixed) |
    |------|------|----------------------|---------------------------------------------|
@@ -78,9 +96,11 @@ another class already opens) is a Checkpoint A failure, whatever folder or agent
 
 1. **Scan the WHOLE `{automation_root}`** — every folder, not only `pages/` and
    `pages/components/`: every class that takes a `Page` in its constructor or extends a base page,
-   with its file, class name, route / URL literal and exported locator names. Run
-   `node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --root . --pretty`
-   once for its `pageScan` section (the same walk, machine-made) and read the classes yourself.
+   with its file, class name, route / URL literal and exported locator names. Run the discovery digest ONCE
+   instead of opening page files one by one:
+   `node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --root . --page-scan [--inventory {reports_folder}/automation-inventory.md]`
+   — every class with its file, base class, routes, locator count and member names, plus the duplicate
+   candidate pairs and the pairs a row already decides; open a class's file only to decide a candidate.
 2. **Match each screen the TCs touch against the classes** — by normalized name (case, a trailing
    `s` / `Page`, a numeric file prefix ignored), then by route literal, then by two or more identical
    locators. A match is **evidence for a decision, never the decision**: a different class name on
@@ -212,6 +232,11 @@ when the project has no convention of its own. Where it does — a different fix
 `components/` layer, an existing helpers module — match it, and record it under
 `automation.layers` in `Testing/qa-manifest.json` so the validator checks the same boundaries
 instead of assuming these names.
+
+**The type check and the validator run together:** `scripts/check.mjs run` (`compliance-checkpoints.md` §3a)
+runs the project's own `tsc --noEmit` and the validator in ONE call, side by side within the compliance
+limit, and prints a compact summary (the full output under `artifacts/checks/`) — never two separate calls
+per repair. A project without TypeScript in `node_modules` reports the type check `notRun`, never clean.
 
 **Verify your typecheck actually runs.** Some automation projects' `tsconfig.json` makes
 `npx tsc --noEmit -p tsconfig.json` report **zero errors even for a deliberate type error**

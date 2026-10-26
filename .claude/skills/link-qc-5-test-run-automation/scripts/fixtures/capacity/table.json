@@ -1,0 +1,4 @@
+[
+  { "pid": "SELF", "ppid": "PARENT", "start": null, "cmd": "node capacity.mjs" },
+  { "pid": "PARENT", "ppid": 1, "start": null, "cmd": "node selftest-capacity.mjs" }
+]

@@ -4,23 +4,39 @@ Load only to close an open `review[]` / `notRun[]` / `exceptions[]` item. Every 
 carries its `ruleId`, `severity` and `message`; the rule catalogue (`RULES`) and the detection limits
 (`LIMITS`, shipped as `limits[]`) live in the script — this file says how to act on them.
 
-A read-only static screen over generated Playwright automation. Zero dependencies, Node ≥ 18,
-never writes anything. **It is a screen, not a judge**: it reports what a token-level scan over
+A read-only static screen over generated Playwright automation. Zero dependencies, Node ≥ 18; it
+never touches the code it scans, and the only file it ever writes is its own full payload behind
+`--out`. **It is a screen, not a judge**: it reports what a token-level scan over
 comment/string-stripped source can establish, and routes everything else to semantic review.
 
 ## Running it
 
-```bash
-node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs \
-  --root <project> --pretty \
-  [--files a.spec.ts,b.spec.ts] [--tests-path <dir>] [--pages-path <dir>] \
-  [--tc-ids <csv|file>] [--req-ids <csv|file>] [--allow-file <path>] \
-  [--evidence-fn captureEvidence] [--treat-as-spec] [--require-steps] \
+The model-facing call is compact: `--summary` prints the gate, the counts and the first twenty open
+items, `--out` keeps the full payload on disk for the items you have to close. Plain command shape —
+no `cd`, no pipe, no environment prefix, no `--pretty`.
+
+```text
+node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --root <project> --summary
+  --out {results_root}/artifacts/checks/validator-full.json
+  [--files a.spec.ts,b.spec.ts] [--tests-path <dir>] [--pages-path <dir>] [--automation-root <dir>]
+  [--tc-ids <csv|file>] [--req-ids <csv|file>] [--allow-file <path>] [--evidence-fn captureEvidence]
+  [--console-guard-fn attachConsoleGuard] [--network-guard-fn attachNetworkGuard]
+  [--treat-as-spec] [--require-steps] [--inventory <automation-inventory.md>] [--strict]
+
+node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --root <project> --page-scan
   [--automation-root <dir>] [--inventory <automation-inventory.md>] [--strict]
 
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest.mjs      # exits 1 on mismatch
 node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --help
 ```
+
+`--summary` is the same `analyze()` payload cut down — the summary's `gate` and `gateReason` ARE the
+full payload's, so nothing is decided differently. Without `--summary` the full payload goes to stdout
+as before (`--pretty` only for a human reader). `--page-scan` is the discovery digest of the
+`<automation_inventory>` scan in one call: every page class of the automation root with its file,
+base class, routes, locator count and member names, every duplicate candidate pair and every pair a
+decision row already decides — read it instead of opening page files one by one; with `--strict` it
+exits 2 while a candidate pair is undecided.
 
 `--files` should carry the page objects, components, fixtures and helpers the specs touch as well
 as the specs: the wait, `networkidle` and positional-selector rules apply in every layer, and a
@@ -53,7 +69,16 @@ One JSON object: `{ tool, schemaVersion, readOnly, root, generatedOn, config, sc
 fingerprint, findings[], review[], exceptions[], notRun[], traceability, counts, gate, gateReason,
 complianceNote, limits[] }`. `pageScan` lists every page class the root walk found (file, line,
 name, base class, route literals, locator count), the candidate / decided / undecided counts and the
-inventory file used — it is the machine half of the `<automation_inventory>` scan.
+inventory file used — it is the machine half of the `<automation_inventory>` scan. `config.b8` names
+the guard helpers and the admission layer the B8 rules found (or `null`).
+
+With `--summary`: `{ tool, schemaVersion, summary: true, gate, gateReason, counts, byRule, open[]
+('{ruleId} {file}:{line}', violations first, then review, then warnings — at most 20), openTotal,
+review, notRun, notRunItems[], exceptions, fingerprint { scopeDigest, files }, pageScan { classes,
+candidates, decided, undecided }, full }` — `full` is the `--out` file, where every finding, `review[]`,
+`notRun[]` and `exceptions[]` entry still is. With `--page-scan`: `{ mode: 'page-scan', automationRoot,
+counts, classes[] { class, file, line, extends, routes, locators, members (≤ 40), membersTotal },
+duplicates[], decided[], inventory, notRun[], warnings[] }`.
 
 Severities: `violation` (moves the gate) · `warning` · `review` (undetermined — blocks a *compliance*
 PASS until closed) · `info`.
@@ -102,9 +127,40 @@ emitted as `gate: BLOCKED`; a stack trace never reaches stdout.
   layer the scan is pointed at — pass page objects and helpers in `--files`.
 - **`review`** — undetermined, never guessed: `assertions-conditional`, `assertions-unresolved`,
   `evidence-conditional`, `evidence-unresolved`, `evidence-placement-unproven`,
-  `outcome-coverage-unassessed`, `exception-unverified`, `pom-architecture-unknown`, `pom-duplicate-page`.
+  `outcome-coverage-unassessed`, `exception-unverified`, `pom-architecture-unknown`, `pom-duplicate-page`;
+  and the six **B8 rules** below, staged at `review`. Exemptible: `constant-redeclared`,
+  `console-guard-missing`, `network-guard-missing`, `admission-contract`. Not exemptible: `empty-catch`,
+  `timeout-literal` (a `qa-allow` naming them is itself `exception-not-permitted`).
 - **`info`** — `assertions-call-found`, `evidence-call-found`, `modifier-declared`, `trace-uncovered-id`,
   `exception-unused`, `pom-duplicate-page-decided`, and every excepted finding (downgraded, never removed).
+
+`RULE_CHECKS` (exported beside `RULES`, shown by `--help`) maps every rule to the
+`compliance-checkpoints.md` §2 item(s) it decides or feeds — `16a` / `25a` / `46a` are the code halves of
+items 16 / 25 / 46.
+
+**B8 rules — stricter deterministic checks, staged at `review`.** Each finding is an open item the
+checkpoint must close — fixed, or closed by documented semantic review against the same `scopeDigest`
+— and **none of them moves the scanner gate** (only an undecided `pom-duplicate-page` does). A later
+stage may raise a rule's severity once its false-positive rate is known; that is a deliberate change to
+this file, `RULES` and the harness together.
+
+| Rule | Item | Fires on | Silent on |
+|---|---|---|---|
+| `constant-redeclared` | 6 | a **spec** declaring a numeric constant whose name says timeout / tolerance / threshold / delay / deadline / wait / retry / interval / poll / ms (typed, exported or parenthesised alike), or any `TIMEOUTS` declaration | an expected value, a label map, a `TIMEOUTS.*` reference, a number in a comment or a string; page objects and helpers |
+| `empty-catch` | 28 | a `catch` block or a `.catch()` handler with an empty body (`{}`, a lone `;`, `undefined`, `void 0`), in every layer | a comment inside the block (the documented swallow of an evidence-only helper or a best-effort cleanup), a rethrow, a value fallback such as `.catch(() => false)` (semantic) |
+| `timeout-literal` | 43 | a `timeout` / `actionTimeout` / `navigationTimeout` / `globalTimeout` / `deadline` property, or a `.setTimeout()` / `setDefaultTimeout()` / `setDefaultNavigationTimeout()` call, whose value is a number or a numeric constant of the same file (`0` is named as unlimited) | `TIMEOUTS.*`, a computed budget, a type, a ternary; `timeouts.ts` itself (the policy file) |
+| `console-guard-missing` | 46a | a test no covering `beforeEach` attaches the console guard for, a guard called only in the test body, a handle that is not kept, a guard never reported in `afterEach` | a guard attached by the automatic fixture of the module the spec imports its `test` from |
+| `network-guard-missing` | 49 | the same, for the network guard | the same |
+| `admission-contract` | 25a, 47 | with `helpers/admission.*` under the automation root: a side-effecting worker fixture not depending on `workerAdmission`, a side-effecting test fixture not depending (directly or through another fixture of the same `extend`) on `unitAdmission`, a side-effecting `beforeAll` without the `workerAdmission` parameter | read-only fixtures, option and value fixtures, transitive admission through another fixture |
+
+The guard rules need the helper **defined** under the automation root (`attachConsoleGuard` /
+`attachNetworkGuard`, or the names passed with `--console-guard-fn` / `--network-guard-fn`); without it
+they land in `notRun[]` — an applicable check the semantic review closes. `admission-contract` has no
+subject in a project without the admission layer and stays silent there; parallel-plan treats a unit
+whose fixtures break the contract as U4 (admitted only at spawn), so a finding never makes the run less
+safe — it makes it less parallel until fixed. "Side-effecting" is a heuristic (a `prerequest/` import,
+`request.post` / `put` / `patch` / `delete`, a create / add / save / update / delete / remove / submit /
+approve / reject / upload / import / assign method, a login / sign-in call); the limits are in `limits[]`.
 
 **`pom-duplicate-page` — candidates, never verdicts (non-exemptible).** The page-class pass compares every
 page class of the whole automation root and reports a pair when the normalized names / file stems match
@@ -187,10 +243,14 @@ Read `limits[]` before trusting a PASS. The ones that change what you do: a PASS
 banned text pattern was found; `*-call-found` is a call site, not execution; evidence placement against
 teardown is never verified; at most three relative-import hops (aliases, barrels and base classes are
 `*-unresolved`); assertion quality is not judged; exceptions are checked for form, never substance;
-duplicate-page matching only produces candidates.
+duplicate-page matching only produces candidates; the B8 rules read names and shapes (a timeout imported
+from another module, a guard behind a helper the scan does not see, a side effect behind dynamic
+dispatch are invisible) and are staged at `review`.
 
 ## Self-test
 
-`scripts/selftest.mjs` (eighteen fixture cases, the false-PASS guards among them) **exits non-zero on
-mismatch by design**. A failing self-test means the validator's verdicts cannot be trusted: record the
-compliance gate **BLOCKED** rather than passed, and close the affected checks another way.
+`scripts/selftest.mjs` (twenty-six fixture cases, the false-PASS guards among them; cases 19-26 cover
+`--summary` / `--out`, `--page-scan` and the B8 rules with a true positive, a false-positive guard and a
+false-negative guard each — `scripts/fixtures/b8/README.md`) **exits non-zero on mismatch by design**. A
+failing self-test means the validator's verdicts cannot be trusted: record the compliance gate
+**BLOCKED** rather than passed, and close the affected checks another way.

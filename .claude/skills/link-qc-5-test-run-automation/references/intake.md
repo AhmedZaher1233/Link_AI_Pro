@@ -54,6 +54,24 @@ Required inputs — missing from the task input AND the learning file → ASK th
 3. **Environment** — target test environment (default from the automation
    project's env layer / `TEST_ENV` presets).
 
+**Environment lease — right after the environment and `{run_file}` are resolved, BEFORE any readiness
+probe, data preparation or test touches the environment** (`<capacity_and_lease>`, `execution.md`): one
+skill-5 or skill-9 run per environment at a time on this machine.
+```text
+node .claude/skills/link-qc-5-test-run-automation/scripts/capacity.mjs lease acquire --env {E1 URL}[,{every backend host of TEST-DATA ## 0. Environment}] --test-data {TEST-DATA md} --run-file {run_file}
+```
+Record the payload's `lease.envId` and `members[]` in `{run_file}.environment_lease { env_id, members, run_id,
+acquired_at }` and pass `--env-id {env_id}` to every `run-stage.mjs` call of the run. Held by another run →
+say so once with its message and wait (`--wait {ms}`, bounded) or stop (BLOCKED, naming the run that holds
+it) — never run beside it. A host that cannot be resolved is a warning in the payload (it stays its own
+member). Released at close-out (`<second_run>` step 4), after teardown, clean-up and the background quiet
+period — never between activities: long model work or a question to the user never releases it.
+
+**Fresh session advice (one line, never blocking).** When this conversation already holds earlier work — an
+earlier phase, another story, unrelated tasks — the first message of the run carries ONE line: a fresh
+session for the next run keeps it faster and cheaper (the instructions load once instead of being carried
+by every call). Never a question, never repeated within the run.
+
 **`ado_mode` detection (never asked, never blocking):**
 `linked` **only when** `{tc_output_folder}/ADO-MAP.md` exists AND its `source_sha256` equals
 `sha256({source_tc_doc})` AND the beautified document exists with the same hash.
@@ -126,7 +144,7 @@ Resolve:
 | `coverage_mechanism` | enforcement mechanism from L3 (L1 §2.4: `hard block` / `soft block` / `report-only`) → **default `soft block`** | soft block |
 | `data_setup_layer` | where provisioning code lives: API fixtures in `prerequest/` · UI setup journeys in `tests/{Area}_Tests/00-setup-{entity}.spec.ts` · DB helpers beside the existing DB-oracle helpers | same |
 | `db_access` | `helper` (the automation project already has a DB helper/connection) → `env:{VAR}` (the QC names the env var holding a connection string — value never read into the chat, logged, or written) → **default `none`** (DB option not offered) | none |
-| `workers_parallel` | task input `--workers N` → learning file `[type: env]` line → **default 2** (passed per command as `--workers`; serial groups, the isolation check and the burn-in always `--workers 1`; halved by `run-stage.mjs` for the rest of a stage after rate-limit refusals) | 2 |
+| `workers_parallel` | only for the legacy `--scheduler groups` (default 2). A normal run never sizes workers: the Auto ceiling (`capacity.mjs`, host memory / CPU, bounded by `config.json machineMaxWorkers`) and the dispatcher's ramp decide, admission lowers per launch, every change recorded; `--workers N`, `QA_MAX_WORKERS` and `qa-manifest.json` `execution.maxWorkers` may only LOWER the ceiling. Serial groups, the isolation check and the burn-in always `--workers 1` | 2 (legacy) |
 | `headed` | **true by default** (visible Google Chrome window); task input `--headless` or no display available → false (`PW_HEADLESS=1` on every command), reported as a Deviation | true |
 | `qa_standards` | glob `docs/steering/*` | L1/L2/L3 + testing-strategy |
 

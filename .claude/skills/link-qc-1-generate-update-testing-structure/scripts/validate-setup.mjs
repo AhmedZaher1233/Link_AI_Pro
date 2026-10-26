@@ -11,7 +11,7 @@
 //          `azure-devops-attachments` server of skills 8 / 9 (cloud projects): WARN at worst, never FAIL.
 //          [--sync-report <path-to-json-from-sync-qa-skills --check>]
 import path from 'node:path';
-import { parseArgs, print, read, isFile, scanGit, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanManifest, scanPat, scanGitignore, scanBrowserSecrets, SKILLS, SYNC_COMMAND, STEERING_CANONICAL, PLAYWRIGHT_CLI_IGNORE, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, ENV_RESTART_HINT, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER, ADO_ATTACHMENTS_PACKAGE_PIN, ADO_ATTACHMENTS_PROBE } from './lib.mjs';
+import { parseArgs, print, read, isFile, scanGit, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanManifest, scanPat, scanGitignore, scanBrowserSecrets, scanExecutionLimits, SKILLS, SYNC_COMMAND, STEERING_CANONICAL, PLAYWRIGHT_CLI_IGNORE, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, ENV_RESTART_HINT, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER, ADO_ATTACHMENTS_PACKAGE_PIN, ADO_ATTACHMENTS_PROBE } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const root = path.resolve(args.root || process.cwd());
@@ -64,6 +64,26 @@ row('Azure DevOps hosting', hostingMismatch ? 'WARN' : hostingEvidence ? 'PASS' 
 // PAT: existence only (user-level env var / shell profile) of the variable the entry references. The value is never read, printed or compared.
 const pat = scanPat(ado.present ? expectedPatVar : null);
 row('PAT env var', !pat.persisted && !pat.inProcess ? (ado.present ? 'FAIL' : 'WARN') : pat.sessionMissing ? 'WARN' : 'PASS', pat.persisted || pat.inProcess ? `${pat.name} ${pat.persisted ? `set (${pat.scope})` : 'present in this session only (not persisted)'}${pat.sessionMissing ? ` — saved on this machine but missing from this session: ${ENV_RESTART_HINT}` : ''}` : `${pat.checked.join(' / ')} not set — user runs ${pat.setupScript} (masked prompt; stores ${PAT_VAR_CLOUD} and ${PAT_VAR_SELF_HOSTED}), then must ${ENV_RESTART_HINT}`);
+
+// Execution limits (skills 5 and 9): the machine's worker ceiling and the coordination directory — read-only; skill 1 never
+// writes config.json and never raises a limit (references/toolchain.md "Execution limits").
+const xl = scanExecutionLimits(root);
+const xc = xl.ceiling;
+const overrides = [...xc.lowered.map((l) => `lowered to ${l.value} by ${l.by}`), ...xc.refusedRaises.map((r) => `${r.by}=${r.value} ignored (only lowers)`), ...xc.invalid.map((i) => `${i.by}=${JSON.stringify(i.value)} invalid (ignored)`)];
+const ceilingSource = xc.source === 'auto' ? `Auto: ${xc.auto.host.totalMemMb} MB / ${xc.auto.host.cpus} cores → ${xc.auto.byMem} by memory, ${xc.auto.byCpu} by CPU` : xc.source === 'auto-fallback' ? 'Auto fallback — ' + xc.auto.reason : 'config error';
+const ledgerOff = xl.ledgerMode === 'exclusive' || xl.ledgerVarPersisted;
+row('Execution limits', xl.config.exists && !xl.config.valid ? 'WARN' : (xc.refusedRaises.length || xc.invalid.length || xl.warnings.length || ledgerOff || xc.source === 'auto-fallback' ? 'WARN' : 'PASS'),
+  (xl.config.exists && !xl.config.valid ? `${xl.config.error} — the ceiling falls back to 1 until it is fixed by hand; ` : '')
+  + `machine ceiling ${xc.base} (${ceilingSource}; upper bound ${xc.upper.value} from ${xc.upper.from === 'config' ? 'config.json' : 'AUTO_MAX'}), effective ${xc.effective} worker(s) — a run starts at 2 and its ramp adapts within it`
+  + (overrides.length ? '; ' + overrides.join('; ') : '')
+  + (xl.ledgerMode === 'exclusive' ? '; QA_LEDGER=off in this session — skills 5 / 9 run one Playwright command at a time, serially (protection reduced)' : '')
+  + (xl.ledgerVarPersisted ? '; QA_LEDGER is saved at user level — if it is "off" every later run is exclusive and serial; remove it unless that is intended' : '')
+  + (xl.warnings.length ? '; ' + xl.warnings.join('; ') : '')
+  + '; config.json machineMaxWorkers only bounds Auto — skills never write it');
+row('Coordination directory', !xl.writable || (xl.ledger.exists && !xl.ledger.valid) ? 'FAIL' : 'PASS',
+  !xl.writable ? `${xl.dir} (${xl.dirSource}) is not writable${xl.writableVia && xl.writableVia !== xl.dir ? ' (checked at ' + xl.writableVia + ')' : ''} — skills 5 and 9 refuse to launch Playwright ("no safe coordination"); set QA_CAPACITY_DIR to a writable absolute path`
+  : xl.ledger.exists && !xl.ledger.valid ? `${xl.ledger.error} in ${xl.dir} — skills 5 and 9 refuse to launch Playwright until it is repaired (delete it only while no run is active)`
+  : `${xl.dir} (${xl.dirSource === 'home' ? 'default' : xl.dirSource})${xl.dirExists ? '' : ' — created by the first skill 5 / 9 run'}`);
 
 // Browser secrets file (3c, 5b and 9, optional): existence of the user-level variable and the file it names — the content is never read.
 const bs = scanBrowserSecrets();

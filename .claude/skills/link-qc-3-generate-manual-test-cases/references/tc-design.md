@@ -358,8 +358,8 @@ expected-result line that needs a person starts with `[HUMAN] ` ("Out-of-browser
 | AI Oracle | OPTIONAL — present only on a TC whose step sends a prompt to an AI assistant / chatbot whose reply differs every run. Sub-list `Intent` · `Must contain` · `Must not contain` · `Language` · `Max length` · `Repeats` / `Pass threshold` ("AI / chatbot test cases" below). The prompt stays a typed input in `Steps`; `Expected Result` stays the human-readable outcome. Judged by the manual CLI run (skill 5b) and, on one observation, by 3b / 3c; the renderer displays it and never judges it |
 | Smoke | YES / NO — YES only for the critical happy-path journeys that prove the feature is alive (login works, screen reachable, core flow functions). Keep the smoke set small: roughly 10–20% of TCs, at least 1 per screen. Skill 5 runs `Smoke: YES` TCs FIRST behind a failure gate. Mark deliberately — never default everything to YES. |
 | Automation Candidate | YES / NO — see automation suitability below |
-| Data effect | OPTIONAL — `read-only` / `creates` / `modifies` / `deletes`. Tells skill 5 whether this TC may run in parallel with others (read-only) or must run one after another (it changes data). Leave blank to let skill 5 infer it from the steps. |
-| Shared data | OPTIONAL — the fixture, record, or account this TC shares with other TCs, in plain words plus its token (e.g. `price list "Sample" yearly values [D2]`, `single-session admin account [A1]`). TCs naming the same shared data run one after another. |
+| Data effect | OPTIONAL — ONE value, the strongest that applies (`deletes` over `modifies` over `creates` over `read-only`): what this TC does to application data. `read-only` — changes nothing (signing in is fine). `creates` — adds only NEW records of its own (unique names / generated values) and changes no existing record — also when it later edits or deletes a record it created itself. `modifies` / `deletes` — changes or removes an EXISTING record: name that record in the step that changes it, by its token (`Edit order "Sample" [D3]`). `—` → skill 5 infers it from the step verbs. Skill 5's parallel planner turns it into conflicts — "Data effect and Shared data" below; it never makes a TC "serial" by itself. |
+| Shared data | OPTIONAL — data whose STATE this TC shares with other TCs, so they must not run at the same time: a record two TCs change, or one changes while another checks it; a total or counter several TCs move. Plain words plus its token, written the SAME way in every TC that shares it (skill 5 matches the words): `order "Sample" [D3]`. Add `(depends on TC-012)` when this TC needs the state another TC leaves behind — the two then run in that order. Never data the TC only reads and nobody changes (the token in its steps already says so). `—` when none. |
 | Tags | OPTIONAL, design-owned — comma-separated tags the reviewer wants on the Azure DevOps work item (e.g. `uat`, `regression`); `—` when none. Skill 4 publishes them (with its own owned tags); 3b / 3c / 5 never edit them. A project-wide tag every TC carries goes in the `**Tag convention:**` header line instead (`deliverables.md` §2). |
 | Validation | Always `draft — not app-validated` at design time (or `not-implemented — pending implementation` per `entry-cases.md` §4). The other states are set only by 3b — `validation-states.md`. |
 
@@ -378,6 +378,29 @@ skill 5's `@positive` stage; a TC that asserts a rejection, a guard, a validatio
 blocked role runs in `@negative` — whether it is typed `edge-case` or `negative`. State this
 mapping in the document header AND write the result per TC in the `Stage` field / summary column
 so skill 5 never has to guess.
+
+### Data effect and Shared data — what skill 5's parallel planner reads
+
+Skill 5 runs TCs side by side only when nothing one does can change what another checks. It derives that from these
+two fields plus the steps (its parallel readiness check); a field that is precise lets more TCs run together, a vague
+one makes them run alone — safe, only slower. The rules it applies:
+
+| The TC … | Write | Skill 5 then |
+|---|---|---|
+| only reads (opens, filters, views) | `Data effect: read-only` | runs it beside anything that does not change what it reads |
+| adds records of its own with unique names, e.g. "Create order 'QA-{timestamp}'" (also when it later edits / deletes that same record) | `Data effect: creates` | runs it beside other creators; keeps it apart from TCs that **count, list the latest, search or export** that collection — so name the collection in those TCs' steps ("the Orders list shows …") |
+| edits or removes an EXISTING record | `Data effect: modifies` / `deletes`, and the record's token in the step that changes it: `Edit order "Sample" [D3]` | keeps it apart only from the TCs that use `[D3]`; a change whose record it cannot tell (no token, no noun) runs alone |
+| changes a system / global setting, or anything every user sees | the setting named plainly in the step ("Open the system settings and …") | runs it alone (a barrier: nothing else runs while it does) |
+| needs the state another TC leaves behind | `Shared data: order "Sample" [D3] (depends on TC-012)` | runs TC-012 first and this TC after it, never apart from each other |
+| and other TCs move the same record, total or counter | `Shared data:` the same words in each of them, e.g. `order "Sample" [D3]` | never runs them at the same time |
+
+- An account that allows only one session at a time is a note on its TEST-DATA `## 1. Accounts` row ("allows one
+  session") — every TC signing in with it is then kept apart, without a Shared data line on each.
+- A step that submits wrong credentials (a lockout counter) or switches the session language is recognised from the
+  step text; nothing extra is needed.
+- Both fields are design data in the TC hash: changing them on an APPROVED document is a design change
+  (`--revision`, then republish / re-automation), so they are set while drafting or before approval — never patched
+  into an approved TC to tune a run.
 
 ## AI / chatbot test cases
 

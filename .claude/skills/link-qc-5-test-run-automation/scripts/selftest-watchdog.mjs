@@ -49,14 +49,17 @@ const wd = (args) => run({ plan: GROUP, grace: GRACE, ...args });
   check('2 open step past deadline + grace with no progress is frozen', p, { frozen: r.frozen });
 }
 
-/* 3 — a progress record inside grace resets the clock: still OK. */
+/* 3 — the step DEADLINE is fixed from its start: a progress record (even a meaningful one) never extends it. Start 10:00:05,
+   deadline 30 s, progress "rows loaded 40/100" at 10:01:30, now 10:02:00: 115 s > 30 s + 60 s grace → FROZEN; the
+   meaningful progress is still measured (30 s ago). */
 {
   const r = wd({ heartbeat: fx('progress.heartbeat.jsonl'), now: '2026-09-20T10:02:00Z' });
   const p = [];
-  if (r.verdict !== 'OK') p.push('verdict ' + r.verdict + ' != OK — a progress record must reset the clock');
+  if (r.verdict !== 'FROZEN') p.push('verdict ' + r.verdict + ' != FROZEN — progress must never extend a step deadline');
+  if (r.frozen[0] && (r.frozen[0].elapsed_ms !== 115000 || !/last meaningful progress 30 s ago/.test(r.frozen[0].reason))) p.push('frozen ' + JSON.stringify(r.frozen[0]));
   if (r.workers[0] && r.workers[0].progress_records !== 1) p.push('progress record not counted');
   if (r.workers[0] && r.workers[0].since_last_progress_ms !== 30000) p.push('since_last_progress_ms ' + r.workers[0].since_last_progress_ms + ' != 30000');
-  check('3 progress inside grace is not frozen', p, {});
+  check('3 a fixed deadline: progress never extends it', p, {});
 }
 
 /* 4 — Playwright already recorded the step's own timeout (end: timeout): not a hang. */
@@ -204,6 +207,67 @@ const wd = (args) => run({ plan: GROUP, grace: GRACE, ...args });
     fs.rmSync(tmp, { recursive: true, force: true });
   }
   check('12 --stop-reason names a non-freeze stop; default wording unchanged', p, {});
+}
+
+// cases 13-15 write their heartbeat to a throw-away file; T0 = 10:00:00Z, records at T0 + seconds
+const T0 = Date.parse('2026-09-20T10:00:00Z');
+const at = (s) => new Date(T0 + s * 1000).toISOString();
+function hbFile(records) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-watchdog-'));
+  const f = path.join(dir, 'hb.jsonl');
+  fs.writeFileSync(f, records.map((r) => JSON.stringify({ worker: 0, tc: 'TC-001', ...r, at: at(r.at) })).join('\n') + '\n');
+  return f;
+}
+
+/* 13 — MEANINGFUL progress only: a long step (deadline 600 s) whose notes keep CHANGING ("polling", a timestamp) but whose
+   counter stopped at 5/10 is silent since its last rise (20 s): at 136 s, 116 s > silence 55 s + grace 60 s → FROZEN by the
+   silence rule (active, the default); --silence-mode shadow only reports it; a counter that rose (6/10 at 70 s) keeps it alive. */
+{
+  const p = [];
+  const base = [{ at: 0, event: 'test-start' }, { at: 1, step: 'export the report', event: 'start', deadline_ms: 600000 }, { at: 20, step: 'export the report', event: 'progress', note: 'rows 5/10' },
+    { at: 40, step: 'export the report', event: 'progress', note: 'polling' }, { at: 60, step: 'export the report', event: 'progress', note: 'polling at 10:01:00' },
+    { at: 70, step: 'export the report', event: 'progress', note: 'rows 5/10' }, { at: 80, step: 'export the report', event: 'progress', note: 'still waiting', meaningful: false }];
+  const stuck = hbFile(base);
+  const a = wd({ heartbeat: stuck, now: at(136), silence: '55000' });
+  if (a.verdict !== 'FROZEN' || !a.frozen[0] || a.frozen[0].rule !== 'silence' || a.frozen[0].since_last_progress_ms !== 116000) p.push('active: ' + JSON.stringify(a.frozen));
+  const s = wd({ heartbeat: stuck, now: at(136), silence: '55000', silenceMode: 'shadow' });
+  if (s.verdict !== 'OK' || !(s.would_freeze || []).length) p.push('shadow: ' + JSON.stringify([s.verdict, s.would_freeze]));
+  const moving = hbFile([...base, { at: 85, step: 'export the report', event: 'progress', note: 'rows 6/10' }]);
+  const m = wd({ heartbeat: moving, now: at(136), silence: '55000' });
+  if (m.verdict !== 'OK' || (m.workers[0] && m.workers[0].since_last_progress_ms !== 51000)) p.push('a rising counter: ' + JSON.stringify([m.verdict, m.workers[0]]));
+  const flagged = hbFile([...base, { at: 85, step: 'export the report', event: 'progress', note: 'upload', meaningful: true }]);
+  if (wd({ heartbeat: flagged, now: at(136), silence: '55000' }).verdict !== 'OK') p.push('a helper-marked meaningful record must count');
+  check('13 meaningful progress only: changed text / timestamps / polling never reset the silence clock; a rising counter does', p, {});
+}
+
+/* 14 — NESTED steps: the parent stays watched after its child ends (stack); its fixed deadline still applies. Parent 30 s from
+   1 s, child 2-5 s; at 95 s the parent is 94 s old > 30 s + 60 s → FROZEN on the parent. */
+{
+  const p = [];
+  const f = hbFile([{ at: 0, event: 'test-start' }, { at: 1, step: 'place the order', event: 'start', deadline_ms: 30000 }, { at: 2, step: 'fill the form', event: 'start', deadline_ms: 10000 },
+    { at: 5, step: 'fill the form', event: 'end', outcome: 'ok' }]);
+  const r = wd({ heartbeat: f, now: at(95) });
+  if (r.verdict !== 'FROZEN' || !r.frozen[0] || r.frozen[0].step !== 'place the order') p.push('nested: ' + JSON.stringify(r.frozen));
+  const ok = wd({ heartbeat: f, now: at(60) });
+  if (ok.verdict !== 'OK' || !ok.workers[0] || ok.workers[0].step !== 'place the order') p.push('parent watched inside its deadline: ' + JSON.stringify(ok.workers[0]));
+  check('14 a nested step never hides its parent; the parent\'s fixed deadline applies', p, {});
+}
+
+/* 15 — BOUNDED waits: an open admission-wait / rate-wait is never a UI stall (no silence verdict) but is FROZEN past its own
+   budget + grace; inside a step the step's fixed deadline still applies. */
+{
+  const p = [];
+  const adm = hbFile([{ at: 0, event: 'test-start' }, { at: 1, event: 'admission-wait', phase: 'start', reason: 'host pressure', budget_ms: 1000 }]);
+  const inBudget = wd({ heartbeat: adm, now: at(30), silence: '1000' });
+  if (inBudget.verdict !== 'OK' || !inBudget.workers[0] || inBudget.workers[0].state !== 'admission-wait') p.push('inside its budget: ' + JSON.stringify(inBudget.workers[0]));
+  const past = wd({ heartbeat: adm, now: at(63) });
+  if (past.verdict !== 'FROZEN' || !past.frozen[0] || past.frozen[0].rule !== 'wait-budget') p.push('past its budget: ' + JSON.stringify(past.frozen));
+  const rate = hbFile([{ at: 0, event: 'test-start' }, { at: 1, step: 'sign in', event: 'start', deadline_ms: 600000 }, { at: 2, step: 'sign in', event: 'rate-wait', phase: 'start', reason: 'rate limit: login', budget_ms: 120000 }]);
+  const waiting = wd({ heartbeat: rate, now: at(150), silence: '55000' });
+  if (waiting.verdict !== 'OK') p.push('a server-directed wait inside its budget is no stall: ' + JSON.stringify(waiting.frozen));
+  const over = wd({ heartbeat: rate, now: at(185), silence: '55000' });
+  if (over.verdict !== 'FROZEN' || !over.frozen[0] || over.frozen[0].rule !== 'wait-budget') p.push('a rate wait past its budget: ' + JSON.stringify(over.frozen));
+  check('15 bounded waits: never a UI stall, FROZEN only past their own budget + grace', p, {});
 }
 
 const out = {

@@ -34,12 +34,16 @@
 //   14   sync-qa-skills arguments and summary: argValues() keeps every repeated --only (and a comma list) where
 //        parseArgs keeps only the last; syncSummary() keys every status with underscores (missing_in_source, never
 //        missing_in-source); the sync script derives `only` and `summary` through them.
+//   15   Execution limits (skills 5 / 9): scanExecutionLimits() — the coordination directory (QA_CAPACITY_DIR absolute, else
+//        ~/.link-ai-pro/capacity; writable through its nearest parent), the ceiling from config.json only (no file → 2,
+//        invalid → 1), QA_MAX_WORKERS / manifest execution.maxWorkers only lower, QA_LEDGER=off = exclusive execution, a torn
+//        ledger.json; validate-setup's Execution limits / Coordination directory rows; the constants agree with skill 5.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { parseArgs, print, run, planMcpMigration, applyMcpMigration, detectAdoHosting, scanMcp, scanPat, inspectAdoEntry, inspectAdoAttachmentsEntry, scanAdoAttachments, adoAttachmentsLauncherAssetPath, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, PAT_VARS, DOCX_SERVER, DOCX_ARGS, planReplace, SKILLS, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER, ADO_ATTACHMENTS_PACKAGE_PIN, skillVersion, compareSemver, versionStatus, scanSuite, argValues, syncSummary } from './lib.mjs';
+import { parseArgs, print, run, planMcpMigration, applyMcpMigration, detectAdoHosting, scanMcp, scanPat, inspectAdoEntry, inspectAdoAttachmentsEntry, scanAdoAttachments, adoAttachmentsLauncherAssetPath, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, PAT_VARS, DOCX_SERVER, DOCX_ARGS, planReplace, SKILLS, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER, ADO_ATTACHMENTS_PACKAGE_PIN, skillVersion, compareSemver, versionStatus, scanSuite, argValues, syncSummary, scanExecutionLimits, CAPACITY_DEFAULT_CEILING, CAPACITY_AUTO_MAX, CAPACITY_FALLBACK_CEILING, CAPACITY_WORKER_DEMAND, CAPACITY_DIR_VAR, CAPACITY_MAX_WORKERS_VAR } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -329,6 +333,79 @@ for (const [id, fixture, expectDocxAction] of [[1, 'cloud.mcp.json', 'mcp-added'
   const wired = /const only = argValues\(process\.argv\.slice\(2\), 'only'\)/.test(src) && /const summary = syncSummary\(files\)/.test(src) && !/args\.only/.test(src);
   check(14, 'sync arguments and summary: repeated / comma / single --only kept (parseArgs keeps only the last), summary keys use underscores (missing_in_source), sync-qa-skills derives both through lib.mjs',
     Object.values(onlyOk).every(Boolean) && sumOk && wired, { onlyOk, sum, wired });
+}
+
+// ---- 15. Execution limits (skills 5 / 9): coordination directory, ceiling, lower-only overrides, validate-setup rows ----
+{
+  const xdir = (name) => { const d = path.join(tmp, 'xl-' + name); fs.mkdirSync(d, { recursive: true }); return d; };
+  const home = xdir('home');
+  const proj = xdir('project');
+  // a fixed host (16 GB / 8 cores → Auto 4) and no persisted variable: nothing depends on this machine
+  const HOST = { totalMemMb: 16384, cpus: 8 };
+  const scan = (env = {}, root = proj, persisted = () => ({ persisted: false })) => scanExecutionLimits(root, { env, home, host: HOST, persisted });
+  const capHome = path.join(home, '.link-ai-pro', 'capacity');
+  // the default directory (not created yet — writable through its nearest existing parent), ceiling 2, ledger mode
+  const d0 = scan();
+  const shared = xdir('shared');
+  const viaEnv = scan({ QA_CAPACITY_DIR: shared });
+  const rel = scan({ QA_CAPACITY_DIR: 'relative/dir' });
+  const dirOk = d0.dir === capHome && d0.dirSource === 'home' && d0.dirExists === false && d0.writable === true && d0.ceiling.base === 4 && d0.ceiling.source === 'auto' && d0.ceiling.auto.byMem === 8 && d0.ceiling.auto.byCpu === 4 && d0.ceiling.upper.value === CAPACITY_AUTO_MAX
+    && d0.ledgerMode === 'ledger' && viaEnv.dir === path.resolve(shared) && viaEnv.dirSource === CAPACITY_DIR_VAR && viaEnv.dirExists === true
+    && rel.dir === capHome && rel.warnings.length === 1 && /not an absolute path/.test(rel.warnings[0]);
+  // config.json raises only by hand; overrides only lower; invalid values ignored; an invalid file → 1 (fail safe)
+  fs.writeFileSync(path.join(shared, 'config.json'), JSON.stringify({ machineMaxWorkers: 4 }));
+  fs.mkdirSync(path.join(proj, 'Testing'), { recursive: true });
+  fs.writeFileSync(path.join(proj, 'Testing', 'qa-manifest.json'), JSON.stringify({ schemaVersion: 1, execution: { maxWorkers: 3 } }));
+  const cfg = scan({ QA_CAPACITY_DIR: shared, QA_MAX_WORKERS: '6' });
+  const lower = scan({ QA_CAPACITY_DIR: shared, QA_MAX_WORKERS: '1' });
+  const junk = scan({ QA_CAPACITY_DIR: shared, QA_MAX_WORKERS: 'many' });
+  fs.writeFileSync(path.join(shared, 'config.json'), '{ "machineMaxWorkers": 0 }');
+  const bad = scan({ QA_CAPACITY_DIR: shared });
+  const ceilOk = cfg.ceiling.base === 4 && cfg.ceiling.source === 'auto' && cfg.ceiling.upper.from === 'config' && cfg.ceiling.effective === 3 && stable(cfg.ceiling.refusedRaises) === stable([{ by: CAPACITY_MAX_WORKERS_VAR, value: 6 }])
+    && stable(cfg.ceiling.lowered) === stable([{ by: 'manifest execution.maxWorkers', value: 3 }])
+    && lower.ceiling.effective === 1 && lower.ceiling.lowered[0].by === CAPACITY_MAX_WORKERS_VAR
+    && junk.ceiling.invalid.length === 1 && junk.ceiling.effective === 3
+    && bad.config.valid === false && bad.ceiling.base === 1 && bad.ceiling.source === 'config-error';
+  fs.rmSync(path.join(shared, 'config.json'));
+  // QA_LEDGER=off is exclusive execution, never "uncoordinated"; an unreadable ledger.json is reported
+  const off = scan({ QA_CAPACITY_DIR: shared, QA_LEDGER: 'off' });
+  fs.writeFileSync(path.join(shared, 'ledger.json'), '{ torn');
+  const torn = scan({ QA_CAPACITY_DIR: shared });
+  // a QA_LEDGER saved at user level is reported (the probe stands in for the registry / shell profile); unusable host
+  // readings fall back to 2 with the reason
+  const saved = scan({ QA_CAPACITY_DIR: shared }, proj, (n) => ({ persisted: n === 'QA_LEDGER' }));
+  const fb = scanExecutionLimits(proj, { env: { QA_CAPACITY_DIR: shared }, home, host: { totalMemMb: 0, cpus: 0 }, persisted: () => ({ persisted: false }) });
+  const modeOk = off.ledgerMode === 'exclusive' && torn.ledger.exists && torn.ledger.valid === false && saved.ledgerVarPersisted === true && off.ledgerVarPersisted === false
+    && fb.ceiling.base === CAPACITY_FALLBACK_CEILING && fb.ceiling.source === 'auto-fallback';
+  // validate-setup rows (spawned with the env under test; the scanner never writes)
+  const validate = path.join(here, 'validate-setup.mjs');
+  const rowsOf = (env) => {
+    const r = spawnSync(process.execPath, [validate, '--root', proj], { encoding: 'utf8', env: { ...process.env, ...env } });
+    try { const rows = JSON.parse(r.stdout).rows; return { limits: rows.find((x) => x.item === 'Execution limits') || null, dir: rows.find((x) => x.item === 'Coordination directory') || null }; } catch { return { limits: null, dir: null }; }
+  };
+  fs.writeFileSync(path.join(proj, 'Testing', 'qa-manifest.json'), JSON.stringify({ schemaVersion: 1 }));
+  const rTorn = rowsOf({ QA_CAPACITY_DIR: shared, QA_MAX_WORKERS: '' });
+  fs.rmSync(path.join(shared, 'ledger.json'));
+  const rOk = rowsOf({ QA_CAPACITY_DIR: shared, QA_MAX_WORKERS: '', QA_LEDGER: 'off' });
+  const rRaise = rowsOf({ QA_CAPACITY_DIR: shared, QA_MAX_WORKERS: '9' });
+  const before = fs.readdirSync(shared).sort().join(',');
+  // the spawned rows read this machine's host (Auto is host-dependent): only the shape and the statuses are asserted
+  const rowsOk = rTorn.dir?.status === 'FAIL' && /refuse to launch/.test(rTorn.dir.reason)
+    && rOk.dir?.status === 'PASS' && rOk.limits?.status === 'WARN' && /machine ceiling \d+ \(Auto/.test(rOk.limits.reason) && /effective \d+ worker/.test(rOk.limits.reason) && /lowered to \d+ by manifest/.test(rOk.limits.reason) === false && /QA_LEDGER=off in this session/.test(rOk.limits.reason)
+    && rRaise.limits?.status === 'WARN' && /ignored \(only lowers\)/.test(rRaise.limits.reason)
+    && before === '';
+  // the constants agree with skill 5's capacity.mjs when it is installed beside this skill
+  const cap5 = path.join(here, '..', '..', 'link-qc-5-test-run-automation', 'scripts', 'capacity.mjs');
+  let mirror = 'skipped';
+  if (fs.existsSync(cap5)) {
+    const src = fs.readFileSync(cap5, 'utf8');
+    mirror = new RegExp('export const AUTO_MAX = ' + CAPACITY_AUTO_MAX + ';').test(src) && new RegExp('export const AUTO_FALLBACK = ' + CAPACITY_FALLBACK_CEILING + ';').test(src) && CAPACITY_DEFAULT_CEILING === CAPACITY_FALLBACK_CEILING
+      && new RegExp('headed: \\{ memMb: ' + CAPACITY_WORKER_DEMAND.memMb + ', cpu: ' + CAPACITY_WORKER_DEMAND.cpu + ' \\}').test(src)
+      && /path\.join\(os\.homedir\(\), '\.link-ai-pro', 'capacity'\)/.test(src)
+      && /env\.QA_CAPACITY_DIR/.test(src) && /'QA_MAX_WORKERS'/.test(src) && /manifest\.execution \? manifest\.execution\.maxWorkers/.test(src) ? 'agree' : 'differ';
+  }
+  check(15, 'execution limits: default / QA_CAPACITY_DIR / relative ignored; Auto ceiling from the host, config.json only bounds it, overrides only lower, invalid → 1, unusable readings → fallback; QA_LEDGER=off / saved QA_LEDGER reported; validate-setup rows (torn ledger FAIL, raise attempt WARN); constants agree with skill 5',
+    dirOk && ceilOk && modeOk && rowsOk && mirror !== 'differ', { dirOk, ceilOk, modeOk, rowsOk, mirror, rTorn, rOk, rRaise });
 }
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}

@@ -47,7 +47,7 @@ description: >
   TEST-CASES with the cli", "re-validate TCs with playwright-cli", "compare 3b and 3c",
   "resolve the test data", "fill the test-data file", "decide how to prepare the test data".
 argument-hint: "[<TEST-CASES path> | <feature> | <user-story-id> | <SPEC folder>] [--authorize-revision] [--audit] [--lang ar|en]"
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(node *render-tc-review.mjs*), Bash(node *selftest.mjs*), Bash(playwright-cli *), Bash(npx --no-install playwright-cli *)
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(node *render-tc-review.mjs*), Bash(node *selftest.mjs*), Bash(node *capacity.mjs*), Bash(playwright-cli *), Bash(npx --no-install playwright-cli *)
 ---
 
 # Live validation of a manual test-case document through playwright-cli — optional, in place, honest

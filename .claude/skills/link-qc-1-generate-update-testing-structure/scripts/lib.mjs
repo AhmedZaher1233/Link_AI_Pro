@@ -675,6 +675,112 @@ export function scanManifest(root) {
   catch { return { exists: true, valid: false }; }
 }
 
+/* ---------------- execution limits (skills 5 and 9: the machine's worker ceiling and the coordination directory) ---------------- */
+
+// The same rules as link-qc-5-test-run-automation/scripts/capacity.mjs (resolveCapacityDir / readConfig / autoCeiling /
+// resolveCeiling), re-implemented read-only here because /sync-skills copies one skill folder at a time — selftest case 15
+// compares these constants with skill 5's copy when it is installed. The ceiling is AUTO: computed from the host's TOTAL
+// memory / CPU and the headed per-worker demand, bounded by config.json machineMaxWorkers (absent / "auto" → AUTO_MAX — a
+// safety upper bound, not the worker count chosen); unusable readings → the fallback. Skill 1 never writes config.json and
+// never raises a limit; QA_MAX_WORKERS, the manifest's execution.maxWorkers and a run's --workers can only lower it.
+export const CAPACITY_DIR_VAR = 'QA_CAPACITY_DIR';
+export const CAPACITY_MAX_WORKERS_VAR = 'QA_MAX_WORKERS';
+export const CAPACITY_LEDGER_VAR = 'QA_LEDGER';
+export const CAPACITY_AUTO_MAX = 8;
+export const CAPACITY_FALLBACK_CEILING = 2;
+export const CAPACITY_DEFAULT_CEILING = CAPACITY_FALLBACK_CEILING;
+// per headed worker, the ×1.5 bootstrap safety applied (skill 5 capacity.mjs BOOTSTRAP_DEMAND.headed)
+export const CAPACITY_WORKER_DEMAND = Object.freeze({ memMb: 1536, cpu: 1.5 });
+export const CAPACITY_CONFIG_FILE = 'config.json';
+export const CAPACITY_LEDGER_FILE = 'ledger.json';
+export const CAPACITY_DEFAULT_DIR = '~/.link-ai-pro/capacity';
+export const CAPACITY_CONFIG_TEMPLATE = Object.freeze({ machineMaxWorkers: 'auto', classes: { compliance: 2, reviewer: 2 } });
+
+/** The Auto ceiling of a host (pure): min(by memory, by CPU) within [1, upper]; unusable readings → the fallback. */
+export function capacityAutoCeiling({ totalMemMb, cpus, ci = false, upper = CAPACITY_AUTO_MAX }) {
+  if (!(totalMemMb > 0) || !(cpus > 0)) return { value: Math.min(CAPACITY_FALLBACK_CEILING, upper), byMem: null, byCpu: null, reason: 'host memory / CPU readings unavailable — conservative fallback' };
+  const reserve = ci ? { memMb: Math.max(1024, Math.round(totalMemMb * 0.1)), cores: 1 } : { memMb: Math.max(2048, Math.round(totalMemMb * 0.25)), cores: 2 };
+  const byMem = Math.floor((totalMemMb - reserve.memMb) / CAPACITY_WORKER_DEMAND.memMb);
+  const byCpu = Math.floor((cpus - reserve.cores) / CAPACITY_WORKER_DEMAND.cpu);
+  return { value: Math.max(1, Math.min(upper, byMem, byCpu)), byMem, byCpu, reason: null };
+}
+
+const posIntOf = (v) => { const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v; return Number.isInteger(n) && n > 0 ? n : null; };
+
+/**
+ * Read-only: where the coordination directory is, whether it can be used, what the machine ceiling resolves to and
+ * which lower-only overrides apply. Nothing is created, written or raised.
+ * → { dir, dirSource, warnings[], dirExists, writable, writableVia, config: { file, exists, valid, machineMaxWorkers,
+ *     error }, ceiling: { base, source, effective, lowered[], refusedRaises[], invalid[] }, ledger: { exists, valid,
+ *     error }, ledgerMode: 'ledger' | 'exclusive', template }
+ */
+export function scanExecutionLimits(root, { env = process.env, home = os.homedir(), host = null, persisted = persistedEnvVar } = {}) {
+  const warnings = [];
+  const raw = typeof env[CAPACITY_DIR_VAR] === 'string' ? env[CAPACITY_DIR_VAR].trim() : '';
+  const homeDir = path.join(home, '.link-ai-pro', 'capacity');
+  let dir = homeDir;
+  let dirSource = 'home';
+  if (raw) {
+    if (path.isAbsolute(raw)) { dir = path.resolve(raw); dirSource = CAPACITY_DIR_VAR; }
+    else warnings.push(`${CAPACITY_DIR_VAR} "${raw}" is not an absolute path — ignored; ${homeDir} is used`);
+  }
+  let dirExists = false;
+  try { dirExists = fs.statSync(dir).isDirectory(); } catch { dirExists = false; }
+  // writable: the directory itself, or — when it does not exist yet — the nearest existing parent (the first run creates it)
+  let writable = false;
+  let writableVia = null;
+  for (let d = dir; ; d = path.dirname(d)) {
+    let exists = false;
+    try { exists = fs.statSync(d).isDirectory(); } catch { exists = false; }
+    if (exists) { try { fs.accessSync(d, fs.constants.W_OK); writable = true; } catch { writable = false; } writableVia = d; break; }
+    if (path.dirname(d) === d) break;
+  }
+  const cfgFile = path.join(dir, CAPACITY_CONFIG_FILE);
+  const config = { file: cfgFile, exists: isFile(cfgFile), valid: null, machineMaxWorkers: null, error: null };
+  if (config.exists) {
+    try {
+      const c = JSON.parse(read(cfgFile));
+      if (!c || typeof c !== 'object' || Array.isArray(c)) { config.valid = false; config.error = 'config.json is not a JSON object'; }
+      else if (c.machineMaxWorkers !== undefined && c.machineMaxWorkers !== null && c.machineMaxWorkers !== 'auto' && posIntOf(c.machineMaxWorkers) === null) { config.valid = false; config.error = `config.json machineMaxWorkers must be a positive integer or "auto" (got ${JSON.stringify(c.machineMaxWorkers)})`; }
+      else { config.valid = true; config.machineMaxWorkers = posIntOf(c.machineMaxWorkers); }
+    } catch (e) { config.valid = false; config.error = `config.json: ${e.message}`; }
+  }
+  // the ceiling: Auto from this host, bounded by config.json (an invalid file → 1, fail safe); then the lower-only overrides
+  const upper = config.machineMaxWorkers || CAPACITY_AUTO_MAX;
+  const h = host || { totalMemMb: Math.round(os.totalmem() / (1024 * 1024)), cpus: os.cpus().length };
+  const ciOn = !!env.CI && !/^(0|false|no)$/i.test(String(env.CI).trim());
+  const auto = config.exists && !config.valid ? null : capacityAutoCeiling({ totalMemMb: h.totalMemMb, cpus: h.cpus, ci: ciOn, upper });
+  const base = auto ? auto.value : 1;
+  const source = !auto ? 'config-error' : auto.reason ? 'auto-fallback' : 'auto';
+  let effective = base;
+  const lowered = [];
+  const refusedRaises = [];
+  const invalid = [];
+  const consider = (by, v) => {
+    if (v === undefined || v === null || v === '') return;
+    const n = posIntOf(v);
+    if (n === null) { invalid.push({ by, value: v }); return; }
+    if (n < effective) { effective = n; lowered.push({ by, value: n }); }
+    else if (n > base) refusedRaises.push({ by, value: n });
+  };
+  consider(CAPACITY_MAX_WORKERS_VAR, env[CAPACITY_MAX_WORKERS_VAR]);
+  let manifestMax;
+  try { const m = JSON.parse(read(path.join(root, MANIFEST)) || 'null'); manifestMax = m && m.execution ? m.execution.maxWorkers : undefined; } catch { manifestMax = undefined; }
+  consider('manifest execution.maxWorkers', manifestMax);
+  const ledgerFile = path.join(dir, CAPACITY_LEDGER_FILE);
+  const ledger = { exists: isFile(ledgerFile), valid: null, error: null };
+  if (ledger.exists) {
+    try { const l = JSON.parse(read(ledgerFile)); ledger.valid = !!l && typeof l === 'object' && !Array.isArray(l); if (!ledger.valid) ledger.error = 'ledger.json is not a JSON object'; }
+    catch (e) { ledger.valid = false; ledger.error = `ledger.json: ${e.message}`; }
+  }
+  // QA_LEDGER=off disables the coordination for every later run when it is SAVED at user level, not only in this process
+  let ledgerOffPersisted = false;
+  try { ledgerOffPersisted = !!(persisted && persisted(CAPACITY_LEDGER_VAR).persisted); } catch { ledgerOffPersisted = false; }
+  return { dir, dirSource, warnings, dirExists, writable, writableVia, config,
+    ceiling: { base, source, effective, lowered, refusedRaises, invalid, upper: { value: upper, from: config.machineMaxWorkers ? 'config' : 'AUTO_MAX' }, auto: auto ? { byMem: auto.byMem, byCpu: auto.byCpu, host: h, reason: auto.reason } : null }, ledger,
+    ledgerMode: String(env[CAPACITY_LEDGER_VAR] || '').trim() === 'off' ? 'exclusive' : 'ledger', ledgerVarPersisted: ledgerOffPersisted, template: CAPACITY_CONFIG_TEMPLATE };
+}
+
 /* ---------------- helpers ---------------- */
 
 function globCount(root, re, skip, depth = 6) {

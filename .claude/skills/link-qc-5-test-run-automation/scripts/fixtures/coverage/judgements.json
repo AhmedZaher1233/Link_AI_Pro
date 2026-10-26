@@ -1,0 +1,19 @@
+{
+  "user_story": "US-9001 — Sample orders",
+  "target": 80,
+  "targetSource": "default",
+  "mechanism": "soft block",
+  "tcs": [
+    { "tc": "TC-001", "title": "Create an order with valid data", "type": "Positive", "stage": "smoke", "smoke": true, "candidate": "YES", "requirements": ["REQ-01"], "status": "Fully Covered", "mappedTests": ["tests/Orders_Tests/orders.spec.ts › [TC-001] Create an order with valid data"], "note": "" },
+    { "tc": "TC-002", "title": "Filter orders by status", "type": "Positive", "stage": "positive", "smoke": false, "candidate": "YES", "requirements": ["REQ-02"], "status": "Fully Covered", "mappedTests": ["tests/Orders_Tests/orders.spec.ts › [TC-002] Filter orders by status"] },
+    { "tc": "TC-003", "title": "Every order row shows its owner", "type": "Positive", "stage": "positive", "smoke": false, "candidate": "YES", "requirements": ["REQ-03"], "status": "Partially Covered", "mappedTests": ["tests/Orders_Tests/orders.spec.ts › [TC-003] Every order row shows its owner"], "note": "checks the first row only where the TC says every row", "category": "Per-Row Enumeration & Identity", "scenario": "Every row of the orders list shows the order owner", "whyManual": "the test checks the first row only" },
+    { "tc": "TC-004", "title": "Empty list message for a customer without orders", "type": "Negative", "stage": "negative", "smoke": false, "candidate": "YES", "requirements": ["REQ-04"], "status": "Partially Covered", "mappedTests": ["tests/Orders_Tests/orders.spec.ts › [TC-004] Empty list message"], "note": "data-gated: skips when the customer has orders", "category": "Empty State (Negative)", "scenario": "A customer without orders sees the empty-list message", "whyManual": "no customer without orders exists in the environment" },
+    { "tc": "TC-005", "title": "Print the order confirmation", "type": "Negative", "stage": "negative", "smoke": false, "candidate": "NO", "requirements": ["REQ-02"], "status": "Not Covered", "mappedTests": [], "note": "manual — not automated", "category": "Not an automation candidate", "implementation": "manual — not automated", "scenario": "Print the order confirmation", "whyManual": "the print dialog is outside the browser" }
+  ],
+  "requirements": [
+    { "id": "REQ-01", "short": "create an order", "outcome": "Full", "assertedBy": ["TC-001"] },
+    { "id": "REQ-02", "short": "filter and print", "outcome": "Partial", "assertedBy": ["TC-002"] },
+    { "id": "REQ-03", "short": "row owner", "outcome": "Partial", "assertedBy": ["TC-003"] },
+    { "id": "REQ-04", "short": "empty state", "outcome": "Missing", "assertedBy": [] }
+  ]
+}

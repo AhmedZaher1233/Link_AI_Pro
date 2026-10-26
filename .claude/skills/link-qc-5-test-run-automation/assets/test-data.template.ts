@@ -4,12 +4,13 @@
 // Copied by link-qc-5-test-run-automation into {automation_root}/helpers/test-data.ts when absent.
 //
 // PART 1 — unique names. Every record a test CREATES carries a name / code built here, so two
-// workers, a retry, a repeat-each variant or a re-run of the same phase never collide on
-// "Order Alpha", and cleanup can select everything a run created by prefix.
+// workers, a retry, a repeat-each variant, a re-run of the same phase or two commands running at the
+// same time (PW_LANE — the runner's command index, set per command) never collide on "Order Alpha",
+// and cleanup can select everything a run created by prefix.
 //
-//   const name = uniqueName('order');            // order-p3-w1-r0-k7q2
+//   const name = uniqueName('order');            // order-p3-w1-r0-k7q2   (order-p3-l2-w1-r0-k7q2 with PW_LANE=2)
 //   await orders.create(name);
-//   … afterAll: await deleteByPrefix(runPrefix('order'))   // order-p3-
+//   … afterAll: await deleteByPrefix(runPrefix('order'))   // order-p3-   (unchanged by the lane)
 //
 // PART 2 — per-ID resolution. A TC references its configuration by ID — `Open the portal [E1]`,
 // `Login as Administrator [A1]`, `price list "Sample" [D1]` — and EVERY ID resolves to ITS OWN
@@ -19,6 +20,9 @@
 // data item. The maps below are keyed by those IDs and read environment variables NAMED AFTER
 // THE ID: `E1_URL`, `A1_USER` / `A1_PASSWORD`. No default values, no secrets in this file — a
 // missing variable throws with the ID it needs, so a test never runs against a guessed value.
+// `account(id)` also records WHICH account the running test resolved (`currentAccount()`, the ID only —
+// never a username or password): helpers/rate-limit.ts and helpers/network-guard.ts use it for
+// account-scoped rate limits and their request records.
 import { test, type TestInfo } from '@playwright/test';
 
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -39,16 +43,32 @@ export function runPrefix(prefix: string): string {
   return `${prefix}-p${phase()}-`;
 }
 
-/** `{prefix}-p{phase}-w{worker}-r{retry}-{4 random}` — unique across workers, retries, repeats and re-runs. */
-export function uniqueName(prefix: string, info: TestInfo = test.info()): string {
-  const repeat = info.repeatEachIndex ? `-e${info.repeatEachIndex}` : '';
-  return `${runPrefix(prefix)}w${info.parallelIndex}-r${info.retry}${repeat}-${shortRandom()}`;
+/** The runner's command index in the stage (PW_LANE), or null outside a skill run / with an older runner. */
+function lane(): number | null {
+  const raw = process.env.PW_LANE;
+  return raw !== undefined && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : null;
 }
 
-/** Same shape for numeric-only fields (codes, references): digits only, still unique per worker / retry. */
+/**
+ * `{prefix}-p{phase}-w{worker}-r{retry}-{4 random}` — unique across workers, retries, repeats and re-runs;
+ * `{prefix}-p{phase}-l{lane}-w{worker}-…` while PW_LANE is set, so two commands running side by side never collide.
+ */
+export function uniqueName(prefix: string, info: TestInfo = test.info()): string {
+  const repeat = info.repeatEachIndex ? `-e${info.repeatEachIndex}` : '';
+  const l = lane();
+  return `${runPrefix(prefix)}${l === null ? '' : `l${l}-`}w${info.parallelIndex}-r${info.retry}${repeat}-${shortRandom()}`;
+}
+
+/**
+ * Same shape for numeric-only fields (codes, references): digits only, `digits + 3` long, still unique per worker / retry.
+ * While PW_LANE is set the three leading digits are lane · worker · retry (each mod 10), so two commands running at the
+ * same moment never produce the same code.
+ */
 export function uniqueCode(info: TestInfo = test.info(), digits = 6): string {
   const stamp = Date.now().toString().slice(-digits);
-  return `${phase()}${info.parallelIndex}${info.retry}${stamp}`.slice(-digits - 3);
+  const l = lane();
+  if (l === null) return `${phase()}${info.parallelIndex}${info.retry}${stamp}`.slice(-digits - 3);
+  return `${l % 10}${info.parallelIndex % 10}${info.retry % 10}${stamp}`;
 }
 
 /* ---------------- per-ID resolution of TEST-DATA references ---------------- */
@@ -92,11 +112,34 @@ export function environment(id: string): EnvironmentEntry {
   return entry();
 }
 
-/** `[A{n}]` → that account, by ID. Never resolve an account from a role name. */
+/** `[A{n}]` → that account, by ID. Never resolve an account from a role name. Records the ID for currentAccount(). */
 export function account(id: string): AccountEntry {
   const entry = accounts[id.toUpperCase()];
   if (!entry) throw new Error(`test-data: no account entry for [${id}] — add the ## 1. Accounts row to helpers/test-data.ts`);
-  return entry();
+  const resolved = entry();
+  runtime().account = { id: resolved.id, testId: currentTestId() };
+  return resolved;
+}
+
+/* ---------------- the account the running test resolved (shared with the rate-limit helpers) ---------------- */
+
+type QaRuntime = { account?: { id: string; testId: string | null } | null };
+const RUNTIME_KEY = '__linkQcRuntime';
+function runtime(): QaRuntime {
+  const g = globalThis as unknown as Record<string, QaRuntime | undefined>;
+  if (!g[RUNTIME_KEY]) g[RUNTIME_KEY] = {};
+  return g[RUNTIME_KEY] as QaRuntime;
+}
+function currentTestId(): string | null {
+  try { return (test.info() as unknown as { testId?: string }).testId ?? null; } catch { return null; }
+}
+
+/** The A-ID the RUNNING test last resolved through account(), or null (none yet, or one a previous test resolved). */
+export function currentAccount(): string | null {
+  const a = runtime().account;
+  if (!a) return null;
+  const id = currentTestId();
+  return id === null || a.testId === null || a.testId === id ? a.id : null;
 }
 
 /**

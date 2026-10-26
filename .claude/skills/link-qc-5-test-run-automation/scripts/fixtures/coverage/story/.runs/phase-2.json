@@ -1,0 +1,7 @@
+{
+  "schema": "skill6-run/1",
+  "phase": 2,
+  "status": "planning",
+  "feature": "sample",
+  "user_story": "US-9001 — Sample orders"
+}

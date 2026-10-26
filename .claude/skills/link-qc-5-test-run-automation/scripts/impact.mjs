@@ -31,11 +31,14 @@
 // A TC's fingerprint is the sha256 over `testId=fingerprint` of every test carrying it.
 //
 // Contract: references/final-run.md (<second_run>), references/run-report.md §3 (summary files);
-// run-stage.mjs imports `fingerprintTests` (start / end of a call) and `selectStale`.
+// run-stage.mjs imports `fingerprintTests` (start / end of a call) and `selectStale`; parallel-plan.mjs imports
+// `closureOf` (per test: the closure files and part ids); `reverseDependencies` answers "which tests / TCs depend on
+// these changed files" (fail safe: a test with an unknown part depends on everything).
 //
 // Usage:
 //   node impact.mjs fingerprint --root <automation_root> [--spec a,b] [--tcs TC-1,TC-2] [--run-file <phase-N.json>] [--pretty]
 //   node impact.mjs select --root <automation_root> [--spec a,b] --progress <results_root>/artifacts/progress [--run-file <phase-N.json>] [--pretty]
+//   node impact.mjs reverse --root <automation_root> [--spec a,b] --files <changed file,…> [--parts <part id,…>] [--run-file <phase-N.json>] [--pretty]
 // Exit code always 0 — the result is in the payload; an error is { outcome: 'BLOCKED', reason }.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -1557,7 +1560,7 @@ function regionRefs(ctx, m, ranges, parts, files) {
 
 /* ================================================================ closure ================================================================ */
 
-function closureOf(ctx, starts) {
+function moduleClosure(ctx, starts) {
   const list = Array.isArray(starts) ? starts : [starts];
   const key = list.join('|');
   if (ctx.closures.has(key)) return ctx.closures.get(key);
@@ -1636,7 +1639,7 @@ function buildGlobals(ctx, failedTimeouts) {
       if (f && isCodeFile(f)) starts.push(f);
     }
   }
-  const mods = starts.length ? closureOf(ctx, [...new Set(starts)]) : [];
+  const mods = starts.length ? moduleClosure(ctx, [...new Set(starts)]) : [];
   const roots = [];
   closureParts(ctx, mods, new Set(configs), parts, files, unknown, roots, true);
   for (const cfg of configs) { const m = getMod(ctx, cfg); if (!m.parseError) regionRefs(ctx, m, [[0, m.src.length]], parts, files); }
@@ -1813,7 +1816,7 @@ function fingerprintOne(ctx, specMod, t, spec, globals, setupParts) {
     st.unknown.add('spec could not be scanned: ' + specMod.rel);
     return finish(st, t);
   }
-  const mods = closureOf(ctx, specMod.abs);
+  const mods = moduleClosure(ctx, specMod.abs);
   for (const abs of mods) { const m = getMod(ctx, abs); if (m.kind === 'code' && !m.whole) st.closureClasses.push(...m.classes); }
   for (const c of specMod.classes) if (!st.closureClasses.includes(c)) st.closureClasses.push(c);
   const roots = [];
@@ -1893,7 +1896,7 @@ export function fingerprintTests({ root, specs = [], tcs = null, runPlan = null,
   const ctx = makeCtx(absRoot, cache);
   const specFiles = resolveSpecList(ctx, specs);
   const failedT = new Set();
-  for (const f of specFiles) for (const abs of closureOf(ctx, f)) { const m = getMod(ctx, abs); if (m.timeouts && m.timeouts.fail) failedT.add(abs); }
+  for (const f of specFiles) for (const abs of moduleClosure(ctx, f)) { const m = getMod(ctx, abs); if (m.timeouts && m.timeouts.fail) failedT.add(abs); }
   const globals = buildGlobals(ctx, failedT);
   const setupParts = setupResolver(ctx, runPlan, globals);
   const tests = {};
@@ -1934,6 +1937,10 @@ export function fingerprintTests({ root, specs = [], tcs = null, runPlan = null,
   }
   const out = { schema: SCHEMA_VERSION, root: absRoot, tcs: outTcs, tests: outTests, files: sortObj(files), warnings: ctx.warnings.slice() };
   Object.defineProperty(out, '_closureByTc', { value: closureByTc, enumerable: false });
+  // per test: the closure files (relative, sorted) — not part of the payload; closureOf() / reverseDependencies() read it
+  const closureRel = new Map();
+  for (const id of Object.keys(outTests)) closureRel.set(id, [...closureByTest.get(id)].map((f) => rel(absRoot, f)).sort(natural));
+  Object.defineProperty(out, '_closureByTest', { value: closureRel, enumerable: false });
   return out;
 }
 
@@ -2092,6 +2099,96 @@ export function selectStale({ root, specs = [], progressDir, runPlan = null } = 
   return res;
 }
 
+/* ================================================================ closure / reverse dependencies ================================================================ */
+
+/** The part ids of a test that name `file` (posix, relative): spec / module / file / data / config / test / hook / describe / member / fixture parts. */
+function partsNaming(parts, file) {
+  const out = [];
+  for (const k of Object.keys(parts)) {
+    const colon = k.indexOf(':');
+    if (colon < 0) continue;
+    const rest = k.slice(colon + 1);
+    if (rest === file || rest.startsWith(file + '::') || rest.startsWith(file + '#')) out.push(k);
+  }
+  return out;
+}
+
+/**
+ * Per test of the given specs: the files its fingerprint closure reaches (the spec, its import closure, the data files
+ * it references, every config / tsconfig / timeouts module), its part ids and its unknown reasons; per TC the union
+ * over its tests. Read-only — the code view behind parallel-plan.mjs and reverseDependencies().
+ */
+export function closureOf({ root, specs = [], runPlan = null, cache = new Map() } = {}) {
+  const fp = fingerprintTests({ root, specs, runPlan, cache });
+  const tests = {};
+  const acc = new Map();
+  for (const [id, t] of Object.entries(fp.tests)) {
+    const files = fp._closureByTest.get(id) || [];
+    tests[id] = { file: t.file, title: t.title, describe: t.describe, tcs: t.tcs, files, parts: Object.keys(t.parts), unknown: t.unknown };
+    for (const tc of t.tcs) {
+      if (!acc.has(tc)) acc.set(tc, { tests: [], files: new Set(), unknown: new Set() });
+      const e = acc.get(tc);
+      e.tests.push(id);
+      for (const f of files) e.files.add(f);
+      for (const u of t.unknown) e.unknown.add(u);
+    }
+  }
+  const tcs = {};
+  for (const tc of [...acc.keys()].sort(natural)) {
+    const e = acc.get(tc);
+    tcs[tc] = { tests: e.tests.sort(natural), files: [...e.files].sort(natural), unknown: [...e.unknown].sort(natural) };
+  }
+  return { schema: SCHEMA_VERSION, root: fp.root, tests, tcs, warnings: fp.warnings };
+}
+
+/**
+ * Which tests / TCs depend on the changed `files` (posix, relative to the root, or absolute): a test depends on a file
+ * its closure reaches or one of its parts names, on any part id listed in `parts`, and — with a run plan — on the
+ * closure of the setup journey feeding its serial:{gap} group. FAIL SAFE: a test with an unknown part depends on
+ * everything (reason `unknown`). Read-only; Checkpoint B's incremental shadow and the parallel readiness check use it.
+ */
+export function reverseDependencies({ root, specs = [], files = [], parts = [], runPlan = null, cache = new Map() } = {}) {
+  const fp = fingerprintTests({ root, specs, runPlan, cache });
+  const absRoot = fp.root;
+  const norm = [...new Set(csvList(files).map((f) => (path.isAbsolute(f) ? rel(absRoot, f) : f.replace(/\\/g, '/').replace(/^\.\//, ''))))].sort(natural);
+  const wantParts = new Set(csvList(parts));
+  const setupFiles = new Map();
+  const plan = runPlan && (runPlan.run_plan || runPlan);
+  for (const sg of (plan && Array.isArray(plan.setup_groups) ? plan.setup_groups : [])) {
+    if (!sg || typeof sg.name !== 'string' || !sg.name.startsWith('setup:')) continue;
+    const specsOf = csvList(Array.isArray(sg.spec) ? sg.spec : sg.spec || '');
+    if (!specsOf.length) continue;
+    try {
+      const s = fingerprintTests({ root: absRoot, specs: specsOf, cache });
+      const set = new Set();
+      for (const id of Object.keys(s.tests)) for (const f of s._closureByTest.get(id) || []) set.add(f);
+      setupFiles.set(sg.name.slice('setup:'.length), set);
+    } catch { /* an unreadable setup spec: its gap is matched by the part only */ }
+  }
+  const tests = [];
+  const tcs = new Set();
+  const unknown = [];
+  for (const [id, t] of Object.entries(fp.tests)) {
+    const closure = new Set(fp._closureByTest.get(id) || []);
+    const via = new Set();
+    for (const f of norm) {
+      if (closure.has(f)) via.add('closure:' + f);
+      for (const k of partsNaming(t.parts, f)) via.add(k);
+    }
+    for (const k of Object.keys(t.parts)) {
+      if (wantParts.has(k)) via.add(k);
+      if (k.startsWith('setup:')) { const set = setupFiles.get(k.slice('setup:'.length)); if (set && norm.some((f) => set.has(f))) via.add(k); }
+    }
+    if (t.unknown.length) unknown.push({ test: id, tcs: t.tcs, reasons: t.unknown });
+    if (!via.size && !t.unknown.length) continue;
+    tests.push({ test: id, file: t.file, tcs: t.tcs, via: [...via].sort(natural), reason: via.size ? 'depends' : 'unknown' });
+    for (const tc of t.tcs) tcs.add(tc);
+  }
+  tests.sort((a, b) => natural(a.test, b.test));
+  unknown.sort((a, b) => natural(a.test, b.test));
+  return { schema: SCHEMA_VERSION, root: absRoot, files: norm, parts: [...wantParts].sort(natural), tests, tcs: [...tcs].sort(natural), unknown, warnings: fp.warnings };
+}
+
 /* ================================================================ CLI ================================================================ */
 
 const USAGE = [
@@ -2099,6 +2196,7 @@ const USAGE = [
   '',
   '  node impact.mjs fingerprint --root <automation_root> [--spec a,b] [--tcs TC-1,TC-2] [--run-file <phase-N.json>] [--pretty]',
   '  node impact.mjs select --root <automation_root> [--spec a,b] --progress <results_root>/artifacts/progress [--run-file <phase-N.json>] [--pretty]',
+  '  node impact.mjs reverse --root <automation_root> [--spec a,b] --files <changed file,…> [--parts <part id,…>] [--run-file <phase-N.json>] [--pretty]',
   '',
   'Exit code is always 0; the result (or { outcome: "BLOCKED", reason }) is the JSON payload.',
 ].join('\n');
@@ -2117,12 +2215,16 @@ function main(argv) {
   const cmd = args._[0];
   if (args.help || cmd === 'help' || !cmd) { process.stdout.write(USAGE + '\n'); return; }
   try {
-    if (cmd !== 'fingerprint' && cmd !== 'select') throw new Error("unknown command '" + cmd + "' — use fingerprint or select");
+    if (cmd !== 'fingerprint' && cmd !== 'select' && cmd !== 'reverse') throw new Error("unknown command '" + cmd + "' — use fingerprint, select or reverse");
     if (!args.root || args.root === true) throw new Error('--root <automation_root> is required');
     const runPlan = args['run-file'] && args['run-file'] !== true ? runPlanFrom(args['run-file']) : null;
     const specs = typeof args.spec === 'string' ? args.spec : [];
     if (cmd === 'fingerprint') {
       const r = fingerprintTests({ root: args.root, specs, tcs: typeof args.tcs === 'string' ? args.tcs : null, runPlan });
+      print({ tool: 'impact', command: cmd, outcome: 'OK', ...r }, args);
+    } else if (cmd === 'reverse') {
+      if (typeof args.files !== 'string' && typeof args.parts !== 'string') throw new Error('--files <changed file,…> (or --parts <part id,…>) is required');
+      const r = reverseDependencies({ root: args.root, specs, files: typeof args.files === 'string' ? args.files : [], parts: typeof args.parts === 'string' ? args.parts : [], runPlan });
       print({ tool: 'impact', command: cmd, outcome: 'OK', ...r }, args);
     } else {
       if (!args.progress || args.progress === true) throw new Error('--progress <results_root>/artifacts/progress is required');

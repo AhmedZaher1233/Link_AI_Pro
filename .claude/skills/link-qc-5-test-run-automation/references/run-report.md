@@ -19,17 +19,22 @@ detected. Same inputs → same bytes, so a render is always safe to repeat.
 
 ```bash
 # dry run — parse, compute, validate; prints the JSON payload, writes nothing
-node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs --report {run_report_md} --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs --report {run_report_md}
 # render the page next to the markdown (TEST-RUN-REPORT-{feature}.html)
-node … --report {run_report_md} --write --pretty [--out {path}]
+node … --report {run_report_md} --write [--out {path}]
 # after a deliberate re-render over a page a human edited (the payload said refused.reason: hand-edited)
 node … --report {run_report_md} --write --force
-# the harness — run it before delivering any page the script rendered
-node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-report.mjs --pretty
+# the harness — before delivering any page the script rendered (a pass is reused only on an exact cache key, B20)
+node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs harness --name selftest-run-report.mjs
 ```
 
 `--bugs`, `--runs` and `--comments` override the defaults (`BUG-REPORT-{feature}.md` next to the
-report, `.runs/` in the same folder and `REVIEW-COMMENTS-{feature}.md` next to the report). `--tracker`
+report, `.runs/` in the same folder and `REVIEW-COMMENTS-{feature}.md` next to the report). `--base {story
+folder}` resolves the evidence links, the legacy listing, the comments and the tracker against that folder —
+how a DRAFT report under `artifacts/drafts/phase-{N}/` renders exactly what the published one will. `--gate
+{.runs/phase-N.checkpoint-B.json}` adds the gate record's hash to the provenance and its verdict to the page's
+meta line; `run-data.mjs publish` passes it (`final-run.md` `<publication>`) — a page published after
+Checkpoint B is rendered only that way. `--tracker`
 overrides where the tracker is looked for and `--ado-url {org-or-collection URL}/{project}` sets the
 Azure DevOps project its bug IDs link to (§5b). `--strict` maps the gate to an exit code for CI (PASS 0 · MISMATCH 1
 · BLOCKED 2 · NOT_RUN 3); without it the script always exits 0 and the result is the payload.
@@ -62,17 +67,26 @@ bug file, a missing run file, a missing screenshot file or a legacy artifact in 
   automation-inventory.md           page-object decision table (SKILL.md <automation_inventory>): one row per screen — reuse / extend / create — rewritten each run, read by validate-automation.mjs --inventory
   coverage/                         coverage-summary.csv · coverage-detail.csv · manual-scenarios.csv (replaced each run)
   .runs/phase-{N}.json              ALL machine data of phase N (schema skill6-run/1); immutable once its status is final (skill 9's retest of the latest phase excepted, §3)
+  .runs/phase-{N}.checkpoint-A.json · .runs/phase-{N}.checkpoint-B.json   the gate records (skill5-gate/1) written by scripts/check.mjs gate — the record of each checkpoint; never edited by hand
+  artifacts/drafts/phase-{N}/       TEST-RUN-REPORT-{feature}.md · BUG-REPORT-{feature}.md · .runs/phase-{N}.json · TEST-RUN-REPORT-{feature}.html — the phase's report set BEFORE Checkpoint B; promoted byte-identical by run-data.mjs publish
+  artifacts/checks/{snapshotId}/    snapshot.json · results.jsonl · run-*.json (full tool output) · gate-{A|B}.json (copy) · carry-shadow.json — one folder per checkpoint snapshot
+  artifacts/parallel-plan.json      the parallel readiness payload (parallel-plan.mjs --out; every run — the stages' --units file, re-planned in place by run-stage.mjs when its inputs fingerprint changed)
+  artifacts/reconcile/{stamp}/      config-inventory.mjs reconcile --apply: the originals of every file it changed (same relative paths) + summary.md (before → after, conflicts)
+  artifacts/progress/status.json    the live worker view (run-stage.mjs): Auto ceiling, active workers, the TCs each runs — rewritten only when it changes
+  artifacts/progress/admission.json the stage's admission state (written only by run-stage.mjs; PW_ADMISSION_FILE) · artifacts/progress/cancel.flag (a stop: helper waits end at once)
+  artifacts/diagnostics/phase-{N}/{command}/   stall diagnostics of the step helper (PW_DIAGNOSTICS_DIR)
   artifacts/stages/{stage}-{group}[-attempt{n}].json   raw Playwright JSON per stage command (emptied at run start)
   artifacts/progress/{stage}-{group}[-attempt{n}].jsonl          heartbeat per stage command (helpers/steps.ts + helpers/progress-reporter.ts)
   artifacts/progress/{stage}-{group}[-attempt{n}].results.jsonl  incremental per-test results (survive a killed command)
   artifacts/progress/{stage}-{group}[-attempt{n}].watchdog.json  written by scripts/watchdog.mjs --write (through run-stage.mjs) ONLY when that command was stopped — frozen, or past its outer ceiling
   artifacts/progress/{stage}-{group}[-attempt{n}].plan.json      the stage-filtered run-plan group run-stage.mjs hands the watchdog (this stage's TCs of that group)
   artifacts/progress/{stage}-{group}[-attempt{n}].ratelimit.jsonl  the network guard's record per command (PW_RATE_LIMIT_FILE): 429 / 503 + Retry-After responses and policy headers, origin + pathname only
-  artifacts/progress/rate-limit.state.json                       the phase-wide rate-limit slot book (PW_RATE_LIMIT_STATE) helpers/rate-limit.ts shares across workers
-  artifacts/progress/{run}-{stage}-{seq}.summary.json            one per run-stage.mjs call ({run} = first | rerun): statuses, phase-wide counts, executed, code fingerprints, failures (latest attempt), isolation, interference, rateLimit, merged_stages, watchdog / timeout events, the stage message
+  artifacts/progress/rate-limit.state.json                       the phase-wide rate-limit slot book (PW_RATE_LIMIT_STATE) helpers/rate-limit.ts shares across workers — only when the run holds no environment lease; with one, the book is the environment group's shared rate-limits/{bookId}.json in the coordination directory
+  artifacts/progress/{run}-{stage}-{seq}.summary.json            one per run-stage.mjs call ({run} = first | rerun): statuses, phase-wide counts, executed, code fingerprints, failures (latest attempt), isolation, interference, rateLimit, merged_stages, watchdog / timeout events, scheduler, host (the sampler's minima / peaks), opt-in telemetry, the stage message
   artifacts/test-output/phase-{N}/{stage}-{group}[-attempt{n}]/  ONE command's Playwright outputDir (PW_OUTPUT_DIR) — Playwright wipes it as that command starts, so stages/ and progress/ stay outside it; no later command touches it; earlier phases pruned by run-stage.mjs
 {automation_root}/automation-logs/[SPEC-{spec-name}/]{user_story_name}/run-progress-{stamp}.log
 {automation_root}/screenshots/[SPEC-{spec-name}/]{user_story_name}/phase-{N}/{TC-ID}/{variant_slug}/attempt-{a}.png
+{QA_CAPACITY_DIR | ~/.link-ai-pro/capacity}/config.json · ledger.json · demand.json · rate-limits/{bookId}.json   the machine-wide coordination directory (capacity.mjs) — OUTSIDE every story folder, shared by every run of this user
 ```
 
 - `{feature}` = the stem of `TEST-CASES-{feature}.md`; `{user_story_name}` = the exact leaf of the
@@ -80,9 +94,9 @@ bug file, a missing run file, a missing screenshot file or a legacy artifact in 
 - **Top-level whitelist.** The story folder holds exactly `TEST-RUN-REPORT-{feature}.md`,
   `BUG-REPORT-{feature}.md`, `TEST-RUN-REPORT-{feature}.html`, `automation-inventory.md`,
   `coverage/`, `.runs/`, `artifacts/`, plus the reviewer's optional `REVIEW-COMMENTS-{feature}.md`
-  (the reviewer creates it; no skill does). Nothing else is ever created there — not a checkpoint
-  record, a fixture cache, a status file, a backup folder, a retest folder or an extra results
-  JSON. The renderer neither reads nor lists `automation-inventory.md`; the validator does. Machine data of a run goes into
+  (the reviewer creates it; no skill does). Nothing else is ever created there — not a fixture cache, a
+  status file, a backup folder, a retest folder or an extra results JSON; the checkpoint gate records live
+  INSIDE `.runs/` and the drafts, snapshots and check outputs INSIDE `artifacts/`. The renderer neither reads nor lists `automation-inventory.md`; the validator does. Machine data of a run goes into
   `.runs/phase-{N}.json`; scratch goes under `artifacts/` (replaced each run, safe to gitignore).
   `artifacts/stages/` and `artifacts/progress/` are emptied at the start of a phase; inside it, every
   command — normal, isolation, burn-in, smoke retry, re-queue, re-run — takes the next free
@@ -134,11 +148,11 @@ then `## Phase N — YYYY-MM-DD` sections, ascending. Sub-sections per phase (`#
 
 | Sub-section | Shape | Required |
 |---|---|---|
-| `Run` | bullets `- **Field:** value`: **Outcome** (mandatory, Status vocabulary, optional ` — reason`), Environment, Build, Run command, Headed / workers, Timeouts (`test 90 s · step 30 s · action 15 s · navigation 30 s · expect 10 s — {n} calibrated · {n} watchdog events`), Started, Duration (`hh:mm:ss (planned ~… · serial-only ~…)`), Run file, Progress log, Screenshots, Compliance, Azure DevOps, Previous phase, and three one-line bullets — `- **Re-run:** {n} TCs ({i} impacted · {v} no verdict · {a} added), {b} burn-in, {k} heal iteration(s) — or not needed — no code changed after the first run and every TC has a verdict`, `- **Isolation checks:** {n} failed beside others → {p} passed alone (interference) · {c} confirmed · {r} rate_limited — or none needed`, `- **Rate limits:** {services paced} · {n} refusals · cool-downs {s} · workers {from → to} — or none seen`. **Sub-bullets are not rendered** — every value stays on its one line | yes |
-| `Stages` | table `Stage · Total · Passed · Failed · Incomplete · Skipped · Not run[ · Partial]` (Smoke / Positive / Negative, a `{Stage} (re-run)` row per re-run stage counting only the re-run subset, then **Total** = the results of record — one per TC, the latest attempt over the phase, **never the sum of the rows**; the `Partial` column required exactly when the phase holds a `PARTIAL` row) + `**Smoke gate:** passed \| healed-then-passed ({n} cycles) \| FAILED-STOPPED — fail% {x}% — {action}` | when Outcome is executed (GREEN / FAILURES / INCOMPLETE / SMOKE GATE FAILED) |
+| `Run` | bullets `- **Field:** value`: **Outcome** (mandatory, Status vocabulary, optional ` — reason`), Environment, Build, Run command, Headed / workers, Timeouts (`test 90 s · step 30 s · action 15 s · navigation 30 s · expect 10 s — {n} calibrated · {n} watchdog events`), Started, Duration (`hh:mm:ss (planned ~… · serial-only ~…)`), Run file, Progress log, Screenshots, Compliance, Azure DevOps, Previous phase, and three one-line bullets — `- **Re-run:** {n} TCs ({i} impacted · {v} no verdict · {a} added), {b} burn-in, {k} heal iteration(s) — or not needed — no code changed after the first run and every TC has a verdict`, `- **Isolation checks:** {n} failed beside others → {p} passed alone (interference) · {c} confirmed · {r} rate_limited — or none needed`, `- **Rate limits:** {services paced} · {n} refusals · cool-downs {s} · workers {from → to} — or none seen`, and `- **Acceptance:** ACCEPTED | ACCEPTED pending Checkpoint B — see gate record | NOT ACCEPTED — {reasons}` (`structured-returns.md` `<run_acceptance>`; `run-data.mjs report` writes all four). **Sub-bullets are not rendered** — every value stays on its one line | yes |
+| `Stages` | table `Stage · Total · Passed · Failed · Incomplete · Skipped · Not run[ · Partial]` (Smoke / Positive / Negative, a `{Stage} (re-run)` row per re-run stage counting only the re-run subset, then **Total** = the results of record — one per TC, the latest attempt over the phase, **never the sum of the rows**; the `Partial` column required exactly when the phase holds a `PARTIAL` row) + `**Smoke gate:** passed \| healed-then-passed ({n} cycles) \| FAILED-STOPPED \| NO VERDICT — fail% {x}% — {action}` (fail% over the PASS + FAIL smoke TCs; `NO VERDICT` = none had one — the phase is `INCOMPLETE`, never GREEN) | when Outcome is executed (GREEN / FAILURES / INCOMPLETE / SMOKE GATE FAILED) |
 | `Run plan` | table `Group · Mode · Workers · TCs · Reason` + `**Decisions:** {n} field · {n} inferred · {n} fail-safe`; an `account:{A-ID}` lane is a row of this table like any other group, and a TC the isolation check moved shows in its new group with the move in the Reason | optional |
 | `Coverage` | table `Stage · Total TCs · Fully · Partially · Not · Weighted %` (+ **Total**) + `**Target:** {t}% ({L3 \| default}, {mechanism}) — **{PASS \| user override \| report-only \| BLOCKED}** · **Δ vs phase {N-1}:** {±d pts — improved … · regressed … \| no prior measurement}` + optional table `Requirement · Outcome · Asserted by` (Full / Partial / Missing / Assumed) | optional |
-| `Results` | table `TC-ID · REQ · Name · Status · Group · Duration · Classification · Evidence`, one row per TC. Status ∈ `PASS \| FAIL \| INCOMPLETE \| SKIP \| NOT_RUN \| PARTIAL — human step pending`. **`PARTIAL — human step pending`** is the one status that carries a reason (the frozen wording; a bare `PARTIAL` or another reason warns, a reason on any other status BLOCKs): the candidate TC has `[HUMAN]` steps, the automation ran and passed up to the first one, and its Classification names the pending step as `human step: {n}`; it counts in its own `partial` bucket — **never as passed** — and a phase holding one is `INCOMPLETE` at best. Classification otherwise from the `<first_run>` catalogue or `—`; an INCOMPLETE row writes `incomplete: {missing slugs}`, `rate_limited` (refused by the application's rate limit, still refused alone — no verdict), or `interrupted: watchdog at step "…" after N s` / `interrupted: collateral (…)` / `interrupted: outer ceiling stop after N s` / `cleanup_incomplete` (reason strings on the existing statuses — no new status); a NOT_RUN row may write `not started: watchdog stop`, `not started: outer ceiling stop after N s`, `not started: depends on {TC} (failed)` (a chain follower), `not started: smoke gate failed (re-run)` or `not started: code changed after its run`. Each row is the TC's result of record; its attempt sub-rows (the run file) name the pass in their stage text (`positive · re-run`, `smoke · isolation`, `positive · burn-in`). Evidence = ` · `-separated markdown links **relative to this folder** (`[attempt-2.png](../../screenshots/…/attempt-2.png) · [failed](…/attempt-1-failed.png)`) or `—`; a PARTIAL row links the image of its last automated step | same rule as Stages |
+| `Results` | table `TC-ID · REQ · Name · Status · Group · Duration · Classification · Evidence`, one row per TC. Status ∈ `PASS \| FAIL \| INCOMPLETE \| SKIP \| NOT_RUN \| PARTIAL — human step pending`. **`PARTIAL — human step pending`** is the one status that carries a reason (the frozen wording; a bare `PARTIAL` or another reason warns, a reason on any other status BLOCKs): the candidate TC has `[HUMAN]` steps, the automation ran and passed up to the first one, and its Classification names the pending step as `human step: {n}`; it counts in its own `partial` bucket — **never as passed** — and a phase holding one is `INCOMPLETE` at best. Classification otherwise from the `<first_run>` catalogue or `—`; an INCOMPLETE row writes `incomplete: {missing slugs}`, `rate_limited` (the failing step's own request throttled, refused again alone after the server's deadline — no verdict), or `interrupted: watchdog at step "…" after N s` / `interrupted: collateral (…)` / `interrupted: outer ceiling stop after N s` / `interrupted: wait budget exhausted (server deadline {T})` / `cleanup_incomplete` (reason strings on the existing statuses — no new status); a NOT_RUN row may write `not started: watchdog stop`, `not started: outer ceiling stop after N s`, `not started: depends on {TC} (failed)` (a chain follower), `not started: smoke gate failed (re-run)`, `not started: code changed after its run`, `not started: deferred until {T}`, `not started: admission timeout ({reason})`, `not started: host pressure` or `not started: environment lease ({reason})` (the last four make the run NOT ACCEPTED). Each row is the TC's result of record; its attempt sub-rows (the run file) name the pass in their stage text (`positive · re-run`, `smoke · isolation`, `positive · burn-in`). Evidence = ` · `-separated markdown links **relative to this folder** (`[attempt-2.png](../../screenshots/…/attempt-2.png) · [failed](…/attempt-1-failed.png)`) or `—`; a PARTIAL row links the image of its last automated step | same rule as Stages |
 | `Unverified assumptions` | table `TC-ID · Ambiguity · Interpretation encoded · Evidence · Result`, or `none` | optional |
 | `Bugs` | cross-reference table `Bug · TC-ID · Severity · Status` — one row per bug this phase found or retested, ids from `BUG-REPORT-{feature}.md`; or `none`. **Details never live here** | optional |
 | `Heal log` | the nine-column table of `<first_run>` step 5, or `First run fully green` | optional |
@@ -209,7 +223,7 @@ The renderer recomputes every number from the tables (counts per phase from `###
 TC-ID; bug counts from the entries, never the header; variants / attempts from the run file, `—` when
 absent) and reports a written value that disagrees as a mismatch. The one rule you apply when writing
 `**Status:**` / `Outcome`: `SMOKE GATE FAILED` when the smoke-gate line says `FAILED-STOPPED`, else
-`FAILURES` if any FAIL, else `INCOMPLETE` if any INCOMPLETE **or any PARTIAL**, else `GREEN`; a declared
+`FAILURES` if any FAIL, else `INCOMPLETE` if any INCOMPLETE **or any PARTIAL** or the smoke gate says `NO VERDICT`, else `GREEN`; a declared
 `ENVIRONMENT_BLOCKED` / `BLOCKED` with no Results table is accepted as declared.
 
 ## 7. `.runs/phase-N.json` — schema `skill6-run/1` and its lifecycle
@@ -248,8 +262,15 @@ and attempt carries `run`, `command`, `code_fingerprint` and a `stage` text nami
 { id, title, tc_id, req_id, severity, status }` · `heal_log[]` · `skips[]` · `deviations[]` ·
 `parallel_checks[] { tc, stage, group, workers, parallel_attempt, alone_attempt, outcome:
 interference | confirmed | rate_limited, overlapped[], overlap_rerun[] { tc, status }, moved_to,
-learning_line }` · `rate_limit { planned[] (the run plan's rate_limits[]), refused, services[],
-policies[], cooldowns_ms[], adjustments[], learned[] }` (from the stage summaries' `rateLimit`) ·
+learning_line, cause?: test_data_conflict | possible_product_concurrency_defect | environment | unexplained,
+cause_evidence?[], resolution?: "test-side: {evidence}" | "bug: BUG-{n}" | null }` · `rate_limit { planned[] (the
+run plan's rate_limits[]), refused, services[], policies[], cooldowns_ms[], adjustments[], learned[], scopes?[] }`
+(from the stage summaries' `rateLimit`) · optional, additive: `environment_lease { env_id, members[], run_id,
+acquired_at, released_at? }` · `parallel_readiness { counts, units, conflicts, differences[], unlock_suggestions[] }`
+(every run; `differences[]` only with `--compare`) · `concurrency { scheduler (dispatch | serial | groups), max_workers, avg_active, peak_cpu_pct, min_available_mb (from the summaries' `host`, the opt-in telemetry otherwise), pressure_episodes,
+blocked_admissions, lowered[], timeline[] }` · `acceptance { verdict: ACCEPTED | NOT ACCEPTED, reasons[], mode:
+pre-gate | final, conditional_on[], computed_at }` · `smoke_gate.eligible` (and `verdict: NO VERDICT`) ·
+`results[].status_reason` · `cleanup { sweeps[] { tcs } }` ·
 `impact { selections[] { at, iteration, rerun_set[] { tc, reason, changed[] }, added[] { tc, reason },
 outside_scope[] }, final_check { at, stale[], fresh_by_member_only[] { tc, review }, unknown[] } }` ·
 `run_plan_adjustments[] { at, stage, kind: move | rate-limit | workers, tc | service | group, from,
@@ -260,8 +281,8 @@ step_default_ms, step_long_ms, operations {name: ms}, watchdog_grace_ms, rate_li
 max_start_wait_ms, in_step_wait_ms, cooldown_ms, cooldown_max_ms } }, events[] { tc, step,
 elapsed_ms, deadline_ms, expected, kind: step | test | ceiling | watchdog, evidence },
 adjusted[] { key, from_ms, to_ms, reason, evidence }, probe: PASS | NOT_RUN, calibration:
-done | NOT_RUN }` (optional; the renderer ignores it — the Timeout policy section of the report
-carries the human-readable form) · `watchdog_events[] { stage, group, worker, tc, step,
+done | NOT_RUN }` (optional; the renderer ignores it — the `### Run` `Timeouts` bullet and the return's
+`Timeouts:` line carry the human-readable form) · `watchdog_events[] { stage, group, worker, tc, step,
 elapsed_ms, deadline_ms, action: stopped | ceiling-stop }` (optional). `merged.stages[]`,
 `watchdog_events[]` and `timeouts.events[]` entries come ready-made from the stage summaries of
 `run-stage.mjs` (`artifacts/progress/{run}-{stage}-{seq}.summary.json`).
@@ -292,7 +313,9 @@ thumbnail with its own viewer. A missing file warns (`evidence-file-missing`), a
 
 ## 9. Provenance and hand edits
 
-Line 2 of every page is a provenance comment (the sha256 of each input and a self-hash of the page). On
+Line 2 of every page is a provenance comment (the sha256 of each input and a self-hash of the page; a page
+published after Checkpoint B also carries ` · gate={sha256}` of its gate record — pages without it still
+verify). On
 `--write` a self-hash mismatch means a human edited the HTML: the write is refused (`refused.reason:
 hand-edited`) until `--force` — tell the user what will be lost first. Typing a comment in the page never
 changes the page file.

@@ -23,7 +23,13 @@
 //
 // Usage:
 //   node render-run-report.mjs --report <TEST-RUN-REPORT-{feature}.md> [--bugs <BUG-REPORT-{feature}.md>]
-//        [--runs <dir>] [--comments <path>] [--tracker <path>] [--ado-url <url>] [--out <path>] [--write] [--force] [--strict] [--pretty]
+//        [--runs <dir>] [--comments <path>] [--tracker <path>] [--ado-url <url>] [--base <story folder>] [--gate <gate record>]
+//        [--out <path>] [--write] [--force] [--strict] [--pretty]
+// --base: a DRAFT report (artifacts/drafts/phase-N/) is rendered as if it stood in the story folder — evidence links, the
+//   legacy listing, the reviewer's comments file and the tracker are resolved against <story folder> (default: the
+//   report's own folder), so the draft page equals the page the published files give.
+// --gate: the Checkpoint B gate record (.runs/phase-N.checkpoint-B.json) the published page belongs to — its sha256 joins
+//   the provenance line (` · gate=…`) and its verdict is shown in the meta line. Without it nothing changes.
 // Exit: 0 always, unless --strict: PASS 0 · MISMATCH 1 · BLOCKED 2 · NOT_RUN 3.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,7 +60,9 @@ export const BUG_STATUSES = ['open', 'resolved', 'not-checked'];
 const COUNT_KEYS = ['passed', 'failed', 'incomplete', 'skipped', 'notrun', 'partial', 'total'];
 const COUNT_LABEL = { passed: 'Passed', failed: 'Failed', incomplete: 'Incomplete', skipped: 'Skipped', notrun: 'Not run', partial: 'Partial', total: 'Total' };
 const STATUS_BUCKET = { PASS: 'passed', FAIL: 'failed', INCOMPLETE: 'incomplete', SKIP: 'skipped', NOT_RUN: 'notrun', PARTIAL: 'partial' };
-const SMOKE_RE = /^(passed|healed-then-passed|FAILED-STOPPED)\b/;
+// `NO VERDICT` — no smoke TC produced a PASS or FAIL (skill 5's smoke gate): positive / negative did not start; the
+// phase is never GREEN for it (it derives INCOMPLETE unless a FAIL makes it FAILURES).
+const SMOKE_RE = /^(passed|healed-then-passed|FAILED-STOPPED|NO VERDICT)\b/;
 const SECRET_RE = /\b(password|passcode|secret|token|pat|api[- ]?key)\b\s*(?:[:=]|is)\s*["'`]?[^\s"'`]{3,}/i;
 const LINK_RE = /!?\[([^\]]*)\]\(([^)\s]+)\)/g;
 
@@ -71,6 +79,7 @@ export const LIMITS = [
   'The tracker TC-STATUS-TRACKER-{feature}.md (--tracker, else beside the `Source document`, else the story\'s TestCases folder mirrored from reports/) is read-only data: its `## Test cases` table is merged into every Results table by TC-ID (Covered · Reason not covered · State · Related bug(s) · Bug Azure state · Next action); tracker TCs with no Results row in any phase are listed under "Not automated / not run"; its `## Summary` and `## Bug index` tables are shown as written. A missing tracker renders the page without those columns (tracker-missing warning); a TC-ID on one side only (tracker vs the source TC document, or a Results row the tracker lacks) warns tracker-tc-mismatch; neither changes the gate. Azure IDs link to {base}/_workitems/edit/{id}, the base from --ado-url, else an `Azure DevOps:` URL in the tracker header, else the project .mcp.json azure-devops entry — never a built-in host.',
   'Navigation is built in the browser from the rendered page: a contents panel from the h2 / h3 headings and the phase cards (highlighting the section in view), sort buttons on sortable columns (natural TC / REQ ids, numbers, durations, dates, fixed orders for Status / Classification / State / Bug Azure state, text) and a filter box on tables of more than 15 rows. They change the display order only.',
   'Reviewer comments come from REVIEW-COMMENTS-{feature}.md beside the report (or --comments): each `## {item-id}` entry is attached to the bug card (BUG-n) or phase card (phase-N) with that id, "General" to the general box; an id not on the page is listed, never dropped (comment-unknown-id). The file belongs to the reviewer: the renderer only reads it. Typing in the page never changes the page file, so its self-hash stays valid.',
+  'Drafts and gate records: --base renders a draft report as if it stood in the given story folder (evidence links, legacy listing, comments, tracker), so a draft page and the page of the published files are the same bytes; --gate hashes the Checkpoint B gate record into the provenance (` · gate=…`) and shows its verdict — it does not check the verdict (run-data.mjs publish does).',
 ];
 
 /* ============================================================================================
@@ -240,7 +249,7 @@ export function parseReport(text) {
     const stages = genericTable(tablesOf(stagesSec)[0]);
     const smokeGate = stagesSec ? boldLine(stagesSec.lines, 'Smoke gate') : null;
     if (stagesSec && !smokeGate) errors.push({ kind: 'section-missing', line: stagesSec.start + 1, detail: 'phase ' + n + ' `### Stages` has no `**Smoke gate:**` line' });
-    if (smokeGate && !SMOKE_RE.test(smokeGate)) errors.push({ kind: 'unknown-enum', line: stagesSec.start + 1, detail: 'phase ' + n + ' smoke gate "' + smokeGate + '" must start with passed / healed-then-passed / FAILED-STOPPED' });
+    if (smokeGate && !SMOKE_RE.test(smokeGate)) errors.push({ kind: 'unknown-enum', line: stagesSec.start + 1, detail: 'phase ' + n + ' smoke gate "' + smokeGate + '" must start with passed / healed-then-passed / FAILED-STOPPED / NO VERDICT' });
     const rt = tablesOf(resultsSec)[0];
     if (declared && EXECUTED_OUTCOMES.includes(declared)) { if (!stagesSec) errors.push({ kind: 'section-missing', line: S.start + 1, detail: 'phase ' + n + ' outcome ' + declared + ' needs a `### Stages` sub-section' }); if (!rt) errors.push({ kind: 'section-missing', line: S.start + 1, detail: 'phase ' + n + ' outcome ' + declared + ' needs a `### Results` table' }); }
     const results = [];
@@ -384,8 +393,9 @@ export function buildModel(doc, bugDoc, opts) {
     for (const r of p.results) { if (!counts) break; counts.total++; const k = STATUS_BUCKET[r.status]; if (k) counts[k]++; }
     let outcome = p.declared;
     if (counts) {
-      // a PARTIAL row (human step pending) never lets the phase be GREEN
-      const derived = /^FAILED-STOPPED/.test(p.smokeGate || '') ? 'SMOKE GATE FAILED' : counts.failed ? 'FAILURES' : (counts.incomplete || counts.partial) ? 'INCOMPLETE' : 'GREEN';
+      // a PARTIAL row (human step pending) never lets the phase be GREEN, and neither does a smoke gate without a verdict
+      const noVerdict = /^NO VERDICT/.test(stripMd(p.smokeGate || ''));
+      const derived = /^FAILED-STOPPED/.test(p.smokeGate || '') ? 'SMOKE GATE FAILED' : counts.failed ? 'FAILURES' : (counts.incomplete || counts.partial || noVerdict) ? 'INCOMPLETE' : 'GREEN';
       if (p.declared && p.declared !== derived) mm({ kind: 'outcome', phase: p.n, field: 'Outcome', written: p.declared, computed: derived, source: 'phase' });
       outcome = derived;
     }
@@ -952,7 +962,7 @@ function viewModel(model, files, cm, tm = emptyTracker()) {
     const runFields = p.runFields.order.filter((k) => !/^(outcome|reviewer comment)$/i.test(k)).map((k) => ({ name: k, value: bare(p.runFields.fields[k].value) || DASH }));
     const stages = p.stages ? (() => { const t = p.stages; const ci = { stage: col(t, /^stage$/i) }; const get = (r, k) => { const i = col(t, new RegExp('^' + COUNT_LABEL[k] + '$', 'i')); return i < 0 ? DASH : bare(cell(r, i)) || DASH; }; return t.rows.map((r) => { const name = stripMd(cell(r, ci.stage)); return { name, total: get(r, 'total'), passed: get(r, 'passed'), failed: get(r, 'failed'), incomplete: get(r, 'incomplete'), skipped: get(r, 'skipped'), notrun: get(r, 'notrun'), partial: get(r, 'partial'), row_class: /^total$/i.test(name) ? 'is-total' : '' }; }); })() : [];
     const sg = p.smokeGate ? stripMd(p.smokeGate) : '';
-    const sgm = sg.match(/^(passed|healed-then-passed(?:\s*\([^)]*\))?|FAILED-STOPPED)\s*(.*)$/);
+    const sgm = sg.match(/^(passed|healed-then-passed(?:\s*\([^)]*\))?|FAILED-STOPPED|NO VERDICT)\s*(.*)$/);
     const results = p.results.map((r) => ({
       tc: r.tc, anchor: 'tc-' + p.n + '-' + r.tc, req: r.req, name: r.name || DASH, status: statusText(r.status, r.statusReason), status_class: resultClass(r.status), row_class: r.status === 'FAIL' ? 'gap' : '',
       group: r.group, duration: r.duration, classification: r.classification, evidence: r.evidence || [], has_evidence: (r.evidence || []).length > 0,
@@ -965,7 +975,7 @@ function viewModel(model, files, cm, tm = emptyTracker()) {
       n: p.n, date: p.date, outcome: p.outcome || DASH, outcome_class: outcomeClass(p.outcome), is_latest: latest && p.n === latest.n, open_attr: latest && p.n === latest.n ? ' open' : '',
       toc_label: 'Phase ' + p.n + ' · ' + (p.outcome || DASH),
       summary_counts: p.counts ? 'passed / failed / incomplete / skipped / not run / partial · ' + countsLine(p.counts) : 'no results table', reason: p.reason, has_reason: !!p.reason,
-      run_fields: runFields, has_stages: stages.length > 0, stages, has_smoke: !!sg, smoke_verdict: sgm ? sgm[1] : sg, smoke_rest: sgm ? sgm[2] : '', smoke_class: /^FAILED/.test(sg) ? 's-fail' : /^healed/.test(sg) ? 's-incomplete' : 's-pass',
+      run_fields: runFields, has_stages: stages.length > 0, stages, has_smoke: !!sg, smoke_verdict: sgm ? sgm[1] : sg, smoke_rest: sgm ? sgm[2] : '', smoke_class: /^FAILED/.test(sg) ? 's-fail' : /^(healed|NO VERDICT)/.test(sg) ? 's-incomplete' : 's-pass',
       has_plan: !!p.plan, plan: table(p.plan), has_plan_decisions: !!p.planDecisions, plan_decisions: p.planDecisions ? 'Decisions: ' + stripMd(p.planDecisions) : '',
       ...cv,
       has_results: p.hasResultsTable, results,
@@ -997,6 +1007,8 @@ function viewModel(model, files, cm, tm = emptyTracker()) {
     feature: model.feature || DASH, user_story: hv('User Story'), source_doc: hv('Source document'), source_rev: hv('Source revision'), spec: hv('Spec'), environment: hv('Environment'),
     latest_phase: latest ? String(latest.n) : DASH, latest_run: hv('Latest run'), status: latest ? latest.outcome || DASH : DASH, status_class: outcomeClass(latest ? latest.outcome : ''),
     compliance: hv('Compliance'), ado_mode: hv('Azure DevOps'), run_file: hv('Run file'), screenshots_dir: hv('Screenshots'), progress_log: hv('Progress log'), earlier_phases: hv('Earlier phases'),
+    // --gate only: the gate record the published page belongs to (the report itself says "Checkpoint B pending — see gate record")
+    gate_meta: model.gate ? 'Checkpoint ' + (model.gate.checkpoint || DASH) + ' ' + (model.gate.verdict || DASH) + ' · phase ' + num(model.gate.phase) + ' · snapshot ' + (model.gate.snapshotId || DASH) + (model.gate.decided ? ' · ' + model.gate.decided : '') : '',
     bug_file: files.bugs || 'BUG-REPORT-' + (model.feature || '') + '.md', report_file: files.report,
     has_legacy: model.legacyFiles.length > 0, legacy_list: model.legacyFiles.join(', '),
     has_mismatch: model.mismatches.length > 0, mismatch_count: String(model.mismatches.length),
@@ -1034,7 +1046,7 @@ function shellParts(vm, tm = emptyTracker()) {
   const e = escapeHtml; const code = (x) => '<code>' + e(x) + '</code>';
   const meta = [
     ['Spec', e(vm.spec)], ['Environment', e(vm.environment)], ['Latest phase', e(vm.latest_phase) + ' (' + e(vm.latest_run) + ')'],
-    ['Status', '<span class="badge ' + e(vm.status_class) + '">' + e(vm.status) + '</span>'], ['Compliance', e(vm.compliance)], ['Azure DevOps', e(vm.ado_mode)],
+    ['Status', '<span class="badge ' + e(vm.status_class) + '">' + e(vm.status) + '</span>'], ['Compliance', e(vm.compliance)], ...(vm.gate_meta ? [['Gate record', e(vm.gate_meta)]] : []), ['Azure DevOps', e(vm.ado_mode)],
     ['Run file', e(vm.run_file)], ['Screenshots', e(vm.screenshots_dir)], ['Progress log', e(vm.progress_log)], ['Bug report', e(vm.bug_file)], ['Earlier phases', e(vm.earlier_phases)],
     ...(tm.present ? [[SHELL_STRINGS.en.tr_updated, e(tm.lastUpdated || DASH)]] : []),
   ].map(([label, html]) => ({ label, html }));
@@ -1057,18 +1069,19 @@ function shellParts(vm, tm = emptyTracker()) {
  * Provenance + self-hash
  * ========================================================================================== */
 // v1.1 adds `comments=`, v1.2 adds `tracker=`; both groups are optional so an older page still verifies and is re-rendered without --force.
-const PROV_RE = /<!-- render-run-report v[^ ]+ · report=([0-9a-f]{64}) · bugs=([0-9a-f]{64}|none) · runs=([0-9a-f]{64}|none)(?: · comments=([0-9a-f]{64}|none))?(?: · tracker=([0-9a-f]{64}|none))? · page=([0-9a-f]{64}) -->/;
+// `gate=` (the Checkpoint B gate record of a published page, --gate) is optional too and written only when a gate record was given.
+const PROV_RE = /<!-- render-run-report v[^ ]+ · report=([0-9a-f]{64}) · bugs=([0-9a-f]{64}|none) · runs=([0-9a-f]{64}|none)(?: · comments=([0-9a-f]{64}|none))?(?: · tracker=([0-9a-f]{64}|none))?(?: · gate=([0-9a-f]{64}))? · page=([0-9a-f]{64}) -->/;
 const BLANK = '0'.repeat(64);
 export function selfHash(html) { return sha256(html.replace(PROV_RE, (m) => m.replace(/page=[0-9a-f]{64}/, 'page=' + BLANK))); }
 function stampProvenance(html, hashes) {
-  const line = '<!-- render-run-report v' + SCHEMA_VERSION + ' · report=' + hashes.report + ' · bugs=' + hashes.bugs + ' · runs=' + hashes.runs + ' · comments=' + hashes.comments + ' · tracker=' + hashes.tracker + ' · page=' + BLANK + ' -->';
+  const line = '<!-- render-run-report v' + SCHEMA_VERSION + ' · report=' + hashes.report + ' · bugs=' + hashes.bugs + ' · runs=' + hashes.runs + ' · comments=' + hashes.comments + ' · tracker=' + hashes.tracker + (hashes.gate ? ' · gate=' + hashes.gate : '') + ' · page=' + BLANK + ' -->';
   const withBlank = html.replace(/^(<!DOCTYPE html>\n)/, '$1' + line + '\n');
   return withBlank.replace('page=' + BLANK, 'page=' + selfHash(withBlank));
 }
 export function pageState(existingHtml) {
   const m = existingHtml.match(PROV_RE);
   if (!m) return { provenance: false, handEdited: false };
-  return { provenance: true, handEdited: selfHash(existingHtml) !== m[6], recorded: { report: m[1], bugs: m[2], runs: m[3], comments: m[4] || null, tracker: m[5] || null } };
+  return { provenance: true, handEdited: selfHash(existingHtml) !== m[7], recorded: { report: m[1], bugs: m[2], runs: m[3], comments: m[4] || null, tracker: m[5] || null, gate: m[6] || null } };
 }
 
 /** The TC-IDs of skill 3's TEST-CASES document (summary-table IDs, then `### {ID}` sections) — for the tracker mismatch check only. */
@@ -1118,20 +1131,38 @@ export function renderHtml(model, { template, shell, files = {}, cm = NO_COMMENT
   return { html, leftovers };
 }
 
-export function render({ reportPath, bugsPath = null, runsDir = null, commentsPath = null, trackerPath = null, adoUrl = null, template, shell, root = process.cwd() }) {
+export function render({ reportPath, bugsPath = null, runsDir = null, commentsPath = null, trackerPath = null, adoUrl = null, base: baseDirArg = null, gatePath = null, template, shell, root = process.cwd() }) {
   if (!reportPath || !isFile(reportPath)) return { payload: base({ gate: 'NOT_RUN', gateReason: reportPath ? 'run report not found: ' + reportPath : 'no --report given', input: { report: reportPath || null } }), html: null, model: null };
   const text = readText(reportPath);
   const doc = parseReport(text);
   const feature = doc.feature || (path.basename(reportPath).match(/^TEST-RUN-REPORT-(.+)\.md$/i) || [])[1] || path.basename(reportPath, '.md');
   const dir = path.dirname(reportPath);
+  // --base: the story folder the report is rendered for — a draft under artifacts/drafts/phase-N/ resolves its evidence
+  // links, the legacy listing, the reviewer's comments and the tracker there, exactly as the published report will
+  const storyDir = baseDirArg ? path.resolve(baseDirArg) : dir;
   const bp = bugsPath || path.join(dir, 'BUG-REPORT-' + feature + '.md');
   const bugText = isFile(bp) ? readText(bp) : null;
   const bugDoc = bugText !== null ? parseBugReport(bugText) : null;
   const rd = runsDir || path.join(dir, '.runs');
-  const model = buildModel(doc, bugDoc, { mdDir: dir, runsDir: rd });
+  const model = buildModel(doc, bugDoc, { mdDir: storyDir, runsDir: rd });
+  if (baseDirArg && !fs.existsSync(storyDir)) model.errors.push({ kind: 'base-missing', detail: '--base folder not found: ' + path.relative(root, storyDir) });
   if (bugText === null) model.warnings.push({ kind: 'bug-report-missing', detail: 'no bug report at ' + path.relative(root, bp) + ' — the Bugs section is empty' });
-  // Reviewer comments — REVIEW-COMMENTS-{feature}.md beside the report, or --comments. Absent is normal and silent.
-  const cp = commentsPath || path.join(dir, 'REVIEW-COMMENTS-' + feature + '.md');
+  // --gate: the Checkpoint B gate record (skill5-gate/1) — hashed into the provenance, its verdict shown in the meta line
+  let gateText = null; model.gate = null;
+  if (gatePath) {
+    if (!isFile(gatePath)) model.errors.push({ kind: 'gate-file-missing', detail: 'gate record not found: ' + path.relative(root, gatePath) });
+    else {
+      gateText = readText(gatePath);
+      try {
+        const g = JSON.parse(gateText);
+        model.gate = { checkpoint: g.checkpoint || null, verdict: g.verdict || null, phase: g.phase ?? null, snapshotId: g.snapshotId || null, decided: typeof g.decidedAt === 'string' ? g.decidedAt.slice(0, 10) : null, schema: g.schema || null };
+        if (g.schema !== 'skill5-gate/1') model.warnings.push({ kind: 'gate-schema', detail: 'gate record schema "' + g.schema + '", expected skill5-gate/1' });
+      } catch (e) { model.errors.push({ kind: 'gate-file-unreadable', detail: path.relative(root, gatePath) + ': ' + e.message }); }
+      if (SECRET_RE.test(gateText)) model.errors.push({ kind: 'secret-literal', detail: 'the gate record contains a password-shaped literal' });
+    }
+  }
+  // Reviewer comments — REVIEW-COMMENTS-{feature}.md beside the report (the story folder with --base), or --comments. Absent is normal and silent.
+  const cp = commentsPath || path.join(storyDir, 'REVIEW-COMMENTS-' + feature + '.md');
   const commentsText = isFile(cp) ? readText(cp) : null;
   if (commentsPath && commentsText === null) model.warnings.push({ kind: 'comments-file-missing', detail: 'comments file not found: ' + path.relative(root, commentsPath) });
   const sourceRev = sha256(text).slice(0, 12);
@@ -1142,7 +1173,7 @@ export function render({ reportPath, bugsPath = null, runsDir = null, commentsPa
   for (const x of notes) if (SECRET_RE.test(x.text)) model.errors.push({ kind: 'secret-literal', line: x.line, detail: x.id + ' has a password-shaped literal in its Reviewer comment field' });
   // Tracker — read-only; absent → tracker-missing warning and the page without its columns. The mismatch check compares it with
   // the source TC document when that is found, else only checks that every TC with a Results row is in the tracker.
-  const loc = locateTracker({ trackerPath, reportDir: dir, sourceDoc: model.header['Source document'], feature, root });
+  const loc = locateTracker({ trackerPath, reportDir: storyDir, sourceDoc: model.header['Source document'], feature, root });
   const trackerText = isFile(loc.path) ? readText(loc.path) : null;
   const ran = []; for (const p of model.phases) for (const r of p.results) if (!ran.includes(r.tc)) ran.push(r.tc);
   const docIds = loc.tcDoc ? tcDocIds(readText(loc.tcDoc)) : null;
@@ -1164,13 +1195,14 @@ export function render({ reportPath, bugsPath = null, runsDir = null, commentsPa
   if (gate === 'BLOCKED') html = null;
 
   const runsHash = model.runFiles.length ? sha256(model.runFiles.map((r) => r.phase + ':' + r.sha256).join('\n')) : 'none';
-  const hashes = { report: sha256(text), bugs: bugText !== null ? sha256(bugText) : 'none', runs: runsHash, comments: commentsText !== null ? sha256(commentsText) : 'none', tracker: trackerText !== null ? sha256(trackerText) : 'none' };
+  const hashes = { report: sha256(text), bugs: bugText !== null ? sha256(bugText) : 'none', runs: runsHash, comments: commentsText !== null ? sha256(commentsText) : 'none', tracker: trackerText !== null ? sha256(trackerText) : 'none', ...(gateText !== null ? { gate: sha256(gateText) } : {}) };
   if (html) html = stampProvenance(html, hashes);
   const latest = model.latest;
   const evidenceLinks = model.phases.reduce((n, p) => n + p.results.reduce((m, r) => m + (r.evidence || []).length + (r.attempts || []).reduce((k, a) => k + a.evidence.length, 0), 0), 0) + (model.bugs ? model.bugs.entries.reduce((n, b) => n + b.screenshot.length, 0) : 0);
   const payload = base({
     gate, gateReason,
-    input: { report: path.relative(root, reportPath) || reportPath, bugs: bugText !== null ? path.relative(root, bp) : null, runs: fs.existsSync(rd) ? path.relative(root, rd) : null, comments: commentsText !== null ? path.relative(root, cp) : null, tracker: trackerText !== null ? path.relative(root, loc.path) : null, sourceDocument: loc.tcDoc ? path.relative(root, loc.tcDoc) : null, feature, template: path.relative(root, TEMPLATE_PATH), shell: path.relative(root, SHELL_PATH) },
+    input: { report: path.relative(root, reportPath) || reportPath, bugs: bugText !== null ? path.relative(root, bp) : null, runs: fs.existsSync(rd) ? path.relative(root, rd) : null, comments: commentsText !== null ? path.relative(root, cp) : null, tracker: trackerText !== null ? path.relative(root, loc.path) : null, sourceDocument: loc.tcDoc ? path.relative(root, loc.tcDoc) : null, feature, template: path.relative(root, TEMPLATE_PATH), shell: path.relative(root, SHELL_PATH),
+      ...(baseDirArg ? { base: path.relative(root, storyDir) || '.' } : {}), ...(gatePath ? { gate: path.relative(root, gatePath) } : {}) },
     hashes,
     tracker: { ...trackerPayload(tm), ranTcs: ran.length, notRun: trackerColumnsOn(tm) ? tm.order.filter((id) => !ran.includes(id)).length : null },
     comments: { file: cm.file, page: cm.page, sourceRev: cm.sourceRev, stale: cm.stale, ignored: cm.ignored, open: cm.open, handled: cm.handled,
@@ -1179,6 +1211,7 @@ export function render({ reportPath, bugsPath = null, runsDir = null, commentsPa
     document: {
       feature, userStory: bare(model.header['User Story'] || '') || null, spec: bare(model.header['Spec'] || '') || null, latestPhase: latest ? latest.n : null, status: latest ? latest.outcome : null,
       compliance: bare(model.header['Compliance'] || '') || null, adoMode: bare(model.header['Azure DevOps'] || '') || null, earlierPhases: bare(model.header['Earlier phases'] || '') || null, legacyFiles: model.legacyFiles,
+      ...(model.gate ? { gate: model.gate } : {}),
       phases: model.phases.map((p) => ({ phase: p.n, date: p.date, outcome: p.outcome, declared: p.declared, counts: p.counts, smokeGate: p.smokeGate ? stripMd(p.smokeGate) : null, coverage: p.covStages ? { target: p.covTarget ? stripMd(p.covTarget) : null, total: (p.covStages.rows.find((r) => /^total$/i.test(stripMd(r[0]))) || []).map(stripMd) } : null, bugRefs: p.bugRefs.map((b) => b.id), assumptions: p.assumptions ? p.assumptions.rows.length : 0, heals: p.heals ? p.heals.rows.length : 0, readiness: p.readinessCounts ? { verdict: p.readinessVerdict ? stripMd(p.readinessVerdict) : null, ...p.readinessCounts } : null, runFile: p.run ? { present: true, status: p.run.status || null, schema: p.run.schema } : { present: false, status: null, schema: null } })),
       bugs: model.bugs ? { present: true, ...model.bugs.counts, entries: model.bugs.entries.map((b) => ({ id: b.id, tcId: b.tc, severity: b.severity, status: b.status, foundInPhase: b.foundIn, historyLength: b.history.length, screenshot: b.screenshot.map((s) => s.href) })) } : { present: false, total: null, open: null, resolved: null, notChecked: null, entries: [] },
     },
@@ -1200,7 +1233,8 @@ export function main(argv) {
   const root = process.cwd();
   const reportPath = typeof args.report === 'string' ? path.resolve(root, args.report) : null;
   const r = render({ reportPath, bugsPath: typeof args.bugs === 'string' ? path.resolve(root, args.bugs) : null, runsDir: typeof args.runs === 'string' ? path.resolve(root, args.runs) : null, commentsPath: typeof args.comments === 'string' ? path.resolve(root, args.comments) : null,
-    trackerPath: typeof args.tracker === 'string' ? path.resolve(root, args.tracker) : null, adoUrl: typeof args['ado-url'] === 'string' ? args['ado-url'] : null, root });
+    trackerPath: typeof args.tracker === 'string' ? path.resolve(root, args.tracker) : null, adoUrl: typeof args['ado-url'] === 'string' ? args['ado-url'] : null,
+    base: typeof args.base === 'string' ? path.resolve(root, args.base) : null, gatePath: typeof args.gate === 'string' ? path.resolve(root, args.gate) : null, root });
   const p = r.payload;
   p.writes = [];
   if (args.write && r.html && p.gate !== 'BLOCKED') {

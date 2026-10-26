@@ -154,7 +154,7 @@ Report all three separately. Never let one stand in for another.
 |---|---|---|
 | **Requirement outcome coverage** | Are each requirement's required outcomes actually asserted? `Full` / `Partial` / `Missing` / `Assumed` | `### Coverage`, with the requirement ID on every row |
 | **TC automation coverage** | How much of the approved TC document is automated? The existing weighted % | The PHASE 2.5 gate — target, source, repair pass and user-override path unchanged |
-| **Execution pass rate** | Of what ran, how much passed? | `### Results of record (first run + re-run)` — the results of record (the latest attempt per TC over the phase, each fresh), never mixed into either number above |
+| **Execution pass rate** | Of what ran, how much passed? | the report's `### Results` table and the return's `Results of record` line — the results of record (the latest attempt per TC over the phase, each fresh), never mixed into either number above |
 
 **Traceability is not coverage.** A requirement linked to one test is *traceable*; whether that test
 asserts the requirement's outcomes is a separate judgement (checklist item 7). A link plus a

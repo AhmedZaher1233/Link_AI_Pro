@@ -3,7 +3,7 @@ name: link-qc-9-retesting
 description: >
   Link (QC) skill 9. Retest previously logged bugs in the RUNNING application — never through the Playwright MCP: a bug whose test case is automated is re-run from skill 5's Playwright automation code (run-stage.mjs, every variant, isolation check included); every other bug (no automated TC, a UI-audit bug, a manual-run phase) is retested through playwright-cli — the full test case when it has a row in the latest run, otherwise the bug's own reproduction steps. Positively observes the Expected result, captures evidence, then updates the LATEST phase of the run report in place (TC status, stage totals, outcome, pass rate, run file) and the bug report (resolved (phase N) only after an actual pass; open + History on a fail), re-renders the run report page, applies skill 8's md → Azure push inline (verified close, or reopen with [Reopened] + tag + first assignee + mention) and AFTER the state change uploads the retest evidence through the azure-devops-attachments MCP (verified by read-back), plus skill 7's outcome push for the related test case. Incidental new defects are logged in the producer format and created in Azure through skill 8's recipe. Candidates come from skill 8's Azure → md pull (Azure Resolved) or explicit bug IDs. Trigger on: "retest the bug", "re-verify BUG-3", "check whether the developers fixed it", "retest the Azure candidates", "reopen the bug if it still fails", "rerun the automation for the fixed bugs", "update the pass rate after the fix". Runs after skill 8 (azure-to-md) or on explicit bug IDs; not a gate.
 argument-hint: "[BUG-n,… | BUG-REPORT-*.md | UI-Visual-QA-*.md | story ID | --awaiting-retest] [--locales en,ar] [--headless]"
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(node *run-stage.mjs*), Bash(node *impact.mjs*), Bash(node *render-run-report.mjs*), Bash(playwright-cli *), Bash(npx --no-install playwright-cli *), mcp__azure-devops, mcp__azure-devops-attachments__create_work_item_attachment, mcp__azure-devops-attachments__delete_work_item_attachment
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(node *run-stage.mjs*), Bash(node *impact.mjs*), Bash(node *render-run-report.mjs*), Bash(node *capacity.mjs*), Bash(playwright-cli *), Bash(npx --no-install playwright-cli *), mcp__azure-devops, mcp__azure-devops-attachments__create_work_item_attachment, mcp__azure-devops-attachments__delete_work_item_attachment
 disable-model-invocation: true
 ---
 
@@ -22,6 +22,9 @@ playwright-cli otherwise. The Playwright MCP is never used.
   (is the TC automated, which spec), `run-stage.mjs` (the only way a Playwright command runs),
   `render-run-report.mjs` (the only way the page is made). Detail: [references/automation-rerun.md](references/automation-rerun.md).
 - **playwright-cli route** — [references/browser-cli.md](references/browser-cli.md).
+- **Coordination** — skill 5's `capacity.mjs` (called by path): this run's environment lease (no retest beside a
+  skill 5 run or another retest on the same environment) and one session hold per playwright-cli browser (the
+  machine's worker ceiling) — [references/coordination.md](references/coordination.md). Skill 5 absent → BLOCKED.
 - **Report update** — [references/report-update.md](references/report-update.md).
 - **Azure** — `mcp__azure-devops` for every read and write; attachments through the contract §3
   ladder: an upload tool that takes a file path on the attached `azure-devops` server, else the
@@ -39,7 +42,7 @@ retest). Resolve configuration through contract §2 before asking; see INPUT.txt
 | Bug | Route |
 |---|---|
 | BUG-REPORT bug whose TC is carried by a test of skill 5's automation AND held by the latest phase's run plan (automation-rerun.md §1) | **automation re-run** — `run-stage.mjs --run rerun` against `.runs/phase-N.json` |
-| BUG-REPORT bug otherwise — not automated, the latest phase is a skill 5b manual run, in no run-plan group, or skill 5 not installed | **playwright-cli** — the full TC when it has a row in the latest phase, else the bug's own steps (browser-cli.md §1) |
+| BUG-REPORT bug otherwise — not automated, the latest phase is a skill 5b manual run, or in no run-plan group | **playwright-cli** — the full TC when it has a row in the latest phase, else the bug's own steps (browser-cli.md §1) |
 | UI bug (skill 6 report) | **playwright-cli** — the bug's own steps; ledger only |
 
 Automation that cannot start leaves its bugs unobserved (`NOT_RUN` + reason) — never retested
@@ -58,11 +61,13 @@ another way in the same run.
    data-change authorization, and — for playwright-cli bugs only — the base URL unless recorded, the
    username and login method per role (attended in a headed browser, or secret NAMES from the
    user-run secrets file; a password never in chat) and the language-switch flow unless recorded.
-4. **Automation route** — one background `run-stage.mjs --run rerun` call per stage holding retest
+   Then, before anything touches the environment, this run's **environment lease** (coordination.md §§1-2):
+   held by another run → BLOCKED naming it, nothing executed.
+4. **Automation route** — one background `run-stage.mjs --run rerun --env-id {envId}` call per stage holding retest
    TCs, one message per finished stage, then the verdict per bug from the summary
    (automation-rerun.md §§3–5). A test-code, environment or rate-limit failure is no verdict.
-5. **playwright-cli route** — execute (browser-cli.md §§1, 3–7), positively observe Expected,
-   assertion-point image before any cleanup, second language per `language_switch`; close every
+5. **playwright-cli route** — a session hold per browser before its `open` (coordination.md §4), then
+   execute (browser-cli.md §§1, 3–7), positively observe Expected, assertion-point image before any cleanup, second language per `language_switch`; close every
    session and remove the run's snapshot files.
 6. **Update the reports in place** (report-update.md): phase N's changed Results rows, Stages,
    Outcome, Bugs, Retest bullet, Deviations, header and Run history row; `.runs/phase-N.json` to
@@ -81,19 +86,22 @@ another way in the same run.
 8. Incidental defects observed on the way: full producer-format entries with fresh IDs and evidence
    (step 6), then created in Azure through skill 8's create recipe with the same confirmed story ID
    (no title matching), evidence included (§6b, §6 upload and read-back).
-9. Write the ledger last. Emit the §8 summary: retest pass / fail / unobserved separated from the
-   Azure results, the pass-rate line, the page path and gate, pending actions, plus a second table
+9. Write the ledger last; release every hold and the lease (coordination.md §5 — also on any stop after
+   step 3). Emit the §8 summary: retest pass / fail / unobserved separated from the Azure results, the pass-rate line, the page path and gate, pending actions, plus a second table
    for new issues.
 
 ## Output
 | Item | Source | Route | ADO ID | Retest | TC row (before → after) | Azure (before → after) | Evidence | Result |
 |---|---|---|---|---|---|---|---|---|
 
-`Pass rate (phase N): {p} of {t} TCs ({x}%) → {p'} of {t} ({x'}%)` · `Run report page: {path} — gate {PASS | …}`.
+`Pass rate (phase N): {p} of {t} TCs ({x}%) → {p'} of {t} ({x'}%)` · `Run report page: {path} — gate {PASS | …}`
+· `Coordination: lease {envId} held {from} – {to} · {n} session hold(s) · released`.
 Second table for incidental defects: | New Bug ID | Source | Related TC | Title | ADO ID | Result |
 
 ## Hard rules
 - Never the Playwright MCP — not as a route, a fallback or a single step.
+- Never touch the environment without this run's lease, never open a playwright-cli browser without its session
+  hold, never change the machine's capacity settings to make a retest start (coordination.md §6).
 - Never edit automation code (spec, page object, helper, `timeouts.ts`, config) — not to make a retest
   run, not to make it pass; a test-code failure is reported for skill 5 and changes no row and no bug.
 - Only the LATEST phase is updated in place, only the rows of TCs re-run in full with a product

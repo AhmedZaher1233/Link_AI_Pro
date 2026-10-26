@@ -6,6 +6,307 @@ their next `/sync-skills`, so every entry under *Unreleased* is a release once i
 
 ## [Unreleased]
 
+### Skill 5 2.0.0 — Auto workers, dispatch by default, active stall protection, run-protection reconcile
+
+**Implemented, not runtime-tested.** No harness, script, syntax check, Playwright run, browser or benchmark was executed
+for this entry; harness expectations the new defaults change were updated statically. No consumer project, installation,
+hook or permission rule was touched.
+
+- **link-qc-5-test-run-automation** (still `2.0.0` — unreleased)
+  - **Auto worker ceiling** — `capacity.mjs` `autoCeiling` / `resolveCeiling`: min((total memory − reserve) ÷ 1536 MB,
+    (cores − reserve) ÷ 1.5) for headed workers, within [1, upper]; `upper` = `config.json machineMaxWorkers` (now an
+    upper bound, `"auto"` accepted) else `AUTO_MAX` 8; unusable readings → `AUTO_FALLBACK` 2 with the reason. One shared
+    value recorded in the ledger (`ceiling`): a run may lower it, never raise it while anything runs. Session holds and
+    probes use it unchanged. `QA_MAX_WORKERS` / manifest / `--workers` still only lower.
+  - **Scheduler `auto` (default)** — `run-stage.mjs` dispatches on an OK readiness payload whose new dependency
+    fingerprint (`parallel-plan.mjs readinessFingerprint`: code via impact.mjs, TC hashes, TEST-DATA, learning file, run
+    plan, environment) matches, re-plans in-process when it does not, and otherwise runs SERIALLY (workers 1,
+    `scheduler.fallback`). Explicit `groups` (legacy) and `dispatch` (strict) unchanged. `parallel-plan.mjs --out` writes
+    BLOCKED payloads too; `--env-id` added.
+  - **Pool batches + adaptive ramp** — the conflict-free pool runs as successive batches (max(4 × workers, 8) TCs, never
+    a split unit, reserved / released per batch); `dispatch.mjs createRamp` measures windows by summed monotonic batch
+    wall time, accumulates short batches, restarts on another worker count, decreases on environment-wide throttling
+    (scoped throttling only blocks an increase), can trial straight to a remembered validated count (`ramp.json`,
+    performance history only) and exposes `validated()`. Run-alone / barrier units are marked `global` in the timeline;
+    `run-data.mjs verify` 25b now checks they overlapped nothing, checks isolation / burn-in workers under dispatch too,
+    and expects workers 1 under the serial fallback.
+  - **Active stall protection** — `watchdog.mjs`: fixed deadlines from the step start, open steps as a stack, meaningful
+    progress only (helper flag or a rising n/m counter), bounded `admission-wait` / new `rate-wait` budgets
+    (`rule: wait-budget`), `--silence-mode` default `active`. `run-stage.mjs`: `--timeouts-mode` default `active`,
+    silence default 55 s, `--grace` from `watchdog_grace`. Templates: `timeouts.ts` `stall.silence` 55 s, `diagnostics`
+    30 s, `operations` entries may be `{ deadline, silence, reason }`, sanity checks (≤ 60 s single operations, silence +
+    grace ≤ 115 s); `steps.ts` `report(note, { done, total } | { milestone })` with `meaningful`, quiet clock on meaningful
+    progress / nested steps only, bounded diagnostics, `{ operation }` step option; `rate-limit.ts` `rate-wait`
+    heartbeats; `admission.ts` `budget_ms`.
+  - **Run-protection reconcile** — `config-inventory.mjs reconcile [--apply]`: effective settings with precise statuses,
+    targeted idempotent fixes with a backup in `artifacts/reconcile/{stamp}/`, conflicts never overwritten; `check.mjs`
+    item 43 gains `tool:protections` (ED-17 in the register; required units A 64 / B 78).
+  - **Visible workers** — headed by default; CI / no desktop → headless, reported (`display`); `status.json` + one log
+    line whenever the active worker → TC map changes; a workers line in every stage message.
+  - **Telemetry opt-in** (`--telemetry`), reusing the ledger sampler; summaries carry `host` minima / peaks, read by
+    `run-data.mjs` concurrency.
+  - **Leaner instructions** — SKILL.md rewritten (≈ 150 lines; no harness column, workers never asked, the fresh-session
+    line names `run-data.mjs handoff`), INPUT.txt (`VERSION 2.0.0`, harness list removed), references updated at each
+    rule's home (`run-plan-and-config.md`, `execution.md`, `code-craft.md` §8-9, `final-run.md`,
+    `compliance-checkpoints.md`, `structured-returns.md`, `run-report.md` §3, `rule-registry.md` R13 / R15 / R26 + R38,
+    `schemas/script-payloads.md`, `intake.md`).
+  - Harnesses updated statically: run-stage (legacy cases pinned to `--scheduler groups`, cases 23 / 31 / 32 / 35, new
+    40), watchdog (case 3 inverted, new 13-15), dispatch (new 14), capacity (case 2 rewritten, 19 / 21 bounded at 2),
+    check (unit counts, item 43 units), config-inventory (new 8). Golden files unchanged.
+- **link-qc-1-generate-update-testing-structure** — `scanExecutionLimits` mirrors the Auto formula (`CAPACITY_AUTO_MAX`,
+  `CAPACITY_FALLBACK_CEILING`, `CAPACITY_WORKER_DEMAND`, `capacityAutoCeiling`), reports a `QA_LEDGER` saved at user
+  level; the `Execution limits` row WARNs for exclusive / saved-ledger-off / fallback; selftest case 15 updated;
+  `toolchain.md`, `validation-contract.md`, `testing-layout.md`.
+- **link-qc-9-retesting** — `automation-rerun.md`: the retest call (no readiness payload) runs serially under skill 5's
+  default scheduler; ceilings for one worker.
+- **Repo** — `CLAUDE.md`, `README.md`.
+
+### Skill 5 2.0.0 — step efficiency (batched checkpoint records, opt-in readiness shadow, concise return, no forced model) and the remaining worker-capacity gaps
+
+All 23 self-test harnesses pass (exit 0) and so does run-stage's ledger-enabled variant (`QA_LEDGER_SELFTEST=on`, 38/38),
+run one after another on an otherwise idle machine on 2026-10-26. No consumer project, live benchmark or real Playwright run was executed; no
+installation was synced. Nothing below raises a limit, changes a hook or a permission rule, or activates a deferred
+experiment.
+
+- **link-qc-5-test-run-automation** (still `2.0.0` — unreleased)
+  - **Batched checkpoint records** — `check.mjs record --batch <results.json>` records every semantic result of a
+    checkpoint in ONE call. The whole batch is validated first (the single-record rules per entry, no stale snapshot id,
+    no second (check, unit) inside the batch or against a recorded result — duplicate or contradictory —, the snapshot
+    still re-hashes to itself); any failure rejects the batch and nothing is written; otherwise one atomic replace of
+    `results.jsonl`. Single-record mode is unchanged. `compliance-checkpoints.md` step 6 (A) and step 1 (B) use it.
+    `selftest-check.mjs` case 19: the gate is identical for one-by-one and batched records; every rejection writes
+    nothing. Calls per checkpoint pass on the harness fixture: A 40 → 4 (37 semantic results), B 38 → 5 (34).
+  - **The parallel readiness shadow is opt-in** — `parallel-plan.mjs` emits `mode: readiness` by default (claims,
+    units, conflicts, pool, readiness — what dispatch needs); `--compare` (mode `shadow`) adds the candidate plan and its
+    comparison with the hand plan. A default `groups` run no longer runs the check, records `parallel_readiness` or
+    reports it; `--scheduler dispatch` still requires it on every stage, and `run-stage.mjs` now refuses a `--units`
+    payload of another schema, one with `outcome: BLOCKED` or without a conflict list. A deliberate shadow experiment is
+    `--parallel-shadow` (argument hint, INPUT.txt).
+  - **Concise final return** — `structured-returns.md`: the `AUTOMATION COMPLETE` return is a summary (outcome,
+    acceptance and gate verdicts, results of record, the three coverage figures, a `Timeouts:` line) plus `Needs
+    attention` (failures, every TC that did not pass with its reason, deviations, open quality issues), `Links` (report,
+    bug report, evidence, run file, gate records) and `Your decision / action`; the run plan, timeout table, coverage
+    tables, Heal Log and compliance tables are linked, not repeated. `BLOCKED` names each open gate item and what would
+    close it. Activity names unchanged (skill 12's labels). The timeout record lives in `{run_file}.timeouts`; pointers in
+    code-craft, execution, run-plan-and-config, run-report and INPUT.txt updated; the Placement Manifest is shown in the
+    Writing Automation Code message.
+  - **No forced model** — `model: claude-opus-5` removed from the front matter: skill 5 runs on the model selected for
+    the session. CLAUDE.md now says never to set it on skill 5. The other skills' `model:` lines are unchanged.
+  - **Reservations are held until every owned process has stopped (fallback included)** — in BOTH modes a command runs
+    under `ledger-exec.mjs` and its reservation is released only on a FRESH process table that shows nothing it owns
+    alive (`capacity.mjs releaseConfirmed`). Ownership: recorded processes (pid + start), the token on a command line or
+    in the environment (`QA_LEDGER_TOKEN`, read from `/proc` on Linux), browser profile markers, children of a recorded
+    process that has ENDED (a Windows orphan keeps its dead parent's pid; a parent pid reused by another process fathers
+    only children born before the reuse) and their trees. A survivor the table shows with its recorded identity is
+    stopped; a child that cannot be birth-ordered holds the slots but is never stopped. No table → the slots stay held
+    (`confirmed: none`) and the next command waits with "could not be confirmed stopped"; a waiting reserve confirms it
+    as soon as a table can be read; `capacity.mjs release --token <t> --force` is the user-run escape. Exclusive
+    commands, probes (`scratch.mjs`) and named session holds are never freed by a PID check. In ledger mode, tracking and
+    release no longer use a cached table. `selftest-capacity.mjs` 20 (deterministic tables) and 22 (real processes:
+    cancellation, orphaned, reclaimed — only the run's own; a look-alike survives); `selftest-run-stage.mjs` 38 (a
+    browser that outlives its command, a failed listing).
+  - **Ledger-enabled verification** — `QA_LEDGER_SELFTEST=on` failed 11 of 37 cases because worker counts followed this
+    machine's free memory. Fixed: harness seam `QA_CAPACITY_HOST_FIXTURE` (fixed memory / CPU readings for the ledger's
+    decisions) and a fixed process table for cases 1-32; cases 33-38 keep the real listing; case 33 now proves the
+    scarce-memory lowering deterministically; case 35 proves the 2-worker pool consumes ONE reservation and the reserved
+    slots never exceed the ceiling; case 35's ledger-off check sets `QA_LEDGER=off` itself; an explicit telemetry fixture
+    wins over the ledger's table. The watchdog timing cases (3, 4, 26, 31) assume an idle machine — they flaked only while
+    other harnesses ran beside them.
+  - **Adversarial review fixes (three coordination gaps).**
+    - *Overlapping environments* — `environmentIdentity` also returns the group's identity `tokens` (every name and
+      resolved address); `acquireLease` refuses a request whose tokens meet another run's lease, whatever the ids (a story
+      listing `app` and one listing `app` + `api` on the same address used to get two independent leases and two rate-limit
+      books). A reclaimable overlapping lease is taken over with `cleanup_incomplete`; a lease written before tokens is
+      compared by its member names. `selftest-capacity.mjs` 23.
+    - *A refused worker ran its setup* — `workerAdmission` (`assets/admission.template.ts`) now THROWS
+      `AdmissionRefusedError` on a timeout / stop instead of handing itself over, so no dependent worker fixture or
+      `beforeAll` (seeding, shared login) runs; the next worker under the same published state is refused at once
+      (`{PW_ADMISSION_FILE}.refused`, cleared at every call). `run-stage.mjs` maps the error — and a serial follower of it —
+      to `NOT_RUN — not started: admission timeout (…)`, never FAIL. `selftest-run-stage.mjs` 27.
+    - *Dispatch bypassed the isolation check* — a command now counts as "beside others" when it had workers > 1 OR its run
+      overlapped another command of the call (dispatch's single-worker unit children), and the false-PASS guard re-checks
+      overlapping passes in every command running at the time, each under its own command's group. `groups` runs are
+      unchanged (their commands never overlap). `selftest-run-stage.mjs` 39 (two single-worker units with interference),
+      35 (a restricted unit run beside another is now isolated).
+  - **Release verification round (root causes of the intermittent harness failures, found with evidence).**
+    - *Lock release left an ownerless lock (root cause of the stalls and `FRESHNESS_FAILED`).* Measured with the new
+      opt-in `QA_CAPACITY_TRACE={file}` (JSONL of every lock / command-start / ceiling-stop / freshness event): the
+      recursive delete of `ledger.lock` failed with **EPERM** while a contender had `owner.json` open (Windows keeps the
+      file "delete pending" and refuses the folder); the error was swallowed, the folder stayed without an owner, every
+      contender waited it out as "a creator still writing" (30 s), `ledger-exec.mjs` could not register, Playwright never
+      started and the command's 20 s ceiling stopped it — every failing case in 6 traced attempts had this chain. Fix: a
+      release renames the folder away (retried) and, when Windows refuses, renames `owner.json` to `released-*.json`; a
+      marked folder is broken at once; tombstones swept by age; the owner file also carries `nonce`.
+      `assets/rate-limit.template.ts` uses the same convention for the book lock. Stress (6 processes × 150 cycles):
+      giveups 42 / 36 → 1 / 0, wall time 68 / 39 s → 18 s, no lost update before or after. `selftest-capacity.mjs` 26.
+    - *Three CLIs did nothing on an 8.3 / symlinked path.* `watchdog.mjs`, `config-inventory.mjs` and
+      `validate-automation.mjs` compared a `file://` string built from `argv[1]` with `import.meta.url`; started through
+      `C:\Users\NAME~1\…` they exited 0 with no output (run-stage case 4 under an isolated TEMP). They now compare
+      `realpathSync.native` like run-stage / capacity / check.
+    - *Lease takeover needs more than a dead owner.* `decideLease` also keeps the lease while any process the dead owner
+      started AFTER taking it lives (a shell, a playwright-cli daemon and its browser — none in the ledger), birth-ordered
+      and PID-reuse guarded; a child older than the lease (an MCP server) is not the run's. `selftest-capacity.mjs` 24.
+    - *Overlapping identities share one rate-limit book.* The ledger's `books` registry maps identity tokens to a book; a
+      lease's `bookId` is the oldest book its tokens meet; a request bridging two books merges them (latest `notBefore`,
+      every slot, the highest refusal count, the stricter advertisement, the later recovery — never a shorter deadline);
+      `validateLease` returns the `bookId` and `run-stage.mjs` points `PW_RATE_LIMIT_STATE` at it. `selftest-capacity.mjs`
+      25, `selftest-run-stage.mjs` 37.
+    - *Real-Playwright admission test* — new `selftest-admission.mjs` (5 cases) + `fixtures/admission/`: throw-away
+      projects from the real templates on a LOCAL Playwright runner (`QA_PLAYWRIGHT_DIR`, a resolvable install or the npm
+      npx cache — never installed; NOT_RUN, exit 3, without one). Worker refused by timeout or cancellation: no seeding,
+      shared login, per-test login, `beforeAll` or body; every test `NOT_RUN — not started: admission timeout (…)` through
+      run-stage's own parser (`classifyTest`, newly exported). A unit refusal skips only its own login and body.
+  - Harness counts: run-stage 39, capacity 26, check 19, admission 5 (new; parallel-plan 13 and scratch 14 unchanged).
+    No golden file changed.
+- **link-qc-3c-validate-manual-test-cases-cli** / **link-qc-5b-test-run-manual-cli** — every playwright-cli session takes
+  one hold under the machine's Playwright worker ceiling BEFORE its `open` (skill 5's `capacity.mjs hold acquire
+  --session {-s= name}`, called by path; `hold track` after the open; `hold release --wait` after the close, released only
+  when a process table shows the session's daemon and browser ended). At the ceiling after 10 min: 3c BLOCKED, 5b the
+  account's remaining TCs `NOT_RUN — not started: admission timeout (machine at its worker ceiling)`. Skill 5 not installed
+  → BLOCKED. `allowed-tools` gains `Bash(node *capacity.mjs*)`; INPUT.txt lists skill 5 as a prerequisite.
+- **link-qc-9-retesting** — the same session holds (`--session`, `hold track`, confirmed `hold release`) in
+  `references/coordination.md`; the lease is unchanged.
+- **Session holds** (`capacity.mjs`) — one per session name: acquiring it again reuses it (never counted twice), a hold
+  whose owner is gone is adopted, another live owner's session is refused; an abandoned hold stays held while its session
+  runs; a hold whose owner lives but whose session closed without a release is freed after 2 min (15 min when never seen —
+  the acquire → open window). Holds without `--session` keep the old behaviour. `selftest-capacity.mjs` 21.
+- **Repo** — `CLAUDE.md` (scripts, conventions, hard rules, pre-commit list incl. the ledger-enabled variant), `README.md`.
+
+### Skill 5 2.0.0 — cross-skill completion: skill 9 coordination, skill 1 execution limits, skill 3 data semantics, the rollback hard cap, the parity register
+
+All 23 self-test harnesses were run and pass (the fixes they forced are listed below); no consumer project, live
+benchmark or real Playwright run was executed — Phase 0b and the live acceptance stay with the user. Nothing below
+activates a deferred experiment or the pending permission allow rules (B17).
+
+- **link-qc-5-test-run-automation** (still `2.0.0` — unreleased)
+  - **Rollback hard cap** — `QA_LEDGER=off` / `--no-ledger` and a failed process listing no longer launch
+    uncoordinated: every command takes an EXCLUSIVE, PID-judged reservation in the same ledger file (one Playwright
+    command at a time on the machine, workers ≤ the ceiling; no pressure admission, tree tracking or dispatch); an
+    unwritable coordination directory or unreadable ledger → `BLOCKED` "no safe coordination", TCs `not started: no
+    safe coordination (…)` (counted by run acceptance). Rolling back only the dispatcher is `--scheduler groups`.
+    `scratch.mjs` probes now hold one slot under the ceiling (`--max-wait`, `--capacity-dir`; refused `capacity` /
+    `no-coordination`). `capacity.mjs`: exclusive reservations, PID-judged entries (pruned in every reserve and by a
+    tableless sweep), session holds (`hold acquire | release`) and lease validation by run file.
+  - **B18 / B22 expected-difference register** — new `references/expected-differences.md`: every one of the 54
+    checks marked `identical` (20) or `differs: ED-n` (34) against the 1.2.0 checklist, 16 EDs (3 protocol-wide), all
+    stricter or equal, status PROPOSED — awaiting review; `selftest-check.mjs` case 18 ties it to `CHECKS`.
+  - **Defects the harnesses found and fixed** — the dispatcher dropped a unit whose reservation was refused and then
+    waited 10 min (`dispatch.mjs` `requeue`, case 13); `run-stage.mjs` passed no ledger to its commands under
+    `--scheduler dispatch` / the ledger (`ctx.ledger`); a DNS lookup that never settles hung the identity resolver
+    (un-`unref`'d timeout); `parallel-plan.mjs` read "the" in "Check the total" as a collection and claimed an edit of
+    a token-named record only on its collection (now also `rec:D{n}` — a reader of `[D3]` is kept apart from the TC
+    that edits `[D3]`); `run-data.mjs` acceptance now counts `no safe coordination`.
+  - Harness counts: run-stage 37 (36 rollback hard cap, 37 skill 9's call shapes beside skill 5), run-report 36
+    (skill 9's in-place update of a 1.x and a 2.0 run file), capacity 19, check 18, scratch 14, parallel-plan 13,
+    dispatch 13. No golden file changed.
+- **link-qc-5b-test-run-manual-cli** — `selftest-run-report.mjs` mirror (case 36); renderer and goldens unchanged.
+- **link-qc-9-retesting** — takes its OWN environment lease before anything touches the environment
+  (`capacity.mjs lease acquire --run-id skill9-… --run-file {phase-N}`; held by a skill 5 run or another retest →
+  BLOCKED naming it), passes `--env-id` to every `run-stage.mjs` call, holds one capacity slot per open playwright-cli
+  browser, releases both at the end; skill 5 absent → BLOCKED (was: fall back to playwright-cli). New
+  `references/coordination.md`; `allowed-tools` gains `Bash(node *capacity.mjs*)`; `report-update.md` covers 2.0 run
+  files (gate records never edited, the amended page rendered without `--gate`). Older call shapes without
+  `--env-id` still run (with run-stage's warning).
+- **link-qc-1-generate-update-testing-structure** — rows `Execution limits` (machine ceiling, its source, lower-only
+  overrides, `QA_LEDGER=off` = exclusive) and `Coordination directory` (writable, ledger readable — FAIL otherwise:
+  skills 5 / 9 would refuse to launch); `scanExecutionLimits` in `lib.mjs` (read-only; never writes `config.json`,
+  never raises a limit); `preflight.executionLimits`; setup guidance in `references/toolchain.md`, the optional
+  manifest key `execution.maxWorkers` in `testing-layout.md`; selftest case 15. Separate from B17.
+- **link-qc-3-generate-manual-test-cases** — `Data effect` (one value, the strongest; `creates` = only its own
+  records) and `Shared data` (state shared, the same words in each TC, `(depends on TC-x)`) redefined to match the
+  parallel planner, with a worked table (`tc-design.md` "Data effect and Shared data"), `deliverables.md` and
+  self-review check 14. Vocabulary unchanged: no renderer, golden or TC-hash change; existing approved documents are
+  not rewritten (both fields are in the TC hash — editing them later is a design change). 3b / 3c / 5b only use
+  "`Data effect` ≠ read-only = data-changing" — unchanged.
+- **link-qc-12-adhd-output-style** — verified, unchanged: the eight activity names and run-stage's labels are
+  byte-identical to 1.2.0.
+- **Repo** — `CLAUDE.md`, `README.md`.
+
+### Skill 5 2.0.0: performance optimisation — Phases 1-3 of the plan (Revision 3.1)
+
+Written before the cross-skill completion above; its harnesses have since been run (see there). Experiments that need separate approval (reduced isolation / burn-in, session reuse, parallel reviewer
+subagents, model routing, subagent delegation, `context: fork`, repair batching, locator preflight) are NOT
+implemented; persistent permission allow rules are an open decision; the dispatcher, the ramp, the silence rule
+and incremental Checkpoint B ship opt-in / in shadow.
+
+- **link-qc-5-test-run-automation** — `metadata.version: "2.0.0"` (MAJOR: stricter gate semantics — gate-record
+  files decide both checkpoints, missing / stale / contradictory / duplicate results block; a run must be ACCEPTED;
+  a smoke stage with no PASS / FAIL is NO VERDICT and blocks the first run's positive / negative; the report set is
+  published only after Checkpoint B; `rate_limited` narrowed to the failing step's own throttled request).
+  - **Capacity and coordination (B21)** — new `scripts/capacity.mjs` + `scripts/ledger-exec.mjs`: the machine
+    ceiling (`{QA_CAPACITY_DIR | ~/.link-ai-pro/capacity}/config.json`, default 2, lower-only overrides), the atomic
+    capacity ledger (owner-file lock, two-phase spawn with self-registration, descendant / browser-profile tracking,
+    release only when the tree is gone, sweep, user-run `reclaim`), committed-demand admission, the pressure monitor,
+    and the environment lease (canonical host identity with alias / CNAME / shared-address grouping; acquired at
+    intake, released at close-out). `run-stage.mjs` runs every command inside it (default on; `--no-ledger` /
+    `QA_LEDGER=off` — exclusive execution, see the completion entry above), lowers a group to the ceiling and to what free memory / CPU admit, holds new commands and —
+    through the new admission file — new tests back under host pressure, refuses to start without the lease
+    (`--env-id`) and shares the rate-limit book per environment. Harness `selftest-capacity.mjs` (17).
+  - **Compliance (A4, A14, A15, B18, B22, B7 shadow, B20)** — new `scripts/check.mjs`: `snapshot`, `run` (type
+    check + validator + config inventory + optional typed lint in ONE call within the compliance limit, compact
+    output, the timeouts report), `record`, `gate` (the result protocol, N/A predicates, the never-N/A list, re-hash
+    voiding, gate records `.runs/phase-N.checkpoint-{A|B}.json`), `carry` (incremental B — shadow only), `harness`
+    (a harness pass reused per exact key). The checklist splits items 16, 25, 46 and 48 into code (a) and runtime
+    (b) halves. Harness `selftest-check.mjs` (17).
+  - **Deterministic report data and publication (A6, A7, B22, run-level acceptance)** — new `scripts/run-data.mjs`
+    (`merge`, `report` / `readiness` fragments, `handoff`, `verify` — the runtime checks —, `acceptance`,
+    `draft-init`, `publish`) and `scripts/coverage.mjs`; drafts → freeze → Checkpoint B → publish byte for byte
+    (`<publication>`), run acceptance (`<run_acceptance>`). Harnesses `selftest-run-data.mjs` (10),
+    `selftest-coverage.mjs` (6).
+  - **Parallel readiness and dispatch (B1 shadow, B2, B3, B5)** — new `scripts/parallel-plan.mjs` (claims, units
+    U1-U4, conflicts, classes, a candidate plan compared with the hand plan — shadow) and `scripts/dispatch.mjs`
+    (scheduler + ramp); `run-stage.mjs --scheduler dispatch --units …` (opt-in, refused without the ledger; smoke is
+    the W0 preflight). `impact.mjs reverse` + `closureOf()`. Harnesses `selftest-parallel-plan.mjs` (12),
+    `selftest-dispatch.mjs` (12), `selftest-impact.mjs` 40 → 44.
+  - **Rate limits (B4) and failure preservation (B23)** — server deadlines never shortened or capped, a deadline
+    beyond `--max-wait` defers the TC (`not started: deferred until …`), a mid-step wait budget below the deadline is
+    `interrupted: wait budget exhausted (…)`, 503 + `Retry-After` without rate-limit headers is temporary
+    unavailability, refusals cool down only their scope (workers drop only for environment-wide refusals);
+    interference keeps the first failure and gets a cause from evidence. `selftest-run-stage.mjs` 23 → 35 (case 16
+    now asserts scoped cool-downs; cases 24-35 the new paths).
+  - **Smart timeouts (A15, B9 behind a switch), A10, B16a / B16b** — `watchdog.mjs` reads the helpers'
+    informational heartbeats and adds the silence rule (shadow by default, `--silence-mode active`); `run-stage.mjs`
+    records `timeouts_shadow`, computes `--ceilings auto --timeouts timeouts.ts` and proposes
+    `run_plan_adjustments[]`; the smoke gate counts PASS + FAIL only; smoke retries count toward the 2 heal
+    iterations.
+  - **Validator (A3, A9, B8)** — `--summary` / `--out`, `--page-scan`, six staged review rules
+    (`constant-redeclared`, `empty-catch`, `timeout-literal`, `console-guard-missing`, `network-guard-missing`,
+    `admission-contract`), `RULE_CHECKS`; `selftest.mjs` 18 → 26.
+  - **Templates** — new `assets/admission.template.ts` (always installed); `rate-limit`, `network-guard`, `steps`
+    (stall detector), `console-guard` (`teardown` / `console-report` heartbeats), `test-data` (`PW_LANE`,
+    `currentAccount()`), `timeouts` (`stall.silence`, `admission.max_wait`, finite action / navigation),
+    `progress-reporter` (annotations), `playwright.config` (new environment variables).
+  - **Instructions (A1, A2, A5, A8)** — the fresh-session line, plain script command shapes, the first-draft card,
+    `references/rule-registry.md` (one home per rule, checked by `selftest-references.mjs` case 4) and
+    `references/schemas/script-payloads.md`; new blocks `<capacity_and_lease>`, `<parallel_readiness>`,
+    `<publication>`, `<run_acceptance>`; SKILL.md workflow, rules, scripts table and `allowed-tools`; INPUT.txt.
+  - Renderer (`render-run-report.mjs`, mirrored in 5b): `--base` (drafts), `--gate` (gate hash in the provenance),
+    `NO VERDICT` smoke word — backward compatible, no golden regenerated; `selftest-run-report.mjs` 32 → 35.
+- **link-qc-5b-test-run-manual-cli** — the byte-identical renderer and harness mirror updated with skill 5's.
+- **Repo** — CLAUDE.md (scripts, harness count 17 → 23, checklists), README (skill 5 section, harness list).
+
+### Skill 5 1.2.0: performance baseline instrumentation (Phase 0 of the optimisation plan)
+
+Measurement only — nothing a run does, decides or reports changes.
+
+- **link-qc-5-test-run-automation** — `metadata.version: "1.2.0"` (MINOR: new script, new summary field, new flags).
+  - New `scripts/profile-run.mjs`: measures a finished run for a performance baseline. From a Claude Code transcript
+    (optional labelled `--windows`, e.g. skill-5 work vs side work): API calls, cache reads / writes, uncached input,
+    output, context per call and its segments (start size, growth per call), full-prefix cache writes, tool calls by
+    category, approval paths with p50 / p90, and the model / tool / background-wait / user-wait time split (active time
+    = wall span − waits for the user). From a story's `artifacts/progress`: Playwright time, executions per TC, workers
+    and average concurrency, hung and login steps, telemetry peaks. Read-only; aggregates only — no transcript text,
+    command, path, step title or note is ever printed. Harness `selftest-profile-run.mjs` (7 cases, hand-computed
+    fixture values, a no-leak check).
+  - `run-stage.mjs`: every stage summary carries `telemetry` (`skill5-telemetry/1`) — host memory / CPU and event-loop
+    lag every `--telemetry-interval` (2 s), the running command's process tree (count, working set) every
+    `--tree-interval` (30 s), per command. **Observe only**: no decision, gate, command or report reads it;
+    `--no-telemetry` switches it off. `selftest-run-stage.mjs` case 23 proves identical statuses, counts and
+    Playwright command lines with and without it, and checks the cycle-safe process-tree walk.
+  - Docs: SKILL.md Scripts table, execution.md (`<live_progress>` payload / summary), run-report.md §3.
+- **Repo** — CLAUDE.md (script list, run-stage telemetry, the profiler, seventeen harnesses), README (script / reference
+  counts, harness list).
+
 ### Skill 5 1.1.0, skill 1: five defects found in the skill 5 review fixed at the root
 
 Each fix has a regression test that fails on the old code and passes on the new.

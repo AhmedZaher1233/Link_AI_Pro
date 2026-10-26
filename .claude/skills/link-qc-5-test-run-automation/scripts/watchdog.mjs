@@ -9,20 +9,31 @@
 //              and helpers/evidence.ts: one JSON object per line —
 //              { at, worker, tc, step?, event: start|progress|end|evidence|test-start|test-end,
 //                deadline_ms? (start), outcome? (end: ok|timeout|error), note? }
+//              plus the informational events of the admission / guard / stall helpers:
+//              admission-wait / rate-wait { phase: start|end, reason, budget_ms } · stall { step, silence_ms,
+//              classification } · teardown · console-report { entries, unexpected } · deferred { until, scope }.
+//              None of them is a step: they never open one, never close one and never count as progress
+//              of an open step (a `stall` record of the open step is the helper saying it is SILENT).
 //   results    {results_root}/artifacts/progress/{stage}-{group}.results.jsonl   written by
 //              helpers/progress-reporter.ts on every onTestEnd —
 //              { at, worker, tc: [..], title, status: passed|failed|timedOut|skipped|interrupted,
 //                duration_ms, retry, project }
 //   plan       the run-plan group ({ name, mode, workers, tcs[] }) or the whole run_plan + --group
 //
-// A worker is FROZEN only when ALL of these hold for its newest open step (a `start` with no `end`):
-//   1. now - clock > deadline_ms + grace, where clock = the newest `progress` record of that step,
-//      else the `start` itself — a documented long deadline is honoured as written;
-//   2. no newer heartbeat record of any kind exists for that worker (a newer record means the
-//      worker moved on — the missing `end` is a helper bug, not a hang);
-//   3. no result line for that worker is newer than the step start.
-// Playwright's own step / test timeout fires AT deadline_ms; a step still open at deadline +
-// grace with no `end` therefore means Playwright itself could not act — the driver is hung.
+// Open steps are a STACK per worker (a nested step never hides its parent). A worker is FROZEN when, for any open
+// step whose test it has not left (no newer test-start / test-end / teardown / console-report, no newer result):
+//   1. DEADLINE: now - start > deadline_ms + grace — the deadline is FIXED from the step's start; progress never
+//      extends it (a documented long deadline is honoured as written); or
+//   2. SILENCE (--silence <ms>, the step's own silence_ms first; ACTIVE by default): a LONG step (deadline_ms >
+//      silence) without MEANINGFUL progress for longer than silence + grace. Meaningful = a progress record the
+//      helper marked meaningful (a counter that rose, a new milestone), or — older helpers — a note whose n/m
+//      counter rose; a changed message, a timestamp, repeated polling, the same counter again and every
+//      informational heartbeat never count. A nested step starting / ending is activity of its parent.
+//      --silence-mode shadow only reports it (`would_freeze[]`).
+//   3. WAIT BUDGET: an open admission-wait / rate-wait past its own budget_ms + grace. While such a bounded wait is
+//      open it is never a UI stall (no silence verdict), but the enclosing step's fixed deadline still applies.
+// Playwright's own step / test timeout fires AT deadline_ms; a step still open at deadline + grace with no `end`
+// therefore means Playwright itself could not act — the driver is hung.
 //
 // Reconstruction (always computed, applied by the skill on a stop):
 //   completed[]    every result line whose TC is in the group — real statuses, kept as they are
@@ -36,6 +47,7 @@
 // Exit code is 0 by default (the verdict lives in the payload); --strict maps
 // OK 0 · FROZEN 1 · BLOCKED 2 · NOT_RUN 3 for a poll loop.
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 /* ---------------- argv + output (copied verbatim from scan-lib.mjs — never imported across skills) ---------------- */
@@ -65,7 +77,11 @@ export const SCHEMA_VERSION = 'skill6-watchdog/1';
 export const DEFAULT_GRACE_MS = 60_000;
 
 const STATUS_MAP = { passed: 'PASS', failed: 'FAIL', timedOut: 'FAIL', skipped: 'SKIP', interrupted: 'INCOMPLETE' };
-const EVENTS = new Set(['start', 'progress', 'end', 'evidence', 'test-start', 'test-end']);
+// step events + the informational events (never a step, never progress of a step)
+export const STEP_EVENTS = ['start', 'progress', 'end', 'evidence', 'test-start', 'test-end'];
+export const INFO_EVENTS = ['admission-wait', 'rate-wait', 'stall', 'teardown', 'console-report', 'deferred'];
+const EVENTS = new Set([...STEP_EVENTS, ...INFO_EVENTS]);
+export const SILENCE_MODES = ['active', 'shadow'];
 
 /* ---------------- parsing ---------------- */
 
@@ -113,7 +129,33 @@ function loadGroup(planPath, groupName, errors) {
 
 /* ---------------- decision ---------------- */
 
-export function decide({ heartbeat, results, group, now, graceMs }) {
+// Meaningful progress (the silence clock): a `progress` record whose helper marked it `meaningful: true`; one marked
+// `meaningful: false` never counts. Older helpers write no flag: then only a note carrying an `n/m` counter whose n
+// rose (same m) counts — a changed message, a timestamp, repeated polling or the same counter again never does.
+const COUNTER = /(\d+)\s*\/\s*(\d+)/;
+export function meaningfulProgress(records) {
+  const out = [];
+  let last = null;
+  for (const r of records) {
+    if (r.meaningful === true) { out.push(r); continue; }
+    if (r.meaningful === false) continue;
+    const m = COUNTER.exec(String(r.note || ''));
+    if (!m) continue;
+    const n = Number(m[1]);
+    const total = Number(m[2]);
+    if (last && last.total === total ? n > last.n : n > 0) out.push(r);
+    last = { n, total };
+  }
+  return out;
+}
+
+// records that mean the worker left the step's test (the missing `end` is then a helper defect, not a hang)
+const MOVED_ON = new Set(['test-start', 'test-end', 'teardown', 'console-report']);
+// bounded waits: never a UI stall, but FROZEN past their own budget + grace (no wait extends a run indefinitely)
+const WAIT_EVENTS = new Set(['admission-wait', 'rate-wait']);
+export const DEFAULT_WAIT_BUDGET_MS = 600_000;
+
+export function decide({ heartbeat, results, group, now, graceMs, silenceMs = null, silenceMode = 'active' }) {
   const byWorker = new Map();
   for (const h of heartbeat) {
     if (!byWorker.has(h.worker)) byWorker.set(h.worker, []);
@@ -121,45 +163,92 @@ export function decide({ heartbeat, results, group, now, graceMs }) {
   }
   const workers = [];
   const frozen = [];
+  const wouldFreeze = [];
+  const stalls = [];
+  const silence = Number(silenceMs) > 0 ? Number(silenceMs) : null;
+  const sec = (ms) => Math.round(ms / 1000);
   for (const [worker, recs] of [...byWorker.entries()].sort((a, b) => a[0] - b[0])) {
     recs.sort((a, b) => a._at - b._at || a._line - b._line);
-    // newest open step: the last `start` with no later `end` for the same (tc, step)
-    let open = null;
+    for (const r of recs) if (r.event === 'stall') stalls.push({ worker, tc: r.tc || null, step: r.step || null, at: new Date(r._at).toISOString(), silence_ms: r.silence_ms ?? null, classification: r.classification || null, diagnostics: r.diagnostics || null });
+    // the open steps as a STACK: a nested step never hides its parent; an `end` closes the newest matching start
+    const stack = [];
     for (const r of recs) {
-      if (r.event === 'start') open = r;
-      else if (r.event === 'end' && open && r.tc === open.tc && r.step === open.step) open = null;
+      if (r.event === 'start') stack.push(r);
+      else if (r.event === 'end') { for (let i = stack.length - 1; i >= 0; i--) if (stack[i].tc === r.tc && stack[i].step === r.step) { stack.splice(i, 1); break; } }
     }
+    // the newest open bounded wait (admission or a server-directed rate-limit wait)
+    let waiting = null;
+    for (const r of recs) if (WAIT_EVENTS.has(r.event)) waiting = r.phase === 'end' ? (waiting && waiting.event === r.event ? null : waiting) : r;
     const last = recs[recs.length - 1];
     const w = { worker, state: 'idle', tc: last.tc || null, step: null, last_event: last.event, last_at: new Date(last._at).toISOString() };
-    if (open) {
-      const progress = recs.filter((r) => r.event === 'progress' && r.tc === open.tc && r.step === open.step && r._at >= open._at);
-      const clock = progress.length ? progress[progress.length - 1]._at : open._at;
-      const newerHeartbeat = recs.some((r) => r !== open && r._at > clock && !(r.event === 'progress' && r.tc === open.tc && r.step === open.step));
-      const newerResult = results.some((r) => r.worker === worker && r._at > open._at);
-      const elapsed = now - open._at;
-      const sinceClock = now - clock;
-      const limit = open.deadline_ms + graceMs;
-      Object.assign(w, {
-        state: 'in-step', tc: open.tc, step: open.step,
-        started_at: new Date(open._at).toISOString(), elapsed_ms: elapsed, deadline_ms: open.deadline_ms,
-        progress_records: progress.length, since_last_progress_ms: sinceClock,
-        remaining_before_freeze_ms: Math.max(0, limit - sinceClock),
-      });
-      if (sinceClock > limit && !newerHeartbeat && !newerResult) {
+    const newerResultThan = (t) => results.some((r) => r.worker === worker && r._at > t);
+    const movedOnAfter = (t) => recs.some((r) => r._at > t && MOVED_ON.has(r.event)) || newerResultThan(t);
+    if (waiting && !movedOnAfter(waiting._at)) {
+      const budget = Number(waiting.budget_ms) > 0 ? Number(waiting.budget_ms) : DEFAULT_WAIT_BUDGET_MS;
+      const waited = now - waiting._at;
+      Object.assign(w, { state: waiting.event, tc: waiting.tc || null, reason: waiting.reason || null, waiting_since: new Date(waiting._at).toISOString(), budget_ms: budget });
+      if (waited > budget + graceMs) {
         w.state = 'frozen';
-        frozen.push({
-          worker, tc: open.tc, step: open.step, elapsed_ms: elapsed, deadline_ms: open.deadline_ms, grace_ms: graceMs,
-          since_last_progress_ms: sinceClock, expected: open.note || null,
-          reason: 'step "' + open.step + '" open for ' + Math.round(sinceClock / 1000) + ' s with no progress, past its own deadline (' + Math.round(open.deadline_ms / 1000) + ' s) + grace (' + Math.round(graceMs / 1000) + ' s); Playwright\'s own timeout did not fire — the worker is hung',
+        frozen.push({ worker, tc: waiting.tc || null, step: waiting.step || '(' + waiting.event + ')', elapsed_ms: waited, deadline_ms: budget, grace_ms: graceMs, since_last_progress_ms: waited, expected: null, rule: 'wait-budget',
+          reason: waiting.event + ' open for ' + sec(waited) + ' s, past its own budget (' + sec(budget) + ' s) + grace (' + sec(graceMs) + ' s) — a bounded wait never extends the run' });
+      }
+    }
+    if (w.state !== 'frozen' && stack.length) {
+      const innermost = stack[stack.length - 1];
+      // judge every open step, innermost first: each has its own FIXED deadline (measured from its start — progress
+      // never extends it) and its own silence clock (its meaningful progress, or a nested step starting / ending)
+      for (const open of [...stack].reverse()) {
+        if (movedOnAfter(open._at)) continue;
+        const own = recs.filter((r) => r.event === 'progress' && r.tc === open.tc && r.step === open.step && r._at >= open._at);
+        const meaningful = meaningfulProgress(own);
+        const nested = recs.filter((r) => (r.event === 'start' || r.event === 'end') && r !== open && r._at > open._at && r.tc === open.tc);
+        // a bounded wait that ended inside the step restarts its silence clock (the wait had its own budget)
+        const waits = recs.filter((r) => WAIT_EVENTS.has(r.event) && r._at > open._at);
+        const clock = Math.max(open._at, ...meaningful.map((r) => r._at), ...nested.map((r) => r._at), ...waits.map((r) => r._at));
+        const elapsed = now - open._at;
+        const sinceClock = now - clock;
+        const limit = open.deadline_ms + graceMs;
+        const stepSilence = Number(open.silence_ms) > 0 ? Number(open.silence_ms) : silence;
+        const inWait = !!(waiting && waiting._at >= open._at);
+        if (open === innermost) Object.assign(w, {
+          state: inWait ? w.state : 'in-step', tc: open.tc, step: open.step,
+          started_at: new Date(open._at).toISOString(), elapsed_ms: elapsed, deadline_ms: open.deadline_ms,
+          progress_records: own.length, meaningful_progress: meaningful.length, since_last_progress_ms: sinceClock,
+          remaining_before_freeze_ms: Math.max(0, limit - elapsed), ...(stack.length > 1 ? { open_steps: stack.length } : {}),
         });
-      } else if (newerHeartbeat || newerResult) {
+        if (elapsed > limit) {
+          w.state = 'frozen';
+          // (no `rule` key: a deadline freeze keeps the record shape of the written watchdog file)
+          frozen.push({
+            worker, tc: open.tc, step: open.step, elapsed_ms: elapsed, deadline_ms: open.deadline_ms, grace_ms: graceMs,
+            since_last_progress_ms: sinceClock, expected: open.note || null,
+            reason: 'step "' + open.step + '" open for ' + sec(elapsed) + ' s ' + (clock === open._at ? 'with no progress' : '(last meaningful progress ' + sec(sinceClock) + ' s ago)')
+              + ', past its own deadline (' + sec(open.deadline_ms) + ' s) + grace (' + sec(graceMs) + ' s); Playwright\'s own timeout did not fire — the worker is hung',
+          });
+          break;
+        }
+        const silentLong = stepSilence !== null && !inWait && open.deadline_ms > stepSilence && sinceClock > stepSilence + graceMs;
+        if (silentLong) {
+          const at = new Date(clock + stepSilence + graceMs).toISOString();
+          const reason = 'long step "' + open.step + '" without meaningful progress for ' + sec(sinceClock) + ' s — past the silence limit (' + sec(stepSilence) + ' s) + grace (' + sec(graceMs) + ' s), deadline ' + sec(open.deadline_ms) + ' s';
+          if (silenceMode === 'active') {
+            w.state = 'frozen';
+            frozen.push({ worker, tc: open.tc, step: open.step, elapsed_ms: elapsed, deadline_ms: open.deadline_ms, grace_ms: graceMs, silence_ms: stepSilence,
+              since_last_progress_ms: sinceClock, expected: open.note || null, rule: 'silence', reason: reason + '; stopped by the silence rule' });
+            break;
+          }
+          if (open === innermost) w.would_freeze_at = at;
+          wouldFreeze.push({ worker, tc: open.tc, step: open.step, at, silence_ms: stepSilence, deadline_ms: open.deadline_ms, since_last_progress_ms: sinceClock, reason: reason + ' — would have frozen here (shadow: not stopped)' });
+        }
+      }
+      if (w.state !== 'frozen' && stack.every((open) => movedOnAfter(open._at))) {
         w.state = 'moved-on';
         w.note = 'the step never recorded an end but the worker produced newer records — a helper defect, not a hang';
       }
     }
     workers.push(w);
   }
-  return { workers, frozen };
+  return { workers, frozen, wouldFreeze, stalls };
 }
 
 // a heartbeat `tc` is a string — one TC-ID, or the comma-joined list of a test that covers several
@@ -211,10 +300,11 @@ export function reconstruct({ heartbeat, results, group, frozen, stopReason }) {
 
 const HELP = {
   tool: 'watchdog',
-  usage: 'node watchdog.mjs --heartbeat <jsonl> --results <jsonl> --plan <group-or-run-plan.json> [--group <name>] [--stage <name>] [--now <ISO>] [--grace <ms>] [--stop-reason <text>] [--out <watchdog.json>] [--write] [--pretty] [--strict]',
+  usage: 'node watchdog.mjs --heartbeat <jsonl> --results <jsonl> --plan <group-or-run-plan.json> [--group <name>] [--stage <name>] [--now <ISO>] [--grace <ms>] [--silence <ms>] [--silence-mode active|shadow] [--stop-reason <text>] [--out <watchdog.json>] [--write] [--pretty] [--strict]',
   notes: [
     'Read-only unless --write. Default exit code is 0; --strict maps OK 0 · FROZEN 1 · BLOCKED 2 · NOT_RUN 3.',
-    'A freeze needs an open step past its OWN deadline + grace with no progress, no newer worker record and no newer result. Console silence and a stale stage JSON never count.',
+    'A deadline freeze needs an open step (nested steps included) past its OWN fixed deadline + grace — progress never extends it — whose worker has not left the test (no newer test-start / test-end / teardown / console-report, no newer result). Console silence and a stale stage JSON never count.',
+    '--silence <ms>: a LONG step (deadline > silence) without MEANINGFUL progress past silence + grace is declared FROZEN (--silence-mode active, the default) or only reported in would_freeze[] (shadow). An open admission-wait / rate-wait is never a UI stall but is FROZEN past its own budget_ms + grace. stall / teardown / console-report / deferred records are informational, never a step and never progress.',
     'Reconstruction (completed / interrupted / not_started) is always in the payload; the skill applies it only when it stops the command.',
     '--stop-reason names a stop that was not a freeze (the outer-ceiling kill of run-stage.mjs); with no frozen worker it replaces "collateral (watchdog stop …)" / "watchdog stop" in the reasons.',
   ],
@@ -231,10 +321,16 @@ export function run(args) {
   const now = args.now ? Date.parse(String(args.now)) : Date.now();
   const graceMs = args.grace !== undefined ? Number(args.grace) : DEFAULT_GRACE_MS;
   const stopReason = str(args.stopReason) || str(args['stop-reason']) || null;
+  const silenceRaw = args.silence !== undefined ? args.silence : args.silenceMs;
+  const silenceMs = silenceRaw !== undefined && silenceRaw !== null && silenceRaw !== true ? Number(silenceRaw) : null;
+  const silenceMode = str(args.silenceMode) || str(args['silence-mode']) || 'active';
   const base = { tool: 'watchdog', schema: SCHEMA_VERSION, readOnly: true, now: new Date(now).toISOString(), grace_ms: graceMs, stage: str(args.stage) || null, group: str(args.group) || null };
   if (!planPath) return { ...base, verdict: 'NOT_RUN', reason: 'no --plan supplied', errors, warnings };
   if (Number.isNaN(now)) return { ...base, verdict: 'BLOCKED', reason: '--now is not a valid timestamp', errors, warnings };
   if (Number.isNaN(graceMs) || graceMs < 0) return { ...base, verdict: 'BLOCKED', reason: '--grace must be a non-negative number of milliseconds', errors, warnings };
+  if (silenceMs !== null && (Number.isNaN(silenceMs) || silenceMs < 0)) return { ...base, verdict: 'BLOCKED', reason: '--silence must be a non-negative number of milliseconds', errors, warnings };
+  if (!SILENCE_MODES.includes(silenceMode)) return { ...base, verdict: 'BLOCKED', reason: '--silence-mode must be active | shadow', errors, warnings };
+  if (silenceMs) base.silence = { ms: silenceMs, mode: silenceMode };
   const group = loadGroup(planPath, str(args.group), errors);
   if (!group) return { ...base, verdict: 'BLOCKED', reason: errors[0].reason, errors, warnings };
   base.group = group.name || base.group;
@@ -246,13 +342,13 @@ export function run(args) {
   if (errors.length) {
     return { ...base, verdict: 'BLOCKED', reason: errors.length + ' malformed line(s) — a freeze verdict is never derived from a record that could not be read', errors, warnings, workers: [], frozen: [] };
   }
-  const { workers, frozen } = decide({ heartbeat, results, group, now, graceMs });
+  const { workers, frozen, wouldFreeze, stalls } = decide({ heartbeat, results, group, now, graceMs, silenceMs, silenceMode });
   const reconstruction = reconstruct({ heartbeat, results, group, frozen, stopReason });
   const verdict = frozen.length ? 'FROZEN' : 'OK';
   const payload = {
     ...base, verdict,
     reason: frozen.length ? frozen.map((f) => 'worker ' + f.worker + ': ' + f.reason).join('; ') : 'every worker is idle, progressing, or inside its step deadline',
-    workers, frozen, reconstruction,
+    workers, frozen, ...(silenceMs ? { would_freeze: wouldFreeze } : {}), ...(stalls.length ? { stalls } : {}), reconstruction,
     counts: { planned: group.tcs.length, completed: reconstruction.completed.length, interrupted: reconstruction.interrupted.length, not_started: reconstruction.not_started.length, workers: workers.length, frozen: frozen.length },
     errors, warnings, writes: [],
   };
@@ -282,7 +378,9 @@ function main() {
   return args.strict ? (STRICT_EXIT[payload.verdict] ?? 0) : 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]}` || import.meta.url === new URL(`file://${path.resolve(process.argv[1] || '')}`).href) {
+// the CLI entry: a realpath comparison — a URL string built from argv[1] misses an 8.3 short path (C:\\Users\\NAME~1\\…), a
+// symlink or another drive-letter case and the script then exited 0 having done nothing
+if ((() => { try { return fs.realpathSync.native(process.argv[1] || '') === fs.realpathSync.native(fileURLToPath(import.meta.url)); } catch { return false; } })()) {
   let code = 0;
   try { code = main(); }
   catch (e) {

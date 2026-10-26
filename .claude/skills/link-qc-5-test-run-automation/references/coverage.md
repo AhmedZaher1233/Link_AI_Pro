@@ -52,15 +52,23 @@ identity · a role the environment has no user for · a scenario proved via anot
 Record per TC: `coverageStatus`, `mappedTests` (or `-`), `manualRecommended` (Yes for every
 Partial and Not Covered), `category` (see step 4) and a one-line `note`.
 
-**3. Compute** — overall and per run stage (Smoke / Positive / Negative, the same split the
-run uses):
+**3. Compute — by `scripts/coverage.mjs`, never by hand.** Write your judgements (step 2) to ONE JSON
+file in the session scratch folder — `{ user_story, tcs: [{ tc, title, type, stage: smoke|positive|negative,
+smoke, candidate: YES|NO, requirements[], status: Fully Covered|Partially Covered|Not Covered, mappedTests[],
+note, category, scenario, whyManual, priority }] (document order), requirements: [{ id, short, outcome:
+Full|Partial|Missing|Assumed, assertedBy[] }] }` — then:
+```text
+node .claude/skills/link-qc-5-test-run-automation/scripts/coverage.mjs --judgements {file} --run-file {run_file} --tc-doc {source_tc_doc} --target {coverage_target} --target-source {L3|default} --mechanism "{coverage_mechanism}"
+```
+It computes overall and per run stage (Smoke / Positive / Negative, the same split the run uses):
 
 ```
 weighted % = (full × 1.0 + partial × 0.5) / total × 100     (one decimal)
 ```
 
-Also count distinct automated TC-IDs per spec (context only — role loops and data gates mean
-it is not "tests that will execute").
+plus the gate verdict, the manual priorities, the delta and the report's `### Coverage` fragment. A TC of the
+document without a judgement BLOCKs it — every TC is classified, none skipped. Also count distinct automated
+TC-IDs per spec (context only — role loops and data gates mean it is not "tests that will execute").
 
 **4. Gate** — compare the overall weighted % with `{coverage_target}` using `{coverage_mechanism}`
 (both from L3; defaults 80 % / soft block — say which source was used):
@@ -85,9 +93,10 @@ Progress-log line (activity **Validating Automation Code**, `<live_progress>`; i
 message this step already sends — the below-target question or the run-start message):
 `Validating Automation Code — coverage: {x}% weighted (Full {n} · Partial {n} · None {n}) — target {t}% ({L3 | default}) — {PASS | BELOW TARGET → repairing | BELOW TARGET → user override | BLOCKED}`
 
-**5. Write the coverage folder** — `{coverage_root}` = `{results_root}/coverage/`, **replaced every
-run**; history lives in `{run_file}.coverage_snapshot` (per-TC statuses + delta) and in each
-phase's `### Coverage` table of the run report.
+**5. Write the coverage folder** — the same `coverage.mjs` call with `--write` (after the gate decision of step
+4; `--override` records a user override) writes all of it: `{coverage_root}` = `{results_root}/coverage/`,
+**replaced every run**; history lives in `{run_file}.coverage_snapshot` (per-TC statuses + delta) and in each
+phase's `### Coverage` table of the run report. The contract it implements (and you check):
 Quote any CSV field containing a comma; use these exact headers.
 
 - `coverage-summary.csv`

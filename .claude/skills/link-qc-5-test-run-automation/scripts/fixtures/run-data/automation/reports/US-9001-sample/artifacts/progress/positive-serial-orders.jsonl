@@ -1,0 +1,7 @@
+{"at":"2026-10-01T09:02:16.000Z","worker":0,"tc":"TC-003","event":"test-start","retry":0,"project":"chromium"}
+{"at":"2026-10-01T09:02:17.000Z","worker":0,"tc":"TC-003","step":"Save the order","event":"start","deadline_ms":30000,"note":"the success toast is visible"}
+{"at":"2026-10-01T09:02:47.000Z","worker":0,"tc":"TC-003","step":"Save the order","event":"end","outcome":"timeout","elapsed_ms":30000,"note":"StepTimeoutError: [TC-003] step \"Save the order\" did not complete within 30 s"}
+{"at":"2026-10-01T09:02:48.000Z","worker":0,"tc":"TC-003","event":"teardown"}
+{"at":"2026-10-01T09:02:48.100Z","worker":0,"tc":"TC-003","event":"console-report","entries":0,"unexpected":0}
+{"at":"2026-10-01T09:02:48.500Z","worker":0,"tc":"TC-003","event":"evidence","path":"screenshots/US-9001-sample/phase-1/TC-003/chromium--none--r0/attempt-1.png"}
+{"at":"2026-10-01T09:02:49.000Z","worker":0,"tc":"TC-003","event":"test-end","status":"failed"}

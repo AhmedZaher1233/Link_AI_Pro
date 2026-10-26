@@ -1,0 +1,18 @@
+{
+  "schema": "skill6-run/1",
+  "phase": 1,
+  "status": "running",
+  "user_story_name": "US-1-orders",
+  "results_root": "reports/US-1-orders",
+  "screenshots_root": "screenshots/US-1-orders",
+  "run_plan": {
+    "workers_parallel": 2,
+    "groups": [
+      { "name": "parallel", "mode": "parallel", "workers": 2, "tcs": ["TC-01", "TC-02"] }
+    ],
+    "rate_limits": [
+      { "service": "login", "match": "POST /api/session", "limit": 10, "window_s": 60, "scope": "machine", "calls_per_tc": 1, "at": "start", "pace": 9, "source": "fixture" }
+    ]
+  },
+  "data_readiness": { "verdict": "READY", "gaps": [], "predicted_skips": [] }
+}

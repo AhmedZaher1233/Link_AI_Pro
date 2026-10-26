@@ -45,6 +45,24 @@ guess a flag, read the help.
 - **Close every session you opened** — `{pw} -s=… close` for each — at the end of the run **and**
   before any BLOCKED return; then `{pw} list` and mention "sessions closed" in the final message.
   Never `close-all` / `kill-all`: other work on the machine may own sessions.
+- **Machine capacity — one hold per session, BEFORE its `open`.** A playwright-cli browser counts against the same
+  machine worker ceiling as skill 5's Playwright runs and skill 9's browsers. Skill 5's script, called by path (never
+  copied): `node .claude/skills/link-qc-5-test-run-automation/scripts/capacity.mjs hold acquire --run-id {runId}
+  --session {session} --label "playwright-cli {session}" --wait 600000 --strict` — `{runId}` =
+  `skill5b-{storyId}-{yyyymmddThhmmZ}` (UTC), one per invocation; `{session}` = the `-s=` name above.
+  - Exit 0 → keep the payload's `token`, `open`, then once `capacity.mjs hold track --token {token}` (records the
+    session's daemon and browser). Acquiring the same session again — a re-`open` after "no session" — reuses its hold;
+    a browser is never counted twice.
+  - Exit 1 after the wait (the machine is at its ceiling — a skill 5 run or other browsers use it) → never open the
+    browser anyway: every not-yet-executed TC of that account is `NOT_RUN — not started: admission timeout (machine at its worker ceiling)`, reported, never PASS. Exit 2 → **BLOCKED** with the payload's `error`.
+  - Skill 5 not installed (no `capacity.mjs` at that path) → **BLOCKED**: "machine coordination unavailable — install
+    link-qc-5-test-run-automation with /sync-skills". Never a browser outside the ceiling.
+  - After each `close`: `capacity.mjs hold release --token {token} --wait 30000 --strict` — exit 0 = confirmed closed;
+    exit 1 = the session still runs: `close` it again and release again; still 1 → name it in the final message (the
+    hold stays until a process table shows the session gone). Never `--force`, `sweep` or `reclaim`, never edit the
+    ledger, never set `QA_LEDGER` / `QA_MAX_WORKERS` to get a browser. With `QA_LEDGER=off` a hold is exclusive:
+    nothing else starts while it is held — release it as soon as the session closes.
+  - The final message carries one line: `Machine capacity: {n} session hold(s) — released` (or what is still held).
 
 ## 3. Login — attended, or by secret name; never a password from you
 

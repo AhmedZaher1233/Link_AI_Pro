@@ -44,6 +44,10 @@ PREREQUISITES (installed for you — the skill never installs anything itself):
                                              the skill stops BEFORE asking for anything (BLOCKED,
                                              with that hint). It never uses an MCP server instead.
   - .playwright-cli/ in .gitignore         — added by the same sync step (snapshots land there).
+  - link-qc-5-test-run-automation         — its scripts/capacity.mjs counts every browser this skill opens
+                                             against the machine's Playwright worker ceiling (one hold per
+                                             session, released once the session is confirmed closed). Not
+                                             installed → BLOCKED; at the ceiling → it waits up to 10 minutes.
   - OPTIONAL: a browser secrets file       — run skill 1's scripts/set-playwright-secrets.ps1 (or
                                              .sh) ONCE in your own terminal if you want unattended
                                              logins; it stores username / password pairs in a file

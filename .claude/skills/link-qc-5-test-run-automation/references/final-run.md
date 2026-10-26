@@ -31,7 +31,8 @@ Loaded at **Re-running Fixed & Impacted Tests** — or at a smoke-gate stop, whe
    3. **Re-run** each stage that has TCs in the set, in staged order (setup → smoke → gate →
       positive → negative), ONE `run-stage.mjs --run rerun` call per stage and one stage message
       labelled "re-run" (`<live_progress>`):
-      `--run rerun --stage {S} --stage-tcs {…} --tcs {the set's TCs of S} --burn-in {the healed TCs of S}`.
+      `--run rerun --stage {S} --stage-tcs {…} --tcs {the set's TCs of S} --burn-in {the healed TCs of S}` with the
+      same `--units` file as the first run — the call re-plans it itself when the heal changed the code (`scheduler.replanned`).
       The healed TCs run as burn-in (their own command per group, workers 1, `--repeat-each=3`,
       ceiling × 3; **any failing repeat = FAIL** — the heal is not confirmed, a flaky test is a
       defect). The isolation check runs inside every re-run call as in the first run.
@@ -44,7 +45,8 @@ Loaded at **Re-running Fixed & Impacted Tests** — or at a smoke-gate stop, whe
    6. **A smoke-gate STOP in the re-run** (`<staged_execution>` step 2, phase-wide) keeps every
       fresh first-run result as it is; only the stale TCs the stop prevented become `NOT_RUN` with
       `not started: smoke gate failed (re-run)`.
-2. **Merge every attempt of the phase** into `{run_file}.merged`. Inputs: every stage JSON under
+2. **Merge every attempt of the phase** into `{run_file}.merged` — computed by `run-data.mjs merge`, never by
+   hand (`<publication>` step 1; the rules below are what it implements and what you check). Inputs: every stage JSON under
    `{results_root}/artifacts/stages/` (first run, smoke retries, isolation checks, re-run, burn-in —
    each passed its own command's freshness gate; each a raw Playwright JSON report), every
    `*.watchdog.json` stand-in of a stopped command, and the stage summaries
@@ -101,7 +103,13 @@ Loaded at **Re-running Fixed & Impacted Tests** — or at a smoke-gate stop, whe
    - `tcs[]` — `tc_id, required_variants[], variant_slugs[], status, missing_variants[], skipped_variants[]`;
    - `variant_totals { passed, failed, skipped, not_run, partial }`.
 
-3. **Complete `{run_file}`**, schema `skill6-run/1` in run-report.md §7. Preserve earlier
+3. **Complete the draft run file** (`artifacts/drafts/phase-{N}/.runs/phase-{N}.json`), schema `skill6-run/1`
+   in run-report.md §7. `run-data.mjs merge --write` fills every machine part (`merged`, `results[]` rows,
+   `stages`, `totals`, `variant_totals`, `parallel_checks[]` with the interference cause, `rate_limit`,
+   `watchdog_events[]`, `timeouts.events[]`, `concurrency`); you fill what only judgement can — each result's
+   `classification`, `root_cause`, `severity`, `assumption`, the `heal_log[]`, `deviations[]`, `bugs[]`, every
+   `parallel_checks[].resolution` and every event's classification — and the script keeps them on every later
+   merge. Preserve earlier
    planning/open-question/readiness/coverage/checkpoint objects. Store merged data in `merged`,
    variant totals at top level and TC counts in `totals` — both from the results of record, one
    per TC. Each `results[]` row is the result of record of one TC:
@@ -127,17 +135,22 @@ Loaded at **Re-running Fixed & Impacted Tests** — or at a smoke-gate stop, whe
    `fresh_by_member_only[]` review); `run_plan_adjustments[]` — top level, append-only, every move /
    rate-limit / workers change of the phase (`<run_plan>`).
 
-4. **Append the phase section, update the bug file, render** — `references/run-report.md` §4-§5:
-   - `{run_report_md}`: on the story's first run under this layout create the file with the
+4. **Append the phase section, update the bug file, render — as DRAFTS, published only after Checkpoint B**
+   (`<publication>`; contracts `references/run-report.md` §4-§5):
+   - the draft `TEST-RUN-REPORT-{feature}.md`: on the story's first run under this layout create the file with the
      header block and `## Run history`; otherwise update only the header lines and add ONE
      run-history row. Append `## Phase {N} — {date}` with Run (incl. the one-line `Re-run`,
      `Isolation checks` and `Rate limits` bullets), Stages + smoke gate (`{Stage} (re-run)` rows;
      the Total row = the results of record), Run plan, Coverage, Results (one row per TC, the
      result of record; Evidence = relative links into `{screenshots_root}`), Unverified
      assumptions, the Bugs cross-reference table (ids only), Heal log, Skips, Open questions,
-     Test-data readiness, Deviations (interference, refusals, `outside_scope[]`) — every table
-     written from the merged phase. **Earlier phase sections are never touched.**
-   - `{bug_report_md}`: create it with `## Bugs` / `none` on the first run; one `### BUG-n` entry in
+     Test-data readiness, Deviations (interference with its cause, refusals, deferrals, `outside_scope[]`) —
+     every table written from the merged phase: the header lines, the run-history row, the Stages table +
+     smoke-gate line, the Results rows, the one-line `### Run` bullets (incl. `- **Acceptance:**`) and the
+     readiness table come ready-made from `run-data.mjs report` / `readiness` (`fragments{}`) — paste them; never
+     recount. The header's `Compliance` line reads `Checkpoint A {verdict} · Checkpoint B pending — see gate
+     record` in the draft. **Earlier phase sections are never touched.**
+   - the draft `BUG-REPORT-{feature}.md`: create it with `## Bugs` / `none` on the first run; one `### BUG-n` entry in
      `<bug_report_format>` per NEW `app_bug` of this phase (`Found in phase: N`, `Status: open`, the
      failure image as a relative link); for every existing bug whose TC ran, a History line and its
      Status — the rules of run-report.md §5 (`resolved (phase N)` only after a passing retest, `open` when
@@ -149,18 +162,47 @@ Loaded at **Re-running Fixed & Impacted Tests** — or at a smoke-gate stop, whe
      a question gets an answer, "not a bug" is weighed against the requirement, a TC change is `answered`
      with the route to skill 3 `--revision`), then set only its Status + one-line Response. A comment
      never changes a bug's Status. "read my comments" alone runs this bullet and the render.
-   - Record Checkpoint B in `{run_file}.compliance` and the results-freshness check in
-     `{run_file}.impact`, set the run file's final status, then
-     **render** — the HTML is never hand-written:
-
-   ```text
-   node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs --report "{run_report_md}" --write --pretty
-   ```
-
-   Act on the payload per run-report.md §2 — never on the HTML, never by writing HTML yourself; run
-   `scripts/selftest-run-report.mjs` before delivering the page (a failing harness → the markdown is
-   delivered, the page is not).
+   - Record the results-freshness check in the draft run file's `impact.final_check`, set its final status,
+     render the DRAFT page, freeze, run Checkpoint B and publish — `<publication>` steps 2-6. The HTML is never
+     hand-written; act on the renderer's payload per run-report.md §2, never on the HTML.
 </second_run>
+
+<publication>
+**Drafts → freeze → Checkpoint B → publish.** The phase's report set exists as drafts until Checkpoint B
+passed on exactly those bytes; nothing a reader sees ever claims a B verdict the gate did not give.
+1. **Drafts.** `node .claude/skills/link-qc-5-test-run-automation/scripts/run-data.mjs draft-init --results-root
+   {results_root} --phase {N} --feature {feature}` copies the published report, bug file and run files into
+   `{results_root}/artifacts/drafts/phase-{N}/` (inside `artifacts/` — the folder whitelist is unchanged). Then
+   `run-data.mjs merge --run-file {drafts}/.runs/phase-{N}.json --write`, `run-data.mjs report` and `run-data.mjs
+   readiness` on the same draft run file give every number and table (`<second_run>` steps 2-4).
+2. **Draft page and pre-gate acceptance.**
+   ```text
+   node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs --report {drafts}/TEST-RUN-REPORT-{feature}.md --bugs {drafts}/BUG-REPORT-{feature}.md --runs {drafts}/.runs --base {results_root} --out {drafts}/TEST-RUN-REPORT-{feature}.html --write
+   node .claude/skills/link-qc-5-test-run-automation/scripts/run-data.mjs acceptance --run-file {drafts}/.runs/phase-{N}.json --write
+   ```
+   `--base` resolves the evidence links against the story folder, so the draft page shows what the published
+   one will. The renderer's harness runs once per installed skill version, not before every page:
+   `node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs harness --name selftest-run-report.mjs`
+   (a cached pass for the same skill version, scripts, fixtures, Node and platform; anything changed → it runs
+   again; a failing harness → the markdown is delivered, the page is not).
+3. **Freeze + Checkpoint B** — `compliance-checkpoints.md` §4a: the snapshot hashes the drafts; nothing is
+   edited until the gate decides.
+4. **Publish — only on gate B `PASS`:**
+   ```text
+   node .claude/skills/link-qc-5-test-run-automation/scripts/run-data.mjs publish --results-root {results_root} --phase {N} --feature {feature}
+   ```
+   It refuses unless `.runs/phase-{N}.checkpoint-B.json` says PASS with a matching re-hash and every draft
+   still has its frozen hash; then promotes the drafts byte for byte, renders `{run_report_html}` from them +
+   the gate record (the provenance hashes the gate record) and proves a dry-run re-render reproduces the page
+   byte for byte. `REFUSED` → nothing changed; fix the cause, re-draft, freeze again. A hand-edited page is
+   never overwritten without `--force` (tell the user what will be lost first).
+5. **Final acceptance** — `node .claude/skills/link-qc-5-test-run-automation/scripts/run-data.mjs acceptance
+   --run-file {run_file}` (read-only; the published run file stays byte-identical to its frozen draft) gives the
+   run's `ACCEPTED` / `NOT ACCEPTED — {reasons}` for the return (`<run_acceptance>`).
+6. **Close-out** — the Azure DevOps close-out under `linked` (after B PASS), the learning write-back, then
+   release the environment lease after teardown, clean-up and the background quiet period:
+   `node .claude/skills/link-qc-5-test-run-automation/scripts/capacity.mjs lease release --env-id {env_id} --run-file {run_file} [--quiet-ms {ms}]`.
+</publication>
 
 <bug_report_format>
 Every `app_bug` entry — in `{bug_report_md}` (`BUG-REPORT-{feature}.md`, one `### BUG-n` entry

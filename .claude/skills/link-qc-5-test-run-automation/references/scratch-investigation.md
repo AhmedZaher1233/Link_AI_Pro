@@ -32,7 +32,10 @@ never to re-check what source or a page object already confirms, never while a `
    [--project {browser project}] [--headless] [--timeout ms]` — foreground; one worker, no retries, trace +
    screenshot on, the project's `globalSetup` and stage variables off.
 3. Read `outcome`: `observed` (the probe ran — a failed probe test is an observation, not a FAIL of anything) ·
-   `refused` (fix what `refused[]` names; no browser started) · `timeout` · `error` (read `output[]`) ·
+   `refused` (fix what `refused[]` names; no browser started — `capacity`: the machine is at its Playwright worker
+   ceiling, another run is using it, retry later; `no-coordination`: the coordination directory cannot be used —
+   the probe holds one slot under the same ceiling as the stages, released only when a process table confirms the probe
+   and its browser ended — `capacity.released: false` means it is still held) · `timeout` · `error` (read `output[]`) ·
    `violation` (a file was written outside `test-results/` — delete it, say so, and fix the probe). Traces and
    screenshots are listed in `artifacts[]` (`npx playwright show-trace <file>`).
 4. `node scripts/scratch.mjs clean --root {automation_root}` when the investigation is over, and in any case

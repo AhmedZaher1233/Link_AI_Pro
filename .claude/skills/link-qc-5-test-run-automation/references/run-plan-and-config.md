@@ -40,6 +40,15 @@ is paced, not serialised. The isolation check is the safety net behind every par
 Locale variants (`TC-01` and `TC-01b`) always share the classification of their base TC.
 Decisions driven by the TC fields are marked `field`; the rest `inferred`.
 
+**The machine ceiling bounds every command — Auto, never asked.** `capacity.mjs` computes it from the host's TOTAL
+memory / CPU and the headed per-worker demand (the same value for every run on the machine), bounded by
+`machineMaxWorkers` in `{QA_CAPACITY_DIR | ~/.link-ai-pro/capacity}/config.json` when a human set one (absent /
+`"auto"` → 8, a safety bound — not the worker count chosen); unusable readings → 2, with the reason. `--workers`,
+`QA_MAX_WORKERS` and `qa-manifest.json` `execution.maxWorkers` only LOWER it; current load (memory / CPU after
+everything committed, host pressure, other runs' reservations) is decided at every launch and recorded. The worker
+count actually used is the dispatcher's ramp (`<parallel_readiness>`); `workers_parallel` is only the legacy
+`--scheduler groups` value. `node .claude/skills/link-qc-5-test-run-automation/scripts/capacity.mjs status` shows it.
+
 **Rate limits — known before the run, never asked.** Sources, in order: learning-file `[type:
 env]` lines → the application's source code, read-only (rate-limiter / throttle / lockout
 configuration, cited `file:line`) → TEST-DATA environment notes → limits learned in earlier runs.
@@ -50,9 +59,12 @@ opens — | `step` — a mid-test call through `rateLimitSlot()`), `pace` (limit
 learned value says otherwise) and `source`. An unknown limit → detection only: the network guard
 records refusals and `run-stage.mjs` reacts (`<live_progress>`). A limit learned during a run is
 written back as a plain `[type: env]` line (no new tag key) and appended to
-`run_plan_adjustments[]`; learning a limit changes only the run plan (`PW_RATE_LIMITS`), never
-code, so it never makes a TC stale. **Group ceilings include the pacing floor** ⌈calls ÷ pace⌉ ×
-window for each limited service the group calls (`<live_progress>`).
+`run_plan_adjustments[]` (the stage payload's `proposals[]` carries the ready entry); learning a limit changes
+only the run plan (`PW_RATE_LIMITS`), never code, so it never makes a TC stale. A limit the application
+ADVERTISES (`RateLimit-*` / `X-RateLimit-*` on any response, successful ones included) is paced from the first
+request even before it is written back. **Group ceilings include the pacing floor** ⌈calls ÷ pace⌉ × window for
+each limited service the group calls — `run-stage.mjs --ceilings auto --timeouts {timeout_policy}` computes them
+with the documented arithmetic (`<live_progress>`).
 
 **Required variants per TC.** The plan also records, for every TC, the set of test variants that
 MUST pass for the TC to count as passed: every Playwright project the story runs (`projects[]` —
@@ -107,7 +119,7 @@ command: `{ "at": "ISO-8601", "stage": "positive", "kind": "move | rate-limit | 
   run tag: `@run:parallel` or `@run:serial-{group}` (kebab-case group name — `serial:order-items`
   → `@run:serial-order-items`, `account:A1` → `@run:serial-account-a1`).
 - **A serial group is its `@run:serial-{group}` tag plus its own `--workers=1` command** — that is
-  what isolates it. `--workers=1` is the documented override of the shared config's 2 workers
+  what isolates it under `--scheduler groups` (dispatch serialises from the readiness claims). `--workers=1` is the documented override
   (recorded in the group's `reason`). Execution order inside every stage is defined in
   `<staged_execution>`: parallel group first with `--workers={workers_parallel}`, then each serial
   group with `--workers=1`.
@@ -132,9 +144,49 @@ command: `{ "at": "ISO-8601", "stage": "positive", "kind": "move | rate-limit | 
   ran cleanly as plain-English tagged lines.
 </run_plan>
 
+<parallel_readiness>
+**The parallel readiness check — read-only, every run: it is what lets tests run side by side.** Run once, after
+`<run_plan>` and before Checkpoint A; pass its file as `--units` on every stage call:
+```text
+node .claude/skills/link-qc-5-test-run-automation/scripts/parallel-plan.mjs --root {automation_root} --spec {this story's spec files} --tc {source_tc_doc} --data {TEST-DATA md} --learning Testing/project-learning.md --run-file {run_file} --env-id {env_id} --out {results_root}/artifacts/parallel-plan.json [--compare]
+```
+`run-stage.mjs` (scheduler `auto`, the default) DISPATCHES a stage only on an `OK` payload whose `inputs.fingerprint` —
+the code of the specs and everything they reach (helpers, page objects, fixtures, config, timeouts), the TC hashes,
+TEST-DATA, the learning file, the run plan and the environment — still matches; a changed part is re-planned in the
+same call (`scheduler.replanned`). A missing, BLOCKED or unrefreshable payload, the ledger off or setup journeys run
+SERIALLY (workers 1, `scheduler.fallback` names why) — never multi-worker without proof of independence; a remembered
+worker count is never that proof. No re-run of this command is needed after a heal: the stage call re-plans itself.
+It derives, with evidence, the **claims** of every TC and of every hook / fixture of its execution unit
+(records it reads / writes, aggregate reads — counts, sorts, "latest", empty states, exports, searches —,
+setup / teardown writes, account and session state, background effects such as audit entries or
+notifications, global settings, learned conflicts), the conflicts between them, a class per TC
+(`parallel-ready` · `restricted` · `ordered` · `barrier` · `run-alone` · `not-scheduled`) and the **execution
+units** that are never split: U1 a single test · U2 a serial chain · U3 a describe whose `beforeAll` /
+worker fixture shares state · U4 anything it cannot classify with evidence or that breaks the admission
+contract (code-craft §6) — run as one indivisible unit per command. Unique record names prove only that two
+tests do not write the SAME record; unknown effects are run alone, never guessed independent.
+
+- **Dispatch.** The conflict-free pool runs in BATCHES (one multi-worker command per batch of max(4 × workers, 8)
+  TCs, never a split unit, reserved and released per batch); every restricted / ordered / barrier / run-alone unit runs
+  as its own child, never two conflicting units at once and a run-alone unit beside nothing (25b checks both). The
+  pool's workers follow the RAMP, which adapts between batches: start at min(2, the Auto ceiling); a window = at least
+  max(3, workers) tests and 60 s of batch WALL time (start-up and clean-up included; short batches accumulate); one +1
+  trial after a healthy window — straight to the worker count this environment last validated (`ramp.json`,
+  performance history only) — kept only with ≥ 10 % more throughput per wall minute, else reverted and held; −1 on
+  unexplained interference, environment-wide throttling or a slower p95; halved on a browser crash; scoped throttling
+  only blocks an increase (it is paced in its own scope). Never above the Auto ceiling or what admission allows now.
+  Record the payload's counts, units and conflicts in `{run_file}.parallel_readiness`. A FAIL beside other tests is
+  still re-run alone; the status of record never depends on the scheduler.
+- **Explicit schedulers.** `--scheduler groups` runs the hand-built `<run_plan>` (the legacy rollback, multi-worker
+  groups as planned); `--scheduler dispatch` refuses (BLOCKED) instead of falling back. Neither is used by a normal run.
+- **Shadow experiment (opt-in — `--parallel-shadow`).** The same command WITH `--compare` adds `candidatePlan` and its
+  comparison with the hand plan; record the differences in `{run_file}.parallel_readiness` as findings for the human,
+  never an automatic change.
+</parallel_readiness>
+
 <shared_config>
 **ONE shared `playwright.config.ts` for every story — updated, consolidated or created; never a
-per-story file.** The full setting contract (Chrome channel, headed, 2 workers, `fullyParallel`,
+per-story file.** The full setting contract (Chrome channel, headed, runner-decided workers, `fullyParallel`,
 `forbidOnly`, `retries: 0`, env-driven `outputDir` / `globalTimeout` / `headless`, trace and video
 retention, viewport / locale / timezone, the timeout keys) is `references/code-craft.md` §8-9;
 the skeleton for a project with no config is `assets/playwright.config.template.ts`; the timeout
@@ -142,8 +194,8 @@ policy it imports is `assets/timeouts.template.ts` → `{automation_root}/timeou
 
 **Procedure — run at profile time, before any spec is written:**
 
-1. **Inventory.** `node .claude/skills/link-qc-5-test-run-automation/scripts/config-inventory.mjs --root .
-   --pretty` lists every `playwright*.config.*`, every reference to each (package.json scripts, CI
+1. **Inventory.** `node .claude/skills/link-qc-5-test-run-automation/scripts/config-inventory.mjs --root .`
+   lists every `playwright*.config.*`, every reference to each (package.json scripts, CI
    files, docs, other configs, code — a mention in a comment or a code fence counts) and the
    settings that block a merge. `verdict: none` → step 5. `single` → step 4. `multiple` → 2-3.
 2. **Reference scan + mergeability, per extra config.** A config is a merge candidate only when
@@ -172,13 +224,26 @@ policy it imports is `assets/timeouts.template.ts` → `{automation_root}/timeou
    file) is kept and listed as a Deviation, not overwritten.
 5. **Create** from `assets/playwright.config.template.ts` + `assets/timeouts.template.ts` only
    when no config exists at all; register the project's `testDir` / `testMatch`.
+5b. **Reconcile the run protections — every run, before the inventory of page objects; no question for a routine
+   setting.** `node .claude/skills/link-qc-5-test-run-automation/scripts/config-inventory.mjs reconcile --root . --automation-root {automation_root} --results-root {results_root} --run-file {run_file} --apply`
+   resolves the EFFECTIVE settings (presets, project overrides, inherited Playwright defaults, timeouts.ts, helpers, env
+   files, the environment) and fixes only the supported shapes — finite action / navigation budgets, the active-stall
+   keys of `timeouts.ts`, `retries: 0`, a forced local headless, an absent helper — after backing every original up
+   to `{results_root}/artifacts/reconcile/{stamp}/` (+ `summary.md`, before → after). An approved exception (an
+   `operations` entry, an `// exception: <reason>` comment, a `timeouts.adjusted[]` record) and an explicit worker
+   maximum are kept. Every `conflicts[]` entry (an unfamiliar shape, an env file, an environment variable, a persistent
+   browser profile) is reported to the user with its file:line and exact reason — never overwritten, and its protection
+   is NOT active: Checkpoint A item 43 (`tool:protections`) FAILs until it is resolved. One line in the Writing
+   Automation Code message: `Run protections: {n} changed, {m} conflict(s) — {summary.md}`.
 6. **Helpers.** Copy `assets/steps.template.ts`, `progress-reporter.template.ts`,
    `console-guard.template.ts`, `test-data.template.ts` into `helpers/` when the project has no
    equivalent (match an existing equivalent instead of duplicating it). **`network-guard.template.ts`
-   → `helpers/network-guard.ts` and `rate-limit.template.ts` → `helpers/rate-limit.ts` are always
-   installed** (a no-op without `PW_RATE_LIMITS`); in an existing project PHASE 2 adds them, the
-   guard hooks in every spec of the story and `TIMEOUTS.rate_limit { max_start_wait, in_step_wait,
-   cooldown, cooldown_max }` in `timeouts.ts` BEFORE the first run (behaviour: code-craft §11). Add the
+   → `helpers/network-guard.ts`, `rate-limit.template.ts` → `helpers/rate-limit.ts` and
+   `admission.template.ts` → `helpers/admission.ts` are always installed** (each a no-op without its
+   environment variables); in an existing project PHASE 2 adds them, the guard hooks in every spec of the
+   story, `TIMEOUTS.rate_limit { max_start_wait, in_step_wait, cooldown, cooldown_max }`, `TIMEOUTS.stall {
+   silence }` and `TIMEOUTS.admission { max_wait }` in `timeouts.ts` BEFORE the first run (behaviour: code-craft
+   §6, §9, §11), and makes the project's fixtures file extend `helpers/admission`'s `test`. Add the
    `.gitignore` lines of code-craft §12. `helpers/test-data.ts` carries the per-ID maps of
    `<normalization>` (`environments` by E-ID, `accounts` by A-ID, reading `{ID}_URL` / `{ID}_USER` /
    `{ID}_PASSWORD` at run time, no default) — one entry per row of the story's TEST-DATA file; an
@@ -199,5 +264,5 @@ it cannot run):** the smoke stage runs through the shared file, and a one-off pr
 shows: the structured step error names the TC and the step; `attempt-1-failed.png` is written by
 the `afterEach` hook; teardown completed; the next test in the same worker started only after
 it; no orphaned Chrome process; the incremental results line is present. The probe is deleted
-afterwards and the result recorded under `Probe:` in the Timeout policy section.
+afterwards and the result recorded in `{run_file}.timeouts.probe` (and on the return's `Timeouts:` line).
 </shared_config>

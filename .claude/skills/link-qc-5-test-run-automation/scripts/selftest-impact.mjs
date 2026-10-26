@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { fingerprintTests, selectStale, SCHEMA_VERSION } from './impact.mjs';
+import { fingerprintTests, selectStale, closureOf, reverseDependencies, SCHEMA_VERSION } from './impact.mjs';
 import { parseArgs, print } from './scan-lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
@@ -428,6 +428,82 @@ check('24 CLI fingerprint / select / BLOCKED, exit 0', (p) => {
   if (!bj || bj.outcome !== 'BLOCKED' || !bj.reason) p.push('missing root: ' + (b.stdout || b.stderr).slice(0, 200));
   const h = run('--help');
   if (h.status !== 0 || !/fingerprint/.test(h.stdout)) p.push('--help');
+});
+
+/* 25 — reverseDependencies follows the closure: a data file, a helper module, a spec and the config select exactly the
+   tests whose closure reaches them; a file nothing reaches selects nothing. */
+check('25 reverse dependencies follow the closure: data file, helper module, spec, config', (p) => {
+  const root = copyProject();
+  const tcsFor = (files, opts = {}) => reverseDependencies({ root, files, cache: new Map(), ...opts }).tcs;
+  const d = tcsFor(['helpers/data/orders.json']);
+  if (!same(d, ['TC-04'])) p.push('orders.json → ' + JSON.stringify(d));
+  const h = tcsFor(['helpers/format.ts']);
+  if (!same(h, [...ALL01, 'TC-90', 'TC-91'])) p.push('format.ts → ' + JSON.stringify(h));
+  const s = tcsFor(['tests/Orders_Tests/03-orders-dashboard.spec.ts']);
+  if (!same(s, ['TC-09', 'TC-10'])) p.push('03 spec → ' + JSON.stringify(s));
+  const c = tcsFor(['playwright.config.ts']);
+  if (!same(c, ALL)) p.push('config → ' + JSON.stringify(c));
+  const none = reverseDependencies({ root, files: ['helpers/no-such-file.ts'], cache: new Map() });
+  if (none.tcs.length || none.tests.length) p.push('a file nothing reaches selected ' + JSON.stringify(none.tcs));
+  const r = reverseDependencies({ root, files: ['helpers/data/orders.json'], cache: new Map() });
+  const t = r.tests[0] || { via: [] };
+  if (r.tests.length !== 1 || !t.via.includes('closure:helpers/data/orders.json') || !t.via.includes('data:helpers/data/orders.json') || t.reason !== 'depends') p.push('orders.json test entry ' + JSON.stringify(r.tests));
+  const byPart = reverseDependencies({ root, parts: ['member:pages/OrderPage.ts#OrderPage.cancel'], cache: new Map() });
+  if (!same(byPart.tcs, ['TC-02'])) p.push('part member:…#OrderPage.cancel → ' + JSON.stringify(byPart.tcs));
+  return { d, h, s };
+});
+
+/* 26 — fail safe: an unknown test is always included; a setup journey reaches its serial:{gap} TCs only with a run plan. */
+check('26 reverse dependencies: unknown tests always included; setup journey → serial:{gap} with a run plan', (p) => {
+  const root = copyProject();
+  fs.mkdirSync(path.join(root, 'tests', 'Dynamic_Tests'), { recursive: true });
+  fs.copyFileSync(path.join(FIX, 'extra', '04-dynamic.spec.ts'), path.join(root, 'tests', 'Dynamic_Tests', '04-dynamic.spec.ts'));
+  const r = reverseDependencies({ root, files: ['helpers/data/orders.json'], cache: new Map() });
+  if (!same(r.tcs, ['TC-04', 'TC-80'])) p.push('unknown + data → ' + JSON.stringify(r.tcs));
+  const u = r.tests.find((x) => x.tcs.includes('TC-80'));
+  if (!u || u.reason !== 'unknown' || u.via.length) p.push('TC-80 entry ' + JSON.stringify(u));
+  if (!r.unknown.some((x) => x.tcs.includes('TC-80'))) p.push('unknown[] lacks TC-80');
+  if (r.tcs.includes('TC-81')) p.push('TC-81 (static call) must not be included');
+  const clean = copyProject();
+  const withPlan = reverseDependencies({ root: clean, files: ['tests/Orders_Tests/00-setup-order-items.spec.ts'], runPlan: RUN_PLAN, cache: new Map() });
+  if (!same(withPlan.tcs, ['TC-04'])) p.push('setup spec with a run plan → ' + JSON.stringify(withPlan.tcs));
+  const s04 = withPlan.tests.find((x) => x.tcs.includes('TC-04'));
+  if (!s04 || !s04.via.includes('setup:orders')) p.push('TC-04 via ' + JSON.stringify(s04 && s04.via));
+  const noPlan = reverseDependencies({ root: clean, files: ['tests/Orders_Tests/00-setup-order-items.spec.ts'], cache: new Map() });
+  if (noPlan.tcs.length) p.push('setup spec without a run plan → ' + JSON.stringify(noPlan.tcs));
+  return { tcs: r.tcs, withPlan: withPlan.tcs };
+});
+
+/* 27 — closureOf: per test and per TC closure files and part ids; the fingerprint payload itself is unchanged. */
+check('27 closureOf: per test / per TC closure files; fingerprint payload keys unchanged', (p) => {
+  const root = copyProject();
+  const c = closureOf({ root, cache: new Map() });
+  const f04 = (c.tcs['TC-04'] || {}).files || [];
+  for (const f of ['helpers/data/orders.json', 'playwright.config.ts', 'timeouts.ts', 'tests/Orders_Tests/01-orders.spec.ts', 'pages/OrderPage.ts']) if (!f04.includes(f)) p.push('TC-04 closure lacks ' + f);
+  const f09 = (c.tcs['TC-09'] || {}).files || [];
+  if (f09.includes('helpers/format.ts')) p.push('TC-09 closure must not include helpers/format.ts');
+  if (f09.includes('tests/Orders_Tests/01-orders.spec.ts')) p.push('TC-09 closure must not include another spec');
+  if (!same(Object.keys(c.tcs), ALL)) p.push('TCs ' + JSON.stringify(Object.keys(c.tcs)));
+  if (((c.tcs['TC-07'] || {}).tests || []).length !== 2) p.push('TC-07 must carry 2 tests');
+  const any = Object.values(c.tests)[0] || {};
+  if (!Array.isArray(any.parts) || !any.parts.some((k) => k.startsWith('test:'))) p.push('tests[].parts must list the part ids');
+  const keys = Object.keys(fp(root)).join(',');
+  if (keys !== 'schema,root,tcs,tests,files,warnings') p.push('fingerprint payload keys changed: ' + keys);
+});
+
+/* 28 — the CLI reverse command: OK payload; without --files / --parts BLOCKED; exit code 0; --help lists it. */
+check('28 CLI reverse / BLOCKED without --files, exit 0', (p) => {
+  const root = copyProject();
+  const script = path.join(here, 'impact.mjs');
+  const run = (...a) => spawnSync(process.execPath, [script, ...a], { encoding: 'utf8' });
+  const r = run('reverse', '--root', root, '--files', 'helpers/data/orders.json');
+  const rj = r.status === 0 ? JSON.parse(r.stdout) : null;
+  if (!rj || rj.outcome !== 'OK' || rj.command !== 'reverse' || !same(rj.tcs, ['TC-04'])) p.push('reverse: ' + (r.stdout || r.stderr).slice(0, 200));
+  const b = run('reverse', '--root', root);
+  const bj = b.status === 0 ? JSON.parse(b.stdout) : null;
+  if (!bj || bj.outcome !== 'BLOCKED' || !/--files/.test(bj.reason || '')) p.push('reverse without --files: ' + (b.stdout || b.stderr).slice(0, 200));
+  const h = run('--help');
+  if (h.status !== 0 || !/reverse/.test(h.stdout)) p.push('--help does not list reverse');
 });
 
 for (const d of temps) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }

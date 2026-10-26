@@ -5,10 +5,12 @@
 // reference scan cannot be trusted, and the skill must not delete ANY configuration file.
 //
 // Run: node selftest-config-inventory.mjs [--pretty]
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { inventory } from './config-inventory.mjs';
+import { inventory, reconcile } from './config-inventory.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fx = (t) => path.join(here, 'fixtures', 'config-inventory', t);
@@ -118,6 +120,49 @@ const after = inventory({ root: fx('after'), automationRoot: 'Testing/Automation
   const h = call(['--help']);
   try { const o = JSON.parse(h.stdout); if (!/deletable/.test(JSON.stringify(o.notes))) p.push('--help does not explain deletable[]'); } catch { p.push('--help is not JSON'); }
   check('7 CLI exit code and payload shape', p, {});
+}
+
+/* 8 — RECONCILE on a throw-away project with every supported problem: dry-run lists them with precise statuses and changes
+   nothing; --apply backs the originals up, fixes only the supported shapes, leaves the unfamiliar ones as conflicts (an
+   env file forcing headless, a persistent profile) and a second apply changes nothing (idempotent). */
+{
+  const p = [];
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-reconcile-'));
+  try {
+    const auto = path.join(root, 'Testing', 'Automation');
+    fs.mkdirSync(path.join(auto, 'helpers'), { recursive: true });
+    fs.writeFileSync(path.join(auto, 'timeouts.ts'), ['export const TIMEOUTS = {', '  test: { default: 90_000, long: 180_000 },', '  expect: 10_000,', '  action: 15_000,', '  navigation: 90_000, // exception: the SSO redirect chain takes 70-80 s (calibrated phase 2)', '  hook: 60_000,', '  step: { default: 30_000, long: 120_000 },', '  watchdog_grace: 60_000,', '} as const;', ''].join('\n'));
+    const config = ["import { defineConfig } from '@playwright/test';", "import { TIMEOUTS } from './timeouts';", 'export default defineConfig({', '  retries: 2,', '  timeout: TIMEOUTS.test.default,', '  use: {', '    headless: true,', '    actionTimeout: 0,', '  },', '});', ''].join('\n');
+    fs.writeFileSync(path.join(auto, 'playwright.config.ts'), config);
+    fs.writeFileSync(path.join(auto, '.env'), 'BASE_URL=https://app.example.test\nPW_HEADLESS=1\n');
+    fs.writeFileSync(path.join(auto, 'helpers', 'login.ts'), 'export const ctx = (b) => b.launchPersistentContext("C:/profile");\n');
+    for (const h of ['steps', 'progress-reporter', 'admission', 'network-guard', 'rate-limit']) fs.writeFileSync(path.join(auto, 'helpers', h + '.ts'), '// ' + h + '\n');
+    fs.rmSync(path.join(auto, 'helpers', 'admission.ts'));
+    const st = (r, key) => (r.settings.find((s) => s.key === key) || {}).status;
+    const dry = reconcile({ root, automationRoot: 'Testing/Automation', env: {} });
+    if (dry.outcome !== 'CHANGES_NEEDED' || dry.changes.length) p.push('dry-run ' + JSON.stringify([dry.outcome, dry.changes]));
+    if (st(dry, 'actionTimeout') !== 'unbounded-operation' || st(dry, 'navigationTimeout') !== 'unbounded-operation') p.push('unbounded operations ' + JSON.stringify(dry.settings.filter((s) => /Timeout/.test(s.key))));
+    if (st(dry, 'globalTimeout') !== 'no-suite-timeout') p.push('a missing globalTimeout is informational, not an unbounded operation: ' + st(dry, 'globalTimeout'));
+    if (st(dry, 'retries') !== 'protection-disabled' || st(dry, 'headless') !== 'protection-disabled' || st(dry, 'helpers/admission') !== 'protection-disabled' || st(dry, 'TIMEOUTS.stall') !== 'protection-disabled') p.push('disabled protections ' + JSON.stringify(dry.settings));
+    if (st(dry, 'TIMEOUTS.navigation') !== 'exception-approved') p.push('a documented exception must be approved: ' + st(dry, 'TIMEOUTS.navigation'));
+    if (!dry.conflicts.some((c) => /\.env$/.test(c.file || '') && c.line === 2) || !dry.conflicts.some((c) => /login\.ts$/.test(c.file || ''))) p.push('conflicts ' + JSON.stringify(dry.conflicts));
+    if (fs.readFileSync(path.join(auto, 'playwright.config.ts'), 'utf8') !== config) p.push('a dry run changed the config');
+    const noRoot = reconcile({ root, automationRoot: 'Testing/Automation', apply: true, env: {} });
+    if (noRoot.outcome !== 'BLOCKED') p.push('--apply without --results-root must be BLOCKED: ' + noRoot.outcome);
+    const rr = 'Testing/Automation/reports/US-1';
+    const ap = reconcile({ root, automationRoot: 'Testing/Automation', resultsRoot: rr, apply: true, env: {}, now: new Date('2026-10-26T10:00:00Z') });
+    const cfgAfter = fs.readFileSync(path.join(auto, 'playwright.config.ts'), 'utf8');
+    if (!/retries: 0/.test(cfgAfter) || !/actionTimeout: TIMEOUTS\.action/.test(cfgAfter) || !/navigationTimeout: TIMEOUTS\.navigation/.test(cfgAfter) || /headless: true/.test(cfgAfter)) p.push('config after apply:\n' + cfgAfter);
+    const tAfter = fs.readFileSync(path.join(auto, 'timeouts.ts'), 'utf8');
+    if (!/\bstall\s*:/.test(tAfter) || !/\bdiagnostics\s*:/.test(tAfter) || !/navigation: 90_000, \/\/ exception/.test(tAfter)) p.push('timeouts.ts after apply:\n' + tAfter);
+    if (!fs.existsSync(path.join(auto, 'helpers', 'admission.ts'))) p.push('the missing helper was not installed');
+    if (fs.readFileSync(path.join(auto, '.env'), 'utf8') !== 'BASE_URL=https://app.example.test\nPW_HEADLESS=1\n') p.push('an env file was edited');
+    const bk = path.join(root, rr, 'artifacts', 'reconcile', '2026-10-26T10-00-00-000Z');
+    if (ap.outcome !== 'PARTIAL' || fs.readFileSync(path.join(bk, 'Testing', 'Automation', 'playwright.config.ts'), 'utf8') !== config || !fs.existsSync(path.join(bk, 'summary.md'))) p.push('backup / outcome ' + JSON.stringify([ap.outcome, ap.backup]));
+    const again = reconcile({ root, automationRoot: 'Testing/Automation', resultsRoot: rr, apply: true, env: {}, now: new Date('2026-10-26T10:05:00Z') });
+    if (again.changes.length) p.push('a second apply changed something: ' + JSON.stringify(again.changes));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  check('8 reconcile: precise statuses, dry-run writes nothing, apply backs up + fixes supported shapes, conflicts kept, idempotent', p, {});
 }
 
 const out = {

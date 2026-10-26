@@ -47,8 +47,8 @@ project**, not to this repo. Do not create them here.
       SKILL.md INPUT.txt references/ (13, incl. test-data-resolution.md — shared contract with 3b) assets/ (template mirror + comparison template) scripts/ = mirrors of skill 3's
     link-qc-4-publish-test-cases-azure/            beautify approved TCs → Azure DevOps + ADO-MAP.md with verified tags / automation status; --suite-only places published TCs in a Test Plan suite later
       SKILL.md INPUT.txt scripts/ (ado-sync-plan, tc-hash — canonical copy, selftest-ado-sync + fixtures/ado-sync/)
-    link-qc-5-test-run-automation/                 Playwright POM generation (automation inventory first) + staged run (one run-stage.mjs call and one message per stage, isolation check inside) + targeted re-run of the TCs a fix touched (impact.mjs) + 2 compliance gates
-      SKILL.md (≈170 lines: orchestrator — workflow with activity names, every-activity rules, block index; `metadata.version` = the skill's semver) INPUT.txt references/ (19, one per activity: intake, results-and-evidence, azure-devops, code-generation, run-plan-and-config, open-questions, coverage, test-data-readiness, test-data-preparation, execution, final-run, structured-returns, compliance-checkpoints, automation-rules, code-craft, validator, run-report, scratch-investigation, azure-mcp-troubleshooting) scripts/ (18 + fixtures/: the 16 below plus tc-hash — mirror of skill 4's — and selftest-tc-hash) assets/ (10: run-report body partial + report-shell mirror, 8 *.template.ts copied into consumer projects)
+    link-qc-5-test-run-automation/                 Playwright POM generation (automation inventory first) + staged run (one run-stage.mjs call and one message per stage, isolation check inside, inside the machine's capacity ledger and an environment lease) + targeted re-run of the TCs a fix touched (impact.mjs) + 2 script-decided compliance gates (check.mjs) + drafts → freeze → Checkpoint B → publish (run-data.mjs) + run acceptance
+      SKILL.md (≈200 lines: orchestrator — workflow with activity names, every-activity rules, block index; `metadata.version` = the skill's semver) INPUT.txt references/ (19, one per activity: intake, results-and-evidence, azure-devops, code-generation, run-plan-and-config, open-questions, coverage, test-data-readiness, test-data-preparation, execution, final-run, structured-returns, compliance-checkpoints, automation-rules, code-craft, validator, run-report, scratch-investigation, azure-mcp-troubleshooting — plus rule-registry.md, the maintainers' one-home-per-rule map, expected-differences.md, the 1.2.0 → 2.0 gate parity register, and schemas/script-payloads.md, loaded by no activity) scripts/ (33 + fixtures/: the 31 below plus tc-hash — mirror of skill 4's — and selftest-tc-hash) assets/ (11: run-report body partial + report-shell mirror, 9 *.template.ts copied into consumer projects)
     link-qc-5b-test-run-manual-cli/                manual twin of 5: every TC of an APPROVED document run in full through playwright-cli (no MCP), smoke gate without heal, `AI Oracle` TCs judged by rubric; writes skill 5's report set into skill 5's story folder — report only, gates nothing
       SKILL.md INPUT.txt references/ (10: intake, browser-cli, run-plan, execution-rules, test-data-preparation, ai-response-rules, run-report-manual, open-questions, learning-file, self-review) scripts/ (render-run-report, selftest-run-report, scan-lib + fixtures/run-report/ — mirrors of skill 5's; selftest-manual-run + fixtures/manual-run/ — 5b-only) assets/ (2: run-report body partial + report-shell — mirrors)
     link-qc-6-ui-testing/                          visual UI audit of one implemented screen vs its design (Playwright MCP; optional Figma MCP) or, with no design, vs tokens / consistency / WCAG / RTL — beside the chain, gates nothing
@@ -56,7 +56,7 @@ project**, not to this repo. Do not create them here.
     link-qc-7-sync-tc-status-to-azure/             Azure loop: latest TC outcomes → ONE Test Plan run (cloud test-plan tools; otherwise NOT_RUN) — SKILL.md INPUT.txt references/qc-contract.md (mirror)
     link-qc-8-sync-bugs-azure/                     Azure loop: two-way bug sync, direction gate (md → Azure creates + pushes · Azure → md pulls · both), ADO-BUG-MAP.md ledger; evidence attached through the contract's capability ladder after the §6b identity check, verified by read-back
       SKILL.md INPUT.txt references/ (qc-contract.md — CANONICAL copy, md-to-azure.md, azure-to-md.md)
-    link-qc-9-retesting/                           Azure loop: retest bugs — automated TCs re-run from skill 5's code (run-stage.mjs), the rest through playwright-cli, never the Playwright MCP; the LATEST run-report phase updated in place (pass rate); close / reopen in Azure, THEN the evidence upload; incidental bugs — SKILL.md INPUT.txt references/ (qc-contract.md mirror, automation-rerun.md, browser-cli.md, report-update.md)
+    link-qc-9-retesting/                           Azure loop: retest bugs — automated TCs re-run from skill 5's code (run-stage.mjs), the rest through playwright-cli, never the Playwright MCP; the LATEST run-report phase updated in place (pass rate); close / reopen in Azure, THEN the evidence upload; incidental bugs; its own environment lease + one session hold per playwright-cli browser through skill 5's capacity.mjs — SKILL.md INPUT.txt references/ (qc-contract.md mirror, automation-rerun.md, browser-cli.md, report-update.md, coordination.md)
     link-qc-10-white-box-testing/                  code audit against a requirement
     link-qc-11-discover-business-rules/            code-enforced rules (EARS) not in the spec
     link-qc-12-adhd-output-style/                  ADHD chat output style + QA-pipeline overlay (was `i-have-adhd`); chat only, writes no file
@@ -188,14 +188,17 @@ node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest
   (see skill 4's section) and its harness — the close-out writes `automated_tc_sha256` with it
   for every TC that ran `full` coverage with PASS after Checkpoint B PASS, never for a `PARTIAL`
   TC. Regenerate the golden hash only together with skill 4's.
-- `selftest.mjs` (15 cases over `fixtures/mcp/`; case 8 `planReplace` — only our folders replaced / removed; cases 9-12 the optional attachments server: scanner states, migration guard, launcher asset, the validator row on scratch roots; case 13 skill versions: the `metadata.version` parser, semver compare, the status matrix, `scanSuite().versions` and the two validate-setup rows; case 14 the sync arguments: every repeated `--only` (`argValues` — `parseArgs` keeps the last) and the `summary` keys (`syncSummary`: `missing_in_source`, `local_only`)) **exits non-zero on mismatch by design**: the
+- `selftest.mjs` (16 cases over `fixtures/mcp/`; case 15 the execution limits — `scanExecutionLimits` (the coordination directory, the Auto ceiling on a fixed host with `config.json` as its bound, the fallback, a saved `QA_LEDGER`, lower-only overrides, `QA_LEDGER=off` = exclusive, a torn ledger) and the `Execution limits` / `Coordination directory` rows, constants checked against skill 5's `capacity.mjs`; case 8 `planReplace` — only our folders replaced / removed; cases 9-12 the optional attachments server: scanner states, migration guard, launcher asset, the validator row on scratch roots; case 13 skill versions: the `metadata.version` parser, semver compare, the status matrix, `scanSuite().versions` and the two validate-setup rows; case 14 the sync arguments: every repeated `--only` (`argValues` — `parseArgs` keeps the last) and the `summary` keys (`syncSummary`: `missing_in_source`, `local_only`)) **exits non-zero on mismatch by design**: the
   sync guard (azure-devops and azure-devops-attachments byte-identical, cloud and self-hosted), the plan never naming
   either, `detectAdoHosting`, `scanMcp` inline-token detection, `scanPat` session-vs-machine
   (probe-injected, never the registry) and the template's placeholder-only check. Run it after
   any change to `lib.mjs`, the template, the launcher asset or the PAT handling.
 - `set-playwright-secrets.ps1` / `.sh` (optional, skills 3c, 5b and 9) are likewise user-run: per-role
   `{ROLE}_USER` / `{ROLE}_PASSWORD` lines in `~/.link-ai-pro/playwright-secrets.env` and the
-  user-level `PLAYWRIGHT_MCP_SECRETS_FILE` pointing at it. `scanBrowserSecrets` checks existence
+  user-level `PLAYWRIGHT_MCP_SECRETS_FILE` pointing at it. `scanExecutionLimits` (rows `Execution limits` /
+  `Coordination directory`, `references/toolchain.md` "Execution limits") reads skills 5 / 9's machine ceiling and
+  coordination directory with skill 5's rules — read-only; skill 1 never writes `config.json` or raises a limit, and
+  this is separate from the pending B17 permission allow rules. `scanBrowserSecrets` checks existence
   only; nothing in this repo ever reads the file.
 - `sync-qa-skills.mjs --apply --tools` (opt-in) installs `@playwright/cli` globally, runs
   `playwright-cli install-browser` and adds `.playwright-cli/` to `.gitignore` (skills 3c, 5b and 9), and
@@ -216,24 +219,40 @@ node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest
 ### `skills/link-qc-5-test-run-automation/scripts/`
 
 ```bash
-node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --root <project> --pretty [--files a,b] [--tc-ids <csv|file>] [--req-ids <csv|file>] [--inventory <automation-inventory.md>] [--require-steps] [--strict]
+node .claude/skills/link-qc-5-test-run-automation/scripts/validate-automation.mjs --root <project> --pretty [--files a,b] [--tc-ids <csv|file>] [--req-ids <csv|file>] [--inventory <automation-inventory.md>] [--require-steps] [--summary --out <full.json>] [--page-scan] [--strict]
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/tc-hash.mjs --tc <TEST-CASES md> [--data <TEST-DATA md>] [--ids a,b] --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-tc-hash.mjs --pretty
-node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs --report <TEST-RUN-REPORT-{feature}.md> [--bugs <BUG-REPORT-{feature}.md>] [--runs <dir>] [--out <html>] [--write] [--force] [--strict] [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs --report <TEST-RUN-REPORT-{feature}.md> [--bugs <BUG-REPORT-{feature}.md>] [--runs <dir>] [--base <story folder>] [--gate <.runs/phase-N.checkpoint-B.json>] [--out <html>] [--write] [--force] [--strict] [--pretty]
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-report.mjs --pretty
-node .claude/skills/link-qc-5-test-run-automation/scripts/watchdog.mjs --plan <group-or-run-plan.json> [--group <name>] --heartbeat <jsonl> [--results <jsonl>] [--now <ISO>] [--grace <ms>] [--stop-reason <text>] [--out <watchdog.json>] [--write] [--strict] [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/watchdog.mjs --plan <group-or-run-plan.json> [--group <name>] --heartbeat <jsonl> [--results <jsonl>] [--now <ISO>] [--grace <ms>] [--silence <ms>] [--silence-mode active|shadow] [--stop-reason <text>] [--out <watchdog.json>] [--write] [--strict] [--pretty]
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-watchdog.mjs --pretty
-node .claude/skills/link-qc-5-test-run-automation/scripts/run-stage.mjs --run-file <.runs/phase-N.json> --stage setup|smoke|positive|negative --run first|rerun --stage-tcs <TC,…> --ceilings <group=ms,…> --grace <ms> --log <progress log> --project <name> --cwd <automation root> [--spec <files>] [--groups <names>] [--tcs <TC,…>] [--burn-in <TC,…>] [--extra repeat-each=N,last-failed,workers=N] [--cooldown <ms>] [--cooldown-max <ms>] [--label <text>] [--headless] [--cli <cli.js>] [--cmd "<run command>"] [--stage-json-source <path>] [--strict] [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/run-stage.mjs --run-file <.runs/phase-N.json> --stage setup|smoke|positive|negative --run first|rerun --stage-tcs <TC,…> --ceilings <group=ms,…|auto> [--timeouts <timeouts.ts>] [--grace <ms>] --log <progress log> --project <name> --cwd <automation root> [--spec <files>] [--groups <names>] [--tcs <TC,…>] [--burn-in <TC,…>] [--extra repeat-each=N,last-failed,workers=N] [--cooldown <ms>] [--cooldown-max <ms>] [--max-wait <ms>] [--label <text>] [--headless] [--cli <cli.js>] [--cmd "<run command>"] [--stage-json-source <path>] [--env-id <id>] [--no-ledger] [--capacity-dir <dir>] [--silence <ms>] [--timeouts-mode active|shadow] [--scheduler auto|groups|dispatch] [--telemetry] [--units <parallel-plan.json>] [--strict] [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/run-stage.mjs reclaim [--capacity-dir <dir>] [--dry-run]
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-stage.mjs --pretty
-node .claude/skills/link-qc-5-test-run-automation/scripts/impact.mjs fingerprint|select --root <automation root> [--spec <files>] [--tcs <TC,…>] [--progress <results_root>/artifacts/progress] [--run-file <.runs/phase-N.json>] [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/capacity.mjs status|config|sweep|reclaim [--dry-run] [--capacity-dir <dir>] [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/capacity.mjs lease acquire --env <url,…> [--test-data <TEST-DATA md>] [--aliases a=b,…] --run-file <f> [--run-id <id>] [--wait <ms>] [--no-dns] | lease status|release (--env <…> | --env-id <id>) [--run-file <f>] [--quiet-ms <ms>]
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-capacity.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/parallel-plan.mjs --root <automation root> [--spec a,b] [--tc <TEST-CASES md>] [--data <TEST-DATA md>] [--learning <md>] [--run-file <.runs/phase-N.json>] [--stage smoke|positive|negative] [--ceiling N] [--out <file>] [--strict] [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-parallel-plan.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-dispatch.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-admission.mjs --pretty   (needs a local Playwright test runner — QA_PLAYWRIGHT_DIR; NOT_RUN, exit 3, without one)
+node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs snapshot|run|record|gate|carry|harness … [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-check.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/run-data.mjs merge|report|readiness|handoff|verify|acceptance --run-file <run file or its draft> [--write] [--snapshot <id>] | draft-init|publish --results-root <dir> --phase N [--feature f] [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-run-data.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/coverage.mjs --judgements <json> [--run-file <f>] [--tc-doc <md>] [--target <pct>] [--target-source L3|default] [--mechanism <m>] [--override] [--write] [--strict] [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-coverage.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/impact.mjs fingerprint|select|reverse --root <automation root> [--spec <files>] [--tcs <TC,…>] [--files <changed,…>] [--progress <results_root>/artifacts/progress] [--run-file <.runs/phase-N.json>] [--pretty]
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-impact.mjs --pretty
-node .claude/skills/link-qc-5-test-run-automation/scripts/config-inventory.mjs --root <project> [--automation-root <dir>] --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/config-inventory.mjs [reconcile] --root <project> [--automation-root <dir>] [--results-root <dir>] [--run-file <f>] [--apply] --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-config-inventory.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/scratch.mjs run --root <automation root> --spec <root>/test-results/qa-scratch/<name>.spec.ts [--config <shared config>] [--project <name>] [--grep <text>] [--timeout <ms>] [--headless] [--results-root <dir>] [--cli <cli.js>] [--pretty]
 node .claude/skills/link-qc-5-test-run-automation/scripts/scratch.mjs clean --root <automation root> [--pretty]
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-scratch.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-references.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/profile-run.mjs [--transcript <session.jsonl>] [--windows <fromISO>..<toISO>[=label],…] [--progress <results_root>/artifacts/progress] [--hang-ms <ms>] [--login-pattern <regex>] [--pretty]
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-profile-run.mjs --pretty
 ```
 
 - `scan-lib.mjs` is the text engine (comment/string stripper that preserves line numbers, brace
@@ -252,22 +271,36 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-references.mj
   `pom-duplicate-page-decided` (info). Matching only produces candidates — the decision table is
   the verdict. An undecided pair is the ONE review item that moves the scanner gate itself to
   BLOCKED (`--strict` exit 2; documented in `validator.md`), so an unaddressed candidate can never
-  pass Checkpoint A / B.
+  pass Checkpoint A / B. `--summary` prints a compact payload (gate, counts, at most 20 open items) and `--out`
+  writes the full one — the gate is the same by construction (`summarize()`); `--page-scan` is the
+  `<automation_inventory>` discovery digest (`pageScanDigest()`). Six stricter rules ship at the staged
+  severity `review` (they never move the scanner gate): `constant-redeclared` (item 6), `empty-catch` (28),
+  `timeout-literal` (43), `console-guard-missing` (46a), `network-guard-missing` (49), `admission-contract`
+  (25a / 47 — only when the automation root has `helpers/admission.*`); `RULE_CHECKS` maps every rule id to its
+  compliance item(s) and `check.mjs` imports it.
 - `selftest.mjs` **exits non-zero on mismatch by design** (it is a harness, not a reporting
-  script). Run it after any validator change. Its eighteen cases include the false-PASS guards
+  script). Run it after any validator change. Its 26 cases include the false-PASS guards
   and, for the three timing rules (`wait-network-idle`, `positional-unscoped`, `step-missing`
   behind `--require-steps`), true positives, false-positive guards and false-negative guards on
-  `timing*.fixture.ts`; when adding a rule, add the fixture case with it. The fingerprint hashes
+  `timing*.fixture.ts`; cases 19-26 cover `--summary` ≡ full gate, `--page-scan`, and the six staged rules (TP /
+  FP / FN fixtures under `fixtures/b8/`); when adding a rule, add the fixture case with it. The fingerprint hashes
   one hop of each config's relative imports (`timeouts.ts`) — case 17.
 - `watchdog.mjs` is the freeze decision + result reconstruction for one stage command: it reads
   the heartbeat (`helpers/steps.ts`) and the incremental results (`helpers/progress-reporter.ts`)
-  and declares a worker `FROZEN` only when an open step is past its OWN deadline + grace with no
-  progress, no newer worker record and no newer result — console silence and a stale stage JSON
-  never count. Dry-run by default; `--write` produces the `*.watchdog.json` (completed /
-  interrupted / not_started). A heartbeat `tc` of a test covering several TCs ("TC-01,TC-02") counts
-  for each; `--stop-reason` names a non-freeze stop (run-stage's outer-ceiling kill) in the reasons.
-  It is imported by `run-stage.mjs`, never polled by the model. `selftest-watchdog.mjs` (12 cases,
-  golden under `fixtures/watchdog/golden/`) exits non-zero on mismatch.
+  and declares a worker `FROZEN` when an open step (a STACK per worker — a nested step never hides its parent) is past
+  its OWN FIXED deadline + grace (progress never extends a deadline) while the worker is still in that test (no newer
+  test-start / test-end / teardown / console-report, no newer result) — console silence and a stale stage JSON never
+  count. Dry-run by default; `--write` produces the `*.watchdog.json` (completed / interrupted / not_started). A
+  heartbeat `tc` of a test covering several TCs ("TC-01,TC-02") counts for each; `--stop-reason` names a non-freeze
+  stop (run-stage's outer-ceiling kill) in the reasons. The helpers' informational heartbeats (`admission-wait`,
+  `rate-wait`, `stall`, `teardown`, `console-report`, `deferred`) are never a step and never progress of one;
+  `--silence <ms>` (a step's own `silence_ms` first) adds the silence rule — a LONG step without MEANINGFUL progress
+  (`meaningful: true`, or a legacy note whose n/m counter rose; changed text, timestamps, polling never count) past
+  silence + grace — declared FROZEN (`--silence-mode active`, the DEFAULT, `rule: silence`) or only reported in
+  `would_freeze[]` (`shadow`); an open admission / rate-limit wait is never a UI stall but FROZEN past its own
+  `budget_ms` + grace (`rule: wait-budget`). The written file's shape is unchanged (golden; a deadline freeze carries no
+  `rule`). It is imported by `run-stage.mjs`, never polled by the model. `selftest-watchdog.mjs` (15 cases, golden
+  under `fixtures/watchdog/golden/`) exits non-zero on mismatch.
 - `run-stage.mjs` runs ONE stage of a run (`--stage setup|smoke|positive|negative`, `--run
   first|rerun` — `final` is refused: the clean full re-run was removed): every run-plan group of that
   stage in plan order (after `run_plan_adjustments[]`), one Playwright command per group plus a
@@ -280,25 +313,84 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-references.mj
   outer-ceiling stop), the per-command freshness gate (`FRESHNESS_FAILED` stops the stage), a
   tailable progress log (line output, 30 s status lines, credential-looking lines withheld) and ONE
   compact payload + `artifacts/progress/{run}-{stage}-{seq}.summary.json` with the ready, phase-wide
-  stage message (`update`). **Parallelism never changes a status:** a FAIL from a command with
-  workers > 1 (or with a refused request inside its failing step) is re-run ALONE inside the same call
-  after a cool-down (max `Retry-After`, `--cooldown` / `--cooldown-max`) — the isolation check: pass
-  alone = parallel interference (`interference[]`; the tests that overlapped it are re-run alone too),
-  refused again = INCOMPLETE `rate_limited`, more than max(3, 30 %) failures = breaker, no isolation;
-  refusals in a command cool the rest of the stage down with half the workers and a scaled ceiling; a
-  serial-chain follower Playwright skipped is NOT_RUN `not started: depends on …`. Cumulative counts
-  and the smoke gate are phase-wide (all summaries by start time; smoke fail % over TCs with a verdict).
+  stage message (`update`). **Parallelism never changes a status:** a FAIL from a command that ran beside others —
+  workers > 1, or a run that overlapped another command (dispatch's pool and unit children, each perhaps workers 1) — (or
+  whose failing step's OWN request was throttled — 429, or 403 / 503 with rate-limit headers;
+  matched by step title, time window for old helpers; never for an `expects-refusal` test) is re-run ALONE inside
+  the same call — the isolation check: candidates without a refusal at once, refused ones after the server's
+  deadline (never shortened or capped; `--cooldown` / `--cooldown-max` bound only a self-chosen, full-jitter
+  backoff; beyond `--max-wait` the TC is deferred: NOT_RUN `not started: deferred until …`); pass alone =
+  parallel interference (`interference[]` with a `cause` from evidence — `test_data_conflict` ·
+  `possible_product_concurrency_defect` · `environment` · `unexplained`; the tests that overlapped it — in its own
+  command and in every command running at the time — are re-run alone too), refused again = INCOMPLETE `rate_limited`, more than max(3, 30 %) failures = breaker, no isolation;
+  a 503 + `Retry-After` without rate-limit headers is temporary unavailability, never throttling. Refusals cool
+  down only their SCOPE (`service:` / `account:` / `endpoint:` in the admission file; the runner waits before the
+  next command only when the project lacks `helpers/admission.ts`); workers are halved and the ceiling scaled
+  only for environment-wide refusals. The helpers' non-verdicts map mechanically: SKIP + `admission-timeout` →
+  NOT_RUN `not started: admission timeout (…)`; a worker that was not admitted throws `AdmissionRefusedError` from
+  `workerAdmission` (so none of the worker fixtures / beforeAll hooks that depend on it run) → the same NOT_RUN, its
+  serial followers too, never FAIL; SKIP + `rate-limit-deferred` → NOT_RUN `not started: deferred
+  until …` (re-queued alone when due inside `--max-wait`), a `RateLimitWaitError` "wait budget exhausted" →
+  INCOMPLETE `interrupted: wait budget exhausted (…)`; a serial-chain follower Playwright skipped is NOT_RUN `not
+  started: depends on …`. Cumulative counts and the smoke gate are phase-wide (all summaries by start time; smoke
+  fail % over the PASS + FAIL smoke TCs; none → `no_verdict` / NO VERDICT, and a first run's positive / negative is
+  then refused). **Capacity (default on):** every command
+  reserves its full `--workers` in `capacity.mjs`'s ledger under the machine ceiling (lower-only; lowered further
+  when free memory / CPU admit fewer — recorded), is spawned through `ledger-exec.mjs` and released only when its
+  tree is confirmed gone (`ledger.*` in the summary); a 2 s sampler publishes host pressure to
+  `artifacts/progress/admission.json` (`PW_ADMISSION_FILE`; also `PW_UNIT_SCOPES`, `PW_UNIT_MAP`, `PW_LANE`,
+  `PW_CANCEL_FILE`, `PW_DIAGNOSTICS_DIR`, `PW_ENV_ID`); not admitted within `--max-wait` → NOT_RUN `not started:
+  admission timeout / host pressure`; `--env-id` must name a lease this run holds (else BLOCKED, NOT_RUN `not
+  started: environment lease`) and moves the rate-limit book to the coordination directory. `--ceilings auto
+  --timeouts timeouts.ts` does the documented ceiling arithmetic; `--grace` defaults to `watchdog_grace`, the silence
+  limit to `stall.silence` (else min(3 × max(action, navigation, expect), 55 s)) and the silence rule is ACTIVE
+  (`--timeouts-mode shadow` = rollback, `timeouts_shadow`); `proposals[]` carries ready `run_plan_adjustments[]`
+  entries. **Scheduler `auto` (the default):** with the ledger on and `--units` an OK `skill5-parallel-plan/1` payload
+  whose `inputs.fingerprint` (`parallel-plan.mjs readinessFingerprint`: code, TCs, TEST-DATA, learning file, run plan,
+  environment) still matches — else re-planned in-process and written back (`scheduler.replanned`) — it DISPATCHES:
+  the conflict-free pool in BATCHES (one multi-worker command per max(4 × workers, 8) TCs, reserved / released per
+  batch, workers from the ramp, which records one sample per batch with its monotonic wall span), every restricted unit
+  as its own child, run-alone / barrier units recorded `global` in `dispatch.timeline`; without that proof (no / BLOCKED
+  / unrefreshable payload, ledger off, setup) every command runs with ONE worker (`scheduler.used: serial`,
+  `scheduler.fallback`). `--scheduler groups` (explicit) runs the hand-built run plan; `--scheduler dispatch`
+  (explicit) refuses instead of falling back. The last validated worker count per environment and browser kind is kept
+  in `ramp.json` (a trial target only, never evidence). `display`: headed unless `--headless`, CI or no graphical
+  desktop; `status.json` + one log line on every change of the active worker → TC map. `run-stage.mjs reclaim`
+  (user-run) ends orphaned trees.
   Every summary carries the per-TC code fingerprint (`impact.mjs`, imported lazily; a failure there is
   a warning, never a stop) at call start and end. Every command gets its OWN Playwright outputDir
   (`artifacts/test-output/phase-{N}/{stage}-{group}[-attempt{n}]/`, `groups[].outputDir`) — Playwright wipes only
   that folder, so no later command deletes an earlier one's traces and failure screenshots; `pruneOutput` removes
   earlier phases' folders and the old flat layout at each call and keeps the phase's newest `OUTPUT_KEEP` (100,
-  `output_pruned[]`); `--extra last-failed` gets the previous command's `.last-run.json` seeded. The model starts it as one background command per
-  stage and never polls it. `selftest-run-stage.mjs` (22 cases over `fixtures/run-stage/` — a fake
+  `output_pruned[]`); `--extra last-failed` gets the previous command's `.last-run.json` seeded. Every summary carries
+  `host` (the ledger's 2 s sampler's minima / peaks — the ONE host sampler of a call); `telemetry` (`skill5-telemetry/1`)
+  is OPT-IN (`--telemetry`; `--no-telemetry` is accepted, a no-op) and observe only: it reuses the sampler's readings
+  and adds the running command's process tree (count, working set; PowerShell CIM on Windows, `ps` elsewhere) every
+  `--tree-interval` (30 s); nothing reads it to decide anything. The model starts it as one background command per
+  stage and never polls it. **`--no-ledger` / `QA_LEDGER=off` (the rollback switch) or no process listing never
+  launch uncoordinated:** every command then takes an EXCLUSIVE reservation in the same ledger file (one Playwright
+  command at a time on the machine, workers ≤ the ceiling; no pressure admission, no dispatch); an unwritable
+  coordination directory or unreadable ledger → BLOCKED "no safe coordination", nothing started. **In both modes a
+  command runs under `ledger-exec.mjs` and its reservation is released only on a FRESH process table that shows
+  nothing it owns alive** (`capacity.mjs releaseConfirmed`): a browser that outlives its command — detached,
+  re-parented, its parent ended — keeps the slots held and is stopped only when the table shows it with its recorded
+  identity; no table → the slots stay held (`confirmed: none`), later commands wait, never launched beside it.
+  `--units` for dispatch must be an OK `skill5-parallel-plan/1` payload with its conflict list. A lease is accepted
+  for its run file under any run id (skill 9's own lease). `selftest-run-stage.mjs` (40 cases — every case without its own `--scheduler` runs the legacy `groups`; 40 the default `auto` → serial — over `fixtures/run-stage/` — a fake
   Playwright that filters `suite.json` with the real regexes and misbehaves on purpose: freeze with a
   grandchild process, quiet long step, malformed heartbeat, hang past the ceiling, missing / stale
   JSON, no tests, secret output, `0xC0000142`, failures only beside other tests, false passes, 429s
-  with `Retry-After`, mass failure, a serial chain, flaky repeats, the fingerprint read back by `impact.mjs select`, an outputDir wiped per command like the real one) exits non-zero on mismatch; the
+  with `Retry-After`, mass failure, a serial chain, flaky repeats, the fingerprint read back by `impact.mjs select`, an outputDir wiped per command like the real one,
+  NO VERDICT, deferrals, the wait budget, admission timeouts, 503 / 5xx causes, environment-wide refusals; cases
+  1-32 run with `QA_LEDGER=off` — exclusive execution in a throw-away `QA_CAPACITY_DIR` — and, with
+  `QA_LEDGER_SELFTEST=on` (the ledger-enabled variant — run BOTH before a commit), the same 32 cases with the ledger on;
+  either way on fixed host readings (`QA_CAPACITY_HOST_FIXTURE`) and a fixed process table, so no result depends on this
+  machine's free memory; 33-39 use the real process listing in temp directories — the ledger and scarce-memory lowering,
+  the lease, dispatch (the 2-worker pool consumes ONE reservation), 36 the rollback hard cap, 37 skill 9's call shapes
+  beside skill 5, 38 a browser that outlives its command and a failed listing, 39 two single-worker dispatch units side
+  by side: the failure beside the other command and the other command's overlapping pass both re-run alone; 27 also
+  covers a refused worker) exits non-zero on mismatch; the watchdog
+  timing cases (3, 4, 26, 31) assume an otherwise idle machine — run the harnesses one after another. The
   consumer-project run stays `NOT_RUN` here.
 - `impact.mjs` decides which TCs a code change touched — the targeted re-run and Checkpoint B's
   results-freshness check: `fingerprint` (per test: the test call, hooks, spec / describe remainders,
@@ -309,14 +401,22 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-references.mj
   anything dynamic or unresolvable = `unknown` = always stale) and `select` (latest executed attempt per
   TC from the summaries by start time → `stale[]` with the changed parts, `fresh[]`,
   `fresh_by_member_only[]`, `never_run[]`, `no_verdict[]`, `expanded[]` — the closure over tests shared
-  by several TCs —, `outside_scope[]`, `unknown[]`). Read-only, fail-safe (over-selects, never
-  under-selects), imports only `scan-lib.mjs`. `selftest-impact.mjs` (40 cases over `fixtures/impact/`,
+  by several TCs —, `outside_scope[]`, `unknown[]`) and `reverse --files <changed>` (`reverseDependencies()`: every
+  test and TC whose closure reaches a changed file or part; `unknown` always included — `closureOf()` gives the
+  per-test closure `parallel-plan.mjs` reads). Read-only, fail-safe (over-selects, never
+  under-selects), imports only `scan-lib.mjs`. `selftest-impact.mjs` (44 cases over `fixtures/impact/`,
   a mini POM project) exits non-zero on mismatch.
 - `config-inventory.mjs` lists every `playwright*.config.*`, every reference to each (package
   scripts, CI, docs, other configs, code — comments and code fences count) and the settings that
   block a merge; `deletable[]` is the ONLY authority for removing a consolidated config. It never
-  deletes. `selftest-config-inventory.mjs` (7 cases over `fixtures/config-inventory/`) exits
-  non-zero on mismatch.
+  deletes. `reconcile` resolves the EFFECTIVE run protections of an existing project (config + presets + project
+  overrides + inherited defaults, `timeouts.ts`, helpers, env files, the environment) with a precise status per key
+  (`ok` · `unbounded-operation` · `no-suite-timeout` · `above-target` · `exception-approved` · `protection-disabled`);
+  `--apply --results-root` backs every original up to `artifacts/reconcile/{stamp}/` (+ `summary.md`) and fixes only
+  the supported shapes (missing `timeouts.ts` keys from the template, literal `0` action / navigation, a missing pair in
+  `use`, `retries`, a literal `headless: true`, an absent helper) idempotently; everything else is a `conflicts[]` entry,
+  never overwritten. `check.mjs run` runs it dry as item 43's `tool:protections` unit. `selftest-config-inventory.mjs`
+  (8 cases over `fixtures/config-inventory/` + a throw-away reconcile project) exits non-zero on mismatch.
 - `scratch.mjs` is the **investigation runner** (`references/scratch-investigation.md`, `<scratch_investigation>`):
   ONE temporary probe from `{automation_root}/test-results/qa-scratch/` run with the consumer project's OWN
   `@playwright/test` through a generated overlay `scratch.config.ts` over the shared config (1 worker, no
@@ -326,19 +426,135 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-references.mj
   `process.env`, prints a credential or names a TC, and refuses while a stage's progress file is fresh; output is
   credential-filtered, a write outside `test-results/` is `violation`, the payload is `kind: investigation,
   officialResult: false`. `test-results/` is in every scanner's skip list, so the validator, `impact.mjs` and
-  `config-inventory.mjs` never see a probe. Never a result, evidence, re-run, burn-in or freshness proof;
-  `clean` before Checkpoint B (compliance item 50). `selftest-scratch.mjs` (13 cases over
+  `config-inventory.mjs` never see a probe. A probe holds ONE Playwright slot under the machine ceiling (exclusive
+  under `QA_LEDGER=off`; released only when a table confirms the probe and its browser ended; none within
+  `--max-wait` → refused `capacity`, no coordination → refused `no-coordination`). Never a result, evidence, re-run, burn-in or freshness proof;
+  `clean` before Checkpoint B (compliance item 50). `selftest-scratch.mjs` (14 cases over
   `fixtures/scratch/` + the impact fixture project) exits non-zero on mismatch.
-- `selftest-references.mjs` (3 cases, read-only) checks the contracts BETWEEN the instruction files: Heal Log
+- `selftest-references.mjs` (4 cases, read-only) checks the contracts BETWEEN the instruction files: Heal Log
   columns cited by name and matching `automation-rules.md` §5 (with the run-report fixture's header and
   `heal_log[]` keys), everything the smoke-gate STOP needs loaded by the stopping activity (block index → file,
-  the Workflow Load column), and the block index against the blocks. Run it after editing the Workflow table, the
-  block index, a Heal Log passage or a stop path; it exits non-zero on mismatch.
+  the Workflow Load column), the block index against the blocks, and `references/rule-registry.md` (one home per
+  rule; the home's block / § exists; every validator rule id, checklist item and script it names exists; every
+  activity that needs a rule has its home loaded by then; every block SKILL.md's every-activity rules cite is a
+  registry home). Run it after editing the Workflow table, the block index, a Heal Log passage, a stop path or a
+  rule's home; it exits non-zero on mismatch.
+- `capacity.mjs` (+ `ledger-exec.mjs`) is the machine-wide coordination layer, in `{QA_CAPACITY_DIR |
+  ~/.link-ai-pro/capacity}/`: the AUTO machine ceiling (`autoCeiling` / `resolveCeiling`: min((total memory − reserve)
+  ÷ 1536 MB, (cores − reserve) ÷ 1.5) for headed workers, within [1, upper]; `upper` = `config.json` `machineMaxWorkers`
+  written by hand, else `AUTO_MAX` 8 — a safety bound; unusable readings → `AUTO_FALLBACK` 2; `QA_MAX_WORKERS`, manifest
+  `execution.maxWorkers` and `--workers` only lower; ONE shared value recorded in the ledger — a run may lower it but
+  never raise it while anything runs),
+  the capacity ledger (atomic `mkdir` lock with an owner file — dead owner broken at once, ownerless after 30 s; a
+  release RENAMES the folder away and, when Windows refuses that because a contender has `owner.json` open, renames
+  `owner.json` to `released-*.json` — a marked folder is broken at once, so a refused delete never leaves an ownerless
+  lock everyone waits 30 s out (the cause of the run-stage stalls and FRESHNESS_FAILED stops, measured with
+  `QA_CAPACITY_TRACE={file}` — an opt-in JSONL of every lock, command-start / ceiling-stop / freshness event, never read
+  by a decision); `helpers/rate-limit.ts` keeps the same convention for the book lock; temp + rename writes; two-phase spawn: `reserve` → `ledger-exec.mjs` self-registers → `activate`; descendants
+  and browser-profile markers tracked; released only when nothing it owns is alive — recorded processes (pid + start),
+  the token on a command line or in the environment (Linux), markers, a session's `cliDaemon.js`, children of a
+  recorded or ENDED process (birth-ordered; a reused parent pid fathers only children born before the reuse) and their
+  trees; unknown liveness counts as alive; `sweep` resolves dead owners / orphans; `reclaim` ends only recorded
+  orphaned trees), CONFIRMED release (`confirm: 'table'` — exclusive commands, probes, named session holds: freed only
+  on a fresh table, never by a PID check; a waiting `reserve({ snapshot })` confirms; `releaseConfirmed` stops only the
+  run's own survivors; `release --token --force` is the user-run escape), committed-demand
+  admission, the pressure monitor (fed by the runner's 2 s sampler), and the environment lease (canonical host
+  identity with alias / CNAME / shared-address grouping; exclusive per OVERLAPPING environment too — a request whose
+  identity tokens (names, resolved addresses) meet another run's lease is held by it whatever the ids, so stories listing
+  different subsets / aliases of one application never run side by side — and they share ONE rate-limit book (the
+  ledger's `books` registry: a lease's `bookId` is the oldest book whose tokens meet its own; a request bridging two
+  books merges them, never shortening a deadline; `validateLease` hands run-stage the book for `PW_RATE_LIMIT_STATE`);
+  liveness owner = the Claude Code host process; reclaimed only when that owner is dead AND nothing it owns is alive —
+  no recorded tree of the run and no process the owner started after taking the lease (a shell, a playwright-cli
+  daemon and its browser — birth-ordered, PID-reuse guarded; a child older than the lease is not the run's); accepted
+  for its run file under any run id), EXCLUSIVE
+  execution (`reserve({ exclusive, liveness: 'pid' })` — granted only while nothing else of the class is live, blocks
+  everything else while live; PID-judged entries pruned inside every reserve and by a tableless sweep) and session
+  holds (the playwright-cli browsers of skills 3c, 5b and 9 under the same ceiling, owned by the Claude Code process,
+  ONE per `--session` name — reused, never counted twice; released when a table shows the session's daemon and browser
+  ended; an abandoned one stays held while its session runs; legacy holds without a session live as long as their owner).
+  CLI `status | config | sweep | reclaim | release | lease acquire | status | release | hold acquire | track | release`.
+  `selftest-capacity.mjs` (26 cases, injected process tables / clocks / DNS; case 2 the Auto ceiling on fixed hosts, its config bound, the fallback and the shared value a run cannot raise beside others; cases 19 and 21 bound Auto at 2 in their config; cases 15-16, 19, 22 and 26 start real `node`
+  children — 22: cancellation and clean-up on the real table, only the run's own process stopped; 23 overlapping
+  environments: subsets, aliases, shared addresses, no DNS, legacy leases; 24 lease takeover blocked by processes the
+  dead owner started after the lease; 25 one rate-limit book per overlapping group, merges never shortening a deadline;
+  26 lock release with `owner.json` held open, 4 processes × 60 contended cycles without a lost update) exits non-zero
+  on mismatch.
+- `selftest-admission.mjs` (5 cases) is the REAL-Playwright integration test of `assets/admission.template.ts` (no
+  browser launched): throw-away projects from the real templates + `fixtures/admission/` (fixtures that log every side
+  effect), run by a LOCAL Playwright test runner — `QA_PLAYWRIGHT_DIR`, one Node resolves, or the npm npx cache; it never
+  installs anything and without one reports NOT_RUN and exits 3, never a pass. A worker refused by timeout or
+  cancellation runs no seeding, shared login, per-test login, `beforeAll` or body and every test classifies (run-stage's
+  own `collectTests` → `markFollowers` → `classifyTest`) as `NOT_RUN — not started: admission timeout (…)`; a unit refused
+  by a scoped cool-down skips only its own login and body; a reopened state admits again; the control proves the probes.
+- `check.mjs` decides the compliance checkpoints: `snapshot` (the §6.2 hashes — scope files, per-TC tc-hash,
+  requirements, TEST-DATA, run plan, readiness, exceptions, configs, timeouts, lint config, tool versions; at B
+  also the evidence manifest and the drafts), `run` (the consumer's `tsc --noEmit`, the validator, the config
+  inventory, an optional typed lint and the A15 timeouts report — side by side within the compliance limit of 2,
+  through the ledger's `compliance` class; compact stdout, full output under `artifacts/checks/{snapshot}/`),
+  `record` (one semantic result; `--batch <results.json>` all of a checkpoint in ONE call — validated as a whole first,
+  any invalid / stale / duplicate / contradictory entry or a changed scope rejects the batch, nothing written; the
+  gate is identical to one-by-one records), `gate` (the result protocol: one result per (check, unit) for the snapshot;
+  missing / stale / contradictory / duplicate rejected; N/A only with its predicate; never-N/A at B: 16b, 18, 19,
+  25b, 46b, 48a, 48b; runtime items at A `scheduled-for-B`; a re-hash mismatch voids; B needs freshness, gate
+  record A and frozen drafts → `.runs/phase-N.checkpoint-{A|B}.json`, `skill5-gate/1`), `carry` (incremental
+  Checkpoint B — SHADOW ONLY, never a result) and `harness` (B20: a harness pass reused only on an exact key —
+  harness, scripts, fixtures, assets, lockfile, Node, platform / arch, timezone / locale, skill version — cached
+  under `~/.link-ai-pro/harness-cache/`). `CHECKS` (54 entries) is the catalogue; `references/expected-differences.md`
+  is the 1.2.0 → 2.0 parity register (every check identical or `differs: ED-n`, status PROPOSED until reviewed).
+  `selftest-check.mjs` (19 cases, fake tsc / eslint; required units 64 at A / 78 at B — item 43 carries `tool:protections`; case 18 ties the register to `CHECKS`; 19 the batch ≡ individual
+  records at the gate and every rejection) exits non-zero on mismatch.
+- `run-data.mjs` produces the phase's deterministic report data and the publication: `merge` (the `<second_run>`
+  merge into the run file, model-owned fields kept), `report` / `readiness` (ready markdown fragments: header
+  lines, run-history row, Stages + smoke-gate line, Results rows, the `### Run` bullets incl. `Acceptance`, the
+  readiness table), `handoff` (a structured view for a fresh session), `verify` (the runtime checks 16b, 18, 22,
+  23, 25b, 31-34, 37, 38, 43, 45, 46b, 48a, 48b, 50 + freshness, recorded per snapshot), `acceptance` (Revision 3.1
+  §3.8: `ACCEPTED` / `NOT ACCEPTED — {reasons}`, pre-gate or final), `draft-init` and `publish` (only on gate B
+  PASS with matching draft hashes: byte-identical promotion, the page rendered with `--gate`, a reproduction
+  check, rollback on any mismatch). It keeps its own copy of run-stage's report parsing ("keep in step").
+  `selftest-run-data.mjs` (10 cases) exits non-zero on mismatch.
+- `coverage.mjs` is the static coverage arithmetic and files from the model's judgements JSON (weighted % overall
+  and per stage, the gate verdict, manual priorities, the delta, the three CSVs, `coverage_snapshot`, the
+  `### Coverage` fragment); judgements stay semantic; a document TC without one BLOCKs. `selftest-coverage.mjs`
+  (6 cases) exits non-zero on mismatch.
+- `parallel-plan.mjs` is the parallel readiness check (read-only; `--out` is its only write): claims per TC and
+  per hook / fixture (TC fields, TEST-DATA tokens, learned interference lines — a changed TC hash marks them
+  `revalidate`, still honoured —, code structure via `impact.mjs closureOf`), conflict rules, classes, execution
+  units U1-U4 (contract violations and unclassifiable structures → U4), readiness counts (`mode: readiness`, what
+  dispatch needs — run on every skill-5 run) and `inputs.fingerprint` (`readinessFingerprint`, compared part by part by
+  `fingerprintChanges`); `--out` writes a BLOCKED payload too; only with `--compare` (`mode: shadow`, skill 5's
+  `--parallel-shadow`) a candidate plan compared with the hand plan. `dispatch.mjs` (pure) holds the
+  conflict rules, the list scheduler (priority, aging, barriers, pool constraint) and the ramp (W0 = min(2, ceiling);
+  windows of max(minTests, workers) tests and `minWindowMs` of summed WALL time — samples accumulate, a sample at another
+  worker count restarts the window; one +1 trial — or straight to a remembered `target` — after a healthy window, kept
+  only with ≥ 10 % gain; −1 on interference, environment-wide throttling (`envRefusal`) or a slower p95; scoped
+  throttling only blocks an increase; `validated()`; `requeue` hands back a unit whose reservation was refused). A step that edits a record named by its token is a write on that record (`rec:D{n}`) —
+  skill 3's `Data effect` / `Shared data` semantics (`tc-design.md`). `selftest-parallel-plan.mjs` (13)
+  and `selftest-dispatch.mjs` (14: case 14 the batch ramp — wall-clock windows, accumulation, scoped vs environment throttling, the remembered target) exit non-zero on mismatch.
+- `profile-run.mjs` measures a finished run for the performance baseline (Phase 0 of the optimisation plan) — never
+  used during a run. From a Claude Code transcript (`--transcript`, optional `--windows from..to=label,…`, windows with
+  one label merged): API calls, token classes (cache reads / writes, uncached input, output; sidechains counted
+  apart), context per call and its segments (P0, growth g; a drop below half = compaction), full-prefix cache writes
+  (> max(50 000, 25 % of the context)), tool calls by category with approval paths and nearest-rank p50 / p90, the time
+  split (model / tool / background wait / waits for the user; active = wall span − user waits). From a story's
+  `artifacts/progress` (`--progress`): Playwright time, test starts vs executions (records of never-run tests —
+  worker -1, e.g. skips — are starts only), executions per TC, workers and time-weighted average concurrency, gaps
+  between commands vs idle periods (`--max-gap-ms`, 1 h), hung and login steps, run-stage telemetry peaks. READ-ONLY and AGGREGATES ONLY — no transcript text,
+  command, path, step title or note ever reaches the output. `selftest-profile-run.mjs` (7 cases over
+  `fixtures/profile-run/`, every value hand-computed, incl. a no-leak check) exits non-zero on mismatch.
 - `assets/*.template.ts` (`playwright.config`, `timeouts`, `steps`, `progress-reporter`,
-  `console-guard`, `network-guard`, `rate-limit`, `test-data`) are TypeScript the skill copies INTO a
-  consumer project when the equivalent is absent (`network-guard` and `rate-limit` always — they do
-  nothing without `PW_RATE_LIMITS`, so learning a limit changes the run plan, never code). They are never executed here; the consumer-project acceptance probe in
-  `<shared_config>` is what verifies them, and it is reported `NOT_RUN` in this repo.
+  `console-guard`, `network-guard`, `rate-limit`, `test-data`, `admission`) are TypeScript the skill copies INTO a
+  consumer project when the equivalent is absent (`network-guard`, `rate-limit` and `admission` always — they do
+  nothing without their environment variables, so learning a limit changes the run plan, never code). The
+  always-installed helpers exchange state through `globalThis.__linkQcRuntime`, never through new imports from
+  the copied-when-absent ones, so an older `steps.ts` / `test-data.ts` keeps compiling. `admission` holds the
+  `workerAdmission` / `unitAdmission` fixtures (code-craft §6); `rate-limit` books service / account / endpoint /
+  environment buckets together in the shared book (never shortening a server deadline, deferring when out of
+  reach, full-jitter backoff, 50 % recovery, cancellable waits); `network-guard` writes the classified records;
+  `steps` adds the stall detector; `console-guard` writes the `teardown` and `console-report` heartbeats;
+  `timeouts` adds `stall.silence` and `admission.max_wait` and refuses unlimited action / navigation timeouts. They
+  are never executed here; the consumer-project acceptance probe in `<shared_config>` is what verifies them, and it
+  is reported `NOT_RUN` in this repo.
 - `render-run-report.mjs` is the **only** way a `TEST-RUN-REPORT-*.html` page is produced — skill
   5 never hand-writes it. It reads the story's `TEST-RUN-REPORT-{feature}.md` (test-case status,
   one `## Phase N` section per run) **and** `BUG-REPORT-{feature}.md` (the defects), enriches
@@ -358,9 +574,13 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-references.mj
   byte-identical with skills 3 / 3b / 3c. Reviewer comments: every bug and phase card and one
   general box take a comment; the page saves `REVIEW-COMMENTS-{feature}.md` beside itself (the
   reviewer's file, the only extra entry in the story-folder whitelist); `--comments` overrides;
-  the provenance line gains an optional `comments=` hash (v1.0 pages still verify). The contract
-  lives in `references/run-report.md` (§9b comments, §10 templates).
-- `selftest-run-report.mjs` exits non-zero on mismatch by design; its 32 cases (23 PARTIAL rows, 24 reviewer comments, 25 one shell per page, 26 shell + kit mirror with 3 / 3b / 3c, 27 the `ai_rubric_failure` classification, 28 the full mirror with 5b — renderer, harness, scan-lib, both templates, run-report fixtures, 29 the test-data readiness decisions counted per phase, 30 the TC status tracker, 31 navigation markup, 32 `rate_limited` and the documented `interrupted:` / `not started:` / `cleanup_incomplete` reasons accepted without a warning) run on a temporary
+  the provenance line gains an optional `comments=` hash (v1.0 pages still verify). `--base {story folder}`
+  resolves evidence links, the legacy listing, comments and the tracker against that folder (how a DRAFT under
+  `artifacts/drafts/phase-N/` renders exactly what the published page will); `--gate {gate record}` adds an
+  optional ` · gate={sha256}` to the provenance and the gate verdict to the meta line (`run-data.mjs publish`
+  passes it); pages with or without it verify. The smoke-gate word `NO VERDICT` is accepted (the phase is
+  INCOMPLETE, never GREEN). The contract lives in `references/run-report.md` (§1 flags, §9b comments, §10 templates).
+- `selftest-run-report.mjs` exits non-zero on mismatch by design; its 36 cases (36 skill 9's in-place retest update of the latest phase on a 1.x and a 2.0 run file — PASS, no gate claim, gate records untouched; 23 PARTIAL rows, 24 reviewer comments, 25 one shell per page, 26 shell + kit mirror with 3 / 3b / 3c, 27 the `ai_rubric_failure` classification, 28 the full mirror with 5b — renderer, harness, scan-lib, both templates, run-report fixtures, 29 the test-data readiness decisions counted per phase, 30 the TC status tracker, 31 navigation markup, 32 `rate_limited` and the documented `interrupted:` / `not started:` / `cleanup_incomplete` reasons accepted without a warning, 33 `--base`, 34 `--gate`, 35 `NO VERDICT` — none needs a new golden) run on a temporary
   copy of `scripts/fixtures/run-report/automation/` (a story with two phases, two bugs and PNG
   stubs) and compare against `scripts/fixtures/run-report/golden/`. Regenerate the golden only for
   a deliberate change (command in the fixture README).
@@ -508,19 +728,22 @@ change a procedure there and re-read skill 9's steps 5–7.
 
 **Skill front-matter** needs `name` and `description`. The `description` is the trigger — keep its
 trigger phrases when editing, and keep it in step with `INPUT.txt`. Add `argument-hint` where
-useful, `model: claude-opus-5` where the skill already sets it, `metadata: version: "x.y.z"` where the skill is
-versioned (skill 5), and
+useful, `model: claude-opus-5` where the skill already sets it — **never on skill 5**, which inherits the model selected
+for the session (no `model:` key; a forced model switched the model at every invocation and rewrote the whole prompt
+cache — user decision, 2026-10-25; the other skills' lines are a separate decision), `metadata: version: "x.y.z"` where
+the skill is versioned (skill 5), and
 `disable-model-invocation: true` for skills with side effects or session-wide effect (1, 12). Skill 1's
 `allowed-tools` pre-approves only the three read-only script invocations — every mutation must go
 through the normal permission flow. Skills 3 and 3b pre-approve only their two scripts
 (`Bash(node *render-tc-review.mjs*)`, `Bash(node *selftest.mjs*)`); skill 3 has no Playwright MCP
 at all, 3b has no Azure DevOps / Docx MCP. Skill 3c pre-approves the same two scripts plus
-`Bash(playwright-cli *)` and `Bash(npx --no-install playwright-cli *)` and has **no MCP server of
-any kind** — never add `mcp__playwright` to it, never add `--browser-tool` or a CLI path to 3b. Skill 5b
+`Bash(node *capacity.mjs*)` (skill 5's, called by path for its session holds), `Bash(playwright-cli *)` and
+`Bash(npx --no-install playwright-cli *)` and has **no MCP server of any kind** — never add `mcp__playwright` to it, never add `--browser-tool` or a CLI path to 3b. Skill 5b
 pre-approves its three scripts (`Bash(node *render-run-report.mjs*)`, `Bash(node *selftest-run-report.mjs*)`,
-`Bash(node *selftest-manual-run.mjs*)`) plus the same two `playwright-cli` forms and likewise has **no MCP
-server of any kind** — never add `mcp__playwright` to it. Skill 9 pre-approves skill 5's three scripts it
-calls by path (`Bash(node *run-stage.mjs*)`, `Bash(node *impact.mjs*)`, `Bash(node *render-run-report.mjs*)`),
+`Bash(node *selftest-manual-run.mjs*)`) plus `Bash(node *capacity.mjs*)` and the same two `playwright-cli` forms and
+likewise has **no MCP server of any kind** — never add `mcp__playwright` to it. Skill 9 pre-approves skill 5's four scripts it
+calls by path (`Bash(node *run-stage.mjs*)`, `Bash(node *impact.mjs*)`, `Bash(node *render-run-report.mjs*)`,
+`Bash(node *capacity.mjs*)`),
 the same two `playwright-cli` forms, `mcp__azure-devops` and exactly the two attachment tools — never
 `mcp__playwright` (user decision, 2026-10-19).
 
@@ -573,15 +796,21 @@ file, the folder whitelist, the renderer's gates or the viewer), keep in step:
 deliberately), `selftest-run-report.mjs`, 5b's byte-identical mirror of all of these (renderer, harness,
 scan-lib, both templates, fixtures — regenerate its goldens with skill 5's) + its `references/run-report-manual.md`,
 the `<result_organization>` (`references/results-and-evidence.md`) / `<second_run>` /
-`<bug_report_format>` (`references/final-run.md`) / `<checkpoint_b>` (`references/compliance-checkpoints.md`
-§4a) blocks and the checklist (`references/structured-returns.md`), `INPUT.txt`,
-skill 1's `references/testing-layout.md` and `README.md`.
+`<bug_report_format>` / `<publication>` (`references/final-run.md`) / `<checkpoint_b>` (`references/compliance-checkpoints.md`
+§4a) blocks and the checklist + `<run_acceptance>` (`references/structured-returns.md`), `scripts/run-data.mjs`
+(`merge`, `report` fragments, `verify`, `acceptance`, `publish`) + `selftest-run-data.mjs` + `fixtures/run-data/`,
+`references/schemas/script-payloads.md`, `INPUT.txt`, skill 1's `references/testing-layout.md` and `README.md`.
 
 **When changing skill 5's compliance rules**, keep these five in step: the `<checkpoint_a>` /
 `<checkpoint_b>` blocks (`references/compliance-checkpoints.md` §3a / §4a) and `<quality_checklist>`
 (`references/structured-returns.md`), with the every-activity rules of `SKILL.md`, the derived checklist in
 `references/compliance-checkpoints.md`, the `[M]` / `[R]` tags in `references/code-craft.md`, the
-rule catalogue in `scripts/validate-automation.mjs` (`RULES` + `LIMITS`) and the exemptibility lists in
+rule catalogue in `scripts/validate-automation.mjs` (`RULES` + `LIMITS` + `RULE_CHECKS`), the check catalogue in
+`scripts/check.mjs` (`CHECKS`: kinds, units, N/A predicates, never-N/A list) + `selftest-check.mjs` (its required
+unit counts follow `RULE_CHECKS`), the runtime checks of `scripts/run-data.mjs verify`, `references/rule-registry.md`
+(+ `selftest-references.mjs` case 4), `references/expected-differences.md` (+ `selftest-check.mjs` case 18 — a check
+whose kind, units, predicate or never-N/A flag changes needs its row and, if it now differs, an `ED`) and the
+exemptibility lists in
 `references/validator.md`. A new rule needs a `scripts/fixtures/` case and a `selftest.mjs`
 expectation — a true positive, a false-positive guard and a false-negative guard — or it is
 unverified.
@@ -590,18 +819,22 @@ unverified.
 names, the timeout keys, the heartbeat / results record shapes, the watchdog verdicts, the
 consolidation procedure, the stage messages), keep in step: `<shared_config>`
 (`references/run-plan-and-config.md`) / `<live_progress>` / `<staged_execution>` / `<first_run>`
-step 2b (`references/execution.md`) and the Timeout policy section (`references/structured-returns.md`),
-`references/code-craft.md` §8-9 and §14, the eight `assets/*.template.ts`, `scripts/watchdog.mjs` +
+step 2b (`references/execution.md`) and the return's `Timeouts:` line (`references/structured-returns.md`),
+`references/code-craft.md` §6, §8-9, §11 and §14, the nine `assets/*.template.ts`, `scripts/watchdog.mjs` +
 `selftest-watchdog.mjs` + its fixtures, `scripts/run-stage.mjs` + `selftest-run-stage.mjs` +
-`fixtures/run-stage/`, `scripts/impact.mjs` + `selftest-impact.mjs` + `fixtures/impact/` (the summary
-`code{}` shape and the part ids), `scripts/config-inventory.mjs` + its harness,
+`fixtures/run-stage/` (the fake Playwright emulates the helpers' records and annotations), `scripts/capacity.mjs`
++ `ledger-exec.mjs` + `selftest-capacity.mjs` (the lock protocol is shared with `rate-limit.template.ts`),
+`scripts/dispatch.mjs` / `parallel-plan.mjs` + their harnesses, `scripts/run-data.mjs verify` (heartbeat events),
+`scripts/impact.mjs` + `selftest-impact.mjs` + `fixtures/impact/` (the summary
+`code{}` shape and the part ids), `scripts/config-inventory.mjs` + its harness, `<capacity_and_lease>` /
+`<parallel_readiness>`, `references/schemas/script-payloads.md`,
 `references/run-report.md` (§3 folder contract, §7 `timeouts` / `watchdog_events` /
 `merged.stages[].source`), `INPUT.txt`, skill 1's `references/testing-layout.md` and `README.md`.
 Deliberate departures from community Playwright practice are listed in code-craft §15 — change
 one only on an explicit user instruction, and update the row.
 
 **Progressive disclosure.** `SKILL.md` stays compact and delegates detail to `references/*.md`
-loaded per step (skill 1 ≈ 110 lines over 9 references; skill 5 ≈ 180 lines over 18 references,
+loaded per step (skill 1 ≈ 110 lines over 9 references; skill 5 ≈ 200 lines over 19 references + the rule registry,
 one per activity, with a block index — every moved block keeps its `<tag>`, so a pointer like
 `<pom_mandatory>` still resolves). Load each reference once and keep it. Don't inline reference
 content back into a SKILL.md.
@@ -635,6 +868,11 @@ content back into a SKILL.md.
   automation code); every other bug goes through playwright-cli (the full TC when it has a row in the latest
   phase, else the bug's own steps; same login rules as 3c / 5b). The result updates the LATEST phase in place
   (see the Azure loop conventions), and in Azure the evidence is uploaded only AFTER the verified close / reopen.
+  Before anything touches the environment it takes ITS OWN environment lease through skill 5's `capacity.mjs`
+  (`--run-id skill9-…`, the phase's run file; held → BLOCKED naming the holder; skill 5 absent → BLOCKED), passes
+  `--env-id` to every `run-stage.mjs` call and holds one capacity slot per open playwright-cli browser; both are
+  released at the end (`references/coordination.md`). A 2.0 phase's gate records are never edited and the amended
+  page is rendered without `--gate`.
 - **AI Oracle** (optional TC field after `Data Oracle`: Intent · Must contain · Must not contain ·
   Language · Max length · Repeats / Pass threshold): designed by skill 3, judged by 5b from the reply
   text — hard checks + rubric against the pass threshold, never from a screenshot; no secret in the prompt
@@ -759,10 +997,32 @@ content back into a SKILL.md.
 - **No project, product or customer name and no real host in any skill**: neutral examples
   (`Administrator`, `admin.user`, `Open Products`), placeholders in templates and fixtures.
 - Skill 5 enforces **two machine gates**: `<checkpoint_a>` before execution and `<checkpoint_b>`
-  on the final code, both of which must PASS for the delivered scope. The scanner gate is not the
-  compliance gate — open `review[]` / `notRun[]` items must be closed by semantic review or the
-  checkpoint is BLOCKED.
-- **Skill 5 runs from ONE shared `playwright.config.ts`** (Chrome, headed, 2 workers,
+  on the final code, both of which must PASS for the delivered scope — decided by `check.mjs gate` from one
+  result per check for a frozen snapshot, recorded in `.runs/phase-N.checkpoint-{A|B}.json`. The scanner gate is
+  not the compliance gate — open `review[]` / `notRun[]` items must be closed by semantic review or the
+  checkpoint is BLOCKED. The report set is drafted, frozen, checked by B and only then published byte for byte
+  (`run-data.mjs publish`); `AUTOMATION COMPLETE` also needs the run ACCEPTED (`<run_acceptance>`: no unresolved
+  possible concurrency defect or unexplained first-attempt regression, no required TC left unstarted by
+  admission / pressure / deferral / the lease, a smoke verdict). Incremental Checkpoint B (`check.mjs carry`) is
+  shadow only until separately approved.
+- **Skill 5 runs inside the machine's capacity** (Revision 3.1 of the optimisation plan, approved 2026-10-24):
+  the machine ceiling is AUTO (host memory / CPU, headed demand; the capacity config only bounds it, lower-only
+  overrides — user decision, 2026-10-26: workers are never asked), every command reserves
+  its workers in the ledger and releases them only when its tree is gone, host pressure holds new commands and
+  tests back, and an environment lease (acquired at intake, released at close-out; skill 9 may take the same
+  lease) keeps one run per environment on this machine. Ledger off ⇒ dispatch off — and ledger off is never
+  uncoordinated: exclusive execution keeps the hard cap (user decision, 2026-10-24), and a command's slots are released
+  only when a process table confirms its tree — browsers included — ended (no table → held); investigation probes and
+  the playwright-cli browsers of skills 3c, 5b and 9 count against the ceiling too — one session hold per browser,
+  taken before its `open`, released after a confirmed close (user decision, 2026-10-25). The parallel readiness check
+  runs on every run and the default scheduler (`auto`) dispatches on a fresh OK payload — independent tests in batches
+  the ramp sizes, conflicting units apart, unknown effects alone — and runs SERIALLY without that proof (user decision,
+  2026-10-26); the silence rule is ACTIVE by default (fixed deadlines, meaningful progress only, bounded waits — a stuck
+  step stopped within 120 s); run-stage telemetry is opt-in; an existing project's run protections are reconciled
+  before Checkpoint A (`config-inventory.mjs reconcile`). Checkpoint semantic results are recorded in one `check.mjs
+  record --batch` per checkpoint; the final return is a summary that links the report. Session reuse, reduced
+  isolation / burn-in, reviewer delegation and model routing stay deferred.
+- **Skill 5 runs from ONE shared `playwright.config.ts`** (Chrome, headed locally, runner-decided workers,
   `fullyParallel`), never a per-story file; a second config is merged only when its behaviour is
   reproducible and every reference is rewritten, deleted only when `config-inventory.mjs` lists it
   `deletable[]`, otherwise kept and reported. Timeouts come from `timeouts.ts` only and are
@@ -820,9 +1080,12 @@ Branch `main`; commit and push only when asked. Projects pick changes up on thei
 `/sync-skills`, so a push here is effectively a release — add an entry under `## [Unreleased]` in
 `CHANGELOG.md` (one sub-list per skill touched; it doubles as the PR description), make sure
 `SKILL.md`, `INPUT.txt`, `lib.mjs` and `README.md` are consistent, a changed versioned skill bumped its
-`metadata.version`, and that all sixteen self-test harnesses pass (skill 1's
+`metadata.version`, and that all twenty-four self-test harnesses pass (skill 1's
 `selftest.mjs`; skill 4's `selftest-ado-sync.mjs`; skill 5's validator, run-report, watchdog,
-config-inventory, tc-hash, run-stage, impact, scratch and references harnesses; the mirrored one in skills 3, 3b and 3c including its
+config-inventory, tc-hash, run-stage, impact, scratch, references, profile-run, check, run-data, coverage,
+capacity, parallel-plan, dispatch and admission harnesses — run-stage in both variants, default and `QA_LEDGER_SELFTEST=on`,
+the admission one on a local Playwright test runner (its NOT_RUN is not a pass), one harness after another, each with
+its own temp folder and `QA_CAPACITY_DIR`; the mirrored one in skills 3, 3b and 3c including its
 mirror case; and skill 5b's `selftest-run-report.mjs` — the run-report mirror — and
 `selftest-manual-run.mjs`), before committing.
 

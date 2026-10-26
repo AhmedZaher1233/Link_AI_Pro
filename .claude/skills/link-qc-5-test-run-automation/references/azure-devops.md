@@ -51,7 +51,7 @@ touched here, and a legacy map without the hash columns gets them added, never r
    `[HUMAN]` step), `PASS` on every required variant in the results of record (each fresh —
    `impact.mjs` names none stale), **after Checkpoint B PASS**:
    ```bash
-   node .claude/skills/link-qc-5-test-run-automation/scripts/tc-hash.mjs --tc {source_tc_doc} --data {tc_output_folder}/TEST-DATA-{feature}.md --ids TC-01,TC-02 --pretty
+   node .claude/skills/link-qc-5-test-run-automation/scripts/tc-hash.mjs --tc {source_tc_doc} --data {tc_output_folder}/TEST-DATA-{feature}.md --ids TC-01,TC-02
    ```
    and write each `hashes[TC-ID]` into that TC's `automated_tc_sha256`. The hash is semantic
    (behaviour fields + the role / data shape the TC references — `references/run-report.md` names

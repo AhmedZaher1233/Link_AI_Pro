@@ -1,0 +1,1 @@
+{"tool":"run-stage","stage":"smoke","telemetry":{"schema":"skill5-telemetry/1","observeOnly":true,"memory":{"availableMinMb":4000},"cpu":{"peakPct":55.5},"tree":{"peakRssMb":900,"peakProcesses":12}}}

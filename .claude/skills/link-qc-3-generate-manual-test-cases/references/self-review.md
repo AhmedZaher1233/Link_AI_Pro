@@ -83,7 +83,9 @@ gate is the human.
     a recorded check (unchecked = `UNKNOWN`); no `api` / `db` way is shown as available without
     confirmation from the learning file or the user; the header counts equal the table rows;
     "shared" means the TCs use the same data item, with execution order stated only for a real
-    dependency; no locator, endpoint path, table / column name, code identifier or secret
+    dependency (`(depends on TC-x)`); a `modifies` / `deletes` TC names the record it changes by
+    its token in that step, and a `Shared data` line is worded the same in every TC that shares it
+    (`tc-design.md` "Data effect and Shared data"); no locator, endpoint path, table / column name, code identifier or secret
     anywhere in the file.
 15. **Open questions** (`open-questions.md`) — every unresolved gap has a `Q-{n}` entry in the
     required shape (affected TCs, gap, why, evidence, recommendation + reason, alternatives,

@@ -1,0 +1,8 @@
+{"at":"2026-01-01T09:00:00.000Z","worker":0,"tc":"TC-1","event":"test-start"}
+{"at":"2026-01-01T09:00:01.000Z","worker":0,"tc":"TC-1","step":"Login as the admin [A1] SECRET-MARKER-STEP","event":"start","deadline_ms":30000,"note":"SECRET-MARKER-NOTE"}
+{"at":"2026-01-01T09:00:31.000Z","worker":0,"tc":"TC-1","step":"Login as the admin [A1] SECRET-MARKER-STEP","event":"end","outcome":"ok","elapsed_ms":30000}
+{"at":"2026-01-01T09:00:00.000Z","worker":1,"tc":"TC-2","event":"test-start"}
+{"at":"2026-01-01T09:00:02.000Z","worker":1,"tc":"TC-2","step":"Sign in as viewer","event":"start","deadline_ms":30000}
+{"at":"2026-01-01T09:00:22.000Z","worker":1,"tc":"TC-2","step":"Sign in as viewer","event":"end","outcome":"ok","elapsed_ms":20000}
+{"at":"2026-01-01T09:00:40.000Z","worker":0,"tc":"TC-1","event":"test-end"}
+{"at":"2026-01-01T09:00:30.000Z","worker":1,"tc":"TC-2","event":"test-end"}

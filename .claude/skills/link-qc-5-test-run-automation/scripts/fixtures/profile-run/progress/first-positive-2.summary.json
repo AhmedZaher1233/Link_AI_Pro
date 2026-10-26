@@ -1,0 +1,1 @@
+{"tool":"run-stage","stage":"positive","telemetry":{"schema":"skill5-telemetry/1","observeOnly":true,"memory":{"availableMinMb":3500},"cpu":{"peakPct":70},"tree":{"peakRssMb":1200,"peakProcesses":15}}}

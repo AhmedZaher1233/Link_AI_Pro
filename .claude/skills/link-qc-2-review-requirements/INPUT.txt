@@ -1,9 +1,18 @@
 SKILL: link-qc-2-review-requirements
-WHAT IT DOES: Reviews a requirement / user story / spec for completeness, clarity,
-testability, consistency, feasibility, and risk. Splits multi-story specs and writes one
-folder per User Story (REQ file + review file). Stories taken from a spec FILE are grouped
-under Testing/Requirements/SPEC-{spec-name}/; ADO / Word / pasted stories go directly under
-Testing/Requirements/.
+WHAT IT DOES: Reviews a requirement / user story / spec for completeness (incl. priority,
+upward traceability, notifications, audit trail, AR/EN localization and Hijri dates, SLA and
+time rules, calculations, cancel/withdraw/edit flows, existing-data impact, lists and exports,
+assumptions / constraints / out-of-scope, and the full NFR set), clarity (incl. passive voice
+with no actor, weak words, leftover TBD / TBC placeholders — English and Arabic), testability (incl. atomic ACs), consistency, correctness, story
+quality (necessity, scope, INVEST), feasibility, and risk (likelihood × impact per AC, which
+sets the P1 / P2 / P3 test priorities). Findings use a defined High / Medium / Low severity
+scale; points the reviewer cannot judge are raised as "Question" rows, not defects. Then reads each story as the
+ONE role you pick (QC, PO / BA, Developer or a custom role — asked first at the start, then the
+scope question) and walks the end-to-end journeys across stories to find broken hand-offs.
+OUTPUT IS REVIEW REPORTS ONLY: one business review file per spec per role (one section per user
+story) and, only if you choose the technical assessment, one separate technical review file. The skill
+NEVER creates or edits a requirement file (no REQ-*.md) — the requirement is the source of
+truth and only the PO changes it.
 
 ============================================================
 INPUT — PROVIDE EXACTLY ONE SOURCE
@@ -11,15 +20,26 @@ INPUT — PROVIDE EXACTLY ONE SOURCE
 
 Pick ONE of these five:
   1. Azure DevOps User Story   — the story ID (e.g. 1031475) or its EXACT title
-  2. Word document             — path to the .docx file (read via the docx MCP; the findings are
-                                 ALSO written into the document as Word review comments, one per
-                                 finding — you are asked once: original file or a copy
-                                 {name}-QC-review.docx (recommended: copy))
+  2. Word document             — path to the .docx file (read via the docx MCP; the BUSINESS
+                                 findings are ALSO written into the document as Word review
+                                 comments, one per finding — you are asked once: original file
+                                 or a copy {name}-QC-review.docx (recommended: copy)). Technical
+                                 findings are never written into the Word document.
   3. Direct text               — paste the requirement/PRD text in the chat
   4. Small spec file           — path to the .md file (one user story; output still lands
                                  under SPEC-{spec-name}/)
-  5. Big spec file             — path to the .md file (multiple user stories — it will be
-                                 split, one review per story, all under SPEC-{spec-name}/)
+  5. Big spec file             — path to the .md file (multiple user stories — it is split into
+                                 one section per story, all in ONE review file)
+
+OPENING QUESTIONS (one question box, before anything is read):
+  1. Role — QC / PO / BA / Developer, or a custom role via "Other" (single selection —
+     exactly ONE role is mandatory). QC covers the tester checks AND the PO / BA checks
+     (delivers the goal, matches the real process, no missing rules).
+  2. Scope — "Business only" (business review only, no technical file) — listed first
+             or "Include technical assessment" (business review + separate technical review file)
+  Answer them up front with --perspective qc|po|dev and --technical | --business-only.
+  Any role can choose the technical assessment; both review files are read as the same role.
+  To review as another role, run the skill again with that role — each role gets its own files.
 
 REQUIREMENT DEPENDENCIES ARE FOLLOWED AUTOMATICALLY: if the spec explicitly refers to other
 REQUIREMENT files (another spec or story, a glossary, a permission matrix, a story ID defined
@@ -27,57 +47,115 @@ elsewhere…), the skill finds them (relative path → repo search → learning 
 reads them, checks this spec against them, and gives an unreviewed dependency spec its own full
 review under Testing/Requirements/SPEC-{dep-spec-name}/ (up to 2 levels deep). Dependency files
 are never modified. Reply "skip" for a dependency you do not want followed — it is then reported
-as Unresolved and the acceptance criteria that rely on it are rated Risky.
+as Unresolved and the acceptance criteria that rely on it are rated incomplete (and Risky in the
+technical review, when chosen).
 
 TECHNICAL FILES ARE IGNORED: source code, API files, configuration, database schemas, data
 models, technical design documents, infrastructure and automation code are never read or
-reviewed, even when the spec refers to them. The review uses requirement information only and
-is written in simple QA English.
+reviewed, even when the spec refers to them — also in the technical review, which is judged
+from the requirement wording only. The business review is written in simple QA English and
+contains nothing technical.
 
 REPLY SYNC (Word sources only): say "read the replies", "check comment replies", "pull reviewer
 answers from the Word file" or "sync Word comments" + the .docx path. The skill reads the replies
 BA / PO / developers left on its comments, classifies them (Answered / Accepted / Rejected /
-Question back), adds a "Reviewer Replies" section to the review, re-rates what an answer closed,
-updates the REQ file and the learning file, and — only after you confirm — resolves answered
-threads and posts the QC's replies.
+Question back), logs them in "Reviewer Replies", re-rates what an answer closed, adds answered
+rules to the story's "Clarified Rules" section (for the PO to take into the source) and the
+learning file, and — only after you confirm — resolves answered threads and posts the QC's replies.
+
+FINDING STATUS (all sources): every finding has a stable ID (e.g. 1234-AC3-AMB-1) and a Status:
+Open / Accepted / Rejected / Answered. To update it without re-reviewing, say "update finding
+status" + the story ID, then either name the changes in chat ("1234-AC3-AMB-1 answered: the limit
+is 5 working days") or edit the Status cells in the review file yourself. The skill shows the
+changes, waits for your OK, logs them in "Reviewer Replies", adds answers to "Clarified Rules",
+and re-applies the verdict rules. Answered findings no longer count against the verdict.
+
+FINAL GATE — ANSWER THE QUESTIONS: after the review reports are written, the skill asks whether
+you want to go through the open business questions now (Answer them now / All need PO decision /
+Not now). Each question then offers 1–3 suggested answers, "Need PO decision", or your own typed
+answer (up to 4 questions per box, High priority first). Answered questions are marked
+"✅ Answered" in the business review (findings, Clarified Rules, ratings and verdict updated);
+the others are marked "⏳ Need PO decision". The skill then writes
+business-clarification-{spec-or-story-name}.md: a table of the answered questions (Q, answer,
+who answered — name and role — and a "🔎 PO to verify" flag on every answer not given by the
+PO / BA role, with an empty "PO check" column for the PO), plus the PO questions grouped in one
+section ready to send. Say "the PO confirmed Q-02" / "the PO corrected Q-03: …" to record the
+PO's check. Run it again later with "answer the open questions".
+When the PO replies, say "the PO answered …" — the answers move to "Answered Questions".
+
+RE-RUN = CONFIRMATION REVIEW: reviewing a spec or story that already has a review keeps its
+Finding IDs and Status, marks every finding New / Still open / Changed, moves fixed ones to
+"Closed Findings", keeps the Clarified Rules, and adds "Changes Since Last Review" blocks
+(previous → current verdict, what changed in the requirement, Fixed / New / Changed / Still open
+counts). Older per-story review files (US-{id}-review.md in story folders, SPEC-REVIEW-SUMMARY.md)
+are read as the previous review and left in place — never deleted.
 
 OPTIONAL:
   - A dimension to limit the review: completeness | clarity | testability |
-    consistency | feasibility | risk        (default: all 6)
+    consistency | feasibility | risk | correctness | story quality   (default: all 8;
+    feasibility alone writes only the technical review file)
+  - A technique only: "perspective review" | "walk the journey"
+    (both run automatically on a full review; a single-dimension review runs the perspective
+    pass for that dimension only and skips the journey walk)
+  - --perspective qc|po|dev (exactly one) — answers the role question up front
+  - --technical | --business-only — answers the Review Scope Gate up front
   - "all" — review every spec under specs/ and every story under test/User stories/
-  - --lang ar|en — language of the review files (US-{id}-review.md, SPEC-REVIEW-SUMMARY.md)
+  - --lang ar|en — language of both review files
 
 REVIEW LANGUAGE: English unless THIS run asks for another language (--lang ar or an explicit
 sentence). Nothing else decides it — not the source language, not a saved learning-file
 answer. An Arabic requirement gets an English review unless you ask for Arabic; you are never
 asked which language you want, and the choice is never saved. Quoted application text (labels,
-messages) stays in the application's language. REQ-*.md is ALWAYS English (skill 3 reads it).
+messages) stays in the application's language.
 
 IF YOU GIVE NOTHING: the skill first checks Testing/project-learning.md (recorded spec
 locations, Azure DevOps project, glossary); only what is still
 missing is asked. It never guesses. Your answers are saved to the file's "Requirements
-Review Model" section.
+Review Model" section (never the scope, role or language — those are per run).
 
 ============================================================
-OUTPUT — WHAT YOU GET
+OUTPUT — WHAT YOU GET (review reports only — at most 2 files per spec per role)
 ============================================================
+  Every review file is written in plain, easy English (Arabic only with --lang ar), is titled
+  "Business Review — … · Reviewed as: {role}" or "Technical Review — … · Reviewed as: {role}"
+  (the ONE role you picked: QC, PO / BA, Developer, custom — also in the file name), opens with a short
+  "In Short" summary, and has ONE "Questions to Answer" table, grouped by status (Need PO decision
+  first, then Open, then Answered) and ordered High → Medium → Low inside each group, with no
+  duplicate questions (business questions for PO / BA, technical ones for Dev / Architect).
+  Trimmed layout: In Short → Dashboard (one row per story: verdict, ratings, risk) → Questions →
+  Spec Level (dependencies, journeys) → one short section per story (Issues table, P1 risk,
+  coverage) → Appendix (clarified rules, replies, closed findings). The requirement text is
+  never copied; the header names the source version that was reviewed.
+  Each finding appears once; descriptions are kept to 3 short sentences.
+
   Spec FILE input (cases 4 and 5):
-  Testing/Requirements/SPEC-{spec-name}/        ← {spec-name} = file stem, kebab-case
-    US-{id}-{name}/                             ← one per story found in the spec
-      REQ-{id}-{name}.md    ← structured requirement (input for skill 3) — always English
-      US-{id}-review.md     ← the review (ratings, gaps, questions, verdict) — in the chosen language
-    SPEC-REVIEW-SUMMARY.md  (only when the spec held several stories; includes the
-                             Dependencies block: each file it depends on + status + conflicts)
+  Testing/Requirements/SPEC-{spec-name}/                 ← {spec-name} = file stem, kebab-case
+    SPEC-{spec-name}-{ROLE}-review.md     ← business review: Spec Summary (stories + verdicts,
+                                             dependencies, cross-story findings, journeys) +
+                                             one section per story — in the chosen language
+    SPEC-{spec-name}-{ROLE}-technical-review.md  ← ONLY if you chose the technical assessment:
+                                             feasibility, delivery risks and every technical
+                                             point, with its own technical verdict
   Testing/Requirements/SPEC-{dep-spec-name}/    ← a dependency spec that had no review yet
                                                   gets its own full review here
 
   ADO / Word / pasted text (cases 1-3):
   Testing/Requirements/US-{id}-{name}/
-    REQ-{id}-{name}.md
-    US-{id}-review.md     ← for Word sources also holds "Word comments: N written to …" and,
-                             after a reply sync, the "Reviewer Replies" section
-  {name}-QC-review.docx (or the original .docx, by your choice) — one Word comment per finding
-                             + one summary comment, author "QC Review"   (Word sources only)
+    US-{id}-{ROLE}-review.md      ← business review (one story section); for Word sources also
+                                     holds "Word comments: N written to …"
+    US-{id}-{ROLE}-technical-review.md   ← ONLY if you chose the technical assessment
+  {ROLE} = QC | PO | Developer | custom-role — e.g. SPEC-orders-QC-review.md and, from another
+  run, SPEC-orders-PO-review.md side by side
+  {name}-QC-review.docx (or the original .docx, by your choice) — one Word comment per business
+                             finding + one summary comment per story, author "QC Review",
+                             each tagged with the review's role
+                             (Word sources only)
+  business-clarification-{spec-name | US-{id}-{name}}.md   ← next to the review files, after the
+                             final gate: answered questions + "Questions for the PO" (one file per
+                             spec or story, shared by all roles, updated on every gate)
   Testing/project-learning.md                   (updated: glossary, business rules, Q&A)
+
+  NOT written: any REQ-*.md or other requirement file. If skill 3 needs a REQ file, it builds
+  its own from the source.
 
 WHEN TO RUN: after skill 1, before skill 3.

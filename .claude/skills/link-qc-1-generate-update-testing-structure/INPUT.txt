@@ -86,7 +86,7 @@ OUTPUT — WHAT YOU GET
   playwright.config.ts       (created only if missing)
   Validation table: Node.js · NPM · Playwright · Playwright cfg · Playwright CLI · Playwright CLI
   browser · Python + Pillow · .gitignore · Folder layout · Steering Docs · L1/L2 generic ·
-  Learning File · .mcp.json · Azure DevOps hosting · PAT env var · Browser secrets file · Playwright MCP · Azure DevOps
+  Learning File · .mcp.json · Azure DevOps hosting · PAT env var · Execution limits · Coordination directory · Browser secrets file · Playwright MCP · Azure DevOps
   MCP · Docx MCP · Azure DevOps attachments MCP · Figma MCP · QA Skills · Skills current · sync-skills cmd ·
   Manifest — each PASS / WARN / FAIL / NOT_RUN, never PASS without the check having run (the playwright-cli,
   Python + Pillow, Azure DevOps attachments MCP and Figma MCP rows are WARN at worst: 3c, 5b, skill 9's playwright-cli route, the attachments

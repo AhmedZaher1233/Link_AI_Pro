@@ -1,0 +1,14 @@
+{"at":"2026-10-01T09:01:11.000Z","worker":0,"tc":"TC-002","event":"test-start","retry":0,"project":"chromium"}
+{"at":"2026-10-01T09:01:11.200Z","worker":1,"tc":"TC-005","event":"test-start","retry":0,"project":"chromium"}
+{"at":"2026-10-01T09:01:12.000Z","worker":0,"tc":"TC-002","step":"Filter the list by Pending","event":"start","deadline_ms":30000,"note":null}
+{"at":"2026-10-01T09:01:12.300Z","worker":1,"tc":"TC-005","step":"Change the quantity of the first line","event":"start","deadline_ms":30000,"note":null}
+{"at":"2026-10-01T09:01:28.000Z","worker":1,"tc":"TC-005","step":"Change the quantity of the first line","event":"end","outcome":"ok","elapsed_ms":15700}
+{"at":"2026-10-01T09:01:29.000Z","worker":1,"tc":"TC-005","event":"evidence","path":"screenshots/US-9001-sample/phase-1/TC-005/chromium--variation-a--r0/attempt-1.png"}
+{"at":"2026-10-01T09:01:30.000Z","worker":0,"tc":"TC-002","step":"Filter the list by Pending","event":"end","outcome":"error","elapsed_ms":18000,"note":"expect(locator).toHaveText(expected) failed"}
+{"at":"2026-10-01T09:01:30.100Z","worker":1,"tc":"TC-005","event":"teardown"}
+{"at":"2026-10-01T09:01:30.200Z","worker":1,"tc":"TC-005","event":"console-report","entries":0,"unexpected":0}
+{"at":"2026-10-01T09:01:31.000Z","worker":0,"tc":"TC-002","event":"teardown"}
+{"at":"2026-10-01T09:01:31.200Z","worker":0,"tc":"TC-002","event":"console-report","entries":1,"unexpected":0}
+{"at":"2026-10-01T09:01:31.300Z","worker":1,"tc":"TC-005","event":"test-end","status":"passed"}
+{"at":"2026-10-01T09:01:31.500Z","worker":0,"tc":"TC-002","event":"evidence","path":"screenshots/US-9001-sample/phase-1/TC-002/chromium--none--r0/attempt-1.png"}
+{"at":"2026-10-01T09:01:32.000Z","worker":0,"tc":"TC-002","event":"test-end","status":"failed"}

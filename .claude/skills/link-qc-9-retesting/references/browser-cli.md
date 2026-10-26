@@ -42,6 +42,7 @@ non-language-specific bug only when `language_switch` is configured (contract §
 
 ## 3. Sessions and login — never a password from you
 
+- Before each `open`: that session's hold (coordination.md §4); after its `close`: the hold's release.
 - One session per account: `{pw} -s=qa9-{storyId}-{accountId} open {baseUrl}` (`--headed` for an
   attended login or when the user asked to watch). Every later command carries the same `-s=…`.
   Never `--persistent`, `--profile`, `state-save` / `state-load`, `attach`.

@@ -37,7 +37,7 @@ description: >
   "test the chatbot", "test the AI assistant", "run the AI test cases", "manual run report",
   "re-run the manual run", "read my comments on the manual run".
 argument-hint: "[<TEST-CASES path> | <feature> | <user-story-id> | <SPEC folder>] [--approve | --unapproved] [--audit] [--env <name>]"
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(node *render-run-report.mjs*), Bash(node *selftest-run-report.mjs*), Bash(node *selftest-manual-run.mjs*), Bash(playwright-cli *), Bash(npx --no-install playwright-cli *)
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(node *render-run-report.mjs*), Bash(node *selftest-run-report.mjs*), Bash(node *selftest-manual-run.mjs*), Bash(node *capacity.mjs*), Bash(playwright-cli *), Bash(npx --no-install playwright-cli *)
 ---
 
 # Manual test run of a test-case document through playwright-cli — every TC, report only

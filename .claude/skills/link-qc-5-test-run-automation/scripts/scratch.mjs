@@ -17,21 +17,26 @@
 //
 // Refused (no browser starts): a spec outside the scratch folder; a spec that captures official evidence, takes its
 // own screenshot, uses storageState, writes files, reads process.env, prints a credential property or names a TC; a
-// stage that looks in flight (--results-root: a progress file written in the last 120 s).
+// stage that looks in flight (--results-root: a progress file written in the last 120 s); no free Playwright slot under
+// the machine ceiling within --max-wait (120 s) — the probe reserves ONE slot in skill 5's capacity ledger (exclusive
+// under QA_LEDGER=off), released only when a fresh process table shows the probe and its browser ended (capacity.mjs
+// releaseConfirmed; no table → the slot stays held, payload capacity.released false); an unusable coordination
+// directory refuses it (no-coordination).
 // After the run: every output line passes run-stage.mjs's credential filter plus exact redaction of credential-named
 // environment values; any file written outside test-results/ under --root / --results-root = outcome `violation`.
 //
 // Usage:
 //   node scratch.mjs run   --root <automation root> --spec <root>/test-results/qa-scratch/<name>.spec.ts
 //        [--config <shared playwright config>] [--project <browser project>] [--grep <text>]
-//        [--timeout 120000 (max 600000)] [--headless] [--results-root <dir>] [--cli <playwright cli.js>] [--pretty]
+//        [--timeout 120000 (max 600000)] [--headless] [--results-root <dir>] [--cli <playwright cli.js>]
+//        [--max-wait 120000] [--capacity-dir <dir>] [--pretty]
 //   node scratch.mjs clean --root <automation root> [--pretty]
 // Exit code always 0 — the outcome is in the payload: observed · error · timeout · refused · violation (run);
 // removed · absent (clean).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs, print, posix, isFile, isDir, read, stripSource } from './scan-lib.mjs';
 import { filterLine, killTree } from './run-stage.mjs';
 
@@ -39,7 +44,8 @@ export const SCHEMA = 'skill5-scratch/1';
 export const SCRATCH_REL = 'test-results/qa-scratch';
 export const OVERLAY = 'scratch.config.ts';
 export const NOTICE = 'Investigation only — never a TC result, evidence, coverage, burn-in, isolation check or freshness proof; the official result of a TC comes only from run-stage.mjs.';
-const DEFAULT_TIMEOUT = 120000, MAX_TIMEOUT = 600000, KILL_MARGIN = 15000, BUSY_WINDOW = 120000, KEEP_LINES = 80;
+const DEFAULT_TIMEOUT = 120000, MAX_TIMEOUT = 600000, KILL_MARGIN = 15000, BUSY_WINDOW = 120000, KEEP_LINES = 80, DEFAULT_CAPACITY_WAIT = 120000;
+const here = path.dirname(fileURLToPath(import.meta.url));
 const RUN_ENV = /^(PW_STAGE_JSON|PW_PROGRESS_FILE|PW_PHASE|PW_STAGE_ATTEMPT|PW_RATE_LIMIT_FILE|PW_RATE_LIMIT_STATE|PW_RATE_LIMITS|PW_GLOBAL_TIMEOUT|PW_WORKERS|PW_OUTPUT_DIR|PW_HEADLESS|PW_SCRATCH_JSON)$/;
 const SECRET_NAME = /(PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|CONNECTION_?STRING)/i;
 const CONFIGS = ['playwright.config.ts', 'playwright.config.mts', 'playwright.config.js', 'playwright.config.mjs'];
@@ -189,15 +195,32 @@ export async function runScratch(a) {
   const pwArgs = ['test', specName, '--config', overlay];
   if (typeof a.grep === 'string') pwArgs.push('--grep', a.grep);
 
+  // the machine's worker ceiling covers a probe too: ONE Playwright slot in the capacity ledger (exclusive under
+  // QA_LEDGER=off), released only on a table that confirms the probe's tree ended — no slot within --max-wait → refused, no browser
+  let cap;
+  try { cap = await import(pathToFileURL(path.join(here, 'capacity.mjs')).href); } catch (e) { return refuse([{ reason: 'no-coordination', detail: 'capacity.mjs could not be loaded (' + e.message + ') — no probe outside the machine\'s worker ceiling' }], { spec: posix(path.relative(root, spec)) }); }
+  const capDir = typeof a['capacity-dir'] === 'string' ? path.resolve(a['capacity-dir']) : cap.resolveCapacityDir();
+  const capWaitMs = Math.min(Math.max(a['max-wait'] !== undefined ? Number(a['max-wait']) || 0 : DEFAULT_CAPACITY_WAIT, 0), MAX_TIMEOUT);
+  let slot;
+  try { slot = await cap.reserve({ dir: capDir, cls: 'playwright', units: 1, liveness: 'pid', confirm: 'table', exclusive: process.env.QA_LEDGER === 'off', owner: { runId: 'scratch:' + specName, runFile: null }, waitMs: capWaitMs, pollMs: 1000, snapshot: () => cap.processSnapshot({ timeoutMs: 10000 }) }); }
+  catch (e) { slot = { ok: false, code: e instanceof cap.LockBusyError ? 'busy' : 'coordination', reason: e.message }; }
+  if (!slot.ok) {
+    const noCoord = slot.code === 'ledger-error' || slot.code === 'coordination';
+    return refuse([{ reason: noCoord ? 'no-coordination' : 'capacity', detail: (noCoord ? 'no safe coordination — ' : 'the machine is at its Playwright worker ceiling — ') + (slot.reason || 'no slot') + (noCoord ? '' : ' (waited ' + Math.round(capWaitMs / 1000) + ' s; --max-wait)') }], { spec: posix(path.relative(root, spec)) });
+  }
+  const capacity = { token: slot.token, exclusive: process.env.QA_LEDGER === 'off', waitedMs: slot.waitedMs || 0, released: null };
+
   const watched = [...new Set([root, ...(resultsRoot ? [resultsRoot] : [])])];
   const before = snapshot(watched);
   const started = Date.now();
   const output = [];
-  let killed = false, spawnError = null, exitCode = null;
+  let killed = false, spawnError = null, exitCode = null, childPid = null;
   await new Promise((resolve) => {
     let child;
     try { child = spawn(process.execPath, [cli, ...pwArgs], { cwd: root, env, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] }); }
     catch (e) { spawnError = e.message; resolve(); return; }
+    childPid = child.pid;
+    cap.activate({ dir: capDir, token: slot.token, pid: child.pid, start: started, startSource: 'spawn' }).catch(() => { /* the token and the tree walk at release still cover it */ });
     const timer = setTimeout(() => { killed = true; killTree(child); }, timeoutMs + killMargin);
     let pending = '';
     const take = (chunk) => {
@@ -210,6 +233,15 @@ export async function runScratch(a) {
     child.on('error', (e) => { spawnError = e.message; });
     child.on('close', (code) => { clearTimeout(timer); if (pending.trim()) output.push(clean(pending)); exitCode = code; resolve(); });
   });
+  // released only on a fresh table that shows the probe and its browser ended; a survivor the table shows with its
+  // recorded identity is stopped (never on a guess); no table → the slot stays held (sweep confirms it later)
+  let rel;
+  try { rel = await cap.releaseConfirmed({ dir: capDir, token: slot.token, snapshot: () => cap.processSnapshot({ timeoutMs: 10000 }), attempts: 4, delayMs: 500, kill: (pid) => killTree({ pid }) }); }
+  catch (e) { rel = { released: false, confirmed: 'none', alive: [], killed: [], reason: e.message }; }
+  capacity.released = rel.released;
+  capacity.confirmed = rel.confirmed;
+  if (rel.killed && rel.killed.length) capacity.killed = rel.killed;
+  if (!rel.released) capacity.reason = rel.reason || 'its processes could not be confirmed stopped';
 
   let tests = [], artifacts = [];
   const report = read(reportFile);
@@ -219,7 +251,7 @@ export async function runScratch(a) {
   const outcome = writesOutside.length ? 'violation' : killed ? 'timeout' : spawnError || !report ? 'error' : 'observed';
   return {
     ...base, outcome, spec: posix(path.relative(root, spec)), config: posix(path.relative(root, config)),
-    project: typeof a.project === 'string' ? a.project : null, durationMs: Date.now() - started, exitCode,
+    project: typeof a.project === 'string' ? a.project : null, durationMs: Date.now() - started, exitCode, capacity,
     tests, artifacts: artifacts.map((p) => posix(path.join(SCRATCH_REL, p))), writesOutside,
     error: spawnError || (killed ? `killed after ${timeoutMs + killMargin} ms` : !report ? 'no json report — read output[]' : null),
     output,

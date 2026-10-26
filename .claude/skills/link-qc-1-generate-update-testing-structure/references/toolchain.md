@@ -82,6 +82,42 @@ Not a toolchain item either: an MCP entry plus the launcher file
 `.claude/mcp-launchers/azure-devops-attachments.cjs`, documented in `mcp-setup.md` §2d. Nothing to
 install — the launcher runs the pinned package through `npx -y` on first start.
 
+## Execution limits — the worker ceiling and the coordination directory of skills 5 and 9
+
+Not an install either: two settings skills 5 and 9 read at every Playwright launch. Rows `Execution limits` and
+`Coordination directory` (`scanExecutionLimits` in `lib.mjs` — read-only). **This skill never writes them and never
+raises a limit**; it reports, and on request shows the user what to write.
+
+* **Coordination directory** — `QA_CAPACITY_DIR` (an absolute path; a relative one is ignored with a warning), else
+  `~/.link-ai-pro/capacity/`. It holds the capacity ledger, the environment leases and the shared rate-limit state;
+  the first skill 5 / 9 run creates it. It must be writable, otherwise skills 5 and 9 refuse to launch Playwright
+  ("no safe coordination") — the row is FAIL and the fix is a writable absolute `QA_CAPACITY_DIR`. A torn
+  `ledger.json` is FAIL too (repair it, or delete it only while no run is active). Several OS users or CI runners on
+  one machine share a ceiling only through ONE `QA_CAPACITY_DIR` that an administrator provisions with read / write
+  access for each of them.
+* **Machine ceiling — Auto** — computed by skill 5's `capacity.mjs` from the host's TOTAL memory / CPU for visible
+  (headed) browsers: min((memory − reserve) ÷ 1536 MB, (cores − reserve) ÷ 1.5) within [1, upper] — the reserve is
+  max(2 GB, 25 %) + 2 cores locally, max(1 GB, 10 %) + 1 core on CI; unusable readings → 2 (WARN with the reason).
+  `upper` = `machineMaxWorkers` in `{coordination directory}/config.json` when the user set one (an absolute bound),
+  else 8 — a safety bound, not the worker count chosen; skill 5's ramp starts at 2 and adapts within it. An invalid
+  file → 1 (fail safe; WARN until fixed). The bound is a **hand edit** by the user (in CI: by whoever provisions the
+  runner) — never by a skill, a flag or an environment variable. Template:
+  `{ "machineMaxWorkers": "auto", "classes": { "compliance": 2, "reviewer": 2 } }`.
+* **Lower-only overrides** — `QA_MAX_WORKERS` (environment), the optional `execution.maxWorkers` in
+  `Testing/qa-manifest.json` (a project limit) and a run's `--workers`. A value above the ceiling is ignored (WARN
+  "ignored (only lowers)"); an invalid one is ignored (WARN).
+* **`QA_LEDGER=off`** — the rollback switch of skill 5's capacity ledger. It never means "uncoordinated": skills 5
+  and 9 then run one Playwright command at a time on the machine, serially (exclusive execution, still under the
+  ceiling) — a reduced protection, so the `Execution limits` row WARNs, also when the variable is SAVED at user level
+  (registry / shell profile) and would affect every later run. Skill 1 never sets or removes it.
+* **Run protections of an existing project** (finite timeouts, active stall protection, the helpers, `retries: 0`,
+  visible local browsers) are reconciled by skill 5 itself before every run (`config-inventory.mjs reconcile`) —
+  skill 1 only checks that the shared config exists.
+* Check live: `node .claude/skills/link-qc-5-test-run-automation/scripts/capacity.mjs config` (the resolved ceiling
+  and the template) and `… capacity.mjs status` (reservations, session holds, leases).
+* Separate from the Claude Code permission allow rules some optimisations would add (B17 of skill 5's optimisation
+  plan): those are pending approval and are not configured here.
+
 ## playwright.config.*
 * Create only when required; when it exists, read it and preserve every valid project setting.
 * Requirements are listed in `references/testing-layout.md` (paths from the manifest, HTML

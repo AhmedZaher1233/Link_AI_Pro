@@ -1,0 +1,10 @@
+{"at":"2026-01-01T09:01:00.000Z","worker":0,"tc":"TC-3","event":"test-start"}
+{"at":"2026-01-01T09:01:01.000Z","worker":0,"tc":"TC-3","step":"Build the tree","event":"start","deadline_ms":1500000}
+{"at":"2026-01-01T09:26:01.000Z","worker":0,"tc":"TC-3","step":"Build the tree","event":"end","outcome":"timeout","elapsed_ms":1500000,"note":"locator.click: Test timeout"}
+{"at":"2026-01-01T09:26:05.000Z","worker":0,"tc":"TC-3","event":"test-end"}
+{"at":"2026-01-01T09:27:00.000Z","worker":0,"tc":"TC-1","event":"test-start"}
+{"at":"2026-01-01T09:27:10.000Z","worker":0,"tc":"TC-1","step":"Open the page","event":"start","deadline_ms":30000}
+{"at":"2026-01-01T09:27:20.000Z","worker":0,"tc":"TC-1","step":"Open the page","event":"end","outcome":"ok","elapsed_ms":10000}
+{"at":"2026-01-01T09:27:30.000Z","worker":0,"tc":"TC-1","event":"test-end"}
+{"at":"2026-01-01T09:27:30.000Z","worker":-1,"tc":"TC-4","event":"test-start"}
+{"at":"2026-01-01T09:27:30.000Z","worker":-1,"tc":"TC-4","event":"test-end"}

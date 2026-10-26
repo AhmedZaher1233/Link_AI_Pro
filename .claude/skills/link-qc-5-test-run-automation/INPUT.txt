@@ -1,5 +1,5 @@
 SKILL: link-qc-5-test-run-automation
-VERSION: 1.1.0 (SKILL.md front-matter metadata.version — /sync-skills shows installed → available)
+VERSION: 2.0.0 (SKILL.md front-matter metadata.version — /sync-skills shows installed → available)
 WHAT IT DOES: Takes skill 3's TC document → generates Playwright automation (POM
 mandatory) → passes a pre-run COMPLIANCE CHECKPOINT → measures static coverage → resolves
 test-data readiness with you → runs
@@ -46,15 +46,27 @@ AZURE DEVOPS IS OPTIONAL (auto-detected, never asked): if skill 4 already publis
 OPTIONAL:
   3. Environment                 — target test environment (defaults to the automation
                                    project's TEST_ENV preset)
-  4. --workers N                 — browser windows for the parallel group (default 2, from the
-                                   ONE shared playwright.config.ts; serial groups always run
-                                   with 1, the documented override)
-  5. --headless                  — hide the browser (default: VISIBLE Google Chrome window,
-                                   you watch the run; passed to the config as PW_HEADLESS=1)
+  4. Workers                     — NOT asked. The machine ceiling is AUTO: computed from this
+                                   machine's total memory / CPU for visible browsers (e.g. 16 GB /
+                                   8 cores → 4), the same for every run here, never above
+                                   {QA_CAPACITY_DIR | ~/.link-ai-pro/capacity}/config.json
+                                   "machineMaxWorkers" when you set one (absent → 8, a safety bound).
+                                   A run starts at 2 and its ramp adds a worker only when a measured
+                                   window shows ≥ 10 % more throughput and healthy memory / CPU,
+                                   steps back on interference, environment-wide throttling or a slower
+                                   p95. --workers N, QA_MAX_WORKERS and qa-manifest.json
+                                   execution.maxWorkers can only LOWER the ceiling.
+  5. --headless                  — hide the browsers (default: VISIBLE Google Chrome windows, one
+                                   per active worker, each its own temporary browser — never your
+                                   personal one; CI or a machine without a desktop runs headless by
+                                   itself and says so)
   6. --approve | --unapproved    — answer the approval question in advance (--approve sets
                                    "Status: APPROVED" in the document, --unapproved runs it as
                                    it is); a pipeline run on an unapproved document without
                                    one of them is BLOCKED
+  7. --parallel-shadow           — OPTIONAL experiment: also compare the readiness check's plan with
+                                   the hand-built run plan and record the differences. Off by default;
+                                   changes nothing in the run
 
 COMPLIANCE GATES: the run passes through TWO mandatory compliance checkpoints, and BOTH must
   pass before the skill claims the automation is compliant.
@@ -82,12 +94,19 @@ COMPLIANCE GATES: the run passes through TWO mandatory compliance checkpoints, a
       (scripts/impact.mjs fingerprints each test's code, per TC). If a defect is found it is
       repaired, the affected tests (chosen by impact.mjs, never by guess) are rerun, and the
       review is repeated.
-  Each gate is recorded PASS / FAIL / BLOCKED against a content hash of the tested files, and each
-  result is checked per TC, so a result from before a later change to that test's code is re-run
-  (or reported not run), never reported as complete. A check that applies but
+  Each gate is DECIDED BY A SCRIPT (scripts/check.mjs gate) from exactly one result per check for
+  a frozen snapshot of the tested files, and written to its own record file
+  (.runs/phase-N.checkpoint-A.json / -B.json); a missing, stale, contradictory or duplicate result
+  keeps it BLOCKED, and any edit during the checkpoint voids it. Each result is checked per TC, so a
+  result from before a later change to that test's code is re-run (or reported not run), never
+  reported as complete. A check that applies but
   could not be completed is reported UNRESOLVED and keeps its gate BLOCKED — never as passed, and
   never as "not applicable"; N/A is only for a rule that has nothing to act on in this scope, with
-  the reason saying why. AUTOMATION COMPLETE is not returned while either gate is unresolved.
+  the reason saying why. The report, bug file, run file and page are written as DRAFTS, checked by
+  Checkpoint B, and only then published unchanged (scripts/run-data.mjs publish). AUTOMATION COMPLETE
+  is not returned while either gate is unresolved, or while the RUN is NOT ACCEPTED — an unresolved
+  possible concurrency defect, an unexplained first-attempt failure, a test not started because the
+  machine had no capacity, the smoke stage without any PASS / FAIL.
   Compliance status is kept
   separate from execution status: compliant tests can still find real application bugs, and a
   green suite can still break the automation rules.
@@ -96,26 +115,62 @@ HOW IT RUNS: the skill builds a run plan from your TCs — read-only TCs and TCs
 records they create themselves run in parallel, TCs that edit or share the same data, or that
 type a wrong password into a lockable account, run one after another (you can steer this with
 the optional "Data effect" / "Shared data" fields from skill 3) — then runs
-smoke → positive → negative with the browser visible, from ONE shared playwright.config.ts
-(Google Chrome, 2 workers). An existing config is updated in place; several are consolidated
+smoke → positive → negative with the browsers visible, from ONE shared playwright.config.ts
+(Google Chrome). An existing config is updated in place; several are consolidated
 into one — each extra config is merged only when its behaviour can be reproduced, its
 references (package scripts, CI, docs) rewritten first, and deleted only after nothing refers
 to it; a config that cannot be merged safely is kept and reported. A config is created only
-when none exists. Timeouts come from one timeouts.ts (test budget separate from per-step
-deadlines, initial values documented, calibrated after the first run from evidence — never
-raised to hide a broken locator or a frozen step); a heartbeat watchdog stops only a genuinely
-hung worker, keeps every finished result and names interrupted vs never-started TCs.
-Each stage runs as ONE call of scripts/run-stage.mjs: it starts the Playwright commands of every
-run group, watches them itself (the watchdog, the time ceiling, the fresh-results check) and comes
-back once with the stage's results — nobody polls it, and a command that outlives its time ceiling
-is stopped instead of running on.
+when none exists.
+EXISTING PROJECTS ARE RECONCILED, NOT REPLACED: before every run the skill reads the effective
+settings (presets, project overrides, inherited defaults, timeouts.ts, helpers, env files) and
+fixes only what it supports — an unlimited action / navigation timeout, missing stall keys,
+retries, a forced local headless, a missing helper — after copying every original to
+artifacts/reconcile/{time}/ with a before → after summary. Your explicit worker maximum, paths,
+fixtures, secrets and documented exceptions are kept. Anything unfamiliar (an env file, a
+persistent browser profile, an unusual shape) is reported with file:line and never overwritten —
+that protection is then reported NOT active and the pre-run checkpoint stays blocked until it is
+resolved. You are never asked to adjust a routine setting by hand.
+BOUNDED, NEVER STUCK: timeouts come from one timeouts.ts. A missing or unclickable element fails
+within 15 s (action) / 10 s (assertion) — never more than 60 s; every step has a FIXED deadline from
+its start; a long step that shows no MEANINGFUL progress (a counter that rose, a new milestone —
+changed text or polling does not count) is stopped within 120 s of its last progress (55 s
+silence + 60 s grace + ≤ 5 s polling), with a bounded diagnostics snapshot. A legitimately long
+operation is a named exception in timeouts.ts with its reason. Waiting for the machine (admission)
+or for a server's "retry after" is bounded separately and never read as a stall. Timeouts are
+calibrated from evidence, never raised to hide a broken locator or a frozen step; a stop keeps
+every finished result and names interrupted vs never-started TCs.
+Each stage runs as ONE call of scripts/run-stage.mjs: it starts the Playwright commands, watches
+them itself (the watchdog, the time ceiling, the fresh-results check) and comes back once with the
+stage's results — nobody polls it, and a command that outlives its time ceiling is stopped.
 PARALLEL RUNS NEVER CHANGE A RESULT: a test that fails beside other tests is run again ALONE
 automatically before its failure counts (passing alone → PASS, reported to you as possible
-interference and moved out of the parallel group); a test the application refused because of a
-rate limit (too many logins, OTP requests …) is reported INCOMPLETE — "rate_limited", never as a
-failure or a bug. Known rate limits are read from the learning file and the application's source
-code (never asked), and the tests are paced to stay under them; every test still logs in through
-the UI. Two helpers do this inside your project (helpers/network-guard.ts, helpers/rate-limit.ts).
+interference with its cause from evidence — shared test data, a possible concurrency defect of the
+application, the environment, or unexplained — and moved out of the parallel group; the first
+failure is kept in the history); a test whose own request the application refused because of a
+rate limit (too many logins, OTP requests …) and refused again alone is reported INCOMPLETE —
+"rate_limited", never as a failure or a bug. The server's "retry after" time is never shortened; a
+wait longer than the stage allows defers the test ("not started: deferred until …"). Known and
+advertised rate limits are read from the learning file, the application's source code and its
+response headers (never asked), and the tests are paced to stay under them; every test still logs in
+through the UI. Helpers do this inside your project (helpers/network-guard.ts, helpers/rate-limit.ts,
+helpers/admission.ts).
+ONE RUN PER ENVIRONMENT, WITHIN THE MACHINE: at intake the skill takes an environment lease, so a
+second skill-5 or skill-9 run on the same environment waits (or stops) instead of changing the data
+under this one; every Playwright command reserves its workers in a machine-wide ledger
+(scripts/capacity.mjs) and runs only when the machine ceiling and the free memory / CPU allow — a
+command the machine cannot take within 10 minutes is reported "not started" with the reason. Switching
+the ledger off (QA_LEDGER=off — the rollback switch) never runs anything uncoordinated: every command then
+runs alone on the machine (exclusive execution, still under the ceiling); a coordination folder that
+cannot be written starts nothing. Skill 9's retests take the same lease and count their browsers too.
+INDEPENDENT TESTS RUN SIDE BY SIDE, CONFLICTING ONES APART: a read-only PARALLEL READINESS CHECK
+(scripts/parallel-plan.mjs) works out, with evidence, what every test reads and changes. Tests with
+no conflict run together in batches (80-150 TCs are batched, so the worker count adapts during a
+stage, not only between stages); tests sharing data, an account or a chain run apart; anything whose
+effect is unknown runs alone; setup that changes data waits for admission first. When the check is
+missing, blocked or out of date — the code, TCs, test data, the learning file, the run plan or the
+environment changed — the run re-plans it, or runs serially and tells you why; it never runs tests
+side by side without that proof. status.json and one log line show the Auto ceiling, the active
+workers and the TCs each runs.
 AFTER THE FIRST RUN only the tests whose code the fixes changed, the ones without a verdict (not
 run, interrupted, rate-limited) and the ones that hit an environment failure are re-run; healed
 tests are repeated 3 times alone (one failure = still broken). Nothing changed and every test has
@@ -220,7 +275,10 @@ OUTPUT — WHAT YOU GET
                                          merged stage results per variant / attempt (first run,
                                          isolation checks, re-run), per-TC results of record, bugs,
                                          heal log, isolation checks, rate limits, the re-run
-                                         selection and freshness check — immutable once final
+                                         selection and freshness check, the acceptance — immutable
+                                         once final
+      .runs/phase-N.checkpoint-A.json / -B.json ← the two compliance gate records (written by
+                                         scripts/check.mjs, never by hand)
       coverage/                        ← coverage-summary.csv · coverage-detail.csv ·
                                          manual-scenarios.csv (replaced each run)
   NOTE: the same report set may hold phases written by link-qc-5b-test-run-manual-cli (the
@@ -234,7 +292,17 @@ OUTPUT — WHAT YOU GET
                                          one *.summary.json per stage run (replaced each phase)
       artifacts/test-output/phase-N/   ← Playwright traces / attachments, one folder per command (kept
                                          for the phase; earlier phases removed by the next run)
+      artifacts/drafts/phase-N/        ← the report set before Checkpoint B (published unchanged after it)
+      artifacts/checks/{snapshot}/     ← each checkpoint's snapshot, results and full tool output
+      artifacts/parallel-plan.json     ← the parallel readiness check
+      artifacts/diagnostics/phase-N/   ← stall diagnostics of a step that stayed silent
+      artifacts/reconcile/{time}/      ← originals of every setting file the reconcile changed + summary.md
+      artifacts/progress/status.json   ← live: Auto ceiling, active workers, the TCs each runs
   Nothing else is written at that top level.
+  {QA_CAPACITY_DIR | ~/.link-ai-pro/capacity}/  ← machine-wide, outside every project: config.json (the
+                                         upper bound of the Auto ceiling — yours to write, optional),
+                                         ledger.json, demand.json, ramp.json (last validated workers),
+                                         rate-limits/{environment}.json
   {automation_root}/automation-logs/[SPEC-{spec-name}/]US-{id}-{name}/run-progress-{stamp}.log ← live tailable log
   {automation_root}/screenshots/[SPEC-{spec-name}/]US-{id}-{name}/
       phase-{N}/{TC-ID}/{browser}--{variation}--r{n}/attempt-{a}.png   ← EVERY attempt of every
@@ -244,9 +312,10 @@ OUTPUT — WHAT YOU GET
   {automation_root}/playwright.config.ts  ← the ONE shared config, updated in place (never a per-story file)
   {automation_root}/timeouts.ts           ← the timeout policy (initial values → calibrated after the first run)
   {automation_root}/helpers/steps.ts · progress-reporter.ts · console-guard.ts · test-data.ts  ← copied from the skill's templates when absent
-  {automation_root}/helpers/network-guard.ts · rate-limit.ts  ← always installed (no effect until a rate limit is known)
-  + a "Timeout policy" section in the final report: initial values, first-run events, adjustments
-    with reasons and evidence, the watchdog probe result — each NOT_RUN with the reason when no run happened
+  {automation_root}/helpers/network-guard.ts · rate-limit.ts · admission.ts  ← always installed (no effect until a rate limit is known / the runner publishes an admission state)
+  + the timeout record in the run file (initial values, first-run events, adjustments with reasons and
+    evidence, the watchdog probe result — each NOT_RUN with the reason when no run happened), summarised
+    on one "Timeouts" line of the final message
   Azure DevOps (ONLY when already published): automation flag + automated-test metadata on the
                 TC work items, summary comment on the story; {Story}/ADO-MAP.md (columns
                 TC-ID | ADO Work Item ID | published_tc_sha256 | automated_tc_sha256 |
@@ -263,20 +332,8 @@ OUTPUT — WHAT YOU GET
     the live counts, current TC, elapsed and estimated remaining time are in the progress log
   Testing/project-learning.md  ← updated: automation tricks (one line per page-object decision),
                                   element identification, env fixes, Q&A
-  Self-test harnesses the skill runs before trusting its scripts (each exits non-zero on mismatch):
-    scripts/selftest.mjs (validator, 18 cases incl. the page-object duplicate rule) ·
-    selftest-run-report.mjs (32) · selftest-watchdog.mjs (12) · selftest-config-inventory.mjs ·
-    selftest-tc-hash.mjs (the canonical TC hash — same golden as skill 4's harness) ·
-    selftest-run-stage.mjs (22: stage commands, freeze stop with a process-tree kill, the time
-    ceiling, the fresh-results check, false-freeze guards, the per-stage messages, the isolation
-    check, rate limits, the burn-in, the re-run, the code fingerprint, one output folder per command
-    so no command deletes an earlier one's traces) ·
-    selftest-impact.mjs (the re-run selection and the per-TC freshness check) ·
-    selftest-scratch.mjs (13: the investigation probe is refused outside its folder or with evidence /
-    screenshots / storageState / file writes / env reads / TC ids, filters credentials, flags writes
-    outside its folder, and is invisible to the validator, impact.mjs and config-inventory) ·
-    selftest-references.mjs (3: Heal Log columns cited by name, a smoke-gate stop has its report
-    instructions loaded, the block index matches the blocks)
+  Self-test harnesses: every script has one (scripts/selftest-*.mjs, listed in the repository's
+  CLAUDE.md); during a run only the renderer's runs, once per installed version (check.mjs harness).
 
 WHEN TO RUN: after skill 3 produced the TC document — ideally once a human reviewed it and set
 Status: APPROVED; an unapproved document only costs you the one approval question. Publishing to Azure

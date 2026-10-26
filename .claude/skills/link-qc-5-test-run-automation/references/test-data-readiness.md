@@ -12,6 +12,9 @@ the one consent question, preparing, keep / clean-up) and the twelve preparation
 precondition cannot be met or its data is absent from the environment is **decided here — never
 discovered by the run.** The run must not be the first place a "no data" skip appears, and a gap
 the project itself can create is **prepared by this skill, never left as "data missing"**.
+Every probe and every preparation here runs UNDER the environment lease acquired at intake
+(`intake.md`) — another skill-5 or skill-9 run on the same environment cannot change the data between this
+check and the run.
 
 **1. Collect the requirements** — start from skill 3's
 `{tc_output_folder}/TEST-DATA-{feature}.md` when it exists: take its environment rows (`## 0.

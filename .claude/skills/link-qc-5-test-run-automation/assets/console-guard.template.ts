@@ -10,9 +10,19 @@
 // to the test (`console-errors.txt`) and annotated, and the skill lists it under Deviations as a
 // potential defect for the human to classify. The allow-list comes from Testing/qa-manifest.json
 // (`automation.consoleAllowList`, strings compiled as regular expressions) with these defaults.
+//
+// Two heartbeat records per test (PW_PROGRESS_FILE, through helpers/steps.ts — silent without it), the runtime
+// evidence of Checkpoint B:
+//   { at, worker, tc, event: 'teardown' }                          the FIRST thing report() does — call report() as the
+//                                                                  first statement of afterEach, so "teardown started" is
+//                                                                  on record before any cleanup (check 16b: the
+//                                                                  assertion-point image must be older than this record)
+//   { at, worker, tc, event: 'console-report', entries, unexpected }   proof the report ran for this test (check 46b)
+// attachConsoleGuard also registers the page for the stall diagnostics of helpers/steps.ts.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
+import { heartbeat, tcIdsOf } from './steps';
 
 const DEFAULT_ALLOW: RegExp[] = [
   /favicon\.ico/i,
@@ -33,6 +43,14 @@ function loadAllowList(): RegExp[] {
 }
 
 const ALLOW = loadAllowList();
+
+/** The page the stall diagnostics look at — the same per-worker registry helpers/steps.ts reads (globalThis, never an import). */
+function registerPage(page: Page): void {
+  const g = globalThis as unknown as Record<string, { page?: Page | null } | undefined>;
+  const key = '__linkQcRuntime';
+  if (!g[key]) g[key] = {};
+  (g[key] as { page?: Page | null }).page = page;
+}
 
 export type ConsoleGuard = {
   /** Unexpected entries collected so far (message + source location when known). */
@@ -57,13 +75,17 @@ export function attachConsoleGuard(page: Page, allow: RegExp[] = ALLOW): Console
     record('console.error', msg.text(), loc?.url ? `${loc.url}:${loc.lineNumber}` : undefined);
   });
   page.on('pageerror', (err) => record('pageerror', err.message));
+  registerPage(page);
   return {
     unexpected, all,
     async report(testInfo: TestInfo) {
+      const tc = tcIdsOf(testInfo.title).join(',') || testInfo.title;
+      heartbeat({ worker: testInfo.parallelIndex, tc, event: 'teardown' });
       try {
         if (all.length) await testInfo.attach('console-errors.txt', { body: all.join('\n'), contentType: 'text/plain' });
         if (unexpected.length) testInfo.annotations.push({ type: 'console-errors', description: `${unexpected.length} unexpected browser error(s) — see console-errors.txt` });
       } catch { /* reporting must never fail a test */ }
+      heartbeat({ worker: testInfo.parallelIndex, tc, event: 'console-report', entries: all.length, unexpected: unexpected.length });
     },
   };
 }

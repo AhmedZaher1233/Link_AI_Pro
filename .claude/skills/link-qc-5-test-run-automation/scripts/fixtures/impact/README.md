@@ -36,5 +36,10 @@ Cases 18d / 18e prove the explicit `setup_groups[].feeds: ["serial:…"]` link b
 `unknown`); case 12 copies it to `tests/Dynamic_Tests/` to prove that `(orders as any)[action]()`
 makes TC-80 `unknown` while TC-81's static call does not.
 
+Cases 25-28 (`reverseDependencies`, `closureOf`, the `reverse` command) read the same project: `helpers/data/orders.json`
+is reached by TC-04 only, `helpers/format.ts` by the tests of `01` and `02`, `03-orders-dashboard.spec.ts` by TC-09 / TC-10,
+`playwright.config.ts` by every TC; with the run plan the setup journey reaches TC-04 through `setup:orders`; the copied
+`extra/04-dynamic.spec.ts` makes TC-80 `unknown`, which reverse dependencies always include.
+
 Changing a file here changes the expectations of the harness: re-run
 `node ../../selftest-impact.mjs --pretty` and adjust the expected TC sets only for a deliberate change.

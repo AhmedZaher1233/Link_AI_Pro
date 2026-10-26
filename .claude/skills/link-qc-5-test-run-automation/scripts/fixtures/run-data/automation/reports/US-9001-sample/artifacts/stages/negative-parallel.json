@@ -1,0 +1,21 @@
+{
+  "config": { "version": "1.52.0" },
+  "suites": [
+    {
+      "title": "tests/Orders_Tests/orders.spec.ts",
+      "file": "tests/Orders_Tests/orders.spec.ts",
+      "specs": [],
+      "suites": [
+        {
+          "title": "REQ-04 Customers",
+          "file": "tests/Orders_Tests/orders.spec.ts",
+          "specs": [
+            { "title": "[TC-004] Reject an order without a customer", "file": "tests/Orders_Tests/orders.spec.ts", "line": 130, "tags": ["@negative", "@run:parallel"],
+              "tests": [ { "projectName": "chromium", "expectedStatus": "skipped", "annotations": [ { "type": "skip", "description": "data_missing — readiness: customer without orders (QC declined)" } ], "results": [ { "status": "skipped", "duration": 0, "attachments": [], "annotations": [] } ] } ] }
+          ],
+          "suites": []
+        }
+      ]
+    }
+  ]
+}

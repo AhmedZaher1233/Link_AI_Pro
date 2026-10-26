@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // validate-automation.mjs — read-only static screen for generated Playwright automation.
-// Node >= 18, zero dependencies. Never writes anything.
+// Node >= 18, zero dependencies. Never touches the code it scans; the ONE file it may write is the
+// full payload, and only behind --out <file>.
 //
 // WHAT THIS IS: a screen, not a judge. It reports what a token-level scan over
 // comment/string-stripped source can establish with confidence. Everything it cannot
@@ -10,13 +11,19 @@
 // A `gate: PASS` means "no banned text pattern was found". It does NOT mean the tests
 // are correct, nor that they verify their requirement. See `limits` in the payload.
 //
+// Model-facing output is compact: --summary prints the gate, the counts and the first open items
+// (summarize(): the SAME analyze() payload, so the summary gate is the full gate by construction) and
+// --out <file> keeps the full payload on disk. --page-scan prints the discovery digest of every page
+// class under the automation root (pageScanDigest()) for the automation inventory.
+//
 // Exit code is 0 by default (the result lives in the JSON payload), matching the other
 // read-only scripts in this suite. `--strict` maps the gate onto an exit code for CI.
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
-  parseArgs, print, isDir, isFile, read, rel, sha256, digestOf,
-  loadStripped, matchDelim, testIdentifiers, findBlocks,
+  parseArgs, print, isDir, isFile, read, rel, posix, sha256, digestOf,
+  loadStripped, matchDelim, splitArgs, findBodyRange, testIdentifiers, findBlocks,
   importMap, findMemberBody, isStraightLine, walk, isSpecFile, isCodeFile, ancestorOfKind,
 } from './scan-lib.mjs';
 
@@ -77,6 +84,36 @@ export const RULES = {
   'outcome-coverage-unassessed': { severity: 'review',    exemptible: false, title: 'Requirement is linked to a test; whether its required outcomes are asserted is undetermined' },
   'exception-unverified':        { severity: 'review',    exemptible: false, title: 'Exception is well-formed; whether its source justifies it here is undetermined' },
   'pom-architecture-unknown':    { severity: 'review',    exemptible: false, title: 'Project layer layout could not be determined — POM rules not applied to this file' },
+
+  // B8 — stricter deterministic rules, STAGED at severity `review`: each finding is an open item the
+  // checkpoint must close; none of them moves the scanner gate (only an undecided pom-duplicate-page does).
+  'constant-redeclared':         { severity: 'review',    exemptible: true,  title: 'Timeout / tolerance / threshold constant declared in a spec instead of its one source' },
+  'empty-catch':                 { severity: 'review',    exemptible: false, title: 'Empty catch — an error is swallowed with no statement and no explanation' },
+  'timeout-literal':             { severity: 'review',    exemptible: false, title: 'Inline timeout value — every timeout comes from timeouts.ts' },
+  'console-guard-missing':       { severity: 'review',    exemptible: true,  title: 'Console guard not attached in beforeEach and reported in afterEach' },
+  'network-guard-missing':       { severity: 'review',    exemptible: true,  title: 'Network guard not attached in beforeEach and reported in afterEach' },
+  'admission-contract':          { severity: 'review',    exemptible: true,  title: 'Side-effecting fixture or beforeAll can start before admission (workerAdmission / unitAdmission)' },
+};
+
+// Every rule → the compliance-checkpoints.md §2 item(s) it decides or feeds (Revision 3.1 numbering: 16a / 25a /
+// 46a are the code halves of 16 / 25 / 46). check.mjs maps mechanical results onto checklist items with it.
+export const RULE_CHECKS = {
+  'focus-only': ['20'], 'modifier-no-reason': ['21'], 'modifier-declared': ['21'],
+  'placeholder-assertion': ['8'], 'empty-test-body': ['8'], 'no-assertions': ['8'],
+  'assertions-call-found': ['9'], 'assertions-conditional': ['9'], 'assertions-unresolved': ['9'],
+  'evidence-missing': ['14'], 'evidence-call-found': ['14'], 'evidence-conditional': ['14'], 'evidence-unresolved': ['14'],
+  'evidence-in-hook': ['15'], 'evidence-duplicate': ['15'], 'evidence-placement-unproven': ['16a'],
+  'trace-title-missing-tcid': ['29'], 'trace-describe-missing-reqid': ['29'], 'trace-title-dynamic': ['29'],
+  'trace-unknown-tcid': ['30'], 'trace-unknown-reqid': ['30'], 'trace-uncovered-id': ['34'], 'outcome-coverage-unassessed': ['33', '34'],
+  'hardcoded-credential': ['38'],
+  'exception-not-permitted': ['39'], 'exception-malformed': ['39'], 'exception-expired': ['39'], 'exception-unused': ['39'], 'exception-unverified': ['39'],
+  'pom-raw-locator': ['1'], 'pom-navigation': ['1'], 'pom-evaluate': ['1'], 'pom-keyboard': ['1'], 'pom-architecture-unknown': ['1'],
+  'pom-chained-locator': ['2'], 'pom-spec-helper': ['4'],
+  'pom-duplicate-page': ['5'], 'pom-duplicate-page-decided': ['5'], 'pom-inventory-unreadable': ['5'],
+  'wait-for-timeout': ['24'], 'bare-set-timeout': ['24'], 'wait-network-idle': ['42'], 'positional-unscoped': ['41'], 'step-missing': ['40'],
+  'absolute-url': ['47'], 'manifest-unreadable': ['36'],
+  'constant-redeclared': ['6'], 'empty-catch': ['28'], 'timeout-literal': ['43'],
+  'console-guard-missing': ['46a'], 'network-guard-missing': ['49'], 'admission-contract': ['25a', '47'],
 };
 
 export const LIMITS = [
@@ -96,6 +133,10 @@ export const LIMITS = [
   'Positional scoping (first/last/nth) is judged on the receiver chain of that call: a filter() segment, or a named getByRole / getByTestId root narrowed by a further getBy*, counts as scoped. An array .filter on a different receiver in the same statement does not; a locator scoped by an earlier assignment is a false positive to justify with a comment.',
   'networkidle detection reads string literals next to waitForLoadState( or waitUntil: only; a readiness helper that hides the literal behind a constant is invisible.',
   'Page-class duplicate detection (pom-duplicate-page) only produces CANDIDATES: a class is a page when its constructor takes a Page or it extends a page class; two classes in two files match on a normalized name (case, a trailing "s" / "Page", a numeric file prefix ignored), on an identical goto / gotoAppPath / navigate or url-field literal, or on two or more identical locator call literals. A route or locator built at runtime is invisible; a base-class route is not inherited; whether a match is a duplicate is decided by the inventory row, never here.',
+  'The B8 rules (constant-redeclared, empty-catch, timeout-literal, console-guard-missing, network-guard-missing, admission-contract) are staged at severity review: every finding is an open item for the checkpoint and none moves the scanner gate. They match names and shapes only: constant-redeclared reads spec-level numeric declarations whose name says timeout / tolerance / threshold / delay / deadline / wait / retry / interval / poll / ms (and any TIMEOUTS declaration); timeout-literal reads timeout / actionTimeout / navigationTimeout / globalTimeout / deadline object properties and .setTimeout / setDefaultTimeout / setDefaultNavigationTimeout calls whose value is a numeric literal or a numeric constant of the same file (timeouts.ts itself is the policy and is skipped); a value imported from another module is invisible.',
+  'empty-catch fires on a catch block or a .catch() handler with an empty body ({} , a lone ";", undefined, void 0) and no comment inside it. A comment inside the block is the documented swallow (evidence-only helpers, best-effort cleanup) and never fires; a value fallback such as .catch(() => false) is not flagged here and stays a semantic item of check 28.',
+  'The guard rules run only when the guard helper is DEFINED under the automation root (attachConsoleGuard / attachNetworkGuard, or the names given with --console-guard-fn / --network-guard-fn); otherwise they land in notRun[]. A test is covered when a beforeEach of its file or of an enclosing describe calls the helper with its handle kept and an afterEach covering it calls handle.report(); attachment through a fixture counts when the module the spec imports its test function from calls the helper (one hop — that fixture is then trusted to report).',
+  'admission-contract runs only when {automation root}/helpers/admission.(ts|js|mts|cts|mjs|cjs) exists. Fixture dependencies are traced inside one test.extend({…}) object of one file (a dependency defined elsewhere is named as untraceable); "side-effecting" is a heuristic — a call into a prerequest/ import, request.post / put / patch / delete, a page-object create / add / save / update / delete / remove / submit / approve / reject / upload / import / assign method, or a login / sign-in call. A side effect behind dynamic dispatch is invisible.',
 ];
 
 const NON_RECEIVERS = new Set(['page', 'this', 'expect', 'test', 'Promise', 'Object', 'JSON', 'Math', 'console', 'process', 'Array', 'String', 'Number', 'Date', 'await']);
@@ -449,6 +490,13 @@ export function analyze(opts) {
   const layersKnown = !!(paths.layers || isDir(pagesDir));
   const analysisOpts = { pagesDir, root };
 
+  /* --- B8 preconditions: the guard helpers and the admission layer the project actually has --- */
+  const consoleFn = opts.consoleGuardFn || str((opts.args || {})['console-guard-fn']) || 'attachConsoleGuard';
+  const networkFn = opts.networkGuardFn || str((opts.args || {})['network-guard-fn']) || 'attachNetworkGuard';
+  const guardHelpers = { console: helperDefinedUnder(automationDir, consoleFn, cache, root), network: helperDefinedUnder(automationDir, networkFn, cache, root) };
+  const admissionHelper = admissionHelperIn(automationDir, root);
+  let specsWithTests = 0;
+
   const filesScanned = [];
   const unreadable = [];
   const parseFailures = [];
@@ -571,6 +619,17 @@ export function analyze(opts) {
         if (!/process\.env|baseURL|qa-allow/i.test(lineText)) add('absolute-url', lit.line, 'Absolute URL in automation code — resolve it through the environment layer / baseURL.');
       }
     }
+
+    /* --- B8 rules, staged at review (checks 6, 28, 43, 46a, 49, 25a) --- */
+    if (isSpec) scanConstants(s, add);
+    scanEmptyCatch(s, add);
+    scanTimeoutLiterals(s, relFile, add);
+    if (isSpec && testBlocks.length) {
+      specsWithTests++;
+      if (guardHelpers.console) scanGuard('console-guard-missing', consoleFn, 'console guard', s, file, blocks, testBlocks, cache, add);
+      if (guardHelpers.network) scanGuard('network-guard-missing', networkFn, 'network guard', s, file, blocks, testBlocks, cache, add);
+    }
+    if (admissionHelper) scanAdmission(s, file, blocks, add);
 
     /* --- rules 3 + 5 + 6: per test --- */
     for (const b of testBlocks) {
@@ -713,6 +772,12 @@ export function analyze(opts) {
   /* --- unused allow-list entries --- */
   for (const e of allow.entries) if (e.active && !e.used) push('exception-unused', allow.file || 'Testing/qa-allow.json', 1, 'entry for ' + e.ruleId + ' (' + e.file + ') matched nothing in scope');
 
+  /* --- guard rules that could not run: no helper of that name under the automation root --- */
+  if (specsWithTests) {
+    if (!guardHelpers.console) addNotRun('console-guard-missing', 'no ' + consoleFn + '() definition under the automation root (' + paths.automationRoot + ') — the skill installs helpers/console-guard.ts; for a project equivalent under another name pass --console-guard-fn <name>, otherwise close check 46a by semantic review', 'spec files');
+    if (!guardHelpers.network) addNotRun('network-guard-missing', 'no ' + networkFn + '() definition under the automation root (' + paths.automationRoot + ') — the skill always installs helpers/network-guard.ts; for a project equivalent under another name pass --network-guard-fn <name>, otherwise close check 49 by semantic review', 'spec files');
+  }
+
   /* --- uncovered ids --- */
   const uncoveredTcIds = tcIds ? [...tcIds].filter((id) => !referencedTcIds.has(id)) : [];
   for (const id of uncoveredTcIds) push('trace-uncovered-id', tcIdSource || 'supplied list', 1, id + ' has no test referencing it in the scanned scope.');
@@ -778,6 +843,7 @@ export function analyze(opts) {
       layersDeclared: !!paths.layers, scopeMode, evidenceFn, requireSteps,
       allowFile: allow.file, inventoryFile: pageScan.inventory.file,
       idSources: { tcIds: tcIdSource, tcIdCount: tcIds ? tcIds.size : 0, reqIds: reqIdSource, reqIdCount: reqIds ? reqIds.size : 0 },
+      b8: { consoleGuardFn: consoleFn, consoleGuardHelper: guardHelpers.console, networkGuardFn: networkFn, networkGuardHelper: guardHelpers.network, admissionHelper },
     },
     scope: { filesScanned, supportFilesRead: [...supportFilesRead].map((f) => rel(root, f)), unreadable, parseFailures },
     pageScan: {
@@ -868,6 +934,299 @@ function titleTokens(title, re) {
   return out;
 }
 
+/* ---------------- B8 rules — staged at severity `review` (Revision 3 B8; Revision 3.1 §3.5) ----------------
+   Each one reads names and shapes of comment/string-stripped code, like every rule above; what it cannot
+   establish it never claims. A finding is an open item for the checkpoint; none of them moves the gate. */
+
+const escRe = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const uniqList = (xs) => [...new Set(xs)];
+const NUMERIC_EXPR = /^[\s\d_.+\-*/()]+$/;
+const isNumericExpr = (v) => NUMERIC_EXPR.test(v) && /\d/.test(v);
+// `const NAME[: Type] = value` up to the end of the statement or line (strings are blanked, so a quoted number never matches)
+const DECLARATION = /(^|[^\w$.])(const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[A-Za-z_$][\w$<>\[\]|. ]*)?=\s*([^;\n]+)/g;
+const declaredValue = (raw) => raw.trim().replace(/\s+as\s+const\s*$/, '').replace(/,\s*$/, '').trim();
+// words of an identifier: camelCase, PascalCase and SNAKE_CASE split alike ("maxWaitMs" → max wait ms)
+const nameWords = (name) => String(name).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2').replace(/[_$]+/g, ' ').toLowerCase().split(/\s+/).filter(Boolean);
+const POLICY_WORDS = new Set(['timeout', 'timeouts', 'tolerance', 'threshold', 'thresholds', 'delay', 'deadline', 'wait', 'retries', 'retry', 'interval', 'epsilon', 'precision', 'budget', 'grace', 'poll', 'duration', 'ms', 'millis', 'seconds', 'secs']);
+
+/** check 6 — a spec redeclares a timeout / tolerance / threshold (or the TIMEOUTS policy itself). Specs only. */
+function scanConstants(s, add) {
+  for (const m of s.code.matchAll(DECLARATION)) {
+    const name = m[3];
+    const value = declaredValue(m[4]);
+    const at = m.index + m[1].length;
+    if (name === 'TIMEOUTS') {
+      add('constant-redeclared', s.lineOf(at), '"TIMEOUTS" is declared in a spec and shadows the project policy — import it from timeouts.ts, the one source of every timeout (check 6).', { constant: name });
+      continue;
+    }
+    if (!isNumericExpr(value) || !nameWords(name).some((w) => POLICY_WORDS.has(w))) continue;
+    add('constant-redeclared', s.lineOf(at), '"' + name + ' = ' + value + '" declares a timeout / tolerance / threshold in a spec. One source decides it: take it from timeouts.ts (TIMEOUTS.*) or from the page object that owns the constant, so calibration and review see one value (check 6).', { constant: name, value });
+  }
+}
+
+// an empty .catch() handler: () => {} · (e) => {} · e => {} · (e: Error) => undefined · async () => {} · function () {}
+const EMPTY_HANDLER = /^(?:async\s+)?(?:\(\s*(?:[A-Za-z_$][\w$]*\s*(?::\s*[A-Za-z_$][\w$.<>\[\]| ]*)?)?\s*\)|[A-Za-z_$][\w$]*)\s*=>\s*(?:\{\s*;?\s*\}|undefined|void\s+0)$|^(?:async\s+)?function\s*[A-Za-z_$]?[\w$]*\s*\([^)]*\)\s*\{\s*;?\s*\}$/;
+const commentWithin = (s, a, b) => s.comments.some((c) => c.start > a && c.end <= b);
+
+/** check 28 — an error swallowed with no statement and no explanation. Every layer. */
+function scanEmptyCatch(s, add) {
+  for (const m of s.code.matchAll(/(^|[^\w$.])catch\s*(?:\([^)]*\))?\s*\{/g)) {
+    const open = m.index + m[0].length - 1;
+    const close = matchDelim(s.code, open);
+    if (close < 0) continue;
+    if (s.code.slice(open + 1, close).replace(/[\s;]/g, '').length) continue;
+    if (commentWithin(s, open, close)) continue;   // the documented swallow: the comment inside says why
+    add('empty-catch', s.lineOf(m.index + m[1].length), 'Empty catch: the error is swallowed with no statement and no explanation. Surface it (rethrow, or fail the step with a message naming what broke) — or, when swallowing is deliberate (an evidence-only helper, best-effort cleanup), say why in a comment inside the block (check 28).');
+  }
+  for (const m of s.code.matchAll(/\.\s*catch\s*\(/g)) {
+    const open = m.index + m[0].length - 1;
+    const close = matchDelim(s.code, open);
+    if (close < 0) continue;
+    if (!EMPTY_HANDLER.test(s.code.slice(open + 1, close).trim())) continue;
+    if (commentWithin(s, open, close)) continue;
+    add('empty-catch', s.lineOf(m.index), 'Empty .catch() handler: the rejection is swallowed with no statement and no explanation. Let it fail the step — or, when swallowing is deliberate (a late rejection already reported, best-effort cleanup), say why in a comment inside the handler (check 28).');
+  }
+}
+
+const TIMEOUT_KEY = /(^|[^\w$.])(timeout|actionTimeout|navigationTimeout|globalTimeout|deadline)\s*:\s*([^,}\n)]+)/g;
+const TIMEOUT_CALL = /\.\s*(setTimeout|setDefaultTimeout|setDefaultNavigationTimeout)\s*\(\s*([^()]*?)\s*\)/g;
+const ZERO = /^\(?\s*0+(?:\.0+)?\s*\)?$/;
+
+/** check 43 — an inline timeout value. Every layer except the policy file itself (timeouts.ts). */
+function scanTimeoutLiterals(s, relFile, add) {
+  if (/(^|\/)timeouts\.(ts|tsx|mts|cts|js|mjs|cjs)$/i.test(relFile)) return;
+  const numericConsts = new Map();
+  for (const m of s.code.matchAll(DECLARATION)) { const v = declaredValue(m[4]); if (isNumericExpr(v)) numericConsts.set(m[3], v); }
+  const literalOf = (raw) => {
+    const v = String(raw).trim();
+    if (isNumericExpr(v)) return { value: v, via: null };
+    if (numericConsts.has(v)) return { value: numericConsts.get(v), via: v };
+    return null;
+  };
+  const policy = ' — every timeout comes from timeouts.ts (TIMEOUTS.*; a known long operation gets an operations.* key with its reason beside it), so calibration and the watchdog see one policy';
+  for (const m of s.code.matchAll(TIMEOUT_KEY)) {
+    const at = m.index + m[1].length;
+    let k = at - 1;
+    while (k >= 0 && /\s/.test(s.code[k])) k--;
+    if (k < 0 || (s.code[k] !== '{' && s.code[k] !== ',')) continue;   // an object-literal property only (never a ternary or a type)
+    const lit = literalOf(m[3]);
+    if (!lit) continue;
+    const zero = ZERO.test(lit.value.replace(/_/g, ''));
+    add('timeout-literal', s.lineOf(at), 'Inline timeout "' + m[2] + ': ' + m[3].trim() + '"' + (lit.via ? ' (' + lit.via + ' = ' + lit.value + ' in this file)' : '') + policy + (zero ? '; 0 also disables the limit entirely' : '') + ' (check 43).', { key: m[2], value: lit.value });
+  }
+  for (const m of s.code.matchAll(TIMEOUT_CALL)) {
+    const lit = literalOf(m[2]);
+    if (!lit) continue;
+    add('timeout-literal', s.lineOf(m.index), '"' + m[1] + '(' + m[2].trim() + ')" sets an inline budget' + (lit.via ? ' (' + lit.via + ' = ' + lit.value + ' in this file)' : '') + policy + ' (check 43).', { key: m[1], value: lit.value });
+  }
+}
+
+/** The file under `dir` that DEFINES `fnName` (function / const / export list), or null. */
+function helperDefinedUnder(dir, fnName, cache, root) {
+  if (!isDir(dir)) return null;
+  const n = escRe(fnName);
+  const re = new RegExp('\\bfunction\\s*\\*?\\s*' + n + '\\b|\\b(?:const|let|var)\\s+' + n + '\\s*(?::[^=;]+)?=|\\bexport\\s*\\{[^}]*\\b' + n + '\\b');
+  for (const f of walk(dir, (p) => isCodeFile(p) && !isSpecFile(p), 12)) {
+    const s = loadStripped(f, cache);
+    if (s && !s.parseError && re.test(s.code)) return rel(root, f);
+  }
+  return null;
+}
+
+/** Hooks of `kind` that run for test block `t`: file-level ones and those of every enclosing describe. */
+function coveringHooks(blocks, t, kind) {
+  const anc = new Set();
+  for (let p = t.parent; p; p = p.parent) anc.add(p);
+  return blocks.filter((h) => h.kind === 'hook.' + kind && h.body && (h.parent === null || anc.has(h.parent)));
+}
+
+/** One hop: the module the spec imports its test function from calls the guard (an automatic fixture). */
+function fixtureModuleCalls(s, file, cache, callSource) {
+  const imports = importMap(s, file);
+  for (const id of testIdentifiers(s).ids) {
+    const imp = imports.get(id);
+    if (!imp || !imp.file) continue;
+    const mod = loadStripped(imp.file, cache);
+    if (mod && !mod.parseError && new RegExp(callSource).test(mod.code)) return true;
+  }
+  return false;
+}
+
+/** checks 46a / 49 — the guard attached in a covering beforeEach, its handle kept and reported in a covering afterEach. */
+function scanGuard(ruleId, fnName, what, s, file, blocks, testBlocks, cache, add) {
+  const callRe = new RegExp('(^|[^\\w$.])' + escRe(fnName) + '\\s*\\(', 'g');
+  const calls = [...s.code.matchAll(callRe)].map((m) => m.index + m[1].length);
+  if (!calls.length && fixtureModuleCalls(s, file, cache, callRe.source)) return;   // attached through the test layer's fixture
+  const inside = (r, off) => off >= r.start && off < r.end;
+  const seen = new Set();
+  const emit = (line, msg) => { if (seen.has(line + '|' + msg)) return; seen.add(line + '|' + msg); add(ruleId, line, msg); };
+  for (const t of testBlocks) {
+    const hookCalls = calls.filter((off) => coveringHooks(blocks, t, 'beforeEach').some((h) => inside(h.body, off)));
+    if (!hookCalls.length) {
+      const own = calls.find((off) => inside(t.body, off));
+      if (own !== undefined) emit(s.lineOf(own), fnName + '() is called inside the test body, not in a beforeEach — attach the ' + what + ' once per test in beforeEach (and report it in afterEach) so every test of the spec is covered (code-craft §11).');
+      else emit(t.line, 'No ' + what + ' for this test: ' + fnName + '() is not attached in a beforeEach that covers it, nor by the fixture module the spec imports its test function from. Attach it in beforeEach and report it in afterEach (code-craft §11).');
+      continue;
+    }
+    const handles = [];
+    for (const off of hookCalls) {
+      const mm = /([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?$/.exec(s.code.slice(Math.max(0, off - 120), off));
+      if (mm) handles.push(mm[1]);
+    }
+    if (!handles.length) { emit(s.lineOf(hookCalls[0]), fnName + '() is attached in beforeEach but its handle is not kept, so report() can never run in afterEach — what the ' + what + ' collects is lost (code-craft §11).'); continue; }
+    const reported = coveringHooks(blocks, t, 'afterEach').some((h) => handles.some((v) => new RegExp('(^|[^\\w$.])' + escRe(v) + '\\s*\\??\\.\\s*report\\s*\\(').test(s.code.slice(h.body.start, h.body.end))));
+    if (!reported) emit(s.lineOf(hookCalls[0]), fnName + '() is attached in beforeEach but never reported in afterEach (' + uniqList(handles).join(' / ') + '.report(testInfo)) — what the ' + what + ' collects is lost (code-craft §11).');
+  }
+}
+
+/** {automation root}/helpers/admission.* — the admission contract has a subject only when the layer exists. */
+function admissionHelperIn(dir, root) {
+  for (const e of ['ts', 'js', 'mts', 'cts', 'mjs', 'cjs']) { const f = path.join(dir, 'helpers', 'admission.' + e); if (isFile(f)) return rel(root, f); }
+  return null;
+}
+
+// Playwright's own fixtures: a dependency on one of them never admits anything, and is never "untraceable"
+const PW_FIXTURES = new Set(['page', 'context', 'browser', 'browserName', 'request', 'baseURL', 'playwright', 'isMobile', 'headless', 'viewport', 'launchOptions', 'contextOptions', 'storageState', 'locale', 'timezoneId', 'colorScheme', 'channel', 'javaScriptEnabled', 'video', 'trace', 'screenshot', 'connectOptions', 'userAgent', 'acceptDownloads', 'actionTimeout', 'navigationTimeout', 'bypassCSP', 'deviceScaleFactor', 'extraHTTPHeaders', 'geolocation', 'hasTouch', 'httpCredentials', 'ignoreHTTPSErrors', 'offline', 'permissions', 'proxy', 'serviceWorkers', 'testIdAttribute', 'defaultBrowserType']);
+const COLLECTION_RECEIVERS = new Set(['set', 'map', 'seen', 'cache', 'list', 'arr', 'array', 'ids', 'names', 'items', 'headers', 'params', 'searchParams', 'classList', 'url', 'urls', 'keys', 'values', 'result', 'results', 'acc', 'out', 'errors', 'warnings', 'parts', 'formData']);
+
+/** The first side effect a body shows (heuristic, see LIMITS), or null. */
+function sideEffectIn(code, start, end, prereq) {
+  const body = code.slice(start, end);
+  for (const n of prereq) if (new RegExp('(^|[^\\w$.])' + escRe(n) + '\\s*[(.]').test(body)) return n + ' (prerequest/)';
+  let m;
+  const http = /([A-Za-z_$][\w$]*)\s*\??\.\s*(post|put|patch|delete)\s*\(/g;
+  while ((m = http.exec(body))) if (/request|api|client|http|ctx|context/i.test(m[1])) return m[1] + '.' + m[2] + '()';
+  const po = /([A-Za-z_$][\w$]*|\))\s*\??\.\s*((?:create|add|save|update|delete|remove|submit|approve|reject|upload|import|assign)[A-Za-z0-9_$]*)\s*\(/g;
+  while ((m = po.exec(body))) if (!COLLECTION_RECEIVERS.has(m[1])) return '.' + m[2] + '()';
+  const login = /(^|[^\w$])((?:log_?in|sign_?in)[A-Za-z0-9_$]*)\s*\(/gi;
+  while ((m = login.exec(body))) if (!/\bnew\s+$/.test(body.slice(Math.max(0, m.index - 6), m.index + m[1].length))) return m[2] + '()';
+  return null;
+}
+
+/** Names a fixture or hook function destructures from its first parameter ({ a, b: alias, ...rest }). */
+function paramDeps(code, start, end) {
+  const p = code.indexOf('(', start);
+  if (p < 0 || p >= end) return { names: [], destructured: false };
+  const pc = matchDelim(code, p);
+  if (pc < 0 || pc > end) return { names: [], destructured: false };
+  const params = splitArgs(code, p, pc);
+  if (!params.length) return { names: [], destructured: true };
+  const [a, b] = params[0];
+  let k = a;
+  while (k < b && /\s/.test(code[k])) k++;
+  if (code[k] !== '{') return { names: [], destructured: false };
+  const ke = matchDelim(code, k);
+  if (ke < 0) return { names: [], destructured: false };
+  const names = [];
+  for (const [x, y] of splitArgs(code, k, ke)) { const mm = /^\s*(?:\.\.\.)?([A-Za-z_$][\w$]*)/.exec(code.slice(x, y)); if (mm) names.push(mm[1]); }
+  return { names, destructured: true };
+}
+
+/** Every function fixture of every `.extend[<…>]({ … })` object in a stripped module. */
+function fixtureDefinitions(s) {
+  const defs = [];
+  const code = s.code;
+  for (const m of code.matchAll(/\.\s*extend\s*(?=[<(])/g)) {
+    let i = m.index + m[0].length;
+    if (code[i] === '<') {   // skip the generic type arguments (an arrow `=>` inside them is not a closer)
+      let depth = 0;
+      for (; i < code.length; i++) {
+        if (code[i] === '<') depth++;
+        else if (code[i] === '>' && code[i - 1] !== '=') { depth--; if (depth === 0) { i++; break; } }
+      }
+      while (i < code.length && /\s/.test(code[i])) i++;
+    }
+    if (code[i] !== '(') continue;
+    const close = matchDelim(code, i);
+    if (close < 0) continue;
+    let j = i + 1;
+    while (j < close && /\s/.test(code[j])) j++;
+    if (code[j] !== '{') continue;
+    const objEnd = matchDelim(code, j);
+    if (objEnd < 0) continue;
+    for (const [a, b] of splitArgs(code, j, objEnd)) {
+      let ks = a;
+      while (ks < b && /\s/.test(code[ks])) ks++;
+      let name = null;
+      let v = -1;
+      const idm = /^([A-Za-z_$][\w$]*)\s*:/.exec(code.slice(ks, b));
+      if (idm) { name = idm[1]; v = ks + idm[0].length; }
+      else {
+        const lit = s.strings.find((t) => t.start === ks);
+        const rest = lit ? /^\s*:/.exec(code.slice(lit.end + 1, b)) : null;
+        if (rest) { name = lit.value; v = lit.end + 1 + rest[0].length; }
+      }
+      if (!name) continue;   // a shorthand or a spread is not a definition this scan can read
+      while (v < b && /\s/.test(code[v])) v++;
+      let fnStart = v;
+      let fnEnd = b;
+      let scope = 'test';
+      if (code[v] === '[') {
+        const arrEnd = matchDelim(code, v);
+        if (arrEnd < 0 || arrEnd > b) continue;
+        const parts = splitArgs(code, v, arrEnd);
+        if (!parts.length) continue;
+        [fnStart, fnEnd] = parts[0];
+        if (parts[1]) {
+          const opt = code.slice(parts[1][0], parts[1][1]);
+          const sc = /\bscope\s*:\s*(['"`])/.exec(opt);
+          const lit = sc ? s.strings.find((t) => t.start === parts[1][0] + sc.index + sc[0].length - 1) : null;
+          if (lit && lit.value === 'worker') scope = 'worker';
+        }
+      }
+      if (!/^(?:async\s+)?(?:function\b|\(|[A-Za-z_$][\w$]*\s*=>)/.test(code.slice(fnStart, fnEnd).trim())) continue;   // a value or option fixture
+      const body = findBodyRange(code, [[fnStart, fnEnd]]);
+      if (!body) continue;
+      defs.push({ name, scope, deps: paramDeps(code, fnStart, fnEnd), body, line: s.lineOf(ks) });
+    }
+  }
+  return defs;
+}
+
+/** checks 25a / 47 — Revision 3.1 §3.5: every side-effecting fixture / beforeAll depends on the admission fixtures. */
+function scanAdmission(s, file, blocks, add) {
+  const prereq = [];
+  for (const [local, imp] of importMap(s, file)) if (/prerequest/i.test(imp.spec)) prereq.push(local);
+  const defs = fixtureDefinitions(s);
+  const byName = new Map(defs.map((d) => [d.name, d]));
+  const ADMISSION_NAMES = new Set(['workerAdmission', 'unitAdmission']);
+  const reaches = (name, target, seen = new Set()) => {
+    if (seen.has(name)) return { ok: false, external: [] };
+    seen.add(name);
+    const d = byName.get(name);
+    if (!d) return { ok: false, external: [] };
+    const external = [];
+    for (const dep of d.deps.names) {
+      if (dep === target) return { ok: true, external: [] };
+      if (byName.has(dep)) { const r = reaches(dep, target, seen); if (r.ok) return r; external.push(...r.external); }
+      else if (!PW_FIXTURES.has(dep) && !ADMISSION_NAMES.has(dep)) external.push(dep);
+    }
+    return { ok: false, external };
+  };
+  for (const d of defs) {
+    if (ADMISSION_NAMES.has(d.name)) continue;
+    const effect = sideEffectIn(s.code, d.body.start, d.body.end, prereq);
+    if (!effect) continue;
+    const target = d.scope === 'worker' ? 'workerAdmission' : 'unitAdmission';
+    const kind = d.scope === 'worker' ? 'Worker fixture' : 'Test fixture';
+    const tail = ' — add ' + target + ' to its parameters' + (d.scope === 'worker' ? '' : ' (or depend on a fixture that does)') + '; until then parallel-plan treats its unit as U4, admitted only at spawn (Revision 3.1 §3.5).';
+    if (!d.deps.destructured) { add('admission-contract', d.line, kind + ' "' + d.name + '" has a side effect (' + effect + ') and its dependencies are not destructured, so its admission cannot be traced' + tail, { fixture: d.name, scope: d.scope }); continue; }
+    const r = reaches(d.name, target);
+    if (r.ok) continue;
+    const ext = uniqList(r.external);
+    add('admission-contract', d.line, kind + ' "' + d.name + '" has a side effect (' + effect + ') but does not depend on ' + target + (ext.length ? ' (directly, or through ' + ext.join(', ') + ' — defined elsewhere, not traceable here)' : '') + ': it can start before its ' + (d.scope === 'worker' ? 'worker' : 'unit') + ' is admitted' + tail, { fixture: d.name, scope: d.scope, untraceable: ext });
+  }
+  for (const h of blocks) {
+    if (h.kind !== 'hook.beforeAll' || !h.body || !h.args.length) continue;
+    const effect = sideEffectIn(s.code, h.body.start, h.body.end, prereq);
+    if (!effect) continue;
+    const [fa, fb] = h.args[h.args.length - 1];
+    const deps = paramDeps(s.code, fa, fb);
+    if (deps.names.includes('workerAdmission') || deps.names.some((n) => byName.has(n) && reaches(n, 'workerAdmission').ok)) continue;
+    add('admission-contract', h.line, 'beforeAll has a side effect (' + effect + ') but does not take workerAdmission as a parameter: it runs before any admission of its units. Add { workerAdmission } to its parameters; until then its describe is a U4 unit, admitted only at spawn (Revision 3.1 §3.5).', { hook: 'beforeAll' });
+  }
+}
+
 function configFiles(root, automationDir, allowFile, manifestFile, cache) {
   const out = [];
   const seen = new Set();
@@ -949,9 +1308,32 @@ function pageClassesOf(s, relFile) {
       const before = s.code.slice(Math.max(brace + 1, t.start - 48), t.start);
       if (ROUTE_FIELD.test(before) && routeNorm(t.value)) routes.add(routeNorm(t.value));
     }
-    out.push({ file: relFile, line: s.lineOf(m.index), name: m[1], extends: m[2] || null, takesPage, routes: [...routes].sort(), locators: [...locators].sort(), nameNorm: pageNameNorm(m[1]), stemNorm: stemNorm(relFile) });
+    out.push({ file: relFile, line: s.lineOf(m.index), name: m[1], extends: m[2] || null, takesPage, routes: [...routes].sort(), locators: [...locators].sort(), nameNorm: pageNameNorm(m[1]), stemNorm: stemNorm(relFile), members: classMembers(s.code, brace, end) });
   }
   return out;
+}
+
+// a member head at depth 0 of a class body: modifiers, then the name, then ( : = ; < ? ! — fields, methods, accessors
+const MEMBER_HEAD = /^(?:(?:public|private|protected|static|readonly|override|declare|abstract|async|get|set)\s+)*\*?\s*([A-Za-z_$][\w$]*)\s*[?!]?\s*(?:[(:=;<]|$)/;
+const NOT_MEMBERS = new Set(['constructor', 'if', 'for', 'while', 'switch', 'return', 'await', 'const', 'let', 'var', 'new', 'catch', 'function', 'super', 'this', 'else', 'do', 'try', 'throw']);
+
+/** Member names declared directly in a class body (fields, methods, accessors; the constructor excluded). */
+function classMembers(code, open, close) {
+  const names = [];
+  let depth = 0;
+  let atStart = true;
+  for (let i = open + 1; i < close; i++) {
+    const c = code[i];
+    if (c === '{' || c === '(' || c === '[') { depth++; atStart = false; continue; }
+    if (c === '}' || c === ')' || c === ']') { depth--; if (depth === 0 && c === '}') atStart = true; continue; }
+    if (depth !== 0) continue;
+    if (c === ';' || c === '\n') { atStart = true; continue; }
+    if (/\s/.test(c) || !atStart) continue;
+    atStart = false;
+    const m = MEMBER_HEAD.exec(code.slice(i, Math.min(close, i + 200)));
+    if (m && !NOT_MEMBERS.has(m[1]) && !names.includes(m[1])) names.push(m[1]);
+  }
+  return names;
 }
 
 /** The decision table of automation-inventory.md: rows with the identifiers and file tokens their Class / Candidates cells mention. */
@@ -1091,19 +1473,100 @@ function isScopedChain(chain) {
   return false;
 }
 
+/* ---------------- compact outputs (A3) and the discovery digest (A9) ---------------- */
+
+const SUMMARY_CAP = 20;
+const OPEN_ORDER = { violation: 0, review: 1, warning: 2 };
+
+/**
+ * The model-facing summary of ONE analyze() payload: the gate and its reason copied verbatim (so the summary gate
+ * is the full gate by construction), the counts, and the first open items. `out` names the file the full payload
+ * was written to — the findings, review[], notRun[] and exceptions[] live there, every one still an applicable check.
+ */
+export function summarize(payload, { out = null, cap = SUMMARY_CAP } = {}) {
+  const findings = Array.isArray(payload.findings) ? payload.findings : [];
+  const open = findings.filter((f) => f.severity in OPEN_ORDER)
+    .sort((a, b) => OPEN_ORDER[a.severity] - OPEN_ORDER[b.severity] || (a.file < b.file ? -1 : a.file > b.file ? 1 : (a.line || 0) - (b.line || 0)))
+    .map((f) => f.ruleId + ' ' + f.file + ':' + f.line);
+  const c = payload.counts || {};
+  const ps = payload.pageScan || null;
+  const fp = payload.fingerprint || null;
+  return {
+    tool: 'validate-automation', schemaVersion: SCHEMA_VERSION, summary: true, readOnly: !out, root: payload.root,
+    gate: payload.gate, gateReason: payload.gateReason,
+    counts: { files: c.files ?? 0, tests: c.tests ?? 0, violation: c.violation ?? 0, warning: c.warning ?? 0, review: c.review ?? 0, info: c.info ?? 0, exceptions: c.exceptions ?? 0, notRun: c.notRun ?? 0 },
+    byRule: c.byRule || {},
+    open: open.slice(0, cap), openTotal: open.length,
+    review: findings.filter((f) => f.severity === 'review').length,
+    notRun: (payload.notRun || []).length,
+    notRunItems: (payload.notRun || []).slice(0, cap).map((n) => n.ruleId + ' — ' + (n.scope || 'all files')),
+    exceptions: (payload.exceptions || []).length,
+    fingerprint: fp ? { scopeDigest: fp.scopeDigest, files: fp.fileCount } : null,
+    pageScan: ps ? { classes: (ps.classes || []).length, candidates: ps.candidates, decided: ps.decided, undecided: ps.undecided } : null,
+    full: out,
+    note: 'Summary of the full payload — same analyze() call, same gate. Every open review[] / notRun[] item is an APPLICABLE check until closed (compliance-checkpoints.md §1); the full list is in `full`' + (out ? '' : ' (not written: pass --out <file>)') + '.',
+  };
+}
+
+/**
+ * The discovery digest of every page class under the automation root — the machine half of the automation
+ * inventory in one call (routes, locator counts, member names, duplicate candidates, decided pairs).
+ * Candidates are evidence for the inventory row, never a verdict.
+ */
+export function pageScanDigest(opts) {
+  const root = opts.root;
+  const args = opts.args || {};
+  const warnings = [];
+  const paths = opts.paths || resolvePaths(root, args, (id, f, l, m) => warnings.push({ ruleId: id, file: f, line: l, message: m }));
+  const automationDir = path.resolve(root, paths.automationRoot);
+  const findings = [];
+  const notRun = [];
+  const push = (ruleId, file, line, message, extra) => findings.push({ ruleId, severity: RULES[ruleId] ? RULES[ruleId].severity : 'warning', file, line, message, ...(extra || {}) });
+  const inventoryArg = opts.inventory !== undefined ? opts.inventory : str(args.inventory);
+  const files = (opts.files || []).map((f) => path.resolve(root, f));
+  const scan = scanPageClasses({ root, automationDir, files, cache: new Map(), inventoryArg, push, addNotRun: (ruleId, reason, scope) => notRun.push({ ruleId, reason, scope }) });
+  const label = (x) => x.class + ' (' + x.file + ':' + x.line + ')';
+  const MEMBER_CAP = 40;
+  for (const f of findings) if (f.severity === 'warning') warnings.push({ ruleId: f.ruleId, file: f.file, line: f.line, message: f.message });
+  return {
+    tool: 'validate-automation', schemaVersion: SCHEMA_VERSION, mode: 'page-scan', readOnly: true, root,
+    automationRoot: rel(root, automationDir), filesScanned: scan.filesScanned,
+    counts: { classes: scan.classes.length, candidates: scan.candidates, decided: scan.decided, undecided: scan.undecided },
+    classes: scan.classes.map((c) => ({ class: c.name, file: c.file, line: c.line, extends: c.extends, routes: c.routes.slice(0, 5), locators: c.locators.length, members: (c.members || []).slice(0, MEMBER_CAP), membersTotal: (c.members || []).length })),
+    duplicates: findings.filter((f) => f.ruleId === 'pom-duplicate-page').map((f) => ({ a: label(f.pair.a), b: label(f.pair.b), evidence: (f.evidenceKinds || [f.evidence]).join('+') })),
+    decided: findings.filter((f) => f.ruleId === 'pom-duplicate-page-decided').map((f) => ({ a: label(f.pair.a), b: label(f.pair.b), decision: f.decision, inventoryLine: f.inventoryLine })),
+    inventory: scan.inventory,
+    notRun, warnings,
+    note: 'Discovery digest for the automation inventory: every page class of the automation root. A duplicate pair is a candidate, never a verdict — the inventory row decides (reuse / extend / create), and an undecided pair keeps the validator gate BLOCKED until that row is passed with --inventory.',
+  };
+}
+
+/** --out: the full payload, written atomically (temp + rename) — the only file this script ever writes. */
+function writeFull(file, payload) {
+  const abs = path.resolve(file);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  const tmp = abs + '.' + process.pid + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(payload, null, 2) + '\n');
+  fs.renameSync(tmp, abs);
+  return posix(abs);
+}
+
 /* ---------------- CLI ---------------- */
 
 const HELP = {
   tool: 'validate-automation',
-  usage: 'node validate-automation.mjs [--root <dir>] [--pretty] [--files a,b] [--tests-path <dir>] [--pages-path <dir>] [--automation-root <dir>] [--tc-ids <csv|file>] [--req-ids <csv|file>] [--allow-file <path>] [--evidence-fn <name>] [--inventory <automation-inventory.md>] [--require-steps] [--strict]',
+  usage: 'node validate-automation.mjs [--root <dir>] [--summary] [--out <file>] [--files a,b] [--tests-path <dir>] [--pages-path <dir>] [--automation-root <dir>] [--tc-ids <csv|file>] [--req-ids <csv|file>] [--allow-file <path>] [--evidence-fn <name>] [--console-guard-fn <name>] [--network-guard-fn <name>] [--inventory <automation-inventory.md>] [--require-steps] [--strict] [--pretty]  |  node validate-automation.mjs --page-scan [--root <dir>] [--automation-root <dir>] [--inventory <md>] [--strict] [--pretty]',
   notes: [
-    'Read-only. Default exit code is 0; the verdict lives in the JSON payload.',
+    'Read-only on the code it scans. Default exit code is 0; the verdict lives in the JSON payload.',
     '--strict exits 1 on FAIL, 2 on BLOCKED, 3 on NOT_RUN.',
+    '--summary prints the compact summary of the same payload (gate, counts, the first 20 open items); --out <file> writes the full payload there (the only file this script writes). The summary gate is the full gate.',
+    '--page-scan prints the discovery digest of every page class under the automation root (routes, locator counts, members, duplicate candidates, decided pairs) for the automation inventory; with --strict it exits 2 while a candidate pair is undecided.',
     'The scanner gate is not the compliance gate: review[] and notRun[] items must be closed separately.',
     '--require-steps also reports step-missing (warning) for every test with no test.step() / imported step() — pass it for specs this run generated or updated.',
     'Every page class under the automation root is compared (pom-duplicate-page); --inventory <automation-inventory.md> turns a candidate pair covered by a decision row into pom-duplicate-page-decided (info). An undecided pair keeps the gate BLOCKED.',
+    'B8 rules (constant-redeclared, empty-catch, timeout-literal, console-guard-missing, network-guard-missing, admission-contract) are staged at severity review: open items for the checkpoint, never a gate change. The guard rules need the guard helper under the automation root (else notRun); admission-contract runs only when helpers/admission.* exists.',
   ],
-  rules: Object.fromEntries(Object.entries(RULES).map(([k, v]) => [k, { severity: v.severity, exemptible: v.exemptible, title: v.title }])),
+  rules: Object.fromEntries(Object.entries(RULES).map(([k, v]) => [k, { severity: v.severity, exemptible: v.exemptible, title: v.title, checks: RULE_CHECKS[k] || [] }])),
   limits: LIMITS,
 };
 
@@ -1113,17 +1576,25 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { print(HELP, args); return 0; }
   const root = path.resolve(str(args.root) || process.cwd());
+  if (args['page-scan']) {
+    const digest = pageScanDigest({ root, args });
+    print(digest, args);
+    return args.strict ? (digest.counts.undecided > 0 ? 2 : 0) : 0;
+  }
   const filesArg = str(args.files);
   const report = analyze({
     root, args,
     files: filesArg ? filesArg.split(',').map((f) => f.trim()).filter(Boolean) : null,
     treatAsSpec: !!args['treat-as-spec'],
   });
-  print(report, args);
+  const out = str(args.out) ? writeFull(str(args.out), report) : null;
+  print(args.summary ? summarize(report, { out }) : report, args);
   return args.strict ? (STRICT_EXIT[report.gate] ?? 0) : 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]}` || import.meta.url === new URL(`file://${path.resolve(process.argv[1] || '')}`).href) {
+// the CLI entry: a realpath comparison — a URL string built from argv[1] misses an 8.3 short path (C:\\Users\\NAME~1\\…), a
+// symlink or another drive-letter case and the script then exited 0 having done nothing
+if ((() => { try { return fs.realpathSync.native(process.argv[1] || '') === fs.realpathSync.native(fileURLToPath(import.meta.url)); } catch { return false; } })()) {
   let code = 0;
   try { code = main(); }
   catch (e) {

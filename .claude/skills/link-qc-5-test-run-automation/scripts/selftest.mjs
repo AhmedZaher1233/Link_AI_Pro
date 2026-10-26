@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { analyze } from './validate-automation.mjs';
+import { analyze, summarize, pageScanDigest, RULES, RULE_CHECKS } from './validate-automation.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TC = ['TC-01', 'TC-02', 'TC-03'];
@@ -392,6 +392,219 @@ function check(name, problems, detail) {
   const r7 = run('valid.fixture.ts');
   if (has(r7, 'pom-duplicate-page') || has(r7, 'pom-duplicate-page-decided')) p.push('a single page class raised a duplicate finding');
   check('18 page-class duplicate candidates: name / route / prefixed twin / decided vs undecided shared route / common loader', p, { sameName: dup(r1).length, sameRoute: dup(r2).length, twin: dup(r3).length, decided: decided(r4).length, undecided: dup(r5).length, loader: dup(r6).length });
+}
+
+/* ---------------- cases 19-26: compact outputs, the discovery digest and the B8 rules (fixtures/b8/README.md) ---------------- */
+
+// One fixture file, scanned with its own automation root (the guard and admission roots carry their helpers).
+const b8Run = (file, { automationRoot = 'fixtures/pages', spec = true, req = false, args = {} } = {}) => analyze({
+  root: here, args,
+  paths: { manifestState: 'absent', manifestFile: null, automationRoot, tests: automationRoot + '/tests', pages: 'fixtures/pages', layers: null },
+  files: [path.join('fixtures', file)], treatAsSpec: spec,
+  tcIds: new Set(TC), reqIds: req ? new Set(REQ) : null, tcIdSource: 'selftest', reqIdSource: req ? 'selftest' : null,
+  allowList: { entries: [], file: null },
+});
+const lines = (r, ruleId) => r.findings.filter((f) => f.ruleId === ruleId).map((f) => f.line).sort((a, b) => a - b).join(',');
+const expectLines = (p, r, ruleId, want, label) => { const got = lines(r, ruleId); if (got !== want) p.push(label + ': ' + ruleId + ' at [' + got + '] != [' + want + ']'); };
+const B8 = ['constant-redeclared', 'empty-catch', 'timeout-literal', 'console-guard-missing', 'network-guard-missing', 'admission-contract'];
+
+/* 19 — A3: the summary is the full payload's gate and counts, compact; --out keeps the full payload on disk. */
+{
+  const p = [];
+  for (const [fixture, gate] of [['violations.fixture.ts', 'FAIL'], ['valid.fixture.ts', 'PASS'], ['unstrippable.fixture.ts', 'BLOCKED']]) {
+    const full = run(fixture);
+    const s = summarize(full);
+    if (s.gate !== full.gate || s.gate !== gate) p.push(fixture + ': summary gate ' + s.gate + ' / full ' + full.gate + ' != ' + gate);
+    if (s.gateReason !== full.gateReason) p.push(fixture + ': summary gateReason differs from the full payload');
+    for (const k of ['violation', 'warning', 'review', 'info', 'exceptions', 'notRun']) if (s.counts[k] !== full.counts[k]) p.push(fixture + ': counts.' + k + ' ' + s.counts[k] + ' != ' + full.counts[k]);
+    if (s.notRun !== full.notRun.length || s.review !== full.review.length || s.exceptions !== full.exceptions.length) p.push(fixture + ': notRun / review / exceptions totals differ');
+    if (s.open.length > 20) p.push(fixture + ': open[] holds ' + s.open.length + ' items (cap 20)');
+    const openTotal = full.findings.filter((f) => ['violation', 'review', 'warning'].includes(f.severity)).length;
+    if (s.openTotal !== openTotal) p.push(fixture + ': openTotal ' + s.openTotal + ' != ' + openTotal);
+    if (!s.fingerprint || s.fingerprint.scopeDigest !== full.fingerprint.scopeDigest) p.push(fixture + ': fingerprint.scopeDigest differs');
+    if (s.full !== null || s.readOnly !== true) p.push(fixture + ': a summary without --out claims a written file');
+    if (JSON.stringify(s).length >= JSON.stringify(full).length) p.push(fixture + ': the summary is not smaller than the full payload');
+  }
+  const sv = summarize(run('violations.fixture.ts'));
+  if (sv.open[0] !== 'focus-only fixtures/violations.fixture.ts:7') p.push('open[0] ' + sv.open[0] + ' != the first violation "focus-only fixtures/violations.fixture.ts:7"');
+  const iWarn = sv.open.indexOf('wait-for-timeout fixtures/violations.fixture.ts:25');
+  const iLastViolation = sv.open.indexOf('no-assertions fixtures/violations.fixture.ts:39');
+  if (iWarn < 0 || iLastViolation < 0 || iWarn < iLastViolation) p.push('violations must be listed before warnings (wait-for-timeout@25 at ' + iWarn + ', no-assertions@39 at ' + iLastViolation + ')');
+  // CLI: --summary --out <file> prints the summary and writes the full payload; --strict maps the SAME gate
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-validate-sum-'));
+  try {
+    const outFile = path.join(tmp, 'checks', 'validator-full.json');
+    const cli = spawnSync(process.execPath, [path.join(here, 'validate-automation.mjs'), '--root', here, '--tests-path', 'fixtures', '--pages-path', 'fixtures/pages',
+      '--files', 'fixtures/violations.fixture.ts', '--treat-as-spec', '--tc-ids', TC.join(','), '--summary', '--out', outFile, '--strict'], { encoding: 'utf8' });
+    if (cli.status !== 1) p.push('--summary --strict exit ' + cli.status + ' != 1 (FAIL)');
+    let s = null; try { s = JSON.parse(cli.stdout); } catch { p.push('--summary stdout is not one JSON object'); }
+    let full = null; try { full = JSON.parse(fs.readFileSync(outFile, 'utf8')); } catch { p.push('--out did not write a readable full payload'); }
+    if (s && (s.summary !== true || s.gate !== 'FAIL')) p.push('CLI summary: ' + JSON.stringify({ summary: s.summary, gate: s.gate }));
+    if (s && s.full !== outFile.replace(/\\/g, '/')) p.push('CLI summary full ' + s.full + ' != ' + outFile.replace(/\\/g, '/'));
+    if (s && full && (full.gate !== s.gate || full.fingerprint.scopeDigest !== s.fingerprint.scopeDigest || !Array.isArray(full.findings) || !Array.isArray(full.limits))) p.push('the written full payload does not match the summary');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  check('19 --summary is the full gate and counts, compact; --out keeps the full payload', p, { open: sv.open.length, openTotal: sv.openTotal });
+}
+
+/* 20 — A9: the page-scan digest lists every page class with its members, the candidates and the decided pairs. */
+{
+  const p = [];
+  const pomPaths = (name) => ({ manifestState: 'absent', manifestFile: null, automationRoot: 'fixtures/pom/' + name, tests: 'fixtures/pom/' + name + '/tests', pages: 'fixtures/pom/' + name + '/pages', layers: null });
+  const d1 = pageScanDigest({ root: here, paths: pomPaths('same-name') });
+  if (d1.mode !== 'page-scan' || d1.counts.classes !== 2 || d1.counts.undecided !== 1 || d1.counts.decided !== 0) p.push('same-name counts ' + JSON.stringify(d1.counts));
+  const order = d1.classes.find((c) => /pages\/OrderPage\.ts$/.test(c.file));
+  if (!order || ['saveButton', 'statusBadge', 'open', 'expectStatus'].join() !== order.members.join() || order.membersTotal !== 4) p.push('OrderPage members ' + JSON.stringify(order && order.members) + ' (constructor excluded, fields and methods in order)');
+  if (!order || order.locators !== 2 || order.routes.join() !== '/orders/new') p.push('OrderPage locators / routes ' + JSON.stringify(order && { locators: order.locators, routes: order.routes }));
+  if (d1.duplicates.length !== 1 || d1.duplicates[0].evidence !== 'name' || !/OrderPage \(fixtures\/pom\/same-name\/pages\/checkout\/OrderPage\.ts:\d+\)/.test(d1.duplicates[0].b)) p.push('same-name duplicates ' + JSON.stringify(d1.duplicates));
+  const d4 = pageScanDigest({ root: here, paths: pomPaths('shared-route'), inventory: 'fixtures/pom/shared-route/automation-inventory.md' });
+  if (d4.counts.decided !== 1 || d4.counts.undecided !== 0 || d4.duplicates.length !== 0) p.push('shared-route+inventory counts ' + JSON.stringify(d4.counts));
+  if (!d4.decided.length || !/^reuse DashboardPage/.test(d4.decided[0].decision) || !d4.decided[0].inventoryLine) p.push('shared-route decided pair lacks its row: ' + JSON.stringify(d4.decided));
+  const d6 = pageScanDigest({ root: here, paths: pomPaths('common-loader') });
+  if (d6.counts.classes !== 2 || d6.counts.candidates !== 0) p.push('common-loader digest ' + JSON.stringify(d6.counts));
+  const cli = (extra) => spawnSync(process.execPath, [path.join(here, 'validate-automation.mjs'), '--root', here, '--page-scan', '--strict', ...extra], { encoding: 'utf8' });
+  const undecided = cli(['--automation-root', 'fixtures/pom/same-name']);
+  if (undecided.status !== 2) p.push('--page-scan --strict with an undecided pair exit ' + undecided.status + ' != 2');
+  let dj = null; try { dj = JSON.parse(undecided.stdout); } catch { p.push('--page-scan stdout is not one JSON object'); }
+  if (dj && (dj.mode !== 'page-scan' || dj.counts.undecided !== 1 || dj.automationRoot !== 'fixtures/pom/same-name')) p.push('CLI digest ' + JSON.stringify(dj && { mode: dj.mode, counts: dj.counts, root: dj.automationRoot }));
+  const decidedCli = cli(['--automation-root', 'fixtures/pom/shared-route', '--inventory', 'fixtures/pom/shared-route/automation-inventory.md']);
+  if (decidedCli.status !== 0) p.push('--page-scan --strict with every pair decided exit ' + decidedCli.status + ' != 0');
+  check('20 --page-scan digest: classes, members, candidates and decided pairs; --strict BLOCKED while undecided', p, { sameName: d1.counts, sharedRoute: d4.counts });
+}
+
+/* 21 — constant-redeclared (check 6): true positives, false-positive guards, false-negative guards. */
+{
+  const p = [];
+  const tp = b8Run('b8/constants/tp.fixture.ts');
+  expectLines(p, tp, 'constant-redeclared', '6,7,11', 'tp');
+  if (tp.gate !== 'PASS') p.push('tp gate ' + tp.gate + ' — a review-severity B8 finding must never move the gate');
+  if (tp.findings.some((f) => f.ruleId === 'constant-redeclared' && f.severity !== 'review')) p.push('constant-redeclared is not review severity');
+  const fp = b8Run('b8/constants/fp.fixture.ts');
+  expectLines(p, fp, 'constant-redeclared', '', 'fp (expected count, label map, TIMEOUTS reference, non-policy name, commented and quoted numbers)');
+  if (fp.gate !== 'PASS' || fp.counts.review !== 0) p.push('fp gate ' + fp.gate + ' review ' + fp.counts.review + ' (' + sev(fp, 'review') + ')');
+  const fn = b8Run('b8/constants/fn.fixture.ts');
+  expectLines(p, fn, 'constant-redeclared', '6,7,8', 'fn (typed + exported + arithmetic, parenthesised let, TIMEOUTS shadowed)');
+  // a support file is not a spec: the rule never reads page objects or helpers
+  const support = b8Run('b8/constants/tp.fixture.ts', { spec: false });
+  expectLines(p, support, 'constant-redeclared', '', 'support file');
+  check('21 constant-redeclared: TP / FP / FN, specs only, review severity', p, { tp: lines(tp, 'constant-redeclared'), fn: lines(fn, 'constant-redeclared') });
+}
+
+/* 22 — empty-catch (check 28). */
+{
+  const p = [];
+  const tp = b8Run('b8/catch/tp.fixture.ts', { spec: false });
+  expectLines(p, tp, 'empty-catch', '6,11', 'tp');
+  const fp = b8Run('b8/catch/fp.fixture.ts', { spec: false });
+  expectLines(p, fp, 'empty-catch', '', 'fp (commented block, rethrow, commented handler, rethrowing handler, value fallback)');
+  const fn = b8Run('b8/catch/fn.fixture.ts', { spec: false });
+  expectLines(p, fn, 'empty-catch', '5,8,9,10', 'fn (whitespace + typed parameter, lone ";", => undefined, async () => {})');
+  for (const r of [tp, fp, fn]) if (r.gate !== 'PASS') p.push('gate ' + r.gate + ' — empty-catch is staged at review and must not move the gate');
+  check('22 empty-catch: TP / FP / FN in every layer', p, { tp: lines(tp, 'empty-catch'), fn: lines(fn, 'empty-catch') });
+}
+
+/* 23 — timeout-literal (check 43). */
+{
+  const p = [];
+  const tp = b8Run('b8/timeout/tp.fixture.ts', { spec: false });
+  expectLines(p, tp, 'timeout-literal', '8,9,13,14', 'tp');
+  const zero = tp.findings.find((f) => f.ruleId === 'timeout-literal' && f.line === 14);
+  if (!zero || !/disables the limit/.test(zero.message)) p.push('timeout: 0 is not reported as an unlimited value');
+  if (has(tp, 'bare-set-timeout')) p.push('test.setTimeout(…) raised bare-set-timeout (it is a budget, not a timer)');
+  const fp = b8Run('b8/timeout/fp.fixture.ts', { spec: false });
+  expectLines(p, fp, 'timeout-literal', '', 'fp (TIMEOUTS reference, computed budget, type literal, ternary)');
+  const fn = b8Run('b8/timeout/fn.fixture.ts', { spec: false });
+  expectLines(p, fn, 'timeout-literal', '10,12', 'fn (deadline arithmetic, a same-file numeric constant)');
+  const viaConst = fn.findings.find((f) => f.ruleId === 'timeout-literal' && f.line === 12);
+  if (!viaConst || !/WAIT = 7_000/.test(viaConst.message)) p.push('the constant behind "timeout: WAIT" is not named in the message');
+  const policy = b8Run('b8/timeout/timeouts.ts', { spec: false });
+  expectLines(p, policy, 'timeout-literal', '', 'timeouts.ts (the policy file itself)');
+  for (const r of [tp, fp, fn, policy]) if (r.gate !== 'PASS') p.push('gate ' + r.gate + ' (' + r.gateReason + ')');
+  check('23 timeout-literal: TP / FP / FN; the policy file is skipped', p, { tp: lines(tp, 'timeout-literal'), fn: lines(fn, 'timeout-literal') });
+}
+
+/* 24 — console-guard-missing (46a) and network-guard-missing (49): need the helpers under the automation root. */
+{
+  const p = [];
+  const root = { automationRoot: 'fixtures/b8/guards' };
+  const tp = b8Run('b8/guards/tests/tp.fixture.ts', root);
+  expectLines(p, tp, 'console-guard-missing', '7', 'tp');
+  expectLines(p, tp, 'network-guard-missing', '7', 'tp');
+  if (!tp.config.b8 || !/console-guard\.ts$/.test(tp.config.b8.consoleGuardHelper || '') || !/network-guard\.ts$/.test(tp.config.b8.networkGuardHelper || '')) p.push('the guard helpers were not found under the guard root: ' + JSON.stringify(tp.config.b8));
+  for (const f of ['fp.fixture.ts', 'fixture-fp.fixture.ts']) {
+    const r = b8Run('b8/guards/tests/' + f, root);
+    expectLines(p, r, 'console-guard-missing', '', f);
+    expectLines(p, r, 'network-guard-missing', '', f);
+    if (r.notRun.some((n) => /guard-missing/.test(n.ruleId))) p.push(f + ': a guard rule landed in notRun[] although the helpers exist');
+  }
+  const fn = b8Run('b8/guards/tests/fn.fixture.ts', root);
+  expectLines(p, fn, 'console-guard-missing', '10,21', 'fn (handle not kept; only in the test body)');
+  expectLines(p, fn, 'network-guard-missing', '10,20', 'fn (never reported; not attached for the second describe)');
+  const msg = (line, ruleId) => (fn.findings.find((f) => f.ruleId === ruleId && f.line === line) || {}).message || '';
+  if (!/handle is not kept/.test(msg(10, 'console-guard-missing'))) p.push('fn console@10 does not say the handle is not kept');
+  if (!/never reported/.test(msg(10, 'network-guard-missing'))) p.push('fn network@10 does not say it is never reported');
+  if (!/inside the test body/.test(msg(21, 'console-guard-missing'))) p.push('fn console@21 does not say it is called inside the test body');
+  // no helper under the root → the rules cannot run: notRun, never a finding and never silence
+  const none = b8Run('b8/guards/tests/tp.fixture.ts');
+  if (has(none, 'console-guard-missing') || has(none, 'network-guard-missing')) p.push('a guard finding without a helper under the automation root');
+  for (const id of ['console-guard-missing', 'network-guard-missing']) {
+    const n = none.notRun.find((x) => x.ruleId === id);
+    if (!n || n.applicable !== true || !/BLOCKED/.test(n.resolution || '')) p.push(id + ' is not an applicable notRun item without its helper');
+  }
+  for (const r of [tp, fn]) if (r.gate !== 'PASS') p.push('gate ' + r.gate + ' — guard findings are review severity');
+  check('24 guard rules: TP / FP (hooks, fixture) / FN; notRun without the helper', p, { tp: [lines(tp, 'console-guard-missing'), lines(tp, 'network-guard-missing')], fn: [lines(fn, 'console-guard-missing'), lines(fn, 'network-guard-missing')] });
+}
+
+/* 25 — admission-contract (25a / 47): only when helpers/admission.* exists. */
+{
+  const p = [];
+  const root = { automationRoot: 'fixtures/b8/admission', spec: false };
+  const tp = b8Run('b8/admission/fixtures/tp.fixture.ts', root);
+  expectLines(p, tp, 'admission-contract', '6,11,15', 'tp (worker + prerequest, request.post, login)');
+  const worker = tp.findings.find((f) => f.ruleId === 'admission-contract' && f.line === 6);
+  if (!worker || !/workerAdmission/.test(worker.message) || worker.scope !== 'worker') p.push('the worker fixture finding does not name workerAdmission: ' + JSON.stringify(worker && { msg: worker.message, scope: worker.scope }));
+  const unit = tp.findings.find((f) => f.ruleId === 'admission-contract' && f.line === 11);
+  if (!unit || !/unitAdmission/.test(unit.message)) p.push('the test fixture finding does not name unitAdmission');
+  if (!tp.config.b8 || !/helpers\/admission\.ts$/.test(tp.config.b8.admissionHelper || '')) p.push('admission helper not recorded: ' + JSON.stringify(tp.config.b8));
+  const fp = b8Run('b8/admission/fixtures/fp.fixture.ts', root);
+  expectLines(p, fp, 'admission-contract', '', 'fp (direct, transitive, read-only, option)');
+  const fn = b8Run('b8/admission/fixtures/fn.fixture.ts', root);
+  expectLines(p, fn, 'admission-contract', '10,14', 'fn (through a non-admitted fixture; worker fixture on unitAdmission, renamed prerequest import)');
+  const hooks = b8Run('b8/admission/tests/hooks.fixture.ts', { automationRoot: 'fixtures/b8/admission' });
+  expectLines(p, hooks, 'admission-contract', '8', 'hooks (beforeAll without workerAdmission; the one with it is clean)');
+  // without helpers/admission.* the rule has no subject: no finding, no notRun
+  const off = b8Run('b8/admission/fixtures/tp.fixture.ts', { spec: false });
+  if (has(off, 'admission-contract') || off.notRun.some((n) => n.ruleId === 'admission-contract')) p.push('admission-contract ran without helpers/admission.* under the automation root');
+  for (const r of [tp, fn, hooks]) if (r.gate !== 'PASS') p.push('gate ' + r.gate + ' (' + r.gateReason + ')');
+  check('25 admission-contract: TP / FP / FN, beforeAll, inactive without the admission layer', p, { tp: lines(tp, 'admission-contract'), fn: lines(fn, 'admission-contract'), hooks: lines(hooks, 'admission-contract') });
+}
+
+/* 26 — staged severity and exemptibility of the B8 rules. */
+{
+  const p = [];
+  const exemptible = { 'constant-redeclared': true, 'empty-catch': false, 'timeout-literal': false, 'console-guard-missing': true, 'network-guard-missing': true, 'admission-contract': true };
+  const checks = { 'constant-redeclared': '6', 'empty-catch': '28', 'timeout-literal': '43', 'console-guard-missing': '46a', 'network-guard-missing': '49', 'admission-contract': '25a' };
+  for (const id of B8) {
+    if (!RULES[id]) { p.push(id + ' is not in RULES'); continue; }
+    if (RULES[id].severity !== 'review') p.push(id + ' severity ' + RULES[id].severity + ' != review (staged)');
+    if (RULES[id].exemptible !== exemptible[id]) p.push(id + ' exemptible ' + RULES[id].exemptible + ' != ' + exemptible[id]);
+    if (!(RULE_CHECKS[id] || []).includes(checks[id])) p.push(id + ' does not map to check ' + checks[id] + ': ' + JSON.stringify(RULE_CHECKS[id]));
+  }
+  for (const id of Object.keys(RULES)) if (!RULE_CHECKS[id]) p.push(id + ' has no RULE_CHECKS entry');
+  const r = b8Run('b8/pragmas.fixture.ts', { req: true });
+  const honoured = r.findings.find((f) => f.ruleId === 'constant-redeclared' && f.line === 8);
+  if (!honoured || honoured.severity !== 'info' || !honoured.exception) p.push('qa-allow on constant-redeclared (exemptible) was not honoured: ' + JSON.stringify(honoured && { severity: honoured.severity }));
+  if (!at(r, 'exception-unverified', 8)) p.push('the honoured B8 exception is not left open as exception-unverified@8');
+  if (!at(r, 'exception-not-permitted', 13)) p.push('qa-allow on empty-catch (non-exemptible) did not raise exception-not-permitted@13');
+  const swallow = r.findings.find((f) => f.ruleId === 'empty-catch' && f.line === 14);
+  if (!swallow || swallow.severity !== 'review') p.push('empty-catch@14 was downgraded by a qa-allow: ' + JSON.stringify(swallow && swallow.severity));
+  if (r.gate !== 'FAIL') p.push('gate ' + r.gate + ' != FAIL (the not-permitted qa-allow is a violation)');
+  // the existing fixtures raise no B8 finding at all
+  for (const f of ['valid.fixture.ts', 'violations.fixture.ts', 'justified.fixture.ts', 'timing.fixture.ts', 'timing-clean.fixture.ts', 'timing-negative.fixture.ts']) {
+    const x = run(f, { req: true });
+    const hit = x.findings.filter((y) => B8.includes(y.ruleId)).map((y) => y.ruleId + '@' + y.line);
+    if (hit.length) p.push(f + ' raised B8 findings: ' + hit.join(', '));
+  }
+  check('26 B8 rules are staged at review with their exemptibility; a qa-allow follows the existing exemption rules', p, {});
 }
 
 const out = {

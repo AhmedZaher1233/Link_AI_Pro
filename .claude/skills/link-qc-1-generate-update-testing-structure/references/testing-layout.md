@@ -65,7 +65,7 @@ project has no conventions yet.
   `--reporter` on the CLI, because Playwright's `--reporter` replaces the whole configured
   list.
 * **One shared `playwright.config.ts`, never a per-story file.** Skill 5 updates it in place
-  (Google Chrome `channel: 'chrome'`, headed, `workers: 2`, `fullyParallel: true`, `forbidOnly` on
+  (Google Chrome `channel: 'chrome'`, headed, runner-decided workers, `fullyParallel: true`, `forbidOnly` on
   CI, `retries: 0`, every timeout from a sibling `timeouts.ts`), consolidates several configs
   into it only when their behaviour is reproducible and their references are rewritten (an
   unmergeable one is kept and reported), and creates it from its template only when none exists.
@@ -77,6 +77,9 @@ project has no conventions yet.
 * Optional `automation.layers` block in the manifest (`pages`, `fixtures`, `helpers`, `utils`,
   `specGlob`) when the project's layer names differ from the defaults — skill 5's validator
   reads it so Page Object Model checks follow the project's real architecture.
+* Optional `execution.maxWorkers` in the manifest — a project limit on Playwright workers that can only LOWER the
+  Auto machine ceiling of skills 5 and 9 (`toolchain.md` "Execution limits"); never written by this skill, never a way to
+  raise anything.
 * No application URLs or credentials in the config — environment variables or the project's
   env layer only.
 * Before modifying an existing `playwright.config.ts`, read it and preserve every valid

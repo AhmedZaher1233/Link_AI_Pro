@@ -9,8 +9,8 @@ contract; skill 9 only **calls** its scripts by path and never copies, imports o
 .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs   the only way the page is made (report-update.md §4)
 ```
 
-Skill 5's folder absent → no bug takes this route: each goes to playwright-cli with the reason
-`automation runner not installed` (a `### Deviations` line). Read a skill 5 reference only when a
+Skill 5's folder absent → the run is BLOCKED for every route: the environment lease and the worker ceiling are
+skill 5's `capacity.mjs` (coordination.md). Read a skill 5 reference only when a
 rule below points to it (`../link-qc-5-test-run-automation/references/…`), once.
 
 ## 1. Route decision — is the TC automated?
@@ -34,7 +34,7 @@ rule below points to it (`../link-qc-5-test-run-automation/references/…`), onc
 5. **Automation route** ⇔ a test carries the TC **and** the run file's `framework` is not
    `manual-cli` **and** `run_plan.groups[]` (after `run_plan_adjustments[]`) holds the TC.
    Otherwise the playwright-cli route, with its reason recorded: `not automated` · `latest phase is
-   a manual run (skill 5b)` · `in no run-plan group` · `automation runner not installed`.
+   a manual run (skill 5b)` · `in no run-plan group`.
 
 ## 2. Readiness — checked before the combined ask, never asked about
 
@@ -68,13 +68,16 @@ rule below points to it (`../link-qc-5-test-run-automation/references/…`), onc
     --spec {files from §1.4} --ceilings {group}={ms},… --grace {TIMEOUTS.watchdog_grace}
     --log {automation_root}/automation-logs/[SPEC-*/]{US-leaf}/run-progress-{stamp}.log
     --project {the browser project of phase N} --cwd {automation_root} --label "retest — skill 9"
+    --env-id {envId of this run's lease — coordination.md §2}
     [--cooldown {TIMEOUTS.rate_limit.cooldown}] [--cooldown-max {TIMEOUTS.rate_limit.cooldown_max}]
     [--headless] [--cmd "{run command}"] [--stage-json-source {path}]
   ```
 
   Ceilings are computed exactly as skill 5's watchdog layer 1 (`execution.md` `<live_progress>`),
-  over the retest TCs of each group only. Never `--burn-in`, `--extra`, `--reporter`, `--config` or
-  `--retries`.
+  over the retest TCs of each group only — compute them for ONE worker: without a readiness payload skill 5's
+  default scheduler (`auto`) runs the retest SERIALLY (`scheduler.used: serial`), which suits a handful of retests;
+  the active silence rule and the Auto ceiling apply as in skill 5. Never `--burn-in`, `--extra`, `--reporter`,
+  `--config`, `--retries` or `--scheduler`.
 - **One background call per stage**; wait for its completion notice — never poll it, never read the
   log while it runs (pipeline mode: one foreground call per `--groups`, with a tool timeout above
   the ceiling + `--cooldown-max`). After each call, one chat message: the payload's `update`
@@ -82,9 +85,12 @@ rule below points to it (`../link-qc-5-test-run-automation/references/…`), onc
 - `artifacts/` is **never emptied** by this skill: run-stage takes the next free `-attempt{n}` per
   command, so phase N's earlier files stay. The isolation check runs inside the call — a FAIL beside
   other tests is re-run alone before it counts, a refused request is `rate_limited` (no verdict).
-- Payload outcome `BLOCKED` / `SPAWN_FAILED` / `FRESHNESS_FAILED` → every TC of that call is
-  unobserved (`NOT_RUN` with the payload reason) and its bug keeps its Status; never re-tried
-  through playwright-cli.
+- Payload outcome `BLOCKED` (also `environment lease` / `no safe coordination`) / `SPAWN_FAILED` /
+  `FRESHNESS_FAILED` → every TC of that call is unobserved (`NOT_RUN` with the payload reason) and its bug
+  keeps its Status; never re-tried through playwright-cli. A TC `NOT_RUN` `not started: admission timeout` ·
+  `host pressure` · `no safe coordination` (the machine's worker ceiling, coordination.md §3) is unobserved too.
+- Without `--env-id` (an older call) run-stage still runs, with the warning "no --env-id" — that call was not
+  coordinated with other runs on the environment; this skill always passes it.
 
 ## 4. Verdict per bug
 

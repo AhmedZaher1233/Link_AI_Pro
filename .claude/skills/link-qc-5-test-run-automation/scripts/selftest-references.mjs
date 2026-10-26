@@ -13,6 +13,11 @@
 //      each `*.md` it names — is in the Load column of the stopping activity or an earlier one (SKILL.md Workflow);
 //      the STOP names the report contract (run-report.md) and says to load.
 //   3  Block index: every `<tag>` it lists opens in a file it names; every block opened in references/ is listed.
+//   4  Rule registry (references/rule-registry.md): one row per rule id, exactly one home each; the home file and
+//      its block (or § section) exist; every enforcement id resolves — a validator rule in RULES, a checklist item
+//      of compliance-checkpoints.md §2, a script in scripts/; every activity that needs a rule has its home loaded
+//      by then (Workflow Load column, cumulative; `all` = SKILL.md); every block SKILL.md's every-activity rules
+//      cite is the home of a registry row.
 //
 // Run: node selftest-references.mjs [--pretty]
 import fs from 'node:fs';
@@ -129,6 +134,59 @@ function blockIndex() {
   }
   for (const f of refs) for (const m of read('references/' + f).matchAll(/^<([a-z_]+)>\s*$/gm)) if (!index.has(m[1])) p.push('references/' + f + ' opens <' + m[1] + '>, which the block index does not list');
   check('3 every block-index tag opens in its file; every opened block is indexed', p, { tags: index.size });
+}
+
+/* 4 — the rule registry: one home per rule, every pointer and enforcement id resolves, homes loaded before use */
+{
+  const p = [];
+  let reg = '';
+  try { reg = read('references/rule-registry.md'); } catch { p.push('references/rule-registry.md is missing'); }
+  const rows = reg.split('\n').filter((l) => /^\|\s*R\d+\s*\|/.test(l)).map(cells).map(([id, rule, home, enforced, needed]) => ({ id, rule, home, enforced, needed }));
+  if (reg && !rows.length) p.push('the registry has no rule rows');
+  const seen = new Set();
+  for (const r of rows) { if (seen.has(r.id)) p.push(r.id + ' appears twice'); seen.add(r.id); }
+  const index = blockIndex();
+  // the validator's rule ids, read from its source text (no import: this harness stays read-only and dependency-free)
+  const vsrc = fs.readFileSync(path.join(here, 'validate-automation.mjs'), 'utf8');
+  const vStart = vsrc.indexOf('export const RULES = {');
+  const ruleIds = new Set([...vsrc.slice(vStart, vsrc.indexOf('\n};', vStart)).matchAll(/^\s{2}["']?([a-z][a-z0-9-]+)["']?\s*:\s*\{/gm)].map((m) => m[1]));
+  const items = new Set([...read('references/compliance-checkpoints.md').matchAll(/^\|\s*(\d+[ab]?)\s*\|/gm)].map((m) => m[1]));
+  const scripts = new Set(fs.readdirSync(here).filter((f) => f.endsWith('.mjs')));
+  // the Workflow rows and what each has loaded by then (cumulative)
+  const skillMd = read('SKILL.md');
+  const wfRows = skillMd.slice(skillMd.indexOf('## Workflow')).split('\n').filter((l) => /^\|\s*\d+[a-z]?\s*\|/.test(l)).map(cells).map(([id, , , , load]) => ({ id, load }));
+  const loadedBy = new Map();
+  const acc = new Set();
+  for (const w of wfRows) { for (const m of w.load.matchAll(/([a-z0-9-]+\.md)/g)) acc.add(m[1]); loadedBy.set(w.id, new Set(acc)); }
+  const homes = new Set();
+  for (const r of rows) {
+    const files = [...r.home.matchAll(/`([A-Za-z0-9-]+\.md)`/g)].map((m) => m[1]);
+    if (files.length !== 1) { p.push(r.id + ': ' + (files.length ? files.length + ' homes' : 'no home') + ' — every rule has exactly one'); continue; }
+    const file = files[0];
+    const rel = file === 'SKILL.md' ? 'SKILL.md' : 'references/' + file;
+    let text = null;
+    try { text = read(rel); } catch { p.push(r.id + ': home ' + rel + ' does not exist'); continue; }
+    const tag = (r.home.match(/`<([a-z_]+)>`/) || [])[1];
+    const sec = (r.home.match(/§\s*(\d+)/) || [])[1];
+    if (tag) {
+      if (!new RegExp('^<' + tag + '>\\s*$', 'm').test(text)) p.push(r.id + ': <' + tag + '> does not open in ' + rel);
+      if (file !== 'SKILL.md' && !(index.get(tag) || []).includes(file)) p.push(r.id + ': <' + tag + '> is not in the block index under ' + file);
+      homes.add(tag);
+    } else if (sec && !new RegExp('^## ' + sec + '\\.', 'm').test(text)) p.push(r.id + ': ' + rel + ' has no section ' + sec);
+    for (const m of r.enforced.matchAll(/`([a-z][a-z0-9-]*)`/g)) if (!ruleIds.has(m[1])) p.push(r.id + ': validator rule `' + m[1] + '` does not exist');
+    for (const m of r.enforced.matchAll(/`([A-Za-z0-9-]+\.mjs)`/g)) if (!scripts.has(m[1])) p.push(r.id + ': script ' + m[1] + ' does not exist');
+    for (const m of r.enforced.matchAll(/\bitem (\d+[ab]?)\b/g)) if (!items.has(m[1])) p.push(r.id + ': checklist item ' + m[1] + ' is not in compliance-checkpoints.md §2');
+    const needed = r.needed.trim();
+    if (needed === 'all') { if (file !== 'SKILL.md') p.push(r.id + ': needed by every activity, so its home must be SKILL.md, not ' + file); continue; }
+    for (const at of needed.split(/[,\s]+/).filter(Boolean)) {
+      if (!loadedBy.has(at)) { p.push(r.id + ': activity ' + at + ' is not a Workflow row'); continue; }
+      if (file !== 'SKILL.md' && !loadedBy.get(at).has(file)) p.push(r.id + ': activity ' + at + ' needs ' + file + ' but no Workflow row up to it loads it');
+    }
+  }
+  // every block the every-activity rules cite has a registry row
+  const rulesSection = skillMd.slice(skillMd.indexOf('## Rules that hold in every activity'), skillMd.indexOf('## Workflow'));
+  for (const m of rulesSection.matchAll(/`<([a-z_]+)>`/g)) if (!homes.has(m[1])) p.push('SKILL.md\'s every-activity rules cite <' + m[1] + '>, which is no registry row\'s home');
+  check('4 rule registry: one home per rule, pointers and enforcement ids resolve, homes loaded before the activities that need them', p, { rules: rows.length });
 }
 
 const out = {

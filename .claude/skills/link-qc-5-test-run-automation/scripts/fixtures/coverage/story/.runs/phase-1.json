@@ -1,0 +1,24 @@
+{
+  "schema": "skill6-run/1",
+  "phase": 1,
+  "status": "complete",
+  "feature": "sample",
+  "user_story": "US-9001 — Sample orders",
+  "coverage_snapshot": {
+    "measuredAt": "2026-09-30T10:00:00Z",
+    "weightedPct": 50,
+    "target": 80,
+    "targetSource": "default",
+    "mechanism": "soft block",
+    "verdict": "user override",
+    "byStage": {
+      "smoke": { "total": 1, "full": 1, "partial": 0, "none": 0, "weightedPct": 100 },
+      "positive": { "total": 2, "full": 0, "partial": 2, "none": 0, "weightedPct": 50 },
+      "negative": { "total": 1, "full": 0, "partial": 0, "none": 1, "weightedPct": 0 }
+    },
+    "tcs": { "TC-001": "Fully Covered", "TC-002": "Partially Covered", "TC-003": "Partially Covered", "TC-004": "Not Covered" },
+    "requirements": [],
+    "manual": { "total": 3, "high": 1, "medium": 0, "low": 2 },
+    "delta": { "against": null, "pctChange": null, "improved": [], "regressed": [], "added": [], "removed": [] }
+  }
+}

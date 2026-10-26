@@ -739,6 +739,180 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   check('32 rate_limited and documented reason forms (interrupted: / not started: / cleanup_incomplete) accepted', p, {});
 }
 
+/* 33 — --base: a DRAFT report under artifacts/drafts/phase-N/ rendered for the story folder gives the published page byte for byte —
+      evidence links and the legacy listing resolve against the story folder; without --base the draft's links do not resolve. */
+{
+  const t = tmpCopy();
+  try {
+    const p = [];
+    const drafts = path.join(t.story, 'artifacts', 'drafts', 'phase-2');
+    fs.mkdirSync(path.join(drafts, '.runs'), { recursive: true });
+    fs.copyFileSync(t.report, path.join(drafts, 'TEST-RUN-REPORT-create-order.md'));
+    fs.copyFileSync(t.bugs, path.join(drafts, 'BUG-REPORT-create-order.md'));
+    for (const f of fs.readdirSync(t.runs)) fs.copyFileSync(path.join(t.runs, f), path.join(drafts, '.runs', f));
+    fs.writeFileSync(path.join(t.story, 'merged-results.json'), '{}\n'); // a legacy artifact of the story folder
+    const draftReport = path.join(drafts, 'TEST-RUN-REPORT-create-order.md');
+    const pub = render({ reportPath: t.report, root: t.dir });
+    const noBase = render({ reportPath: draftReport, root: t.dir });
+    const draft = render({ reportPath: draftReport, base: t.story, root: t.dir });
+    if (pub.payload.gate !== 'PASS' || draft.payload.gate !== 'PASS') p.push('gates ' + pub.payload.gate + ' / ' + draft.payload.gate);
+    if (!draft.html || draft.html !== pub.html) p.push('the draft page rendered with --base differs from the page of the published files');
+    if (!wkinds(noBase).includes('evidence-file-missing')) p.push('without --base the draft\'s ../../screenshots links should not resolve');
+    if (wkinds(draft).includes('evidence-file-missing')) p.push('with --base the draft\'s links must resolve');
+    if (draft.payload.document.legacyFiles.join() !== 'merged-results.json' || noBase.payload.document.legacyFiles.length) p.push('legacy listing: --base ' + draft.payload.document.legacyFiles.join() + ' / none ' + noBase.payload.document.legacyFiles.join());
+    if (draft.payload.input.base !== path.relative(t.dir, t.story)) p.push('payload input.base ' + draft.payload.input.base);
+    if (pub.payload.input.base !== undefined) p.push('input.base present without --base');
+    const call = (args) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', cwd: t.dir });
+    const w = JSON.parse(call(['--report', draftReport, '--base', t.story, '--write']).stdout);
+    const draftPage = path.join(drafts, 'TEST-RUN-REPORT-create-order.html');
+    if (w.gate !== 'PASS' || !fs.existsSync(draftPage) || read(draftPage) !== norm(pub.html || '')) p.push('CLI --base --write: ' + w.gate + ' — the draft page must be written beside the draft and equal the published page');
+    if (fs.existsSync(t.out)) p.push('CLI --base --write wrote into the story folder');
+    check('33 --base: a draft rendered for the story folder equals the published page; links and legacy files resolve there', p, {});
+  } finally { t.cleanup(); }
+}
+
+/* 34 — --gate: the gate record's sha256 joins the provenance (` · gate=… · page=`), its verdict the meta line; a page without --gate is
+      unchanged and both verify; a missing gate record BLOCKs; re-rendering over a gated page is never refused as hand-edited. */
+{
+  const t = tmpCopy();
+  try {
+    const p = [];
+    const gateFile = path.join(t.runs, 'phase-2.checkpoint-B.json');
+    const gateText = JSON.stringify({ schema: 'skill5-gate/1', checkpoint: 'B', phase: 2, verdict: 'PASS', snapshotId: 'b7c8d9e0', decidedAt: '2026-09-21T14:05:00Z', results: [], rejected: [], na: [] }, null, 2) + '\n';
+    fs.writeFileSync(gateFile, gateText);
+    const gsha = crypto.createHash('sha256').update(gateText, 'utf8').digest('hex');
+    const plain = render({ reportPath: t.report, root: t.dir });
+    const gated = render({ reportPath: t.report, gatePath: gateFile, root: t.dir });
+    if (gated.payload.gate !== 'PASS') p.push('gated render ' + gated.payload.gate + ' ' + gated.payload.gateReason);
+    if (!(gated.html || '').includes(' · tracker=none · gate=' + gsha + ' · page=')) p.push('the gate hash is not in the provenance line');
+    if (/ · gate=/.test(plain.html || '')) p.push('a page rendered without --gate carries gate=');
+    const st = pageState(gated.html || ''); const st0 = pageState(plain.html || '');
+    if (!st.provenance || st.handEdited || st.recorded.gate !== gsha) p.push('gated page provenance ' + JSON.stringify(st));
+    if (!st0.provenance || st0.handEdited || st0.recorded.gate !== null) p.push('plain page provenance ' + JSON.stringify(st0));
+    const m = (gated.html || '').match(/page=([0-9a-f]{64})/); if (!m || selfHash(gated.html) !== m[1]) p.push('gated page self-hash does not verify');
+    if (!/<span><b>Gate record<\/b> Checkpoint B PASS · phase 2 · snapshot b7c8d9e0 · 2026-09-21<\/span>/.test(gated.html || '')) p.push('gate record meta line missing');
+    if (/Gate record/.test(plain.html || '')) p.push('gate meta shown without --gate');
+    if (gated.payload.hashes.gate !== gsha || plain.payload.hashes.gate !== undefined || !gated.payload.document.gate || gated.payload.document.gate.verdict !== 'PASS') p.push('payload hashes.gate / document.gate');
+    const miss = render({ reportPath: t.report, gatePath: path.join(t.runs, 'phase-2.checkpoint-X.json'), root: t.dir });
+    if (miss.payload.gate !== 'BLOCKED' || !kinds(miss).includes('gate-file-missing') || miss.html !== null) p.push('missing gate record: ' + miss.payload.gate);
+    const call = (args) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', cwd: t.dir });
+    const w = JSON.parse(call(['--report', t.report, '--gate', gateFile, '--write']).stdout);
+    const st2 = pageState(read(t.out));
+    if (w.gate !== 'PASS' || st2.handEdited || st2.recorded.gate !== gsha) p.push('CLI --gate --write: ' + w.gate + ' ' + JSON.stringify(st2));
+    const w2 = JSON.parse(call(['--report', t.report, '--write']).stdout);
+    if (w2.gate !== 'PASS' || pageState(read(t.out)).recorded.gate !== null) p.push('re-render without --gate over a gated page: ' + w2.gate);
+    check('34 --gate: gate hash in the provenance and the meta line, verified both ways; missing record BLOCKs', p, { gate: gsha.slice(0, 12) });
+  } finally { t.cleanup(); }
+}
+
+/* 35 — `NO VERDICT` smoke gate (no smoke TC produced a PASS or FAIL): accepted, never GREEN — a phase whose rows are only SKIP /
+      NOT_RUN derives INCOMPLETE, and a header that says GREEN is a MISMATCH. */
+{
+  const p = [];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-run-report-nv-'));
+  try {
+    const doc = (outcome) => ['# Test Run Report — nv', '', '**User Story:** US-1 — No verdict', '**Latest phase:** 1', '**Status:** ' + outcome,
+      '**Latest results:** 0 passed · 0 failed · 0 incomplete · 1 skipped · 1 not run of 2 TCs', '', '## Run history', '',
+      '| Phase | Date | Outcome | Passed | Failed | Incomplete | Skipped | Not run | Total | Duration | Bugs |', '|---|---|---|---|---|---|---|---|---|---|---|',
+      '| 1 | 2026-10-01 | ' + outcome + ' | 0 | 0 | 0 | 1 | 1 | 2 | 00:01:00 | — |', '', '## Phase 1 — 2026-10-01', '', '### Run', '- **Outcome:** ' + outcome, '',
+      '### Stages', '| Stage | Total | Passed | Failed | Incomplete | Skipped | Not run |', '|---|---|---|---|---|---|---|', '| Smoke | 1 | 0 | 0 | 0 | 1 | 0 |', '| Positive | 1 | 0 | 0 | 0 | 0 | 1 |', '| **Total** | 2 | 0 | 0 | 0 | 1 | 1 |', '',
+      '**Smoke gate:** NO VERDICT — fail% — — no smoke TC produced a PASS or FAIL; positive and negative not started', '',
+      '### Results', '| TC-ID | REQ | Name | Status | Group | Duration | Classification | Evidence |', '|---|---|---|---|---|---|---|---|',
+      '| TC-1 | REQ-1 | Smoke check | SKIP | parallel | — | data_missing | — |', '| TC-2 | REQ-1 | Positive check | NOT_RUN | parallel | — | not started: smoke gate NO VERDICT | — |', ''].join('\n');
+    const f = path.join(dir, 'TEST-RUN-REPORT-nv.md');
+    fs.writeFileSync(f, doc('INCOMPLETE'));
+    const r = render({ reportPath: f, root: dir });
+    if (r.payload.gate !== 'PASS' || r.payload.errors.length) p.push('NO VERDICT line: ' + r.payload.gate + ' ' + kinds(r).join(','));
+    if (r.payload.document.phases[0].outcome !== 'INCOMPLETE' || r.payload.document.phases[0].smokeGate.indexOf('NO VERDICT') !== 0) p.push('derived ' + r.payload.document.phases[0].outcome);
+    fs.writeFileSync(f, doc('GREEN'));
+    const g = render({ reportPath: f, root: dir });
+    if (g.payload.gate !== 'MISMATCH' || g.payload.document.phases[0].outcome !== 'INCOMPLETE' || !mm(g, 'phase').some((x) => x.field === 'Outcome' && x.computed === 'INCOMPLETE')) p.push('GREEN over NO VERDICT: ' + g.payload.gate + ' ' + JSON.stringify(g.payload.mismatches));
+    fs.writeFileSync(f, doc('INCOMPLETE').replace('**Smoke gate:** NO VERDICT', '**Smoke gate:** UNDECIDED'));
+    const u = render({ reportPath: f, root: dir });
+    if (u.payload.gate !== 'BLOCKED' || !kinds(u).includes('unknown-enum')) p.push('an unknown smoke word must still BLOCK: ' + u.payload.gate);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  check('35 NO VERDICT smoke gate accepted and never GREEN', p, {});
+}
+
+/* 36 — skill 9's in-place retest of the LATEST phase (link-qc-9-retesting references/report-update.md): BUG-2 / TC-007 retested
+      through the automation, INCOMPLETE → PASS, on the fixture's 1.x run file AND on a 2.0 run file (an `Acceptance` bullet,
+      `acceptance` in the run file, gate records A / B beside it). Both render PASS with no mismatch and none of the warnings
+      the edit could cause; the page is rendered WITHOUT --gate (the B record certifies the phase as published before the
+      retest — skill 9 never edits it and never hashes it into the amended page); the gate records stay byte-identical. */
+{
+  const p = [];
+  const V = '../../screenshots/US-1234-create-order/phase-2/TC-007/';
+  const retestReport = (s) => {
+    const at = s.indexOf('## Phase 2');
+    const head = s.slice(0, at).replace('**Latest results:** 2 passed · 0 failed · 1 incomplete · 1 skipped · 0 not run · 1 partial of 5 TCs', '**Latest results:** 3 passed · 0 failed · 0 incomplete · 1 skipped · 0 not run · 1 partial of 5 TCs')
+      .replace('| 2 | 2026-09-21 | INCOMPLETE | 2 | 0 | 1 | 1 | 0 | 1 | 5 | 00:05:12 | BUG-1, BUG-2 |', '| 2 | 2026-09-21 | INCOMPLETE | 3 | 0 | 0 | 1 | 0 | 1 | 5 | 00:05:12 | BUG-1, BUG-2 |');
+    const ph = s.slice(at)
+      .replace('- **Previous phase:** .runs/phase-1.json\n', '- **Previous phase:** .runs/phase-1.json\n- **Retest:** 2026-09-22 — skill 9 · 1 automation re-run · 0 playwright-cli · 1 passed · 0 failed · 0 unobserved · BUG-2 resolved\n')
+      .replace('| Negative | 1 | 0 | 0 | 0 | 1 | 0 | 0 |\n| **Total** | 5 | 2 | 0 | 1 | 1 | 0 | 1 |', '| Negative | 1 | 0 | 0 | 0 | 1 | 0 | 0 |\n| Positive (retest — skill 9) | 1 | 1 | 0 | 0 | 0 | 0 | 0 |\n| **Total** | 5 | 3 | 0 | 0 | 1 | 0 | 1 |')
+      .replace('| TC-007 | REQ-02 | Order total recalculates | INCOMPLETE | parallel | 00:00:58 | incomplete: chromium--variation-b--r0 | [attempt-1.png](' + V + 'chromium--variation-a--r0/attempt-1.png) |',
+        '| TC-007 | REQ-02 | Order total recalculates | PASS | parallel | 00:01:02 | — | [attempt-2.png](' + V + 'chromium--variation-a--r0/attempt-2.png) · [attempt-1.png](' + V + 'chromium--variation-b--r0/attempt-1.png) · [attempt-1.png](' + V + 'chromium--variation-a--r0/attempt-1.png) |')
+      .replace('OrderTotal.ts line 42 sums lineTotal only | INCOMPLETE |', 'OrderTotal.ts line 42 sums lineTotal only | PASS |')
+      .replace('| BUG-2 | TC-007 | Medium | open |', '| BUG-2 | TC-007 | Medium | resolved (phase 2) |')
+      .replace(/\s*$/, '\n- TC-007 INCOMPLETE → PASS — skill 9 retest 2026-09-22 (automation re-run, attempt 2, BUG-2); phase 2 updated in place\n');
+    return head + ph;
+  };
+  const retestBugs = (s) => s.replace('**Bugs:** 1 open · 1 resolved · 0 not checked this run of 2', '**Bugs:** 0 open · 2 resolved · 0 not checked this run of 2')
+    .replace('- **Status:** open', '- **Status:** resolved (phase 2)')
+    .replace('  - phase 2 — FAIL: first seen while variation B was being investigated', '  - phase 2 — FAIL: first seen while variation B was being investigated\n  - phase 2 — PASS: retest by skill 9 on 2026-09-22 (automation re-run, attempt 2) on UAT, build 4.12.2 — [attempt-2.png](' + V + 'chromium--variation-a--r0/attempt-2.png)');
+  const retestRun = (j) => {
+    const r = j.results.find((x) => x.tc_id === 'TC-007');
+    const ev = (v, a) => 'screenshots/US-1234-create-order/phase-2/TC-007/' + v + '/attempt-' + a + '.png';
+    Object.assign(r, { status: 'PASS', classification: 'N/A', duration_ms: 62000, evidence_screenshot: ev('chromium--variation-a--r0', 2), attempts: 3, missing_variants: [], retest: { at: '2026-09-22T10:00:00Z', bug: 'BUG-2', before: 'INCOMPLETE', after: 'PASS', way: 'automation' } });
+    const a = r.variants.find((v) => v.variant_slug === 'chromium--variation-a--r0');
+    a.attempts.push({ attempt: 2, stage: 'positive · retest (skill 9)', status: 'PASS', evidence_screenshot: ev('chromium--variation-a--r0', 2), failure_screenshot: null, run: 'retest', started_at: '2026-09-22T10:00:00Z' });
+    r.variants.push({ variant_slug: 'chromium--variation-b--r0', project: 'chromium', final_status: 'PASS', duration_ms: 61000, attempts: [{ attempt: 1, stage: 'positive · retest (skill 9)', status: 'PASS', evidence_screenshot: ev('chromium--variation-b--r0', 1), failure_screenshot: null, run: 'retest', started_at: '2026-09-22T10:01:00Z' }] });
+    const t = j.merged.tcs.find((x) => x.tc_id === 'TC-007');
+    Object.assign(t, { status: 'PASS', variant_slugs: t.required_variants.slice(), missing_variants: [] });
+    Object.assign(j.totals, { passed: 3, incomplete: 0 });
+    Object.assign(j.stages.positive, { passed: 2, incomplete: 0 });
+    if (j.variant_totals) Object.assign(j.variant_totals, { passed: 4, not_run: 0 });
+    j.bugs.find((b) => b.id === 'BUG-2').status = 'resolved (phase 2)';
+    j.deviations.push('TC-007 INCOMPLETE → PASS — skill 9 retest 2026-09-22 (automation re-run, attempt 2, BUG-2); phase 2 updated in place');
+    j.retests = (j.retests || []).concat([{ at: '2026-09-22T10:00:00Z', skill: 'link-qc-9-retesting', bug: 'BUG-2', source: 'BUG-REPORT-create-order.md', tc: 'TC-007', way: 'automation', environment: 'UAT', build: '4.12.2', before: 'INCOMPLETE', after: 'PASS', evidence: [ev('chromium--variation-a--r0', 2), ev('chromium--variation-b--r0', 1)], summary: 'reports/US-1234-create-order/artifacts/progress/rerun-positive-1.summary.json' }]);
+    return j;
+  };
+  const caused = ['unknown-classification', 'evidence-file-missing', 'evidence-path-not-relative'];
+  for (const variant of ['1.x run file', '2.0 run file']) {
+    const v2 = variant.startsWith('2.0');
+    const t = tmpCopy((s) => retestReport(v2 ? s.replace('- **Previous phase:** .runs/phase-1.json\n', '- **Previous phase:** .runs/phase-1.json\n- **Acceptance:** ACCEPTED\n') : s), retestBugs);
+    try {
+      const shots = path.join(t.dir, 'screenshots', 'US-1234-create-order', 'phase-2', 'TC-007');
+      fs.copyFileSync(path.join(shots, 'chromium--variation-a--r0', 'attempt-1.png'), path.join(shots, 'chromium--variation-a--r0', 'attempt-2.png'));
+      fs.mkdirSync(path.join(shots, 'chromium--variation-b--r0'), { recursive: true });
+      fs.copyFileSync(path.join(shots, 'chromium--variation-a--r0', 'attempt-1.png'), path.join(shots, 'chromium--variation-b--r0', 'attempt-1.png'));
+      const runFile = path.join(t.runs, 'phase-2.json');
+      const j = retestRun(JSON.parse(read(runFile)));
+      const gates = {};
+      if (v2) {
+        j.acceptance = { verdict: 'ACCEPTED', reasons: [], decided: 'final', at: '2026-09-21T14:05:00Z' };
+        for (const cp of ['A', 'B']) {
+          const f = path.join(t.runs, 'phase-2.checkpoint-' + cp + '.json');
+          gates[f] = JSON.stringify({ schema: 'skill5-gate/1', checkpoint: cp, phase: 2, verdict: 'PASS', snapshotId: 'b7c8d9e0', decidedAt: '2026-09-21T14:0' + (cp === 'A' ? '0' : '5') + ':00Z', results: [], rejected: [], na: [] }, null, 2) + '\n';
+          fs.writeFileSync(f, gates[f]);
+        }
+      }
+      fs.writeFileSync(runFile, JSON.stringify(j, null, 2) + '\n');
+      const r = render({ reportPath: t.report, root: t.dir });
+      const d = r.payload.document || { phases: [] };
+      if (r.payload.gate !== 'PASS' || r.payload.mismatches.length) p.push(variant + ': gate ' + r.payload.gate + ' ' + JSON.stringify(r.payload.mismatches) + ' ' + kinds(r).join(','));
+      const bad = wkinds(r).filter((k) => caused.includes(k));
+      if (bad.length) p.push(variant + ': warnings the retest edit caused: ' + bad.join(','));
+      const ph2 = d.phases[1] || {};
+      if (JSON.stringify(ph2.counts) !== JSON.stringify({ passed: 3, failed: 0, incomplete: 0, skipped: 1, notrun: 0, partial: 1, total: 5 })) p.push(variant + ': phase 2 counts ' + JSON.stringify(ph2.counts));
+      if (!d.bugs || d.bugs.open !== 0 || d.bugs.resolved !== 2) p.push(variant + ': bug counts ' + JSON.stringify(d.bugs));
+      if (!(r.html || '').includes('retest — skill 9')) p.push(variant + ': the retest stage row is not rendered');
+      if (/ · gate=/.test(r.html || '') || /Gate record/.test(r.html || '')) p.push(variant + ': the amended page claims the gate record');
+      for (const [f, text] of Object.entries(gates)) if (read(f) !== text) p.push(variant + ': a gate record changed: ' + path.basename(f));
+    } finally { t.cleanup(); }
+  }
+  check('36 skill 9 retest update of the latest phase: 1.x and 2.0 run files render PASS, no gate claim, gate records untouched', p, {});
+}
+
 const out = {
   tool: 'selftest-render-run-report',
   skill: path.basename(path.resolve(here, '..')),

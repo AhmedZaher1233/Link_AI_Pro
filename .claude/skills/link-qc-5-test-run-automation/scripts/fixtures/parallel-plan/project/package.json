@@ -1,0 +1,8 @@
+{
+  "name": "parallel-plan-fixture-automation",
+  "private": true,
+  "description": "Mini Playwright POM project for selftest-parallel-plan.mjs — never installed, never executed.",
+  "devDependencies": {
+    "@playwright/test": "1.50.1"
+  }
+}

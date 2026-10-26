@@ -34,8 +34,9 @@ without a `SPEC-*` parent is flat; an old `US-{id}/` leaf is legacy, read-only h
   `coverage/`, `.runs/`, `artifacts/`, plus the reviewer's optional `REVIEW-COMMENTS-{feature}.md`
   (saved from the page by the reviewer; the skill never creates it and only sets each handled
   entry's Status and Response). Nothing else is ever created there. Machine data of a run goes into
-  `.runs/phase-{N}.json`; run scratch under `artifacts/`; an investigation probe never here at all
-  (`<scratch_investigation>`).
+  `.runs/phase-{N}.json` (+ its gate records `.runs/phase-{N}.checkpoint-{A|B}.json`); run scratch, the
+  report set's drafts and the checkpoint snapshots under `artifacts/`; an investigation probe never here at
+  all (`<scratch_investigation>`).
 - **The manual CLI run (5b) shares this folder** with the same phase counter and `BUG-{n}` sequence; its
   phases are ordinary earlier phases here, never rewritten (run-report.md §3).
 - **Legacy locations are first-class, read-only history.** Projects set up before this layout keep
@@ -92,6 +93,11 @@ exists so no module ever inherits that defect:
   attempt) it writes the current screen as `attempt-{a}.png` so every executed attempt still
   has an image. It never overwrites an existing image — the assertion-point image always wins.
 - Specs only call the helper — no `page.screenshot(...)` in a spec body, ever.
+- **The helper writes an `evidence` heartbeat** (`{ at, worker, tc, event: 'evidence', path }` to
+  `PW_PROGRESS_FILE`, through `helpers/steps.ts`'s `heartbeat()`) for every image it writes, and the console
+  guard's `report()` — the first statement of `afterEach` — writes `teardown`: Checkpoint B proves from
+  them that every PASS test's image was taken BEFORE its teardown started (compliance item 16b). An existing
+  project helper gains that one line; without it item 16b stays `unresolved`.
 - **Evidence sanity check (first run and re-run):** for every PASS, confirm the image shows
   the state named in the TC's Expected Result (record present, message visible, value shown)
   and not a cleaned-up screen. A PASS whose image shows post-cleanup state is classified

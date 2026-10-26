@@ -4,7 +4,7 @@
 // Usage: node preflight.mjs [--root <path>] [--pretty]
 // Exit code is always 0; every result lives in the JSON payload.
 import path from 'node:path';
-import { parseArgs, print, scanGit, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanManifest, scanPat, scanGitignore, scanBrowserSecrets, SKILLS, PLAYWRIGHT_CLI_IGNORE, ENV_RESTART_HINT, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER } from './lib.mjs';
+import { parseArgs, print, scanGit, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanManifest, scanPat, scanGitignore, scanBrowserSecrets, scanExecutionLimits, SKILLS, PLAYWRIGHT_CLI_IGNORE, ENV_RESTART_HINT, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const root = path.resolve(args.root || process.cwd());
@@ -29,6 +29,7 @@ const azureDevOps = { hosting: mcp.azureDevops.hosting || (git.isRepo ? git.azur
     : (mcp.azureDevops.package === 'cloud' ? 'absent' : mcp.azureDevops.package === 'self-hosted' ? 'not needed' : null) };
 const gitignore = scanGitignore(root);
 const browserSecrets = scanBrowserSecrets(); // existence only — the file is never read
+const executionLimits = scanExecutionLimits(root); // read-only: the worker ceiling and the coordination directory (skills 5 / 9)
 
 // Classification markers. M5 (skills installed) is reported but deliberately NOT used for
 // classification: the skill itself installs skills, so it must not change the evidence it judges.
@@ -49,7 +50,7 @@ print({
   tool: 'preflight', readOnly: true, root, generatedOn: new Date().toISOString(),
   classification, classificationRule: 'EXISTING if M1 or M2, or any two of M3/M4/M6/M7; M5 never counts',
   note: onlyPlaywright ? 'Playwright present for app development only — treated as NEW' : null,
-  markers, git, suite, testing, steering, learning, mcp, azureDevOps, toolchain, manifest, pat, gitignore, browserSecrets,
+  markers, git, suite, testing, steering, learning, mcp, azureDevOps, toolchain, manifest, pat, gitignore, browserSecrets, executionLimits,
   warnings: [
     toolchain.playwrightCli.version && git.isRepo && !gitignore.ignoresPlaywrightCli ? `playwright-cli is installed but ${PLAYWRIGHT_CLI_IGNORE} is not in .gitignore — its snapshot files would be committed (/sync-skills --tools adds the line)` : null,
     !toolchain.playwrightCli.version && (suite.present.includes('link-qc-3c-validate-manual-test-cases-cli') || suite.present.includes('link-qc-5b-test-run-manual-cli') || suite.present.includes('link-qc-9-retesting')) ? 'skill 3c / 5b / 9 is installed but playwright-cli is not — 3c and 5b will BLOCK and skill 9 leaves its non-automated bugs NOT_RUN until /sync-skills --tools runs (3b and every other skill are unaffected)' : null,

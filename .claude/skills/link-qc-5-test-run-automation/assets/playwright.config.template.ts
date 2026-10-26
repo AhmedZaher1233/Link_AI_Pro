@@ -9,14 +9,26 @@
 //   PW_PROGRESS_FILE    this command's heartbeat file (helpers/steps.ts + helpers/progress-reporter.ts)
 //   PW_OUTPUT_DIR       Playwright outputDir of this command ({results_root}/artifacts/test-output/phase-{N}/{command}/)
 //   PW_GLOBAL_TIMEOUT   outer wall-clock ceiling for this command (ms; 0 = none)
-//   PW_HEADLESS=1       run hidden (default: VISIBLE Chrome window)
-//   PW_WORKERS          parallel workers for this command (default 2; serial groups pass --workers 1)
+//   PW_HEADLESS=1       run hidden — set by the runner only for --headless, CI or no graphical desktop (default: VISIBLE Chrome;
+//                       every worker is its own Playwright-launched browser with a temporary profile — never the user's)
+//   PW_WORKERS          workers for this command, decided by the runner (Auto ceiling, ramp, admission; 1 when serial)
 //   PW_VIDEO=1          keep video on failure while investigating a freeze (off by default)
 //   PW_PHASE / PW_STAGE_ATTEMPT   used by helpers/evidence.ts and helpers/test-data.ts
-//   PW_RATE_LIMIT_FILE  this command's rate-limit records (helpers/network-guard.ts: 429 / Retry-After / policy headers)
-//   PW_RATE_LIMIT_STATE the phase-wide pacing state shared by all workers (helpers/rate-limit.ts)
-//   PW_RATE_LIMITS      JSON of the run plan's rate_limits[] — the pace per service (empty: no pacing, detection only)
+//   PW_RATE_LIMIT_FILE  this command's request records (helpers/network-guard.ts: refused / unavailable / server-error /
+//                       policy / network-error, origin + path template only) and the pacing records of helpers/rate-limit.ts
+//   PW_RATE_LIMIT_STATE the slot book helpers/rate-limit.ts shares — per environment across runs (the coordination
+//                       directory's rate-limits/{environment id}.json), or phase-local with an older runner
+//   PW_RATE_LIMITS      JSON of the run plan's rate_limits[] — the configured pace per service (empty: advertised limits and
+//                       refusals still pace)
+//   PW_ADMISSION_FILE   the stage's admission state (open / paused, scoped cool-downs) read by helpers/admission.ts
+//   PW_UNIT_SCOPES      JSON { TC: [scope, …] } — the rate-limit / account scopes each TC touches (admission cool-downs)
+//   PW_UNIT_MAP         JSON { TC: unit id } — the execution unit of each TC (a chain / shared-hook describe is admitted once)
+//   PW_LANE             this command's index in the stage — part of uniqueName() / uniqueCode() (helpers/test-data.ts)
+//   PW_CANCEL_FILE      appears when the stage stops — every helper wait (admission, rate limit) ends at once
+//   PW_DIAGNOSTICS_DIR  where the stall detector of helpers/steps.ts writes its snapshot (screenshot, ARIA, in-flight)
+//   PW_ENV_ID           the environment identity the runner's lease and the shared slot book are keyed by
 //   BASE_URL / PW_LOCALE / PW_TZ  from the project's env layer (utils/env.ts) — never hardcoded here
+// Every one of them is optional: without it the helper that reads it is inert.
 import { defineConfig, devices } from '@playwright/test';
 import { TIMEOUTS } from './timeouts';
 
@@ -50,6 +62,8 @@ export default defineConfig({
     baseURL: process.env.BASE_URL,
     channel: 'chrome',
     headless,
+    // FINITE, always: 0 means "no limit" to Playwright — an action that can wait forever hangs a worker for its whole
+    // test budget (the hang the watchdog then has to kill). Every preset and project override keeps these finite.
     actionTimeout: TIMEOUTS.action,
     navigationTimeout: TIMEOUTS.navigation,
     screenshot: 'only-on-failure',

@@ -17,6 +17,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { scanSpec, FORBIDDEN, SCRATCH_REL, OVERLAY, findCli } from './scratch.mjs';
+import * as cap from './capacity.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SCRATCH = path.join(here, 'scratch.mjs');
@@ -25,6 +26,11 @@ const PROJECT = path.join(here, 'fixtures', 'impact', 'project');
 const pretty = process.argv.includes('--pretty');
 
 const cases = [], fail = [], sandboxes = [];
+// never the real ~/.link-ai-pro/capacity: the probes of every case reserve in a throw-away coordination directory
+const SHARED_CAP = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-scratch-capacity-'));
+sandboxes.push(SHARED_CAP);
+process.env.QA_CAPACITY_DIR = SHARED_CAP;
+delete process.env.QA_LEDGER;
 function check(name, problems, detail) {
   cases.push({ case: name, ok: problems.length === 0, problems, detail });
   if (problems.length) fail.push({ case: name, problems });
@@ -250,6 +256,37 @@ const treeHash = (dir) => {
   if (!noCli?.refused?.some((x) => x.reason === 'no-playwright')) p.push('no Playwright not refused');
   if (found !== cli) p.push('cli not found upwards: ' + found);
   check('12 no shared config / no Playwright → refused; Playwright resolved from a parent node_modules', p, { found });
+}
+
+// 13. The machine ceiling covers a probe: one slot reserved and released (nothing left in the ledger); a ceiling another
+//     run fills → refused "capacity", no browser; QA_LEDGER=off → the slot is exclusive; a torn ledger → "no-coordination"
+{
+  const p = [];
+  const capDir = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-scratch-cap-')); sandboxes.push(d); return d; };
+  const sb = sandbox();
+  const spec = probe(sb, 'probe.spec.ts', PROBE());
+  const d1 = capDir();
+  const ok = scratch(sb, runArgs(sb, spec), { QA_CAPACITY_DIR: d1 }).payload;
+  if (ok?.outcome !== 'observed' || !ok.capacity || ok.capacity.released !== true || ok.capacity.exclusive !== false) p.push('a probe must hold one slot and release it: ' + JSON.stringify(ok?.capacity) + ' ' + ok?.outcome);
+  if (cap.readLedger(d1).entries.length) p.push('entries left after the probe: ' + JSON.stringify(cap.readLedger(d1).entries));
+  const d2 = capDir();
+  const held = await cap.reserve({ dir: d2, cls: 'playwright', units: 2, limit: 2, liveness: 'pid', owner: { runId: 'another-run' } });
+  const sb2 = sandbox();
+  const full = scratch(sb2, runArgs(sb2, probe(sb2, 'probe.spec.ts', PROBE()), ['--max-wait', '500']), { QA_CAPACITY_DIR: d2 }).payload;
+  if (full?.outcome !== 'refused' || full.refused?.[0]?.reason !== 'capacity') p.push('a full ceiling must refuse the probe: ' + JSON.stringify(full?.refused));
+  if (call(sb2)) p.push('Playwright was started over a full ceiling');
+  if (held.ok) await cap.release({ dir: d2, token: held.token, rows: null });
+  const d3 = capDir();
+  const sb3 = sandbox();
+  const ex = scratch(sb3, runArgs(sb3, probe(sb3, 'probe.spec.ts', PROBE())), { QA_CAPACITY_DIR: d3, QA_LEDGER: 'off' }).payload;
+  if (ex?.outcome !== 'observed' || ex.capacity?.exclusive !== true || ex.capacity?.released !== true) p.push('QA_LEDGER=off: ' + JSON.stringify(ex?.capacity));
+  const d4 = capDir();
+  fs.writeFileSync(path.join(d4, 'ledger.json'), '{ torn');
+  const sb4 = sandbox();
+  const torn = scratch(sb4, runArgs(sb4, probe(sb4, 'probe.spec.ts', PROBE())), { QA_CAPACITY_DIR: d4 }).payload;
+  if (torn?.outcome !== 'refused' || torn.refused?.[0]?.reason !== 'no-coordination') p.push('a torn ledger must refuse: ' + JSON.stringify(torn?.refused));
+  if (call(sb4)) p.push('Playwright was started without coordination');
+  check('13 the machine ceiling covers a probe: reserve → release; full → refused; QA_LEDGER=off exclusive; torn ledger → no-coordination', p, { capacity: ok?.capacity });
 }
 
 for (const s of sandboxes) { try { fs.rmSync(s, { recursive: true, force: true }); } catch { /* best effort */ } }
