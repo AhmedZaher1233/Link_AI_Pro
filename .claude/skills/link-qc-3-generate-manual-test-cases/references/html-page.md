@@ -45,7 +45,7 @@ Read the payload, never the HTML: `gate`, `gateReason`, `counts`, `mismatches[]`
 |---|---|---|
 | `PASS` | header consistent, vocabulary valid, (Arabic) every key translated | deliver the page |
 | `MISMATCH` | a header line disagrees with the tables (`mismatches[]`), and/or Arabic keys are missing or stale | the page IS written (with a warning strip / preview banner). **Fix the header lines in the markdown** (skill 3) or the counts you patched (3b), re-render. An Arabic page with `arabicComplete: false` is a **preview** — say so; never call it the Arabic deliverable |
-| `BLOCKED` | something would make the page wrong: out-of-vocabulary `Type` / `Validation` / test-data status (the five words `READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN` / `NOT CREATABLE`), a table row with the wrong cell count, a TC without `Type` / `Steps` / `Expected Result`, a password-shaped literal in a step or in a reviewer comment, a placeholder the model cannot fill, a hand-edited page without `--force` | nothing is written. Fix the markdown (`errors[]` names the line) and re-render. Never bypass by writing HTML yourself |
+| `BLOCKED` | something would make the page wrong: out-of-vocabulary `Type` / `Validation` / test-data status (the five words `READY` / `MISSING` / `IMPOSSIBLE` / `UNKNOWN` / `NOT CREATABLE`), a table row with the wrong cell count, a TC without `Type` / `Steps` / `Expected Result`, a TC whose test layer is `unknown` (`layer-unknown`: `[API]` / `[DB]` lines without a backend action step, or an unmarked Expected line in a TC with no UI step), a password-shaped literal in a step, an expected-result line or a reviewer comment (incl. a `Bearer` / JWT / `scheme://user:pass@` literal — a `[A/E/D{n}]` token or a `$name` after `token:` / `api-key:` is a reference, never a secret), a placeholder the model cannot fill, a hand-edited page without `--force` | nothing is written. Fix the markdown (`errors[]` names the line) and re-render. Never bypass by writing HTML yourself |
 | `NOT_RUN` | no `--tc`, or the file does not exist | fix the path |
 
 `readOnly: true` in the payload means nothing was written (dry run, or a refused write).
@@ -55,7 +55,10 @@ document still renders): `data-literal` (a TEST-DATA environment host / value or
 repeated in a TC text — reference it as `[E{n}]` / `[A{n}]` or end the line with `(intentional
 input)`), `data-ref-unresolved` (a `[A/E/D{n}]` token with no TEST-DATA row), and
 `narrative-not-english` (a TC or the Scope line whose narrative is Arabic script on an English
-page — quoted application labels never count). `review-lang-header-stale` means the `Review page
+page — quoted application labels never count), `capture-unresolved` (a `$name` an `[API]` / `[DB]`
+TC uses before a line captured it with `→ capture … as $name`), `layer-not-confirmed` (a backend
+TC whose layer the `Test layers:` header does not list) and `layer-gate-unrecorded` (backend TCs
+but no `Test layers:` line). `review-lang-header-stale` means the `Review page
 language:` line records a different language than this run rendered: rewrite the line, it is a
 record, never an input.
 
@@ -82,7 +85,7 @@ requirements).
 | Title | `# Test Cases — {feature}` |
 | Header lines | `**Key:** value`, one per line, before the first `##`. Compared with the tables: `Total test cases`, `Smoke TCs`, `Automation candidates`, `MCP validation` (six numbers in the frozen order), `Manual-only scenarios`, `Requirement coverage (weighted)`, `App validation progress`. Also read: `Status`, `Scope`, `Generated`, `Entry case`, `Implementation status`, `Requirement IDs covered`, `Review page language`, and the validator stamp inside `MCP validation` (`— by 3b on {date}, env {name}, scope {mode}[, re-run {n}]`; skill 3c writes `— by 3c on … , tool cli`). The payload reports it as `document.stamp` (`by`, `date`, `env`, `scope`, `rerun`, `tool`) and the page says "validated by 3b on" or "validated by 3c on" accordingly |
 | Summary table | columns by name: `ID`, `Type`, `Locale`, `Requirement`, `Stage`, `Smoke`, `Automation Candidate`, `Data effect`, `Shared data`, `Tags` (optional), `Validation`, `Description` |
-| TC section | `### {TC-ID} — {Description}` then one `- **{Field}:** value` bullet per field; `Preconditions` and `Steps` as 2-space-indented ordered sub-lists; the optional `Tags` field (comma list or `—`) after `Shared data`; an optional `- **AI Oracle:**` sub-list after `Data Oracle` (Intent · Must contain · Must not contain · Language · Max length · Repeats / Pass threshold) is rendered as a list under the Data oracle with keys `tc.{id}.ai.{n}` — the renderer displays it and never judges it; a step, precondition or expected result starting with `[HUMAN]` is a human step; `[A{n}]` / `[E{n}]` / `[D{n}]` tokens reference TEST-DATA rows; an optional `<!-- tc-evidence … -->` comment right after the block (`validated-on`, `env`, `build`, `scope`, `content-sha256`, `req-sha256`, `open-questions`, `checked-in-run` — one `key: value` per line; the run-metadata keys `tool` (`mcp` / `cli`; absent = written by 3b before 3c existed) and `outcome-check` are parsed into `document.evidence[]` and never rendered) |
+| TC section | `### {TC-ID} — {Description}` then one `- **{Field}:** value` bullet per field; `Preconditions` and `Steps` as 2-space-indented ordered sub-lists; the optional `Tags` field (comma list or `—`) after `Shared data`; an optional `- **AI Oracle:**` sub-list after `Data Oracle` (Intent · Must contain · Must not contain · Language · Max length · Repeats / Pass threshold) is rendered as a list under the Data oracle with keys `tc.{id}.ai.{n}` — the renderer displays it and never judges it; a step, precondition or expected result starting with `[HUMAN]` is a human step; a Steps / Expected Result line starting with `[API]` / `[DB]` is a backend line and an `Expected Result` may carry a 2-space-indented `- ` sub-list (one assertion per line, keys `tc.{id}.expected.{n}`, rendered as a list under the inline value); the TC's test layer (`ui` · `hybrid` · `api` · `db` · `api+db` · `unknown`) is derived from those lines exactly like `tc-hash.mjs tcLayer` (skills 4 / 5) and never read from a field; `[A{n}]` / `[E{n}]` / `[D{n}]` tokens reference TEST-DATA rows; an optional `<!-- tc-evidence … -->` comment right after the block (`validated-on`, `env`, `build`, `scope`, `content-sha256`, `req-sha256`, `open-questions`, `checked-in-run` — one `key: value` per line; the run-metadata keys `tool` (`mcp` / `cli`; absent = written by 3b before 3c existed) and `outcome-check` are parsed into `document.evidence[]` and never rendered) |
 | Enhancement log | `TC-ID · Validation · What changed · Why (what the app showed)` + optional `Run` |
 | Coverage tables | traceability and coverage-score rows: `AC · REQ-ID · TC-IDs · Status · Missing`; statuses `Fully Covered` / `Partially Covered` / `Not Covered` |
 | Manual-only | `Category · TC-ID · Scenario · Why manual · Priority` (High / Medium / Low) |
@@ -144,6 +147,7 @@ without tracker columns or sections, and one `tracker-missing` warning. TC-IDs o
 | — (not on the page) | run metadata: the header stamp's `by` / `tool`, each stamp's `tool` / `outcome-check`, each PB's `screenshot`. They reach the payload only (`document.stamp`, `document.evidence[]`, `document.potentialBugs[]`) so a comparison between validators stays traceable without changing the page |
 | Manual-only counts | the manual-only table rows and their Priority |
 | Human steps tile `{TCs} ({steps})`, `human step n` badge, purple step marker | every `[HUMAN]`-prefixed step / precondition / expected result (`counts.humanSteps`, `counts.humanTcs`, `document.humanTcs[]`); shown only when at least one exists |
+| Backend TCs tile `{TCs} ({API lines} / {DB lines})`, a layer badge (`API` / `DB` / `API + DB` / `UI + API / DB`) and caption on the card, the `Test layers` meta line | the `[API]` / `[DB]` lines (`counts.layers`, `counts.backendTcs`, `counts.apiLines`, `counts.dbLines` — present only when at least one TC carries such a line, so every other payload keeps its shape) and the `Test layers:` header line |
 | Tags chips on a TC card | the `Tags` field / column (`document.tags`); never a translation key, never counted |
 | Test case summary table | the TC set above, one row per TC (TC-ID · Description · Type · Locale · Stage · Validation), plus the six tracker columns when a tracker is present (§3b) |
 | — (not on the page) | `counts.dataRefs` (`total` / `resolved` / `unresolved` / `literals`, `null` without TEST-DATA), `document.reviewLangHeader` (the header's recorded value) and `document.langSource` (`flag` / `default`) |
@@ -308,7 +312,9 @@ precedence cases, the human-step / Tags case, the reviewer-comments case, the on
 case 28 (AI Oracle sub-list parsed, keyed and rendered; `[D{n}]` tokens inside it are checked), case
 29 (`NOT CREATABLE`), case 30 (the tracker: merged by TC-ID against a golden, missing → warning,
 mismatch → warning, Azure links from the tracker / `--ado-url` / `.mcp.json`, a secret BLOCKs, Arabic
-chrome), case 31 (section ids, contents panel, typed sort headers, no external request) and
+chrome), case 31 (section ids, contents panel, typed sort headers, no external request), case 32
+(`[API]` / `[DB]` lines: layer derived, badged, counted and keyed, an unknown layer BLOCKs, the
+capture / `Test layers` warnings, the secret shapes) and
 the mirror cases must all pass) and regenerate the goldens only for a deliberate change (see
 `scripts/fixtures/MIRROR.md`). The renderer, its harness, its fixtures, both templates and this file
 are mirrored in three skill folders (3, 3b, 3c); copy after every edit. The shell also goes to skill 5.

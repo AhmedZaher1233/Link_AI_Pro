@@ -18,7 +18,7 @@ import { RULES } from './validate-automation.mjs';
 import {
   CHECKS, RULE_TO_CHECK, NEVER_NA_AT_B, unitsFor, requiredUnits, takeSnapshot, rehash, decideGate, runGate, runChecks,
   runValidator, recordResult, recordBatch, parseBatch, readResults, resultsFile, carryShadow, freshnessOf, runPool, timeoutReport, parseTimeoutValues,
-  lintFacts, harnessKey, harnessRun, skillVersionOf, fileSha, listFiles,
+  lintFacts, harnessKey, harnessRun, skillVersionOf, fileSha, listFiles, complianceSlots, checkpointRun,
 } from './check.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -71,7 +71,7 @@ const why = (g) => g.rejected.map((x) => x.checkId + '|' + x.unit + '|' + x.why)
 {
   const p = [];
   const ids = CHECKS.map((c) => c.id);
-  eq(p, 'check count (50 − 4 split items + 8 halves)', ids.length, 54);
+  eq(p, 'check count (50 − 4 split items + 8 halves + 4 layer checks 51-54)', ids.length, 58);
   for (const x of ['16a', '16b', '25a', '25b', '46a', '46b', '48a', '48b']) truthy(p, 'missing check ' + x, ids.includes(x));
   for (const x of ['16', '25', '46', '48']) truthy(p, 'split item still present: ' + x, !ids.includes(x));
   eq(p, 'never N/A at B', NEVER_NA_AT_B, ['16b', '18', '19', '25b', '46b', '48a', '48b']);
@@ -87,7 +87,7 @@ const why = (g) => g.rejected.map((x) => x.checkId + '|' + x.unit + '|' + x.why)
   eq(p, '33 at B (runtime + the validator rule mapped to it)', unitsFor(by('33'), 'B', {}), ['tool:validator', 'phase']);
   eq(p, '44 (config inventory + review)', unitsFor(by('44'), 'A', {}), ['tool:configs', 'scope']);
   eq(p, '43 (protections + review; the timeout-literal rule when present)', unitsFor(by('43'), 'A', { validatorRuleIds: [] }), ['tool:protections', 'scope']);
-  check('1 catalogue: 54 checks, a/b halves, never-N/A list, rule mapping, units per checkpoint', p, { checks: ids.length, b8Present: B8_PRESENT });
+  check('1 catalogue: 58 checks, a/b halves, never-N/A list, rule mapping, units per checkpoint', p, { checks: ids.length, b8Present: B8_PRESENT });
 }
 
 /* 2 — snapshot A: content-addressed (same content → same id, reused), per-TC hashes, the four predicates of the fixture,
@@ -103,7 +103,7 @@ const sA = snap(P1, 'A');
   truthy(p, 'snapshot file written', fs.existsSync(sA.file));
   eq(p, 'per-TC hashes', Object.keys(sA.snapshot.body.tc.perTc).sort(), ['TC-01', 'TC-02']);
   const pr = sA.snapshot.body.facts.predicates;
-  eq(p, 'predicates (no subject)', Object.fromEntries(Object.entries(pr).map(([k, v]) => [k, v.noSubject])), { 'api-setup': true, 'fail-slow': true, exceptions: true, 'rate-limit-step': true });
+  eq(p, 'predicates (no subject)', Object.fromEntries(Object.entries(pr).map(([k, v]) => [k, v.noSubject])), { 'no-browser-tests': false, 'api-tests': true, 'db-tests': true, 'data-changes': true, 'api-db-tests': true, 'api-setup': true, 'fail-slow': true, exceptions: true, 'rate-limit-step': true });
   eq(p, 'required units at A', requiredUnits('A', sA.snapshot.body.facts).length, 64 + B8_PRESENT);
   truthy(p, 'scopeDigest recorded', /^[0-9a-f]{64}$/.test(String(sA.snapshot.body.scopeDigest)));
   eq(p, 'nothing B-only at A', ['evidence', 'artifacts', 'gateA', 'drafts'].filter((k) => k in sA.snapshot.body), []);
@@ -119,7 +119,7 @@ const recsA = fullSet('A', sA.snapshot);
   eq(p, 'verdict', g.verdict, 'PASS');
   eq(p, 'rejected', why(g), []);
   eq(p, 'auto scheduled-for-B', g.counts.auto, 17);
-  eq(p, 'N/A entries', g.na.map((x) => x.checkId + (x.part ? ':' + x.part : '')).sort(), ['22', '26', '39', '49:slot']);
+  eq(p, 'N/A entries', g.na.map((x) => x.checkId + (x.part ? ':' + x.part : '')).sort(), ['22', '26', '39', '49:slot', '51', '52', '53', '54']);
   truthy(p, 'every auto record is scheduled-for-B', g.results.filter((r) => r.auto).every((r) => r.status === 'scheduled-for-B' && r.unit === 'phase'));
   writeResults(P1.rr, sA.snapshotId, recsA);
   const w = runGate({ resultsRoot: P1.rr, snapshotId: sA.snapshotId, checkpoint: 'A' });
@@ -298,19 +298,21 @@ const recsB = fullSet('B', sB.snapshot);
 {
   const p = [];
   const P5 = freshProject('p5');
-  const r1 = await runChecks({ root: P5.proj, files: SCOPE, noLedger: true });
+  // an explicit tsc path that does not exist: no TypeScript, whatever a node_modules above the temp folder holds
+  const NO_TSC = path.join(TMP, 'no-typescript', 'tsc');
+  const r1 = await runChecks({ root: P5.proj, files: SCOPE, tsc: NO_TSC, slots: localSlots(2) });
   eq(p, 'tsc absent → notRun', r1.compact.components.tsc.status, 'notRun');
   eq(p, 'run gate never PASS without the type check', r1.compact.gate, 'BLOCKED');
   const s = snap(P5, 'A');
-  await runChecks({ root: P5.proj, resultsRoot: P5.rr, snapshotId: s.snapshotId, slots: localSlots(2) });
+  await runChecks({ root: P5.proj, resultsRoot: P5.rr, snapshotId: s.snapshotId, tsc: NO_TSC, slots: localSlots(2) });
   const recs = readResults(resultsFile(P5.rr, s.snapshotId));
   eq(p, '35 units', ['tool:tsc', 'tool:scan'].map((u) => (recs.find((r) => r.checkId === '35' && r.unit === u) || {}).status), ['unresolved', 'verified-mechanical']);
   process.env.FAKE_TSC = 'fail';
-  const r2 = await runChecks({ root: P5.proj, files: SCOPE, tsc: path.join(FX, 'bin', 'fake-tsc.mjs'), noLedger: true });
+  const r2 = await runChecks({ root: P5.proj, files: SCOPE, tsc: path.join(FX, 'bin', 'fake-tsc.mjs'), slots: localSlots(2) });
   delete process.env.FAKE_TSC;
   eq(p, 'fake compiler error', [r2.compact.components.tsc.status, r2.compact.components.tsc.errors, r2.compact.gate], ['FAIL', 1, 'FAIL']);
   eq(p, 'error relative to the project root', (r2.compact.components.tsc.first[0] || '').startsWith('Testing/Automation/tests/orders.spec.ts:3 TS2307'), true);
-  const r3 = await runChecks({ root: P5.proj, files: SCOPE, tsc: path.join(FX, 'bin', 'fake-tsc.mjs'), noLedger: true });
+  const r3 = await runChecks({ root: P5.proj, files: SCOPE, tsc: path.join(FX, 'bin', 'fake-tsc.mjs'), slots: localSlots(2) });
   eq(p, 'fake compiler clean', r3.compact.components.tsc.status, 'PASS');
   check('11 type check: absent → notRun / unresolved, error → FAIL, clean → PASS', p, {});
 }
@@ -360,7 +362,7 @@ const recsB = fullSet('B', sB.snapshot);
   eq(p, 'no lint config', none.floatingPromises, false);
   process.env.FAKE_ESLINT = 'floating';
   const P7 = freshProject('p7');
-  const r = await runChecks({ root: P7.proj, files: SCOPE, lint: true, eslint: path.join(FX, 'bin', 'fake-eslint.mjs'), runTool: undefined, tsc: path.join(FX, 'bin', 'fake-tsc.mjs'), noLedger: true });
+  const r = await runChecks({ root: P7.proj, files: SCOPE, lint: true, eslint: path.join(FX, 'bin', 'fake-eslint.mjs'), runTool: undefined, tsc: path.join(FX, 'bin', 'fake-tsc.mjs'), slots: localSlots(2) });
   delete process.env.FAKE_ESLINT;
   eq(p, 'lint component', [r.compact.components.lint.status, r.compact.components.lint.floating], ['FAIL', 1]);
   check('14 Check 27 lint determinism and the lint component', p, {});
@@ -427,16 +429,20 @@ const recsB = fullSet('B', sB.snapshot);
   check('16 T-38 / B20 harness cache key and reuse', p, {});
 }
 
-/* 17 — CLI: one JSON object, --help documents the six subcommands, a gate without inputs is BLOCKED (exit 0; 2 with --strict). */
+/* 17 — CLI: one JSON object, --help documents the seven subcommands, a gate without inputs is BLOCKED (exit 0; 2 with
+   --strict); the 3.1 `checkpoint` orchestration exits non-zero WITHOUT --strict (BLOCKED 2). */
 {
   const p = [];
   const call = (args) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8' });
   const h = call(['--help']);
-  try { const o = JSON.parse(h.stdout); eq(p, 'usage lines', o.usage.length, 6); } catch { p.push('--help is not one JSON object'); }
+  try { const o = JSON.parse(h.stdout); eq(p, 'usage lines', o.usage.length, 7); } catch { p.push('--help is not one JSON object'); }
   const g = call(['gate']);
   eq(p, 'gate without inputs exits 0', g.status, 0);
   try { eq(p, 'gate without inputs', JSON.parse(g.stdout).verdict, 'BLOCKED'); } catch { p.push('gate output is not JSON'); }
   eq(p, '--strict exit', call(['gate', '--strict']).status, 2);
+  const cp = call(['checkpoint']);
+  eq(p, 'checkpoint without inputs exits 2 by default', cp.status, 2);
+  try { eq(p, 'checkpoint without inputs', [JSON.parse(cp.stdout).outcome, JSON.parse(cp.stdout).step], ['BLOCKED', 'inputs']); } catch { p.push('checkpoint output is not JSON'); }
   check('17 CLI shape and exit codes', p, {});
 }
 
@@ -450,7 +456,7 @@ const recsB = fullSet('B', sB.snapshot);
   const text = fs.existsSync(regFile) ? fs.readFileSync(regFile, 'utf8').replace(/\r\n?/g, '\n') : '';
   if (!text) p.push('references/expected-differences.md is missing');
   const cells = (line) => line.split('|').slice(1, -1).map((s) => s.trim());
-  const parity = text.split('\n').filter((l) => /^\| (\d+[ab]?) \| (M\+S|M|S) · /.test(l)).map(cells);
+  const parity = text.split('\n').filter((l) => /^\| (\d+[ab]?) \| (M\+S|M|S|new) · /.test(l)).map(cells);
   const defined = new Set(text.split('\n').filter((l) => /^\| ED-\d+ \|/.test(l)).map((l) => cells(l)[0]));
   const cited = new Set();
   const seen = new Map();
@@ -465,13 +471,13 @@ const recsB = fullSet('B', sB.snapshot);
     const want = 'A: ' + (c.A || '—') + ' · B: ' + (c.B || '—');
     if (units !== want) p.push(c.id + ' units "' + units + '" != code "' + want + '"');
     if (rules !== (c.rules.length ? String(c.rules.length) : '—')) p.push(c.id + ' rules ' + rules + ' != ' + c.rules.length);
-    const naCode = c.na ? c.na : c.naPart ? 'part: ' + c.naPart : '—';
+    const naCode = [c.na, c.naPart ? 'part: ' + c.naPart : null].filter(Boolean).join(' · ') || '—';
     if (na !== naCode) p.push(c.id + ' N/A "' + na + '" != code "' + naCode + '"');
     if (never !== (c.neverNA ? 'yes' : '—')) p.push(c.id + ' never-N/A "' + never + '" != code ' + c.neverNA);
     const [lk, lat] = legacy.split(' · ');
     const at = new Set(lat.split(','));
     const sameKind = (u, cp) => (at.has(cp) ? u === KIND[lk] : !u);
-    const structural = sameKind(c.A, 'A') && sameKind(c.B, 'B') && !c.na && !c.naPart && !c.neverNA && !/[RL]/.test((c.A || '') + (c.B || ''));
+    const structural = lk !== 'new' && sameKind(c.A, 'A') && sameKind(c.B, 'B') && !c.na && !c.naPart && !c.neverNA && !/[RL]/.test((c.A || '') + (c.B || ''));
     const eds = (verdict.match(/ED-\d+/g) || []);
     eds.forEach((e) => cited.add(e));
     if (verdict === 'identical' && !structural) p.push(c.id + ' marked identical but differs structurally (' + legacy + ' → ' + want + ')');
@@ -564,6 +570,122 @@ const recsB = fullSet('B', sB.snapshot);
 }
 
 try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* a temp folder left behind is harmless */ }
+/* 20 — test layers (3.0): an API / DB test in the scope gives the predicates api-tests / db-tests / data-changes /
+   api-db-tests a subject, so 51-54 need their units (2 each at A; 53 / 54 one runtime unit more at B) and a recorded N/A
+   for them is rejected; `no-browser-tests` has a subject while any ui / hybrid test or TC exists (an N/A for 14 is
+   rejected) and none only when BOTH the code and the TC document show zero — then 14 / 15 / 16a / 19 / 46a / 46b / 49
+   leave the required set even at B (19 / 46b are never-N/A otherwise); without a TC document it never has "no subject". */
+{
+  const p = [];
+  const L = path.join(here, 'fixtures', 'layers');
+  const layered = (name, { withUi = true } = {}) => {
+    const P = freshProject(name);
+    const auto = path.join(P.proj, 'Testing', 'Automation');
+    for (const d of ['api', 'db', 'fixtures']) fs.cpSync(path.join(L, d), path.join(auto, d), { recursive: true });
+    for (const f of ['record.ts', 'api-record.ts', 'db-record.ts', 'db.ts']) fs.copyFileSync(path.join(L, 'helpers', f), path.join(auto, 'helpers', f));
+    const spec = fs.readFileSync(path.join(L, 'tests', 'orders.api.spec.ts'), 'utf8').replace('[TC-01]', '[TC-03]').replace('[TC-02]', '[TC-04]');
+    fs.writeFileSync(path.join(auto, 'tests', 'orders.api.spec.ts'), spec);
+    const layerDoc = fs.readFileSync(path.join(L, 'TEST-CASES-layers.md'), 'utf8').replace(/\r\n?/g, '\n');
+    const block = (id) => layerDoc.slice(layerDoc.indexOf('### ' + id + ' '), layerDoc.indexOf('\n### ', layerDoc.indexOf('### ' + id + ' ') + 1) + 1);
+    const tcFile = path.join(P.proj, DOCS.tc);
+    const base = fs.readFileSync(tcFile, 'utf8').replace(/\r\n?/g, '\n');
+    const head = base.slice(0, base.indexOf('### TC-01'));
+    const backend = block('TC-01').replace('TC-01', 'TC-03') + block('TC-02').replace('TC-02', 'TC-04');
+    fs.writeFileSync(tcFile, (withUi ? base.trimEnd() + '\n\n' : head) + backend);
+    return P;
+  };
+  const API_SPEC = 'Testing/Automation/tests/orders.api.spec.ts';
+  // (a) ui + api tests: every layer predicate has a subject
+  const P = layered('p-layers');
+  const s = snap(P, 'A', [...SCOPE, API_SPEC]);
+  const pr = s.snapshot.body.facts.predicates;
+  eq(p, 'layer predicates (no subject)', ['no-browser-tests', 'api-tests', 'db-tests', 'data-changes', 'api-db-tests'].map((k) => pr[k] && pr[k].noSubject), [false, false, false, false, false]);
+  const unitsOf = (cp, facts, ids) => requiredUnits(cp, facts).filter((u) => ids.includes(u.checkId)).map((u) => u.checkId + ':' + u.unit).sort();
+  eq(p, 'units 51-54 at A', unitsOf('A', s.snapshot.body.facts, ['51', '52', '53', '54']), ['51:scope', '51:tool:validator', '52:scope', '52:tool:validator', '53:scope', '53:tool:validator', '54:scope', '54:tool:validator']);
+  eq(p, 'units 51-54 at B', unitsOf('B', s.snapshot.body.facts, ['51', '52', '53', '54']).length, 10);
+  eq(p, 'required units grew by 8 at A', requiredUnits('A', s.snapshot.body.facts).length - requiredUnits('A', sA.snapshot.body.facts).length, 8);
+  const recs = fullSet('A', s.snapshot).map((r) => (r.checkId === '51' && r.unit === 'tool:validator' ? { ...r, status: 'N/A', reason: 'model says no API' } : r.checkId === '14' && r.unit === 'scope' ? { ...r, status: 'N/A', reason: 'model says no browser' } : r));
+  const g = decideGate({ checkpoint: 'A', snapshot: s.snapshot, records: recs, rehashResult: ok });
+  const rej = why(g);
+  truthy(p, 'an N/A for 51 with an API test in scope is rejected: ' + JSON.stringify(rej), rej.includes('51|tool:validator|na-not-allowed'));
+  truthy(p, 'an N/A for 14 with a browser test in scope is rejected: ' + JSON.stringify(rej), rej.includes('14|scope|na-not-allowed'));
+  if (g.verdict === 'PASS') p.push('a rejected N/A still passed the gate');
+  // (b) API / DB only — the code AND the TC document: the image / console / network items have no subject, even at B
+  const Q = layered('p-backend-only', { withUi: false });
+  const sQ = snap(Q, 'A', [API_SPEC, 'Testing/Automation/helpers/evidence.ts']);
+  const pq = sQ.snapshot.body.facts.predicates;
+  eq(p, 'no-browser-tests (backend only)', pq['no-browser-tests'] && pq['no-browser-tests'].noSubject, true);
+  const browserItems = ['14', '15', '16a', '19', '46a', '46b', '49'];
+  eq(p, 'browser items left in the B set (backend only)', requiredUnits('B', sQ.snapshot.body.facts).filter((u) => browserItems.includes(u.checkId)).map((u) => u.checkId), []);
+  eq(p, '16b / 18 stay required at B (records have their own heartbeats)', requiredUnits('B', sQ.snapshot.body.facts).filter((u) => ['16b', '18'].includes(u.checkId)).map((u) => u.checkId + ':' + u.unit).sort(), ['16b:phase', '18:phase', '18:scope']);
+  // (c) the same code without a TC document: the document side is unknown, so the browser items keep their subject
+  const sN = takeSnapshot({ root: Q.proj, resultsRoot: Q.rr, checkpoint: 'A', phase: 1, files: [API_SPEC], data: DOCS.data, req: DOCS.req });
+  eq(p, 'no-browser-tests without a TC document', sN.snapshot.body.facts.predicates['no-browser-tests'].noSubject, false);
+  check('20 layer checks 51-54: units when a predicate has a subject, N/A rejected; no-browser-tests decided by the script from code AND document only', p, { aUnits: requiredUnits('A', s.snapshot.body.facts).length });
+}
+
+/* 21 — 3.1 bounded coordination: with every compliance slot held by a live run, ONE budget ends the wait (BLOCKED,
+   TIMEOUT, the holder named), runChecks records nothing (a coordination failure is never a code result); QA_LEDGER=off
+   takes the exclusive reservation. A throw-away QA_CAPACITY_DIR — never the user's ledger. */
+{
+  const p = [];
+  const capDir = fs.mkdtempSync(path.join(TMP, 'cap-'));
+  const env = { ...process.env, QA_CAPACITY_DIR: capDir };
+  delete env.QA_LEDGER;
+  const cap = await import('./capacity.mjs');
+  const hold = [];
+  for (let i = 0; i < 2; i++) hold.push(await cap.reserve({ dir: capDir, cls: 'compliance', units: 1, limit: 2, owner: { runId: 'holder-run', runFile: 'holder.json' }, waitMs: 0 }));
+  if (!hold.every((h) => h.ok)) p.push('the harness could not take the two holder slots');
+  const t0 = Date.now();
+  const slots = await complianceSlots({ limit: 2, maxWaitMs: 1500, env, warnings: [] });
+  const took = Date.now() - t0;
+  eq(p, 'blocked, not uncoordinated', slots.mode, 'blocked');
+  if (took > 20000) p.push('the wait was not bounded by the budget: ' + took + ' ms');
+  eq(p, 'a coordination timeout', slots.diagnostics && slots.diagnostics.outcome, 'TIMEOUT');
+  if (!((slots.diagnostics && slots.diagnostics.holders) || []).some((h) => h.runId === 'holder-run')) p.push('the holder is not named: ' + JSON.stringify(slots.diagnostics && slots.diagnostics.holders));
+  const P8 = freshProject('p8');
+  const s8 = snap(P8, 'A');
+  const r8 = await runChecks({ root: P8.proj, resultsRoot: P8.rr, snapshotId: s8.snapshotId, maxWaitMs: 1000, env, limit: 2 });
+  eq(p, 'runChecks: BLOCKED by coordination', [r8.compact.gate, r8.compact.coordination && r8.compact.coordination.outcome], ['BLOCKED', 'TIMEOUT']);
+  eq(p, 'nothing recorded for the snapshot', readResults(resultsFile(P8.rr, s8.snapshotId)).length, 0);
+  for (const h of hold) if (h.ok) await cap.release({ dir: capDir, token: h.token, rows: [] });
+  const ex = await complianceSlots({ limit: 2, maxWaitMs: 3000, env: { ...env, QA_LEDGER: 'off' }, warnings: [] });
+  eq(p, 'QA_LEDGER=off → the exclusive reservation', ex.mode, 'exclusive');
+  await ex.close();
+  check('21 one bounded coordination budget: BLOCKED naming the holder, nothing recorded; QA_LEDGER=off exclusive', p, { tookMs: took });
+}
+
+/* 22 — 3.1 `checkpoint`: the first call stops at AWAITING_REVIEW (exit 4) with an EMPTY template; the template copied back
+   unfilled is rejected (never a verdict); a filled batch naming the snapshot reaches the gate; mechanical results are
+   reused only from a complete run on the same snapshot. */
+{
+  const p = [];
+  const P9 = freshProject('p9');
+  const fakeTools = async (name) => (name === 'tsc' ? { status: 'PASS', errors: [] } : { status: 'PASS', floating: [], problems: 0 });
+  const args = { root: P9.proj, checkpoint: 'A', phase: 1, resultsRoot: P9.rr, files: SCOPE, ...DOCS, slots: localSlots(2), runTool: fakeTools };
+  const r1 = await checkpointRun(args);
+  eq(p, 'first call: the review handoff', [r1.outcome, r1.exit, r1.step], ['AWAITING_REVIEW', 4, 'review']);
+  const tplFile = r1.template ? path.join(P9.proj, r1.template) : null;
+  const tpl = tplFile && fs.existsSync(tplFile) ? JSON.parse(fs.readFileSync(tplFile, 'utf8')) : { results: [] };
+  if (!tpl.results.length) p.push('the template lists nothing to review');
+  if (tpl.results.some((x) => x.status !== null || x.reason !== null || (x.evidence || []).length)) p.push('the template carries a pre-filled verdict');
+  const review = path.join(P9.rr, 'artifacts', 'checks', r1.snapshotId || 'none', 'semantic-A.json');
+  fs.mkdirSync(path.dirname(review), { recursive: true });
+  fs.writeFileSync(review, JSON.stringify(tpl));
+  const r2 = await checkpointRun({ ...args, review });
+  eq(p, 'an unfilled template is rejected as a whole', [r2.outcome, r2.step], ['BLOCKED', 'record']);
+  if (!(r2.steps || []).some((s) => s.step === 'mechanical' && s.reused)) p.push('the complete mechanical run of the same snapshot was not reused');
+  fs.writeFileSync(review, JSON.stringify({ snapshot: 'another-snapshot', results: tpl.results }));
+  const r3 = await checkpointRun({ ...args, review });
+  eq(p, 'a review of another snapshot is refused', [r3.outcome, r3.step], ['BLOCKED', 'review']);
+  tpl.results = tpl.results.map((x) => ({ ...x, status: 'verified-semantic', reason: 'harness: read and decided', evidence: ['Testing/Automation/tests/orders.spec.ts:8'], executor: 'SB-Q' }));
+  fs.writeFileSync(review, JSON.stringify(tpl));
+  const r4 = await checkpointRun({ ...args, review });
+  if (r4.step !== 'gate' || !['PASS', 'FAIL', 'BLOCKED'].includes(r4.outcome)) p.push('the reviewed call did not reach the gate: ' + JSON.stringify([r4.outcome, r4.step, r4.reason]));
+  if (!fs.existsSync(path.join(P9.rr, '.runs', 'phase-1.checkpoint-A.json'))) p.push('no gate record written');
+  check('22 checkpoint: AWAITING_REVIEW with an empty template, unfilled / foreign reviews rejected, the gate decides', p, { outcome: r4.outcome });
+}
+
 const out = {
   tool: 'selftest-check',
   ran: cases.length,

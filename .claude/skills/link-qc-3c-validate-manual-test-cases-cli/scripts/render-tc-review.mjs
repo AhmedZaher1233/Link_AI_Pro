@@ -74,6 +74,7 @@ export const LIMITS = [
   'A [E{n}] / [A{n}] / [D{n}] token with no TEST-DATA row is a data-ref-unresolved WARNING; without a TEST-DATA file the tokens are not checked.',
   'Narrative language is a per-TC script ratio (Arabic letters over Arabic + Latin letters, outside quoted strings) on an English page; quoted application labels never count. It reports narrative-not-english as a WARNING and cannot judge translation quality.',
   'A [HUMAN] step is counted and badged; whether the step really needs a person is the designer\'s call (tc-design.md), not the renderer\'s.',
+  'A Steps / Expected line starting [API] or [DB] is a backend line; the TC\'s test layer (ui · hybrid · api · db · api+db) is derived from the lines exactly like tc-hash.mjs tcLayer — an unknown layer BLOCKs (layer-unknown); a $name used before a line captured it warns (capture-unresolved); a backend TC whose layer the `Test layers:` header does not list warns (layer-not-confirmed). Whether the endpoint or the table exists is not checked.',
   'Legacy documents (missing Scope / Generated / Stage / App validation progress / frozen anchors / Potential Bugs / evidence stamps) render with compatibility[] findings. Only a renamed or missing frozen field inside a TC blocks.',
   'An Arabic page with any missing or stale key is a PREVIEW (arabicComplete: false, gate MISMATCH) — never the finished Arabic deliverable.',
   'A page without a provenance comment (hand-written by an older skill run) is overwritten with a warning; a page whose self-hash no longer matches its provenance was edited by hand and is refused without --force.',
@@ -112,6 +113,8 @@ export const CHROME = {
     s_selfreview: 'Self-review tables', s_negative: 'Negative coverage', s_standards: 'Standards alignment',
     s_tcs: 'Test cases', s_tcs_note: 'tile numbers above match these cards',
     s_tc_summary: 'Test case summary', s_tc_summary_note: 'one row per test case · a TC-ID opens its card', h_description: 'Description', h_type: 'Type', h_locale: 'Locale', h_stage: 'Stage', b_smoke: 'Smoke', b_auto_yes: 'Auto: yes', b_auto_no: 'Auto: no', b_orphan: 'orphan', b_stale: 'stale', b_human: 'human step',
+    layer_hybrid: 'UI + API / DB', layer_api: 'API', layer_db: 'DB', layer_api_db: 'API + DB', layer_unknown: 'layer unknown', l_layers: 'Test layers',
+    t_backend: 'Backend TCs · with an [API] / [DB] line (API lines / DB lines)', cap_backend: 'API / DB lines — run only by the automation (skill 5) in its backend project, with a redacted request / query record as evidence; manual runs (3b / 3c / 5b) stop at them',
     t_human: 'Human steps · TCs with a step a person must perform or observe', cap_human: 'human step — a step marked [HUMAN] must be performed or observed by a person; no tool validates it and the automated part alone never counts as a full pass',
     tc_requirement: 'Requirement', tc_pre: 'Preconditions', tc_steps: 'Steps', tc_expected: 'Expected result', tc_oracle: 'Data oracle', tc_ai_oracle: 'AI oracle', tc_run: 'Run behaviour', tc_infer: 'let automation infer', tc_tags: 'Tags',
     tc_evidence: 'Evidence', ev_on: 'seen on', ev_env: 'environment', ev_build: 'build', ev_scope: 'scope',
@@ -154,6 +157,8 @@ export const CHROME = {
     s_selfreview: 'جداول المراجعة الذاتية', s_negative: 'التغطية السلبية', s_standards: 'المواءمة مع المعايير',
     s_tcs: 'حالات الاختبار', s_tcs_note: 'أرقام البلاطات أعلاه تطابق هذه البطاقات',
     s_tc_summary: 'ملخص حالات الاختبار', s_tc_summary_note: 'صف لكل حالة · معرّف الحالة يفتح بطاقتها', h_description: 'الوصف', h_type: 'النوع', h_locale: 'اللغة', h_stage: 'المرحلة', b_smoke: 'دخان', b_auto_yes: 'أتمتة: نعم', b_auto_no: 'أتمتة: لا', b_orphan: 'يتيم', b_stale: 'قديم', b_human: 'خطوة بشرية',
+    layer_hybrid: 'واجهة + API / قاعدة بيانات', layer_api: 'API', layer_db: 'قاعدة بيانات', layer_api_db: 'API + قاعدة بيانات', layer_unknown: 'طبقة غير معروفة', l_layers: 'طبقات الاختبار',
+    t_backend: 'حالات الخلفية · فيها سطر [API] / [DB] (أسطر API / أسطر قاعدة البيانات)', cap_backend: 'أسطر API / قاعدة البيانات — تنفّذها الأتمتة فقط (المهارة 5) في مشروع الخلفية، والدليل سجل طلب / استعلام منقّح؛ التشغيل اليدوي (3b / 3c / 5b) يتوقف عندها',
     t_human: 'خطوات بشرية · حالات فيها خطوة يجب أن ينفذها أو يلاحظها شخص', cap_human: 'خطوة بشرية — الخطوة المعلَّمة [HUMAN] يجب أن ينفذها أو يلاحظها شخص؛ لا تتحقق منها أي أداة، والجزء المؤتمت وحده لا يُعدّ نجاحًا كاملًا',
     tc_requirement: 'المتطلب', tc_pre: 'الشروط المسبقة', tc_steps: 'الخطوات', tc_expected: 'النتيجة المتوقعة', tc_oracle: 'مرجع البيانات', tc_ai_oracle: 'مرجع الذكاء الاصطناعي', tc_run: 'سلوك التشغيل', tc_infer: 'تُستنتج بواسطة الأتمتة', tc_tags: 'الوسوم',
     tc_evidence: 'الدليل', ev_on: 'شوهد في', ev_env: 'البيئة', ev_build: 'الإصدار', ev_scope: 'النطاق',
@@ -510,7 +515,37 @@ const normState = (v) => {
 const yesNo = (v) => { const s = stripMd(v).toUpperCase(); return s === 'YES' ? 'yes' : s === 'NO' || s === '' || s === DASH ? 'no' : 'unknown'; };
 const pct = (num, den) => (den ? Math.round((num / den) * 1000) / 10 : null);
 const fmtPct = (p) => (p === null ? DASH : String(p));
-const SECRET_RE = /\b(password|passcode|secret|token|pat|api[- ]?key)\b\s*(?:[:=]|is)\s*["'`]?[^\s"'`]{3,}/i;
+// A value that is a reference token ([A1] / [E2] / [D3]), a `$name` capture or a `{{placeholder}}` is never a secret.
+const SECRET_RE = /\b(password|passcode|secret|token|pat|api[- ]?key|authorization)\b\s*(?:[:=]|is)\s*["'`]?(?!\[[AED]\d+\]|\$[A-Za-z_]|\{\{)[^\s"'`]{3,}|\bBearer\s+(?!\[[AED]\d+\]|\$[A-Za-z_])[A-Za-z0-9._~+/=-]{16,}|\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}|\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:[^\s@/]+@/i;
+
+/* ---- test layer from the [API] / [DB] markers — KEEP IN STEP with tc-hash.mjs tcLayer (skills 4 / 5) ---- */
+const LINE_MARKER_RE = /^\s*\[(HUMAN|API|DB)\]/;
+export function layerOf(steps, expectedLines) {
+  const c = { uiSteps: 0, apiSteps: 0, dbSteps: 0, humanSteps: 0, apiExpected: 0, dbExpected: 0, plainExpected: 0 };
+  for (const s of steps) { const m = (String(s ?? '').match(LINE_MARKER_RE) || [])[1]; if (m === 'API') c.apiSteps++; else if (m === 'DB') c.dbSteps++; else if (m === 'HUMAN') c.humanSteps++; else c.uiSteps++; }
+  for (const s of expectedLines) { const m = (String(s ?? '').match(LINE_MARKER_RE) || [])[1]; if (m === 'API') c.apiExpected++; else if (m === 'DB') c.dbExpected++; else if (m !== 'HUMAN') c.plainExpected++; }
+  const api = c.apiSteps + c.apiExpected > 0; const db = c.dbSteps + c.dbExpected > 0;
+  let layer;
+  if (!api && !db) layer = 'ui';
+  else if (c.uiSteps) layer = 'hybrid';
+  else if (!c.apiSteps && !c.dbSteps) layer = 'unknown';
+  else if (c.plainExpected) layer = 'unknown';
+  else layer = api && db ? 'api+db' : api ? 'api' : 'db';
+  return { layer, ...c };
+}
+export const TEST_LAYERS = ['ui', 'hybrid', 'api', 'db', 'api+db'];
+/** `$name` values a line uses before any earlier line captured them (`→ capture … as $name`). */
+function uncapturedVars(lines) {
+  const known = new Set(); const missing = [];
+  for (const raw of lines) {
+    const s = stripQuoted(raw);
+    const cap = [...s.matchAll(/\bcapture\b[^$]*?\bas\s+\$([A-Za-z_]\w*)/gi)].map((m) => m[1]);
+    const capturePart = s.replace(/\bcapture\b[^$]*?\bas\s+\$[A-Za-z_]\w*/gi, ' ');
+    for (const m of capturePart.matchAll(/\$([A-Za-z_]\w*)/g)) if (!known.has(m[1]) && !missing.includes(m[1])) missing.push(m[1]);
+    cap.forEach((v) => known.add(v));
+  }
+  return missing;
+}
 
 export function buildModel(doc, data, opts = {}) {
   const errors = [...doc.errors]; const warnings = [...doc.warnings]; const compatibility = [...doc.compatibility]; const mismatches = [];
@@ -551,12 +586,18 @@ export function buildModel(doc, data, opts = {}) {
     const tagsRaw = fv('Tags') ?? (e.row && e.row.tags !== null && e.row.tags !== undefined ? e.row.tags : null);
     const tags = tagsRaw === null ? [] : bare(tagsRaw).split(/[,;]/).map((x) => x.trim()).filter(Boolean);
     const expected = fv('Expected Result') || '';
+    // An Expected Result may carry a sub-list (one line per [API] / [DB] assertion); rendered as a list after the inline value.
+    const expectedItems = f('Expected Result') ? f('Expected Result').items.map((x) => stripMd(x)).filter(Boolean) : [];
     const isHuman = (s) => /^\s*\[HUMAN\]/i.test(String(s ?? ''));
-    const humanSteps = steps.filter(isHuman).length + pre.filter(isHuman).length + (isHuman(expected) ? 1 : 0);
+    const humanSteps = steps.filter(isHuman).length + pre.filter(isHuman).length + (isHuman(expected) ? 1 : 0) + expectedItems.filter(isHuman).length;
+    for (const s of expectedItems) if (SECRET_RE.test(s)) errors.push({ kind: 'secret-literal', line: e.block.line, detail: e.id + ' contains a password-shaped literal in an expected-result line' });
+    const lay = layerOf(steps, [...(expected ? [expected] : []), ...expectedItems]);
+    if (e.block && lay.layer === 'unknown') errors.push({ kind: 'layer-unknown', line: e.block.line, detail: e.id + ' has [API] / [DB] lines but its test layer cannot be derived — a TC without a UI step needs an [API] / [DB] action step and marks EVERY Expected line (tc-design.md "API and DB test cases")' });
+    if (lay.apiSteps + lay.apiExpected + lay.dbSteps + lay.dbExpected) for (const v of uncapturedVars([...steps, expected, ...expectedItems])) warnings.push({ kind: 'capture-unresolved', id: e.id, detail: e.id + ' uses $' + v + ' before any line captured it ("→ capture … as $' + v + '")' });
     const oracle = bare(fv('Data Oracle')); const shared = bare(fv('Shared data') ?? (e.row ? e.row.shared : ''));
     // Optional `AI Oracle` sub-list (assistant TCs): displayed and keyed, never judged — its [D{n}] tokens are checked like any other field.
     const aiF = f('AI Oracle'); const aiOracle = aiF ? aiF.items.map((x) => stripMd(x)).filter(Boolean) : [];
-    const use = scanDataUse([...pre, ...steps, expected, oracle, shared, ...aiOracle], cfg);
+    const use = scanDataUse([...pre, ...steps, expected, ...expectedItems, oracle, shared, ...aiOracle], cfg);
     if (data) {
       for (const l of use.literals) warnings.push({ kind: 'data-literal', id: e.id, detail: e.id + ' repeats ' + l.kind + ' value "' + l.value + '" (TEST-DATA ' + (l.id || 'row') + ') — reference it as [' + (l.id || '…') + '] or end the line with "(intentional input)"' });
       for (const r of use.unresolved) warnings.push({ kind: 'data-ref-unresolved', id: e.id, detail: e.id + ' references [' + r + '] but TEST-DATA has no such row' });
@@ -566,7 +607,8 @@ export function buildModel(doc, data, opts = {}) {
       id: e.id, line: e.block ? e.block.line : (e.row ? e.row.line : null), orphan,
       description: (e.block && e.block.title) || (e.row && e.row.description) || fv('Description') || '',
       type, locale: fv('Locale') || (e.row && e.row.locale) || '', requirement: fv('Requirement') || (e.row && e.row.requirement) || '',
-      preconditions: pre, steps, expected, oracle, aiOracle, smoke, auto, tags, humanSteps,
+      preconditions: pre, steps, expected, expectedItems, oracle, aiOracle, smoke, auto, tags, humanSteps,
+      layer: lay.layer, apiLines: lay.apiSteps + lay.apiExpected, dbLines: lay.dbSteps + lay.dbExpected,
       effect: bare(fv('Data effect') ?? (e.row ? e.row.effect : '')), shared,
       validation: v.state || 'draft', validationRaw: vRaw || '', stale: v.stale, stage, evidence: ev, refs: [...use.refs].sort(),
       note: bare(fv('Reviewer comment')), // optional reviewer field — displayed, never translated, never a design field
@@ -575,6 +617,15 @@ export function buildModel(doc, data, opts = {}) {
   tcs.sort((a, b) => (a.line ?? 1e9) - (b.line ?? 1e9));
   const humanTcs = tcs.filter((t) => t.humanSteps > 0).length;
   const humanStepsTotal = tcs.reduce((s, t) => s + t.humanSteps, 0);
+  // ---- test layers (only reported when a TC carries an [API] / [DB] line — every other document keeps its payload shape)
+  const backendTcs = tcs.filter((t) => t.layer !== 'ui');
+  const layerCounts = backendTcs.length ? (() => { const o = {}; for (const l of [...TEST_LAYERS, 'unknown']) o[l] = tcs.filter((t) => t.layer === l).length; return o; })() : null;
+  const layersLine = hv(/^test layers$/i);
+  if (layersLine !== null) {
+    const declaredLayers = new Set(stripMd(layersLine).toLowerCase().split(/[,;]/).map((x) => x.trim()).filter(Boolean));
+    const needs = { api: ['api'], db: ['db'], 'api+db': ['api', 'db'], hybrid: ['hybrid'] };
+    for (const t of backendTcs) for (const need of needs[t.layer] || []) if (!declaredLayers.has(need)) warnings.push({ kind: 'layer-not-confirmed', id: t.id, detail: t.id + ' is a ' + t.layer + ' TC but the `Test layers:` line (' + stripMd(layersLine) + ') does not list "' + need + '" — design only the layers the tester confirmed' });
+  } else if (backendTcs.length) warnings.push({ kind: 'layer-gate-unrecorded', detail: backendTcs.length + ' TC(s) carry [API] / [DB] lines but the header has no `Test layers:` line recording the layer-gate answer' });
 
   // ---- counts
   const n = tcs.length;
@@ -680,7 +731,8 @@ export function buildModel(doc, data, opts = {}) {
     feature: doc.feature || opts.feature || DASH, header: h, status: status || DASH, approved, implStatus, implState, generated, scope: declared(/^scope$/i) || '', entry: declared(/^entry case$/i) || DASH,
     reqIds: declared(/^requirement ids covered$/i) || DASH, reviewLang: declared(/^review page language$/i) || '', stamp: stamp ? { by: stamp[1].toLowerCase(), date: stamp[2], env: (stamp[3] || '').trim(), scope: stamp[4] || '', rerun: stamp[5] ? Number(stamp[5]) : 0, tool: (stamp[6] || '').toLowerCase() } : null,
     tcs, counts: { total: n, byType, locales, perLocale, smoke, auto, byState, stale, observed, progressPct, coverage: cov, manual: manualCounts, bugs, testData: td.present ? { items: td.items.length, ready: td.ready, missing: td.missing, impossible: td.impossible, unknown: td.unknown, notCreatable: td.notCreatable, environment: (data.env || []).length, accounts: (data.accounts || []).length } : null, openQuestions: doc.openQuestions.length, orphans: tcs.filter((t) => t.orphan).length,
-      humanSteps: humanStepsTotal, humanTcs, aiOracleTcs: tcs.filter((t) => t.aiOracle.length).length, dataRefs: data ? { total: dataRefs.total, resolved: dataRefs.resolved.size, unresolved: dataRefs.unresolved, literals: dataRefs.literals } : null },
+      humanSteps: humanStepsTotal, humanTcs, aiOracleTcs: tcs.filter((t) => t.aiOracle.length).length,
+      ...(layerCounts ? { layers: layerCounts, apiLines: tcs.reduce((s, t) => s + t.apiLines, 0), dbLines: tcs.reduce((s, t) => s + t.dbLines, 0), backendTcs: backendTcs.length } : {}), dataRefs: data ? { total: dataRefs.total, resolved: dataRefs.resolved.size, unresolved: dataRefs.unresolved, literals: dataRefs.literals } : null },
     trace, manual, log, existing, negative, standards, potentialBugs: doc.potentialBugs, openQuestions: doc.openQuestions, findings: doc.findings, testData: td,
     compatibility, mismatches, warnings, errors,
   };
@@ -700,7 +752,7 @@ export function deriveKeys(model) {
     add('tc.' + t.id + '.description', t.description);
     t.preconditions.forEach((p, i) => add('tc.' + t.id + '.precondition.' + (i + 1), p));
     t.steps.forEach((s, i) => add('tc.' + t.id + '.step.' + (i + 1), s));
-    add('tc.' + t.id + '.expected', t.expected); add('tc.' + t.id + '.oracle', t.oracle); add('tc.' + t.id + '.effect', t.effect); add('tc.' + t.id + '.shared', t.shared);
+    add('tc.' + t.id + '.expected', t.expected); (t.expectedItems || []).forEach((s, i) => add('tc.' + t.id + '.expected.' + (i + 1), s)); add('tc.' + t.id + '.oracle', t.oracle); add('tc.' + t.id + '.effect', t.effect); add('tc.' + t.id + '.shared', t.shared);
     (t.aiOracle || []).forEach((s, i) => add('tc.' + t.id + '.ai.' + (i + 1), s));
   }
   model.counts.coverage.rows.forEach((r, i) => { add('coverage.' + (i + 1) + '.ac', r.ac); add('coverage.' + (i + 1) + '.missing', r.missing); });
@@ -1169,8 +1221,10 @@ function viewModel(model, lang, strings, cm, tm = emptyTracker()) {
     v_class: st(x.validation), v_word: stateWord(x.validation), stale: x.stale, orphan: !!x.orphan, orphan_summary: x.orphan === 'summary-only', orphan_section: x.orphan === 'section-only',
     is_inferred: x.validation === 'inferred' && !x.stale, is_discrepancy: x.validation === 'discrepancy', is_notimpl: x.validation === 'not-implemented', is_draft: x.validation === 'draft' && !x.stale,
     preconditions: x.preconditions.map((p, i) => ({ text: t('tc.' + x.id + '.precondition.' + (i + 1), p), cls: /^\s*\[HUMAN\]/i.test(p) ? ' class="human"' : '' })),
-    steps: x.steps.map((s, i) => ({ text: t('tc.' + x.id + '.step.' + (i + 1), s), cls: /^\s*\[HUMAN\]/i.test(s) ? ' class="human"' : '' })),
+    steps: x.steps.map((s, i) => ({ text: t('tc.' + x.id + '.step.' + (i + 1), s), cls: /^\s*\[HUMAN\]/i.test(s) ? ' class="human"' : /^\s*\[(API|DB)\]/.test(s) ? ' class="backend"' : '' })),
     expected: t('tc.' + x.id + '.expected', x.expected),
+    has_expected_items: x.expectedItems.length > 0, expected_items: x.expectedItems.map((s, i) => ({ text: t('tc.' + x.id + '.expected.' + (i + 1), s), cls: /^\s*\[(API|DB)\]/.test(s) ? ' class="backend"' : '' })),
+    has_layer: x.layer !== 'ui', layer_word: C['layer_' + x.layer.replace('+', '_')] || x.layer,
     human: x.humanSteps > 0, n_human: String(x.humanSteps),
     has_tags: x.tags.length > 0, tags: x.tags.map((g) => ({ text: escapeHtml(g) })),
     oracle: t('tc.' + x.id + '.oracle', x.oracle), has_oracle: !!x.oracle,
@@ -1223,6 +1277,7 @@ function viewModel(model, lang, strings, cm, tm = emptyTracker()) {
     has_mismatch: model.mismatches.length > 0, mismatch_count: String(model.mismatches.length),
     has_orphans: c.orphans > 0,
     has_human: c.humanTcs > 0, n_human_tcs: num(c.humanTcs), n_human_steps: num(c.humanSteps),
+    has_backend: !!c.backendTcs, n_backend_tcs: num(c.backendTcs), n_api_lines: num(c.apiLines), n_db_lines: num(c.dbLines), test_layers: (() => { const k = Object.keys(model.header).find((x) => /^test layers$/i.test(x)); return k ? stripMd(model.header[k]) : ''; })(),
     has_tracker: trk, tracker_th: trk ? trackerHeadHtml(lang) : '', tracker_h: (SHELL_STRINGS[lang] || SHELL_STRINGS.en).tr_title,
     tracker_section: tm.present ? trackerSectionHtml(tm, lang) : '', has_tracker_section: tm.present,
     bug_index_section: tm.present ? bugIndexSectionHtml(tm, lang) : '',
@@ -1242,6 +1297,7 @@ function shellParts(vm, C, tm = emptyTracker(), lang = 'en') {
     { label: C.l_validation, html: vm.has_stamp ? e(vm.val_by) + ' ' + ltr(vm.stamp_date) + ' · ' + e(C.val_scope) + ' ' + ltr(vm.stamp_scope) : e(C.val_none) },
   ];
   if (tm.present) meta.push({ label: (SHELL_STRINGS[lang] || SHELL_STRINGS.en).tr_updated, html: ltr(tm.lastUpdated || DASH) });
+  if (vm.test_layers) meta.push({ label: C.l_layers, html: ltr(vm.test_layers) });
   const banners = [];
   if (vm.arabic_incomplete) banners.push({ cls: 'preview-banner', html: e(C.preview_banner) + ' (' + ltr(vm.outstanding_count) + ')' });
   if (vm.has_mismatch) banners.push({ cls: 'warn-strip', html: '<b>!</b> ' + e(C.warn_strip) + ' (' + ltr(vm.mismatch_count) + ')' });
@@ -1256,6 +1312,7 @@ function shellParts(vm, C, tm = emptyTracker(), lang = 'en') {
     { value: vm.bugs_tile, label_html: e(C.t_bugs), cls: '' },
   ];
   if (vm.has_human) tiles.push({ value: vm.n_human_tcs, label_html: e(C.t_human) + ' (' + ltr(vm.n_human_steps) + ')', cls: 'human' });
+  if (vm.has_backend) tiles.push({ value: vm.n_backend_tcs, label_html: e(C.t_backend) + ' (' + ltr(vm.n_api_lines + ' / ' + vm.n_db_lines) + ')', cls: 'backend' });
   const footer = [
     e(C.footer_1) + ' ' + code('TEST-CASES-' + vm.feature + '.md') + ' ' + e(C.footer_1b),
     e(C.footer_2) + ' ' + code('TEST-DATA-' + vm.feature + '.md') + ' ' + e(C.footer_2b),

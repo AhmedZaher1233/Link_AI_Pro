@@ -607,6 +607,143 @@ const B8 = ['constant-redeclared', 'empty-catch', 'timeout-literal', 'console-gu
   check('26 B8 rules are staged at review with their exemptibility; a qa-allow follows the existing exemption rules', p, {});
 }
 
+/* ---------------- cases 27-31: test layers and the API / DB rules (fixtures/layers, fixtures/layers-bad) ----------------
+   Every expected finding is a `// expect: rule-id[, rule-id]` marker on its line, so the lines below are read from the
+   fixtures, never hand-counted. The clean specs are false-positive guards; fn.spec.ts holds the false-negative guards. */
+const LAYER_RULES = Object.keys(RULES).filter((r) => /^(layer|record|api|db)-/.test(r));
+const LROOT = 'fixtures/layers';
+const layerRun = (file, { automationRoot = LROOT, doc = true, inventory = null, args = {} } = {}) => analyze({
+  root: here,
+  args: { ...(doc ? { 'tc-ids': LROOT + '/TEST-CASES-layers.md' } : {}), ...(inventory ? { inventory } : {}), ...args },
+  paths: { manifestState: 'absent', manifestFile: null, automationRoot, tests: automationRoot + '/tests', pages: automationRoot + '/pages', api: automationRoot + '/api', db: automationRoot + '/db', layers: null },
+  files: file ? [path.join(LROOT, file)] : [], reqIds: null, allowList: { entries: [], file: null },
+});
+/** { rule-id: 'l1,l2' } from the `expect:` markers of one fixture file. */
+function markers(rel) {
+  const out = {};
+  fs.readFileSync(path.join(here, rel), 'utf8').replace(/\r\n?/g, '\n').split('\n').forEach((l, i) => {
+    const m = l.match(/\/\/ expect: ([\w, -]+)$/);
+    if (m) for (const id of m[1].split(',').map((x) => x.trim())) (out[id] = out[id] || []).push(i + 1);
+  });
+  for (const k of Object.keys(out)) out[k] = out[k].sort((a, b) => a - b).join(',');
+  return out;
+}
+const ulines = (r, ruleId, fileRe) => [...new Set(r.findings.filter((f) => f.ruleId === ruleId && (!fileRe || fileRe.test(f.file))).map((f) => f.line))].sort((a, b) => a - b).join(',');
+/** Every layer rule found in `rel` equals the markers of that file — nothing missing, nothing extra. */
+function expectMarkers(p, r, rel, label) {
+  const want = markers(rel);
+  const re = new RegExp(rel.replace(/.*fixtures[\\/]/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\//g, '[\\\\/]') + '$');
+  for (const id of LAYER_RULES) {
+    const got = ulines(r, id, re);
+    if (got !== (want[id] || '')) p.push(label + ': ' + id + ' at [' + got + '] != [' + (want[id] || '') + ']');
+  }
+}
+
+/* 27 — layer classification: the clean api / api+db / db / hybrid / ui specs PASS with the right layers and no layer rule. */
+{
+  const p = [];
+  const want = { 'tests/orders.api.spec.ts': ['api', 'api+db'], 'tests/orders.db.spec.ts': ['db'], 'tests/hybrid.spec.ts': ['hybrid', 'ui'], 'tests/fp.api.spec.ts': ['api'] };
+  for (const [f, layers] of Object.entries(want)) {
+    const r = layerRun(f);
+    if (r.gate !== 'PASS') p.push(f + ': gate ' + r.gate + ' (' + r.gateReason + ')');
+    const got = r.scope.tests.map((t) => t.layer);
+    if (JSON.stringify(got) !== JSON.stringify(layers)) p.push(f + ': layers ' + JSON.stringify(got) + ' != ' + JSON.stringify(layers));
+    const docs = r.scope.tests.map((t) => t.document);
+    if (JSON.stringify(docs) !== JSON.stringify(layers)) p.push(f + ': document layers ' + JSON.stringify(docs) + ' != ' + JSON.stringify(layers));
+    expectMarkers(p, r, LROOT + '/' + f, f);
+    if (r.counts.warning) p.push(f + ': ' + r.counts.warning + ' warning(s) — a data chain was taken for a locator: ' + sev(r, 'warning'));
+  }
+  // the image is owed by ui / hybrid only, the record by api / db / api+db / hybrid (a pure API test with no image is clean)
+  const api = layerRun('tests/orders.api.spec.ts');
+  if (has(api, 'evidence-missing') || has(api, 'console-guard-missing')) p.push('an API test was held to an image / the console guard');
+  if (api.notRun.some((n) => /guard-missing/.test(n.ruleId))) p.push('the guard rules landed in notRun for a spec without browser tests');
+  const hyb = layerRun('tests/hybrid.spec.ts');
+  if (!hyb.notRun.some((n) => n.ruleId === 'console-guard-missing')) p.push('the guard rule did not apply to the hybrid / ui tests (no helper → notRun expected)');
+  // a project WITHOUT an api/ or db/ layer: every legacy test stays ui, nothing is unresolved
+  const legacy = run('valid.fixture.ts');
+  if (legacy.counts.layers.unresolved || legacy.counts.layers.ui !== legacy.counts.tests) p.push('legacy fixture layers ' + JSON.stringify(legacy.counts.layers));
+  if (legacy.config.backendProject) p.push('the legacy fixture root was taken for a backend project');
+  check('27 layer classification: api / api+db / db / hybrid / ui derived from what the test touches, the image and the record owed per layer, legacy ui', p, { api: api.counts.layers, hybrid: hyb.counts.layers });
+}
+
+/* 28 — the API rules: true positives (tp-api), false-negative guards (fn), the record rules, gate FAIL. */
+{
+  const p = [];
+  for (const f of ['tests/tp-api.api.spec.ts', 'tests/fn.spec.ts', 'tests/tp-db.db.spec.ts']) {
+    const r = layerRun(f);
+    expectMarkers(p, r, LROOT + '/' + f, f);
+    if (r.gate !== 'FAIL') p.push(f + ': gate ' + r.gate + ' != FAIL');
+  }
+  for (const id of ['record-missing', 'record-in-hook', 'record-duplicate', 'api-record-missing', 'db-record-missing', 'api-secret-header', 'db-connection-literal', 'layer-mismatch', 'db-write-unledgered', 'db-write-freeform', 'api-mutation-unledgered', 'api-effect-undeclared', 'api-effect-mismatch', 'api-redirect-enabled']) {
+    if (!RULES[id] || RULES[id].severity !== 'violation' || RULES[id].exemptible) p.push(id + ' must be a non-exemptible violation (fail closed): ' + JSON.stringify(RULES[id]));
+  }
+  for (const id of LAYER_RULES) for (const c of RULE_CHECKS[id] || []) if (!['38', '51', '52', '53', '54'].includes(c)) p.push(id + ' maps to check ' + c + ' (layer rules feed 38 / 51-54 only)');
+  check('28 API / DB spec rules: TP and FN markers, records fail closed, non-exemptible', p, {});
+}
+
+/* 29 — backend members (fixtures/layers-bad): effect undeclared / mismatching the mapping, bypassed requests, redirects,
+   secret headers, unledgered ORM writes, unrecorded reads, free-form write SQL, a non-QC connection variable, an
+   unlabelled setup mutation; the clean members beside them and the recorded helpers stay silent. */
+{
+  const p = [];
+  const r = layerRun(null, { automationRoot: 'fixtures/layers-bad', inventory: LROOT + '/automation-inventory.md' });
+  for (const f of ['fixtures/layers-bad/api/BadApi.ts', 'fixtures/layers-bad/db/BadDb.ts', 'fixtures/layers-bad/fixtures/setup.ts']) {
+    const want = markers(f);
+    const base = path.basename(f).replace('.', '\\.');
+    for (const id of LAYER_RULES) { const got = ulines(r, id, new RegExp(base + '$')); if (got !== (want[id] || '')) p.push(path.basename(f) + ': ' + id + ' at [' + got + '] != [' + (want[id] || '') + ']'); }
+  }
+  // the clean layer root: recorded helpers, OrdersApi / OrdersDb, the adapter and the fixtures raise nothing
+  const clean = layerRun('tests/orders.api.spec.ts', { inventory: LROOT + '/automation-inventory.md' });
+  const noisy = clean.findings.filter((f) => LAYER_RULES.includes(f.ruleId)).map((f) => f.ruleId + '@' + f.file + ':' + f.line);
+  if (noisy.length) p.push('clean members raised: ' + noisy.join(', '));
+  if (clean.counts.mutationMembers !== 3) p.push('mutationMembers ' + clean.counts.mutationMembers + ' != 3 (OrdersApi.create, OrdersDb.create / rename)');
+  // no inventory → no mapping row → no mismatch (the effect stays declared)
+  const noInv = layerRun(null, { automationRoot: 'fixtures/layers-bad' });
+  if (has(noInv, 'api-effect-mismatch')) p.push('api-effect-mismatch without an inventory mapping');
+  // a QC-named connection variable is accepted with --db-env
+  const env = layerRun(null, { automationRoot: 'fixtures/layers-bad', args: { 'db-env': 'DATABASE_URL' } });
+  if (has(env, 'db-env-not-qc')) p.push('--db-env DATABASE_URL did not accept the QC-named variable');
+  check('29 backend members: every marked violation found, the clean members silent, the mapping decides the effect', p, { mutationMembers: clean.counts.mutationMembers });
+}
+
+/* 30 — layer mismatch and unresolved: the document layer is compared exactly with the code layer; backend tests live in
+   *.api / *.db spec files and browser tests outside them; an unresolved layer moves the scanner gate to BLOCKED. */
+{
+  const p = [];
+  for (const f of ['tests/tp-layer.spec.ts', 'tests/tp-layer2.api.spec.ts']) { const r = layerRun(f); expectMarkers(p, r, LROOT + '/' + f, f); if (r.gate !== 'FAIL') p.push(f + ': gate ' + r.gate); }
+  const tp = layerRun('tests/tp-layer.spec.ts');
+  const docMis = tp.findings.find((f) => f.ruleId === 'layer-mismatch' && f.tc === 'TC-06');
+  if (!docMis || docMis.document !== 'ui' || docMis.code !== 'api') p.push('TC-06 (document ui, code api) not reported as a document mismatch: ' + JSON.stringify(docMis && { d: docMis.document, c: docMis.code }));
+  if (!at(tp, 'evidence-missing', 11)) p.push('the document layer (ui) did not keep the image owed — evidence must be the union of both layers');
+  // without the TC document only the file rule remains; the code layer alone decides the evidence
+  const noDoc = layerRun('tests/tp-layer.spec.ts', { doc: false });
+  if (noDoc.findings.some((f) => f.ruleId === 'layer-mismatch' && f.tc)) p.push('a document mismatch without a document');
+  if (has(noDoc, 'evidence-missing')) p.push('an API test without a document was held to an image');
+  const un = layerRun('tests/unresolved.spec.ts');
+  expectMarkers(p, un, LROOT + '/tests/unresolved.spec.ts', 'unresolved');
+  if (un.gate !== 'BLOCKED' || !/layer-unresolved/.test(un.gateReason)) p.push('unresolved layer: gate ' + un.gate + ' (' + un.gateReason + ')');
+  if (!has(un, 'evidence-unresolved') && !has(un, 'evidence-missing')) p.push('an unresolved test was not held to an image (fail closed)');
+  check('30 layer mismatch (document, file) and an unresolved layer (gate BLOCKED); evidence = union of both layers', p, {});
+}
+
+/* 31 — the payload: layer counts, use counts, the per-test list, the paths and helpers; the summary keeps the gate. */
+{
+  const p = [];
+  const r = layerRun('tests/orders.api.spec.ts');
+  const c = r.counts;
+  if (JSON.stringify(c.layers) !== JSON.stringify({ ui: 0, hybrid: 0, api: 1, db: 0, 'api+db': 1, unresolved: 0 })) p.push('counts.layers ' + JSON.stringify(c.layers));
+  if (JSON.stringify(c.layerUse) !== JSON.stringify({ ui: 0, api: 2, db: 1 })) p.push('counts.layerUse ' + JSON.stringify(c.layerUse));
+  if (!r.config.backendProject || !/helpers[\\/]api-record\.ts$/.test(r.config.recordHelpers.api || '') || !/helpers[\\/]db-record\.ts$/.test(r.config.recordHelpers.db || '') || !/helpers[\\/]record\.ts$/.test(r.config.recordHelpers.record || '')) p.push('config: ' + JSON.stringify({ b: r.config.backendProject, h: r.config.recordHelpers }));
+  if (r.config.documentLayers !== 6) p.push('documentLayers ' + r.config.documentLayers + ' != 6');
+  if (r.scope.tests.length !== 2 || !r.scope.tests.every((t) => t.via.length)) p.push('scope.tests ' + JSON.stringify(r.scope.tests));
+  const sm = summarize(r);
+  if (sm.gate !== r.gate) p.push('summary gate ' + sm.gate + ' != ' + r.gate);
+  // no record helper under the root → record-missing is an applicable notRun (never silence)
+  const bad = layerRun(null, { automationRoot: 'fixtures/layers-bad' });
+  void bad;
+  check('31 layer payload: counts, uses, per-test list, helpers; summary gate unchanged', p, { layers: c.layers, use: c.layerUse });
+}
+
 const out = {
   tool: 'selftest-validate-automation',
   ran: cases.length,

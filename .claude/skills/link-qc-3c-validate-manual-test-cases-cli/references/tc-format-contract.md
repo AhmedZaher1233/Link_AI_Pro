@@ -36,7 +36,7 @@ env: {environment name}
 build: {version shown by the app | unknown}
 scope: full-tail   (this skill never writes prefix-only — it has no shared-flows-only mode)
 tool: cli
-outcome-check: {what was looked at → what it showed, plain words | human step pending}
+outcome-check: {what was looked at → what it showed, plain words | human step pending | api/db step — automation only}
 data: prepared this run ({e2e scenario | api helper | api source code | db})   (only for a TC walked on data this run prepared — test-data-resolution.md §4; otherwise absent)
 content-sha256: {sha256 of Preconditions + Steps + Expected Result text, normalized}
 req-sha256: {sha256 of the cited acceptance-criterion text as read from the REQ / spec now}
@@ -53,7 +53,9 @@ Inside `Preconditions` / `Steps` / `Expected Result` / `Data Oracle` / `Shared d
 configuration by **reference**: `[E{n}]` an environment row, `[A{n}]` an account, `[D{n}]` a data
 item of `TEST-DATA-{feature}.md`, always name + token (`Login as Administrator [A1]`). Each token
 resolves to its own row — never role → account, never "E1 = the URL". A step or expected-result
-line starting with `[HUMAN] ` needs a person; it is a frozen marker in the text, not a field.
+line starting with `[HUMAN] ` needs a person; it is a frozen marker in the text, not a field. A
+line starting with `[API] ` / `[DB] ` is a backend line only skill 5 runs (`walk-rules.md` §3); it
+is judged by nobody here and never edited.
 
 ## What this skill may write
 

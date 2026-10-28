@@ -164,7 +164,14 @@ notifications, global settings, learned conflicts), the conflicts between them, 
 units** that are never split: U1 a single test · U2 a serial chain · U3 a describe whose `beforeAll` /
 worker fixture shares state · U4 anything it cannot classify with evidence or that breaks the admission
 contract (code-craft §6) — run as one indivisible unit per command. Unique record names prove only that two
-tests do not write the SAME record; unknown effects are run alone, never guessed independent.
+tests do not write the SAME record; unknown effects are run alone, never guessed independent. **Shared server state is a
+barrier:** a destructive reset (a `/reset`-style endpoint, `db.truncate()`, `resetDatabase()`, a `TRUNCATE`) or a SERVER
+clock change (`/clock`, `api.setSystemTime()`) — in the TC text, the test, its hooks and fixtures, global setup, or a
+helper / page-object function it calls (found through the import closure) — runs alone, and a reset in setup code whose
+scope cannot be placed runs alone too; the browser's own clock (`page.clock`, fake timers) and data the run owns
+(`runPrefix()` / `uniqueName()`) are per test. The payload's `readiness.conflicts_brief[]` names each concrete conflict
+in one line ("TC-07 runs alone — … /dev/reset … (helpers/db.ts:42)") for the run-start message. This task never changes
+the application or provisions per-worker application instances to win parallelism.
 
 - **Dispatch.** The conflict-free pool runs in BATCHES (one multi-worker command per batch of max(4 × workers, 8)
   TCs, never a split unit, reserved and released per batch); every restricted / ordered / barrier / run-alone unit runs
@@ -194,10 +201,13 @@ policy it imports is `assets/timeouts.template.ts` → `{automation_root}/timeou
 
 **Procedure — run at profile time, before any spec is written:**
 
-1. **Inventory.** `node .claude/skills/link-qc-5-test-run-automation/scripts/config-inventory.mjs --root .`
-   lists every `playwright*.config.*`, every reference to each (package.json scripts, CI
-   files, docs, other configs, code — a mention in a comment or a code fence counts) and the
-   settings that block a merge. `verdict: none` → step 5. `single` → step 4. `multiple` → 2-3.
+1. **Inventory.** `node .claude/skills/link-qc-5-test-run-automation/scripts/config-inventory.mjs --root . [--config {a path the user named}]`
+   lists every `playwright*.config.*` OF THE PROJECT (skill installations, their fixtures and generated folders are
+   never searched), every reference to each (package.json scripts, CI files, docs, other configs, code — a mention in a
+   comment or a code fence counts), the settings that block a merge, and the ONE `shared` config with its
+   `sharedSource` (the order: `references/schemas/paths-and-evidence.md` §3). `ambiguous[]` → ask which file is the
+   shared one (ONE question; pipeline → BLOCKED) — never pick by order, never move a config to satisfy discovery.
+   `verdict: none` → step 5. `single` → step 4. `multiple` → 2-3.
 2. **Reference scan + mergeability, per extra config.** A config is a merge candidate only when
    its effective behaviour can be reproduced in the shared file with identical results: a
    `projects[]` entry (another browser / locale / device), an env-driven `use` value, or a reporter
@@ -226,24 +236,36 @@ policy it imports is `assets/timeouts.template.ts` → `{automation_root}/timeou
    when no config exists at all; register the project's `testDir` / `testMatch`.
 5b. **Reconcile the run protections — every run, before the inventory of page objects; no question for a routine
    setting.** `node .claude/skills/link-qc-5-test-run-automation/scripts/config-inventory.mjs reconcile --root . --automation-root {automation_root} --results-root {results_root} --run-file {run_file} --apply`
-   resolves the EFFECTIVE settings (presets, project overrides, inherited Playwright defaults, timeouts.ts, helpers, env
-   files, the environment) and fixes only the supported shapes — finite action / navigation budgets, the active-stall
-   keys of `timeouts.ts`, `retries: 0`, a forced local headless, an absent helper — after backing every original up
-   to `{results_root}/artifacts/reconcile/{stamp}/` (+ `summary.md`, before → after). An approved exception (an
-   `operations` entry, an `// exception: <reason>` comment, a `timeouts.adjusted[]` record) and an explicit worker
-   maximum are kept. Every `conflicts[]` entry (an unfamiliar shape, an env file, an environment variable, a persistent
-   browser profile) is reported to the user with its file:line and exact reason — never overwritten, and its protection
-   is NOT active: Checkpoint A item 43 (`tool:protections`) FAILs until it is resolved. One line in the Writing
-   Automation Code message: `Run protections: {n} changed, {m} conflict(s) — {summary.md}`.
+   resolves the EFFECTIVE settings — the shared config and every config module it imports (base / preset configs,
+   transitively), project-level `use` overrides judged one by one, inherited Playwright defaults, timeouts.ts, helpers,
+   env files, the environment — and fixes only the supported shapes, idempotently: finite action / navigation budgets
+   (in the file that holds the setting; a missing one only into the shared config's TOP-LEVEL `use`), the active-stall keys
+   of `timeouts.ts`, `retries: 0`, a forced local headless, an absent helper, and an OUTDATED helper only when its
+   recorded template hash (`// @link-qc-5-template {name} {version} sha256=…`) proves it an untouched copy — after backing
+   every original up to `{results_root}/artifacts/reconcile/{stamp}/` (+ `summary.md`, before → after). An approved
+   exception (an `operations` entry, an `// exception: <reason>` comment, a `timeouts.adjusted[]` record), secrets / env
+   files, custom fixtures and an explicit worker maximum are never touched. Every `conflicts[]` entry (an unfamiliar shape,
+   a customised or unknown-version helper, an env file, an environment variable, a persistent browser profile, an
+   ambiguous shared config) is reported with its file:line and exact reason — never overwritten, and its protection is NOT
+   active; a setting it cannot resolve (an expression, an unreadable config package) is `unresolved` — nothing inserted.
+   Checkpoint A item 43 (`tool:protections`) FAILs on a disabled protection and stays `unresolved` (your semantic review
+   closes it) on an unresolved one. When anything changed, `refresh[]` says what to redo: `parallel-plan.mjs --out` and a
+   new Checkpoint A snapshot. One line in the Writing Automation Code message: `Run protections: {n} changed, {m}
+   conflict(s) — {summary.md}`.
 6. **Helpers.** Copy `assets/steps.template.ts`, `progress-reporter.template.ts`,
    `console-guard.template.ts`, `test-data.template.ts` into `helpers/` when the project has no
    equivalent (match an existing equivalent instead of duplicating it). **`network-guard.template.ts`
    → `helpers/network-guard.ts`, `rate-limit.template.ts` → `helpers/rate-limit.ts` and
    `admission.template.ts` → `helpers/admission.ts` are always installed** (each a no-op without its
-   environment variables); in an existing project PHASE 2 adds them, the guard hooks in every spec of the
+   environment variables) — so are, since 3.0, `record`, `redact`, `data-ledger`, `api-record` and `db-record`
+   (`helpers/*.ts`, inert without an `[API]` / `[DB]` test); `db.template.ts` → `helpers/db.ts` and
+   `data-ledger.cleanup.spec.template.ts` → `tests/_cleanup/data-ledger.cleanup.api.spec.ts` (+ its `registry.ts`) only
+   for a document with `[DB]` / data-changing lines, the `backend` project and `TIMEOUTS.api.request` /
+   `TIMEOUTS.db.query` likewise (code-craft §8, §16-19); in an existing project PHASE 2 adds them, the guard hooks in every spec of the
    story, `TIMEOUTS.rate_limit { max_start_wait, in_step_wait, cooldown, cooldown_max }`, `TIMEOUTS.stall {
    silence }` and `TIMEOUTS.admission { max_wait }` in `timeouts.ts` BEFORE the first run (behaviour: code-craft
-   §6, §9, §11), and makes the project's fixtures file extend `helpers/admission`'s `test`. Add the
+   §6, §9, §11), and makes the project's `test.extend` module (its fixtures module — not a config) extend
+   `helpers/admission`'s `test`. Add the
    `.gitignore` lines of code-craft §12. `helpers/test-data.ts` carries the per-ID maps of
    `<normalization>` (`environments` by E-ID, `accounts` by A-ID, reading `{ID}_URL` / `{ID}_USER` /
    `{ID}_PASSWORD` at run time, no default) — one entry per row of the story's TEST-DATA file; an

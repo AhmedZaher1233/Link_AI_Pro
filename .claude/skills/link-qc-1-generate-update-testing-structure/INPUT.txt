@@ -84,12 +84,14 @@ OUTPUT — WHAT YOU GET
   .claude/mcp-launchers/azure-devops-attachments.cjs   (cloud projects only — copied from skill 1's assets,
                               replaced when outdated; never touched by /sync-skills)
   playwright.config.ts       (created only if missing)
-  Validation table: Node.js · NPM · Playwright · Playwright cfg · Playwright CLI · Playwright CLI
+  {automation root}/package.json  @types/node + typescript added as devDependencies when missing (skill 5's
+                              helpers and its Checkpoint A type check need them; npm install --save-dev)
+  Validation table: Node.js · NPM · Playwright · Playwright cfg · Automation types · Playwright CLI · Playwright CLI
   browser · Python + Pillow · .gitignore · Folder layout · Steering Docs · L1/L2 generic ·
   Learning File · .mcp.json · Azure DevOps hosting · PAT env var · Execution limits · Coordination directory · Browser secrets file · Playwright MCP · Azure DevOps
   MCP · Docx MCP · Azure DevOps attachments MCP · Figma MCP · QA Skills · Skills current · sync-skills cmd ·
   Manifest — each PASS / WARN / FAIL / NOT_RUN, never PASS without the check having run (the playwright-cli,
-  Python + Pillow, Azure DevOps attachments MCP and Figma MCP rows are WARN at worst: 3c, 5b, skill 9's playwright-cli route, the attachments
+  Python + Pillow, Automation types, Azure DevOps attachments MCP and Figma MCP rows are WARN at worst: 3c, 5b, skill 9's playwright-cli route, the attachments
   server and link-qc-6-ui-testing's extras are optional).
   Mode A adds "Would be fixed by B" and "Needs C" lists and changes nothing.
 

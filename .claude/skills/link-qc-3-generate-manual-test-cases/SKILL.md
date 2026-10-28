@@ -10,8 +10,9 @@ description: >
   requirement coverage score and open questions. Trigger on: "design manual test cases",
   "generate manual TCs", "update existing test cases", "review manual TCs against the story",
   "create TCs for user story", "read my comments", "apply the reviewer comments", "address the
-  review comments on the test cases", "test cases for the chatbot / AI assistant".
-argument-hint: "[<feature-name> | <user-story-id>] [existing TCs path/source] [--revision] [--audit] [--lang ar|en]"
+  review comments on the test cases", "test cases for the chatbot / AI assistant", "API test
+  cases", "database test cases", "backend checks for the story".
+argument-hint: "[<feature-name> | <user-story-id>] [existing TCs path/source] [--revision] [--audit] [--lang ar|en] [--layers ui,api,db,hybrid]"
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash(node *render-tc-review.mjs*), Bash(node *selftest.mjs*), mcp__azure-devops, mcp__docx
 ---
 
@@ -95,7 +96,9 @@ BLOCKED with the specific ambiguity — or an open question in the `open-questio
    requirement-defined outcome that leaves the browser (email, SMS, OTP, push, notification,
    download, background job) gets a complete TC — tool limits never remove a TC; a step no
    authorized test interface can perform is prefixed `[HUMAN]` (`references/tc-design.md`
-   "Out-of-browser outcomes").
+   "Out-of-browser outcomes"). API and database behaviour the requirement states is designed as
+   `[API]` / `[DB]` lines only behind the **layer gate** (invariant 16); the requirement decides
+   the expected behaviour, never the code.
 3. **One precedence model.** Steering resolves per `docs/steering/README.md` (L1 baseline, L2
    refines, L3 values + stricter + approved exemptions); specs govern business truth, steering
    governs quality policy, the learning file overrides neither — a contradicted learning entry
@@ -137,7 +140,11 @@ BLOCKED with the specific ambiguity — or an open question in the `open-questio
    (markdown, test-data file, HTML page, summary).
 10. **No code in the deliverables.** No selectors, attribute names, code snippets, JSON, file or
     function identifiers, API endpoint paths, or database table / column names *inside* the TC
-    document, the test-data file, the review page or the learning file. The one auxiliary JSON
+    document, the test-data file, the review page or the learning file. **One narrow exception:**
+    an endpoint path may appear inside an `[API]` line and a table / column name inside a `[DB]`
+    line, and ONLY when the approved source names it (spec, API contract, OpenAPI file given as
+    input) — otherwise the line uses business words and a `Q-{n}` asks for the contract. Hosts stay
+    `[E{n}]`; credentials, tokens and connection strings never appear anywhere. The one auxiliary JSON
     file is `TC-REVIEW-STRINGS-{feature}.ar.json`, the Arabic translation sidecar: it carries only
     human-readable strings copied from the markdown and is written by the renderer and by you
     filling its `ar` values — never anything else.
@@ -166,7 +173,19 @@ BLOCKED with the specific ambiguity — or an open question in the `open-questio
     `Login as Administrator [A1]`, `Data Oracle: price list "Sample" [D2]`), while typed test
     inputs (an invalid URL, a boundary value), exact expected outputs (validation messages,
     totals), labels and one-off values stay inline — a deliberate collision with a configuration
-    value is marked `(intentional input)` on the same line (`references/tc-design.md`).
+    value is marked `(intentional input)` on the same line (`references/tc-design.md`). An API
+    base URL is an `API base` row and a database a `Database` row (a logical identity, never a
+    connection string); an environment used by a data-changing TC carries an `Environment class`
+    row (`test` / `staging` / `production`).
+16. **The tester decides the test layers (layer gate).** When the source states API behaviour
+    (an endpoint, a request / response, a status code, an API contract) or a persistence rule
+    ("is stored", "an audit row", "the status is saved as"), list those **layer candidates** and ask
+    ONCE, in the step-6 message, which layers to design: UI only · + API · + DB · + hybrid (several
+    may be chosen), with a recommendation. `--layers ui,api,db,hybrid` answers it in advance. No
+    answer in a pipeline run → design UI only and list every skipped candidate as a `Q-{n} (layer
+    candidate)` and in the final message. Never design an `[API]` / `[DB]` line the tester did not
+    confirm. The answer is recorded in the header line `Test layers:` — a record of this run, never
+    an input that decides a later run (`references/tc-design.md` "API and DB test cases").
 
 ## Workflow
 
@@ -177,10 +196,10 @@ BLOCKED with the specific ambiguity — or an open question in the `open-questio
 | 3 | **Project profile** — read `Testing/qa-manifest.json`, then resolve every key: task input → manifest → detection → ask. | `references/entry-cases.md` §3 |
 | 4 | **Learning file** — Index + tag grep (never the whole file); reuse what it answers and say what you are reusing. | `references/learning-file.md` |
 | 5 | **Specs + steering** — read `CLAUDE.md`, the steering files from `steering.*` and every `spec_sources` file (targeted: the sections this feature touches; whole file only when small). Missing file → BLOCKED with the path; zero matching REQ-IDs → BLOCKED. | `references/entry-cases.md` §3 |
-| 6 | **Implementation status (static)** — tester's answer → an existing skill-4 report → else `Cannot be validated — not yet checked live`; then ONE ask only for what step 1 left open (a spec-source correction, the out-of-browser interface question of `tc-design.md` when nothing recorded answers it). No browser, no URL, no credentials. | `references/entry-cases.md` §4 |
+| 6 | **Implementation status (static)** — tester's answer → an existing skill-4 report → else `Cannot be validated — not yet checked live`; then ONE ask only for what step 1 left open (a spec-source correction, the out-of-browser interface question of `tc-design.md` when nothing recorded answers it, the **layer gate** of invariant 16 when the source has API / persistence candidates and `--layers` did not answer it). No browser, no URL, no credentials. | `references/entry-cases.md` §4, `references/tc-design.md` "API and DB test cases" |
 | 7 | **Design** — draft the complete set from specs + learning: patterns, 4-field steps, inline assertions, coverage minimums, design techniques (EP / BVA / decision table / state transition) and the E1–E6 error-guessing checklist where the flow has the trigger, locale coverage, out-of-browser outcomes (interface check → an `[E{n}]` row or a `[HUMAN]` step, never a dropped TC), data oracles, format (incl. `Stage`, optional `Tags`), smoke, automation candidates; collect the **data-item list** (every data need, its TCs, its status) and assign the `A{n}` / `E{n}` / `D{n}` IDs the TCs reference as you go; every unresolved gap becomes a `Q-{n}`. Case 1 runs the existing-TC update phase over the existing set instead. | `references/tc-design.md` |
 | 8 | **Validation stamp + data statuses** — every TC `Validation: draft — not app-validated` (or `not-implemented — pending implementation` per step 6); data items `READY` only when the learning file confirms them, else `UNKNOWN`; `Environment: not checked`. | `references/validation-states.md`, `references/tc-design.md` "Test-data collection" |
-| 9 | **Self-review** — the nineteen checks, own findings fixed in place, tables included. | `references/self-review.md` |
+| 9 | **Self-review** — the twenty checks, own findings fixed in place, tables included. | `references/self-review.md` |
 | 10 | **Deliverables + learning update + human gate** — pre-write guard (incl. the SPEC-folder check), TC markdown (English, frozen anchors), test-data file (English), review page via the renderer (English by default; under `--lang ar`: `--write-skeleton` → fill `ar` → `--write`), renderer warnings `data-literal` / `data-ref-unresolved` / `narrative-not-english` cleared, final message, structured return. | `references/deliverables.md`, `references/html-page.md` |
 
 Load a reference only when its step runs. A default fresh-design run needs `entry-cases.md`,
@@ -257,6 +276,16 @@ prefixed `[HUMAN]` is a frozen marker in the step text (no new field): 3b / 3c s
 (`draft — not app-validated (human step pending)`), skill 5 automates up to it (`partial`), skill
 4 publishes it verbatim.
 
+**`[API]` / `[DB]` lines** (behind the layer gate) are frozen markers in the same way: a Steps or
+Expected Result line that starts with one is a backend line; the TC's **test layer** (`ui` ·
+`hybrid` · `api` · `db` · `api+db`) is derived from them by `tc-hash.mjs tcLayer` — never a field
+— and an `unknown` layer (backend markers without a backend action step, or an unmarked Expected
+line in a TC without a UI step) BLOCKs the review page. Skill 5 automates them in its `backend`
+Playwright project (`ui` / `hybrid` stay in the browser project) with a redacted record as
+evidence; 3b / 3c / 5b cannot run them (`api/db step — automation only` / `PARTIAL — out of tool`);
+skill 4 publishes them verbatim. `$name` values captured by a line are reused by later lines. The
+header line `Test layers:` (optional) records the layer-gate answer.
+
 **`TEST-DATA-{feature}.md`** (same folder) is owned by this skill and consumed by skill 5 as
 the starting inventory of its test-data readiness gate (PHASE 2.6) and patched by 3b with live
 statuses: skill 5 reuses its items, TC mapping and statuses, validates only the `MISSING` /
@@ -277,9 +306,9 @@ language; skills 4 and 5 ignore it.
 | `references/entry-cases.md` | intake gate, entry cases 1-3, multi-story split, project profile, static implementation status | steps 1-3, 5, 6 |
 | `references/open-questions.md` | search-first rule, the required question shape, never-act-unanswered, provenance (mirrored with 3b / 3c) | any ask |
 | `references/learning-file.md` | learning-file specifics for skills 3 / 3b / 3c (shared protocol lives in skill 1) (mirrored) | step 4 |
-| `references/tc-design.md` | patterns, step quality, coverage minimums, design techniques, error-guessing checklist, locale, out-of-browser outcomes (`[HUMAN]`), data oracle, test-data collection + reference tokens, frozen TC shape (incl. `Tags`), automation suitability, existing-TC update | step 7 |
+| `references/tc-design.md` | patterns, step quality, coverage minimums, design techniques, error-guessing checklist, locale, out-of-browser outcomes (`[HUMAN]`), API and DB test cases (layer gate, `[API]` / `[DB]` grammar, layers), data oracle, test-data collection + reference tokens, frozen TC shape (incl. `Tags`), automation suitability, existing-TC update | steps 6-7 |
 | `references/validation-states.md` | the six states, who writes them, freshness and stale rules (mirrored) | step 8 |
-| `references/self-review.md` | the nineteen self-review checks incl. coverage score, manual-only list, references, test-data consistency, open questions, technique coverage, error guessing, out-of-browser outcomes, AI Oracle completeness | step 9 |
+| `references/self-review.md` | the twenty self-review checks incl. coverage score, manual-only list, references, test-data consistency, open questions, technique coverage, error guessing, out-of-browser outcomes, AI Oracle completeness, API / DB lines | step 9 |
 | `references/deliverables.md` | pre-write guard, TC markdown + test-data file specs, learning update, final message, revision mode, structured returns, quality checklist | step 10 |
 | `references/html-page.md` | the renderer: commands, gate, parsing contract, derived numbers, compatibility, Arabic sidecar, provenance (mirrored) | step 10 |
 | `assets/tc-review.template.html` | the page skeleton + inline CSS, consumed only by the renderer (mirrored) | step 10 |

@@ -4,7 +4,7 @@
 // Usage: node preflight.mjs [--root <path>] [--pretty]
 // Exit code is always 0; every result lives in the JSON payload.
 import path from 'node:path';
-import { parseArgs, print, scanGit, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanManifest, scanPat, scanGitignore, scanBrowserSecrets, scanExecutionLimits, SKILLS, PLAYWRIGHT_CLI_IGNORE, ENV_RESTART_HINT, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER } from './lib.mjs';
+import { parseArgs, print, scanGit, scanSuite, scanTesting, scanSteering, scanLearning, scanMcp, scanToolchain, scanAutomationTypes, scanManifest, scanPat, scanGitignore, scanBrowserSecrets, scanExecutionLimits, SKILLS, PLAYWRIGHT_CLI_IGNORE, ENV_RESTART_HINT, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const root = path.resolve(args.root || process.cwd());
@@ -17,6 +17,7 @@ const learning = scanLearning(root);
 const mcp = scanMcp(root);
 const toolchain = scanToolchain(root);
 const manifest = scanManifest(root);
+const automationTypes = scanAutomationTypes(root); // skill 5: @types/node + typescript in the automation project (its helpers, its tsc check)
 // PAT: existence only, of the variable the azure-devops entry references (both known names when there is no entry) — the value is never read into the output.
 const pat = scanPat(mcp.azureDevops.present ? mcp.azureDevops.patVar || (mcp.azureDevops.package === 'self-hosted' ? PAT_VAR_SELF_HOSTED : PAT_VAR_CLOUD) : null);
 // Hosting of the Azure DevOps entry vs the git remote (cloud = dev.azure.com / *.visualstudio.com; anything else = self-hosted). Details: mcp.azureDevops + git.azureDevOps.
@@ -50,7 +51,7 @@ print({
   tool: 'preflight', readOnly: true, root, generatedOn: new Date().toISOString(),
   classification, classificationRule: 'EXISTING if M1 or M2, or any two of M3/M4/M6/M7; M5 never counts',
   note: onlyPlaywright ? 'Playwright present for app development only — treated as NEW' : null,
-  markers, git, suite, testing, steering, learning, mcp, azureDevOps, toolchain, manifest, pat, gitignore, browserSecrets, executionLimits,
+  markers, git, suite, testing, steering, learning, mcp, azureDevOps, toolchain, automationTypes, manifest, pat, gitignore, browserSecrets, executionLimits,
   warnings: [
     toolchain.playwrightCli.version && git.isRepo && !gitignore.ignoresPlaywrightCli ? `playwright-cli is installed but ${PLAYWRIGHT_CLI_IGNORE} is not in .gitignore — its snapshot files would be committed (/sync-skills --tools adds the line)` : null,
     !toolchain.playwrightCli.version && (suite.present.includes('link-qc-3c-validate-manual-test-cases-cli') || suite.present.includes('link-qc-5b-test-run-manual-cli') || suite.present.includes('link-qc-9-retesting')) ? 'skill 3c / 5b / 9 is installed but playwright-cli is not — 3c and 5b will BLOCK and skill 9 leaves its non-automated bugs NOT_RUN until /sync-skills --tools runs (3b and every other skill are unaffected)' : null,
@@ -75,6 +76,7 @@ print({
     mcp.docx.legacyWord.length ? `legacy word MCP server (office-word-mcp-server) superseded by docx: ${mcp.docx.legacyWord.join(', ')} — /sync-skills --apply migrates it` : null,
     mcp.docx.present && !mcp.docx.pinned ? 'docx MCP entry is missing the `--with mcp<2` pin — the server will crash on import' : null,
     testing.legacyNames.length ? `legacy testing folder names: ${testing.legacyNames.join(', ')}` : null,
+    automationTypes.missing.length ? `${automationTypes.automationRoot}: ${automationTypes.missing.join(' + ')} missing — skill 5's Checkpoint A type check fails on its helpers; Mode B installs them (${automationTypes.installCommand})` : null,
     git.isRepo && git.dirty ? 'git working tree is dirty (Mode C requires clean or explicit acceptance)' : null,
   ].filter(Boolean),
 }, args);

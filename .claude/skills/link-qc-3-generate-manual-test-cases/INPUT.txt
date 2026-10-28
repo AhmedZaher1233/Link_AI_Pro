@@ -33,6 +33,13 @@ OPTIONAL FLAGS:
                markdown always stay English). Only THIS run's flag or an explicit sentence
                switches it — never the requirement's language, a saved answer, the document's
                "Review page language" line or an existing Arabic sidecar.
+  --layers ui,api,db,hybrid
+               Answers the LAYER GATE in advance. When the requirement states API behaviour (an
+               endpoint, a status code, a response) or a persistence rule ("is stored", "an audit
+               row"), the skill asks ONCE which layers to design: UI only · + API · + DB · + hybrid
+               (a UI action followed by an API / DB check). Only confirmed layers get [API] / [DB]
+               lines. No answer in a pipeline run → UI only, every skipped candidate listed as an
+               open question. The answer is recorded in the "Test layers:" header line.
   --revision   Apply the reviewer's corrections to the TCs they name (patch, never regenerate).
                A TC that 3b / 3c had validated and you now change is reset to draft (stale — revised).
                The corrections come from REVIEW-COMMENTS-{feature}.md (saved from the review page),

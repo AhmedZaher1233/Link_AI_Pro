@@ -124,6 +124,12 @@ way → `skip — data_missing` with `no way found — searched: {sources}` (`so
 pipeline-default`); the run continues with the rest. Production named in the environment →
 nothing is prepared (stated).
 
+**API / DB TCs (3.0).** When the document has data-changing `[API]` / `[DB]` TCs, the SAME message carries the
+data-changes gate of `api-db.md` `<data_changes_gate>` below the table (all · TC-IDs · none) — one message, never a
+second question; the preparation "yes" (`api (source code)` / `db` rows) is recorded as `data_changes.setup` and its
+writes go through the recorded request / client with `purpose: 'setup'` so their keys are ledger-owned and an
+update / delete TC may change them. A target that is production, of unknown class or not verified gets neither.
+
 **6. Execute the decisions** — under the PHASE 2 rules (POM mandatory, no banned patterns,
 never app business logic, never a credential in code, logs, or the learning file) and the twelve
 principles:

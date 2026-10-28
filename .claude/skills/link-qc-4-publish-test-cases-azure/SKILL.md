@@ -378,12 +378,29 @@ SMS, a physical device, a printed document) is copied **verbatim**: the marker s
 text after it is not re-verbed, not split, not softened. It reaches the Azure step text as-is
 and makes the work item carry the `human-step` tag (PHASE 2).
 
+**The `[API]` / `[DB]` prefixes are exempt the same way.** A Steps or Expected Result line that
+starts `[API] ` or `[DB] ` (an API call / assertion or a database check / write skill 3 designed
+behind its layer gate) is copied **verbatim** — method, path, `as [A{n}]`, payload, `→ capture …
+as $name`, assertion and every `$name` stay as written; it is not re-verbed, not split, and its
+path is not moved into a `— ref:` note. It makes the work item carry the `api-step` / `db-step`
+tag (PHASE 2). A TC with an `[API]` / `[DB]` line conforms when its title is in shape and every
+OTHER step starts with a canonical verb.
+
 Further rules:
 
-- **One action per step.** Split chained steps (`… → … → …`, `…; …`).
+- **One action per step.** Split chained steps (`… → … → …`, `…; …`) — never an `[API]` / `[DB]`
+  line (its `→ capture …` is part of the one call).
 - **Every Steps block opens with the journey**: `Login with <role> [A{n}]` → `Go to <surface>
   [E{n}]` → the hops needed to land on the target surface. Lift the route out of
-  Preconditions into a real step. Each hop confirmed per the rule above.
+  Preconditions into a real step. Each hop confirmed per the rule above. **Exception — a pure
+  backend TC** (no unmarked step: layer `api` / `db` / `api+db`, `tc-hash.mjs tcLayer`) has no
+  screen and no login journey: its first `[API]` line names the role (`as [A{n}]`), a pure `[DB]`
+  TC needs none; nothing is prepended. A hybrid TC keeps the journey for its UI part.
+- **Confirming a backend line** replaces the page-object order of the confirmation rule: the
+  automation project's `api/` endpoint clients and `db/` query objects (when skill 5 has written
+  them) → the learning file → the application's route / controller / OpenAPI / migration sources
+  → otherwise `> Needs human review: {endpoint / entity not confirmed}`. The Playwright MCP never
+  confirms a backend line. Confirmation never changes the line — a mismatch is a review note.
 - **Reference tokens survive verbatim.** `[A1]`, `[E1]`, `[D2]` (skill 3's TEST-DATA references:
   account, environment row, data item) stay exactly where the source put them, next to the name
   they qualify — `Login as Administrator [A1]` becomes `Login with Administrator [A1]`, never
@@ -410,8 +427,9 @@ Beautify is format-only. Before writing the file, assert and report:
   when present) · `Type` · `Smoke` · `Automation
   Candidate` · `Tags` · `Shared data` · locale variants unchanged in substance
 - every assertion present in the source still present
-- every `[HUMAN]` marker and every `[A{n}]` / `[E{n}]` / `[D{n}]` token present in the source
-  still present, same TC, same line (count per TC identical)
+- every `[HUMAN]` / `[API]` / `[DB]` marker and every `[A{n}]` / `[E{n}]` / `[D{n}]` token and
+  `$name` present in the source still present, same TC, same line (count per TC identical) —
+  so every TC's derived test layer is unchanged
 
 A `- **Reviewer comment:**` bullet in a source TC is the reviewer's note to the QA skills, never
 TC content: it is not beautified, not published, not part of the TC hash, and not a
@@ -510,7 +528,7 @@ block, the outcome precedence and the map columns; this block only orders the st
    `get_work_item` with `expand: "relations"`, or a WIQL query) and match titles on the
    `[TC-ID]` prefix: match → UPDATE that work item (steps, description, status per the plan,
    tags = preserve + add − remove); no match → create (`workItemId: create`). Intended tags:
-   `{feature}`, `smoke`, `automation` / `manual`, `human-step`, the TC's `Tags:` values, the
+   `{feature}`, `smoke`, `automation` / `manual`, `human-step`, `api-step` / `db-step` (an `[API]` / `[DB]` line), the TC's `Tags:` values, the
    `tag_convention` tags. **add** = intended − current; **remove** = introduced by this skill
    earlier (the map's `Tags (introduced)` column) and no longer intended; **preserve** = every
    other tag — a tag already on the work item is never owned, never removed (contract §4).

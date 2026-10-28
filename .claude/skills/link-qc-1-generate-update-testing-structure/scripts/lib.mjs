@@ -638,6 +638,46 @@ export function planTools(root) {
   return { cli: cli.playwrightCli, browserCache: cli.playwrightCliBrowser, browserDir: cli.playwrightCliBrowserDir, gitignore: gi, inGit, python: py, actions };
 }
 
+/* ---------------- automation type definitions (skill 5) ----------------
+   Skill 5 copies TypeScript helpers into the automation project (helpers/*.ts from its assets/*.template.ts) that import
+   `node:fs` / `node:crypto` / `node:path` and read `process.env`, and its Checkpoint A runs the project's own
+   `tsc --noEmit`. Without these two devDependencies that type check fails ("Cannot find name 'process'", "Cannot find
+   module 'node:fs'") or cannot run at all. A project created by `npm init playwright` already has @types/node. */
+export const AUTOMATION_DEV_PACKAGES = ['@types/node', 'typescript'];
+
+/** The automation project's package.json (manifest paths.automationRoot → Testing/Automation → the project root) and
+ *  whether it declares AND has installed each of AUTOMATION_DEV_PACKAGES (node_modules searched upward to the project
+ *  root — hoisted workspaces count). Only a Playwright project (@playwright/test declared) needs them. Read-only. */
+export function scanAutomationTypes(root) {
+  let rel = null;
+  try { const m = JSON.parse(read(path.join(root, MANIFEST)) || 'null'); rel = m && m.paths && m.paths.automationRoot ? String(m.paths.automationRoot) : null; } catch { rel = null; }
+  const dir = [rel, TESTING_FOLDERS.automationRoot, '.'].filter(Boolean).map((c) => path.resolve(root, c)).find((d) => isFile(path.join(d, 'package.json'))) || null;
+  const none = Object.fromEntries(AUTOMATION_DEV_PACKAGES.map((p) => [p, null]));
+  if (!dir) return { automationRoot: null, packageJson: false, valid: false, playwrightProject: false, declared: none, installed: none, missing: [], installCommand: null };
+  let j = null;
+  try { j = JSON.parse(read(path.join(dir, 'package.json'))); } catch { j = null; }
+  const deps = j ? { ...(j.dependencies || {}), ...(j.devDependencies || {}) } : {};
+  // upward from the automation root, never above the project root: a package in a home-level node_modules is not the
+  // project's (and would make the answer depend on the machine)
+  const top = path.resolve(root);
+  const installedAt = (pkg) => {
+    for (let d = dir; ; d = path.dirname(d)) {
+      const p = path.join(d, 'node_modules', ...pkg.split('/'), 'package.json');
+      if (isFile(p)) { try { return JSON.parse(read(p)).version || 'present'; } catch { return 'present'; } }
+      if (d === top || path.dirname(d) === d || !path.resolve(d).startsWith(top)) return null;
+    }
+  };
+  const declared = Object.fromEntries(AUTOMATION_DEV_PACKAGES.map((p) => [p, deps[p] || null]));
+  const installed = Object.fromEntries(AUTOMATION_DEV_PACKAGES.map((p) => [p, installedAt(p)]));
+  const playwrightProject = Boolean(deps['@playwright/test']);
+  const missing = playwrightProject ? AUTOMATION_DEV_PACKAGES.filter((p) => !declared[p] || !installed[p]) : [];
+  return {
+    automationRoot: path.relative(root, dir).replace(/\\/g, '/') || '.', packageJson: true, valid: Boolean(j), playwrightProject, declared, installed, missing,
+    // run in the automation root, under the normal permission flow (never pre-approved)
+    installCommand: missing.length ? `npm install --save-dev ${missing.join(' ')}` : null,
+  };
+}
+
 /** Is the user-level variable `name` persisted on this machine (registry hive / shell profile)? Existence only. */
 function persistedEnvVar(name) {
   if (process.platform === 'win32') return { persisted: run(`reg query HKCU\\Environment /v ${name}`).ok, scope: 'user (HKCU\\Environment)' };

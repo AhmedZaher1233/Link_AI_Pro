@@ -26,7 +26,8 @@
 // automation match. A referenced ID with no row is fingerprinted as "?" so the gap is visible.
 //
 // Zero dependencies, read-only, Node >= 18. CLI:
-//   node tc-hash.mjs --tc <TEST-CASES-*.md> [--data <TEST-DATA-*.md>] [--ids a,b] [--canonical] --pretty
+//   node tc-hash.mjs --tc <TEST-CASES-*.md> [--data <TEST-DATA-*.md>] [--ids a,b] [--canonical] [--layers] --pretty
+// --layers adds `layers: {TC-ID: layer}` (tcLayer below — the test layer from the [API] / [DB] markers).
 // Always exits 0; the result is the JSON payload.
 
 import fs from 'node:fs';
@@ -190,6 +191,55 @@ export function canonicalTc(tc, data) {
 }
 export function tcHash(tc, data) { return sha256(canonicalTc(tc, data)); }
 
+/* ---------------- test layer (step markers) — NOT part of the hash ---------------- */
+// A Steps or Expected Result line that starts with [API] or [DB] is a backend line; [HUMAN] is neutral;
+// every other Steps line is a UI action. Only Steps are actions: Preconditions, Data effect, cleanup
+// notes and every other field never count. The markers already sit inside hashed fields, so the layer
+// needs no field of its own and HASH_VERSION is unchanged. The layer decides the Playwright project and
+// the evidence the run must produce (skill 5):
+//   ui      no [API]/[DB] line at all (every legacy TC)    → browser · image
+//   hybrid  ≥ 1 UI step and ≥ 1 [API]/[DB] line           → browser · image + record
+//   api     action steps all [API], no [DB] line          → backend · record
+//   db      action steps all [DB], no [API] line          → backend · record
+//   api+db  no UI step, both markers                      → backend · record
+//   unknown backend markers but no [API]/[DB] action step, or an unmarked Expected line in a TC with
+//           no UI step — the review page BLOCKs it and skill 5 never runs it.
+export const STEP_MARKER_RE = /^\s*\[(HUMAN|API|DB)\]/;
+export const LAYER_NEEDS = {
+  ui: { project: 'browser', image: true, record: false },
+  hybrid: { project: 'browser', image: true, record: true },
+  api: { project: 'backend', image: false, record: true },
+  db: { project: 'backend', image: false, record: true },
+  'api+db': { project: 'backend', image: false, record: true },
+  unknown: { project: null, image: false, record: false },
+};
+export function lineMarker(s) { const m = String(s ?? '').match(STEP_MARKER_RE); return m ? m[1] : null; }
+function fieldLines(tc, name) {
+  const { value, items } = fieldText(tc, name);
+  const v = String(value ?? '').trim();
+  return [...(v && v !== '—' && v !== '-' ? [v] : []), ...items]; // the inline value and the sub-list both count
+}
+/** { layer, uiSteps, apiSteps, dbSteps, humanSteps, apiExpected, dbExpected, plainExpected } */
+export function tcLayer(tc) {
+  const c = { uiSteps: 0, apiSteps: 0, dbSteps: 0, humanSteps: 0, apiExpected: 0, dbExpected: 0, plainExpected: 0 };
+  for (const s of fieldLines(tc, 'Steps')) {
+    const m = lineMarker(s);
+    if (m === 'API') c.apiSteps++; else if (m === 'DB') c.dbSteps++; else if (m === 'HUMAN') c.humanSteps++; else c.uiSteps++;
+  }
+  for (const s of fieldLines(tc, 'Expected Result')) {
+    const m = lineMarker(s);
+    if (m === 'API') c.apiExpected++; else if (m === 'DB') c.dbExpected++; else if (m !== 'HUMAN') c.plainExpected++;
+  }
+  const api = c.apiSteps + c.apiExpected > 0; const db = c.dbSteps + c.dbExpected > 0;
+  let layer;
+  if (!api && !db) layer = 'ui';
+  else if (c.uiSteps) layer = 'hybrid';
+  else if (!c.apiSteps && !c.dbSteps) layer = 'unknown';
+  else if (c.plainExpected) layer = 'unknown';
+  else layer = api && db ? 'api+db' : api ? 'api' : 'db';
+  return { layer, ...c };
+}
+
 /** Hash every TC of a document (optionally a subset of ids). */
 export function hashDocument(tcText, dataText, ids) {
   const data = parseTestData(dataText || '');
@@ -214,5 +264,6 @@ if (isMain) {
   const all = hashDocument(tcText, dataText, ids);
   const payload = { gate: 'PASS', version: HASH_VERSION, tc: args.tc, data: dataPath || null, count: Object.keys(all).length, hashes: {} };
   for (const [id, v] of Object.entries(all)) payload.hashes[id] = args.canonical ? v : v.hash;
+  if (args.layers) { payload.layers = {}; for (const tc of parseTcDocument(tcText)) if (payload.hashes[tc.id] !== undefined) payload.layers[tc.id] = tcLayer(tc).layer; }
   print(payload, pretty);
 }

@@ -16,7 +16,11 @@ RUN is `ACCEPTED` only when ALL of these hold:
    (or none) and no resolution;
 4. no required TC is `NOT_RUN` / `INCOMPLETE` because of an admission timeout, host pressure, a deferred wait,
    the environment lease or missing coordination (`no safe coordination`);
-5. the smoke gate produced a verdict (not `NO VERDICT`) whenever the phase had smoke TCs.
+5. the smoke gate produced a verdict (not `NO VERDICT`) whenever the phase had smoke TCs;
+6. (3.0, API / DB) no required TC is `NOT_RUN` for a reason the run must fix (`mapping unresolved`, `db unavailable`,
+   `config missing`, `layer unknown`) or `INCOMPLETE` `evidence_invalid`; no TC the tester consented to was refused its
+   data change; no data change of the run is still in doubt. A TC the tester did NOT consent to is reported, never a
+   reason.
 
 Otherwise the run is `NOT ACCEPTED — {reasons}`: the return is `## BLOCKED` with the acceptance record —
 never `AUTOMATION COMPLETE`, however green the suite. The pre-gate verdict written into the draft run file is
@@ -54,8 +58,8 @@ A passing suite is not a passed gate.
 - **Quality issues left open:** {unverified assumptions carried into the run (TC-IDs) · unresolved timeouts · isolation findings and their cause / resolution · readiness skips and stamped values routed to skill 3 · configurations not merged · capacity: lowered / pressure episodes / deferrals / admission timeouts} — or `none`
 
 ### Links
-- **Run report:** {run_report_html} (markdown {run_report_md}, `## Phase {N}`) · **Bug report:** {bug_report_md} — {n} new · {n} retested · {n} resolved
-- **Evidence:** {screenshots_root}/phase-{N}/ ({N} images) · stage results {results_root}/artifacts/stages/ · run file {run_file} · progress log {logs_root}/run-progress-{stamp}.log
+- **Run report:** {run_report_html} (markdown {run_report_md}, `## Phase {N}`) — markdown only: {run_report_md} (`## Phase {N}`), no page by the run's choice · **Bug report:** {bug_report_md} — {n} new · {n} retested · {n} resolved
+- **Evidence:** {screenshots_root}/phase-{N}/ ({N} images — screenshots: every TC | failed TCs only | none) · stage results {results_root}/artifacts/stages/ · run file {run_file} · progress log {logs_root}/run-progress-{stamp}.log
 - **Also:** coverage {coverage_root} · automation inventory {reports_folder}/automation-inventory.md · gate records {results_root}/.runs/
 
 ### Your decision / action
@@ -124,7 +128,7 @@ lives). A line that does not hold → `## BLOCKED` for the affected scope.
       `<scratch_investigation>`)
 - [ ] Both gates decided by `check.mjs gate` — gate-record files `.runs/phase-{N}.checkpoint-{A|B}.json`, every
       result for the current snapshot, none missing / stale / contradictory / duplicate; the report set was
-      DRAFTED, frozen, checked and then published by `run-data.mjs publish` (byte-identical, page reproduced);
+      DRAFTED, frozen, checked and then published by `run-data.mjs finalize` / `publish` (byte-identical, page reproduced);
       the run `ACCEPTED` per `<run_acceptance>` (compliance §1, `<publication>`)
 - [ ] Every Playwright command ran inside the capacity ledger (or the payload says why it was off), under the
       environment lease acquired at intake and released at close-out; every lowering, pressure episode,
@@ -205,14 +209,17 @@ lives). A line that does not hold → `## BLOCKED` for the affected scope.
 - [ ] `@smoke` tags only from the TC document's `Smoke:` field
 
 **Evidence and report**
-- [ ] Every attempt's assertion-point image and every failed attempt's failure image at the
+- [ ] The delivery question asked at the start (or answered by `--report` / `--screenshots`; pipeline: html + all)
+      and recorded in `{run_file}.delivery` (`intake.md` item 4)
+- [ ] Every image the screenshot choice owes — `all`: every attempt's assertion-point image and every failed
+      attempt's failure image; `failed`: the failed attempts' images; `none`: none — at the
       `<result_organization>` path, recorded in the run file; nothing under `screenshots/` overwritten
-      or deleted; evidence sanity check done, every `evidence_failure` healed by moving the call
+      or deleted; evidence sanity check done on every PASS image, every `evidence_failure` healed by moving the call
 - [ ] `{run_file}.merged` per `<second_run>` step 2 — every variant and attempt, the latest the status of
       record, PASS only when every `required_variants` entry passed, a multi-`[TC-ID]` title credited
       to each TC; phase auto-incremented, no earlier phase rewritten
-- [ ] Run file finalized, `## Phase {N}` appended, page rendered by `render-run-report.mjs` with gate
-      PASS and `selftest-run-report.mjs` passing (run-report.md §1-§2)
+- [ ] Run file finalized, `## Phase {N}` appended, renderer gate PASS on the markdown and `selftest-run-report.mjs`
+      passing (run-report.md §1-§2); the page written by `render-run-report.mjs` only under `delivery.report: html`
 - [ ] Bug file per run-report.md §5 and `<bug_report_format>`: plain-sentence titles, numbered steps from
       login, one-sentence Expected / Actual, root cause + screenshot; `resolved (phase N)` only after a
       passing retest

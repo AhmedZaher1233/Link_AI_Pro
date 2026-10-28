@@ -113,6 +113,8 @@ returned without error only says the action was issued. Before a TC becomes `PAS
 | the assertion-point image exists but shows a post-cleanup / post-navigation screen | `INCOMPLETE` — the file stays (nothing under `screenshots/` is overwritten), no new attempt (attempts are for environment failures only) | `evidence_failure` | the next phase runs the TC again |
 | the session died mid-TC (`browser-cli.md` §9) | `INCOMPLETE` | `interrupted: session lost at step {n}` | not re-run this phase |
 | the first `[HUMAN]` step reached and every step before it passed | `PARTIAL — human step pending` | `human step: {n}` | image of the last executed step; listed under "Needs a human run"; never `PASS`, never counted as passed; the phase is `INCOMPLETE` at best |
+| every UI step passed and the TC has an `[API]` / `[DB]` line (skipped — out of tool), or a UI step needs a `$name` a skipped line captures | `PARTIAL — api/db step pending` | `out of tool: api/db step {n}` (the first backend line) | image of the last executed UI step; listed under "Needs the automation (skill 5)"; never `PASS`; a UI step that FAILs before is reported as that `FAIL` with its bug |
+| the TC has no UI line at all (layer `api` / `db` / `api+db`) | `NOT_RUN` | `—` | reason `not started: api/db only — run skill 5` |
 | data the TC needs is `MISSING` and no way to prepare it was found after the whole search (§4), the preparation failed / was not confirmed, or a token has no row | `SKIP` | `data_missing` | `### Test-data readiness` row `skip — data_missing` + the Skips row with the precise reason |
 | data the TC needs is `NOT CREATABLE` — evidence that the state cannot exist on this environment (§4) | `SKIP` | `—` | reason `not creatable — {evidence}` in `### Skips and residual failures`; readiness row `skip — not creatable` |
 | the QC declined the preparation (endpoint from the source code / database) | `SKIP` | `—` | reason `QC declined (data preparation through {way})`; readiness row `skip — QC declined` |
@@ -124,7 +126,7 @@ returned without error only says the action was issued. Before a TC becomes `PAS
 **A TC never heals and never re-runs to make a failure disappear.** The only second attempt is
 the one after an environment failure; a `FAIL · app_bug` (including a failed AI hard check), `assertion_failure`, `ai_rubric_failure`
 or `timeout_failure` on a reachable page is final for this phase. A `[HUMAN]` TC is never
-`PASS`; a TC without an image is never `PASS`.
+`PASS`; a TC with an `[API]` / `[DB]` line is never `PASS`; a TC without an image is never `PASS`.
 
 ## 4. Test data — one read-only look per item, then prepare what is absent
 

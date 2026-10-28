@@ -142,6 +142,9 @@
 <!-- {{#if ok}} -->
               <span class="shot"><a class="view" href="{{href}}" data-viewer data-group="{{group}}" data-title="{{title}}"><img src="{{href}}" loading="lazy" alt="{{title}}"></a><a class="view-link" href="{{href}}" data-viewer data-group="{{group}}" data-title="{{title}}">View screenshot</a></span>
 <!-- {{/if}} -->
+<!-- {{#if record}} -->
+              <span class="shot"><a class="view-link" href="{{href}}" target="_blank" rel="noopener">View record</a><span class="lbl">{{record_kind}} record</span></span>
+<!-- {{/if}} -->
 <!-- {{#if missing}} -->
               <span class="badge missing">file not found · {{label}}</span>
 <!-- {{/if}} -->
@@ -161,6 +164,9 @@
 <!-- {{#each evidence}} -->
 <!-- {{#if ok}} -->
                     <span class="shot"><a class="view" href="{{href}}" data-viewer data-group="{{group}}" data-title="{{title}}"><img src="{{href}}" loading="lazy" alt="{{title}}"></a><a class="view-link" href="{{href}}" data-viewer data-group="{{group}}" data-title="{{title}}">View screenshot</a></span>
+<!-- {{/if}} -->
+<!-- {{#if record}} -->
+                    <span class="shot"><a class="view-link" href="{{href}}" target="_blank" rel="noopener">View record</a><span class="lbl">{{record_kind}} record</span></span>
 <!-- {{/if}} -->
 <!-- {{#if missing}} -->
                     <span class="badge missing">file not found · {{label}}</span>
@@ -302,6 +308,45 @@
 <!-- {{/if}} -->
 <!-- {{/if}} -->
 
+<!-- {{#if has_retained}} -->
+        <h3 class="sub-head">Retained test records</h3>
+        <div class="tablewrap"><table>
+          <thead><tr>
+<!-- {{#each retained.header}} -->
+            <th>{{text}}</th>
+<!-- {{/each}} -->
+          </tr></thead>
+          <tbody>
+<!-- {{#each retained.rows}} -->
+            <tr>
+<!-- {{#each cells}} -->
+              <td>{{text}}</td>
+<!-- {{/each}} -->
+            </tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{/if}} -->
+<!-- {{#if has_in_doubt}} -->
+        <h3 class="sub-head">In-doubt test records</h3>
+        <p class="line">Writes a crash left unresolved — excluded from every cleanup until the tester resolves them; the run is not accepted while any remains.</p>
+        <div class="tablewrap"><table>
+          <thead><tr>
+<!-- {{#each in_doubt.header}} -->
+            <th>{{text}}</th>
+<!-- {{/each}} -->
+          </tr></thead>
+          <tbody>
+<!-- {{#each in_doubt.rows}} -->
+            <tr>
+<!-- {{#each cells}} -->
+              <td>{{text}}</td>
+<!-- {{/each}} -->
+            </tr>
+<!-- {{/each}} -->
+          </tbody>
+        </table></div>
+<!-- {{/if}} -->
 <!-- {{#if has_deviations}} -->
         <h3 class="sub-head">Deviations</h3>
         <ul>
@@ -373,6 +418,9 @@
 <!-- {{#each screenshot}} -->
 <!-- {{#if ok}} -->
           <span class="shot"><a class="view" href="{{href}}" data-viewer data-group="bugs" data-title="{{title}}"><img src="{{href}}" loading="lazy" alt="{{title}}"></a><a class="view-link" href="{{href}}" data-viewer data-group="bugs" data-title="{{title}}">View screenshot</a></span>
+<!-- {{/if}} -->
+<!-- {{#if record}} -->
+          <span class="shot"><a class="view-link" href="{{href}}" target="_blank" rel="noopener">View record</a><span class="lbl">{{record_kind}} record</span></span>
 <!-- {{/if}} -->
 <!-- {{#if missing}} -->
           <span class="badge missing">file not found · {{label}}</span>

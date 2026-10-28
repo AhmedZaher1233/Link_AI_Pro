@@ -14,6 +14,8 @@
 //   PW_WORKERS          workers for this command, decided by the runner (Auto ceiling, ramp, admission; 1 when serial)
 //   PW_VIDEO=1          keep video on failure while investigating a freeze (off by default)
 //   PW_PHASE / PW_STAGE_ATTEMPT   used by helpers/evidence.ts and helpers/test-data.ts
+//   PW_SCREENSHOTS      the run's screenshot choice for helpers/evidence.ts: all (default) · failed (images only for a failing
+//                       attempt) · none (no image) — records of API / DB tests are written whatever it says
 //   PW_RATE_LIMIT_FILE  this command's request records (helpers/network-guard.ts: refused / unavailable / server-error /
 //                       policy / network-error, origin + path template only) and the pacing records of helpers/rate-limit.ts
 //   PW_RATE_LIMIT_STATE the slot book helpers/rate-limit.ts shares — per environment across runs (the coordination
@@ -27,6 +29,14 @@
 //   PW_CANCEL_FILE      appears when the stage stops — every helper wait (admission, rate limit) ends at once
 //   PW_DIAGNOSTICS_DIR  where the stall detector of helpers/steps.ts writes its snapshot (screenshot, ARIA, in-flight)
 //   PW_ENV_ID           the environment identity the runner's lease and the shared slot book are keyed by
+//   PW_SCREENSHOTS_ROOT the story's evidence root — the API / DB records land beside the images (helpers/record.ts)
+//   PW_API_HOSTS        the permitted API origins (TEST-DATA `API base` rows) — every request and redirect target is checked
+//                       against them BEFORE it is sent (helpers/api-record.ts)
+//   PW_DATA_LEDGER_FILE / PW_DATA_LEDGER_DIR / PW_RUN_ID  the ownership ledger of every data change (helpers/data-ledger.ts)
+//   PW_DATA_CHANGES_TCS the TCs the tester allowed to change data this run — set only for a verified, non-production target
+//   PW_DATA_CHANGES_SETUP=allowed  the test-data preparation consent (setup writes)
+//   PW_DB_EXPECTED_IDENTITY / PW_DB_PRODUCTION_MARKERS / PW_DB_ENV_VAR  the database the TEST-DATA `Database` row names,
+//                       the production markers, the QC-named connection variable (helpers/db.ts, helpers/db-record.ts)
 //   BASE_URL / PW_LOCALE / PW_TZ  from the project's env layer (utils/env.ts) — never hardcoded here
 // Every one of them is optional: without it the helper that reads it is inert.
 import { defineConfig, devices } from '@playwright/test';
@@ -80,6 +90,11 @@ export default defineConfig({
     // The browser project the skill runs ({browser_project}). Keep the name stable: it is part of every
     // evidence path ({project}--{variation}--r{n}). Add an 'ar' project with locale 'ar-SA' ONLY when the
     // application reads the browser locale; otherwise locale variants switch language through the page object.
-    { name: 'chromium', use: { ...devices['Desktop Chrome'], channel: 'chrome' } },
+    // *.api.spec.ts / *.db.spec.ts never run here — they belong to the backend project below.
+    { name: 'chromium', testIgnore: /\.(api|db)\.spec\.[cm]?[jt]s$/, use: { ...devices['Desktop Chrome'], channel: 'chrome' } },
+    // The BACKEND project (skill 5 3.0): pure [API] / [DB] test cases — no page fixture is ever requested, so no browser
+    // starts; the runner reserves them as `backend` capacity. A hybrid TC (a UI step plus an [API] / [DB] check) stays
+    // in the browser project. The name is part of every record path, like the browser project's.
+    { name: 'backend', testMatch: /\.(api|db)\.spec\.[cm]?[jt]s$/, use: { baseURL: process.env.API_BASE_URL ?? process.env.BASE_URL } },
   ],
 });

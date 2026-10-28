@@ -1,6 +1,6 @@
-# Toolchain — Node.js, NPM, Playwright, playwright-cli (skills 3c, 5b and 9), Python + Pillow (link-qc-6-ui-testing)
+# Toolchain — Node.js, NPM, Playwright, type definitions (skill 5), playwright-cli (skills 3c, 5b and 9), Python + Pillow (link-qc-6-ui-testing)
 
-Load only when `validate-setup.mjs` reports `Node.js`, `NPM`, `Playwright`, `Playwright cfg`,
+Load only when `validate-setup.mjs` reports `Node.js`, `NPM`, `Playwright`, `Playwright cfg`, `Automation types`,
 `Playwright CLI` or `Python + Pillow` as FAIL/WARN and the mode allows repair (B, C, new
 project). In Mode A the rows are reported as-is with "would be fixed by B".
 
@@ -23,6 +23,30 @@ project). In Mode A the rows are reported as-is with "would be fixed by B".
   Never reinstall a working setup.
 * Installation commands (`npm install`, `npx playwright install`) run under the normal
   permission flow — they are not pre-approved.
+
+## Type definitions — `@types/node` + `typescript` in the automation project (row `Automation types`)
+* Why: skill 5 copies TypeScript helpers into the automation project (`helpers/*.ts`) that import `node:fs` /
+  `node:crypto` / `node:path` and read `process.env`, and its Checkpoint A runs the project's own `tsc --noEmit`.
+  Without these two devDependencies the editor shows "Cannot find name 'process'" / "Cannot find module 'node:fs'" and
+  Checkpoint A's type check fails or cannot run. `npm init playwright` adds `@types/node` already; older or hand-made
+  projects often lack it.
+* Detected by `scanAutomationTypes()` (preflight `automationTypes`): the automation root from `qa-manifest.json`
+  `paths.automationRoot`, else `Testing/Automation/`, else the project root; each package must be declared in its
+  `package.json` AND present in `node_modules` (searched upward — hoisted workspaces count). Not a Playwright project
+  (no `@playwright/test`) or no `package.json` yet → `NOT_RUN`.
+* Install (Mode B/C/new, row WARN): in the automation root, under the normal permission flow —
+  `npm install --save-dev @types/node typescript` (only the missing ones: the row and `automationTypes.installCommand`
+  name them). Never a global install, never a version pin of your own (npm records the resolved range), never over a
+  project whose `package.json` does not parse. A new project gets them with the Playwright setup in the same step.
+* Verify: run `validate-setup.mjs` again — the row reads PASS with the installed versions. A project that keeps its own
+  `tsconfig.json` with a `types` list must include `"node"` in it (say so when the row is PASS but the user still sees
+  the error in the editor); the row never edits a `tsconfig.json`.
+
+## Database driver — skill 5 3.0, only for TCs with `[DB]` steps (not checked here)
+* Skill 5 detects the project's DB client (`pg`, `mssql`, `mysql2`, `oracledb`, `prisma`, `knex`, `typeorm`,
+  `sequelize`) at intake and, when there is none, asks ONCE to add the matching devDependency; setup never installs
+  one and has no row for it. The connection string lives only in a QC-named environment variable (`QA_DB_URL` /
+  `QA_DB_{NAME}_URL`) — never in `.env`, `.mcp.json` or the learning file.
 
 ## playwright-cli — the browser tool of skills 3c, 5b and 9 only (optional)
 

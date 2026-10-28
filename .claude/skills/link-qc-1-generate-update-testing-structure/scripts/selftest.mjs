@@ -38,12 +38,13 @@
 //        ~/.link-ai-pro/capacity; writable through its nearest parent), the ceiling from config.json only (no file → 2,
 //        invalid → 1), QA_MAX_WORKERS / manifest execution.maxWorkers only lower, QA_LEDGER=off = exclusive execution, a torn
 //        ledger.json; validate-setup's Execution limits / Coordination directory rows; the constants agree with skill 5.
+//   16   Automation type definitions (skill 5): scanAutomationTypes() + the validate-setup row `Automation types`.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { parseArgs, print, run, planMcpMigration, applyMcpMigration, detectAdoHosting, scanMcp, scanPat, inspectAdoEntry, inspectAdoAttachmentsEntry, scanAdoAttachments, adoAttachmentsLauncherAssetPath, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, PAT_VARS, DOCX_SERVER, DOCX_ARGS, planReplace, SKILLS, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER, ADO_ATTACHMENTS_PACKAGE_PIN, skillVersion, compareSemver, versionStatus, scanSuite, argValues, syncSummary, scanExecutionLimits, CAPACITY_DEFAULT_CEILING, CAPACITY_AUTO_MAX, CAPACITY_FALLBACK_CEILING, CAPACITY_WORKER_DEMAND, CAPACITY_DIR_VAR, CAPACITY_MAX_WORKERS_VAR } from './lib.mjs';
+import { parseArgs, print, run, planMcpMigration, applyMcpMigration, detectAdoHosting, scanMcp, scanPat, inspectAdoEntry, inspectAdoAttachmentsEntry, scanAdoAttachments, adoAttachmentsLauncherAssetPath, ADO_SERVER, ADO_CLOUD_PACKAGE, ADO_SELF_HOSTED_PACKAGE, PAT_VAR_CLOUD, PAT_VAR_SELF_HOSTED, PAT_VARS, DOCX_SERVER, DOCX_ARGS, planReplace, SKILLS, ADO_ATTACHMENTS_SERVER, ADO_ATTACHMENTS_LAUNCHER, ADO_ATTACHMENTS_PACKAGE_PIN, skillVersion, compareSemver, versionStatus, scanSuite, argValues, syncSummary, scanExecutionLimits, scanAutomationTypes, CAPACITY_DEFAULT_CEILING, CAPACITY_AUTO_MAX, CAPACITY_FALLBACK_CEILING, CAPACITY_WORKER_DEMAND, CAPACITY_DIR_VAR, CAPACITY_MAX_WORKERS_VAR } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -406,6 +407,44 @@ for (const [id, fixture, expectDocxAction] of [[1, 'cloud.mcp.json', 'mcp-added'
   }
   check(15, 'execution limits: default / QA_CAPACITY_DIR / relative ignored; Auto ceiling from the host, config.json only bounds it, overrides only lower, invalid → 1, unusable readings → fallback; QA_LEDGER=off / saved QA_LEDGER reported; validate-setup rows (torn ledger FAIL, raise attempt WARN); constants agree with skill 5',
     dirOk && ceilOk && modeOk && rowsOk && mirror !== 'differ', { dirOk, ceilOk, modeOk, rowsOk, mirror, rTorn, rOk, rRaise });
+}
+
+// 16 — automation type definitions (skill 5): scanAutomationTypes() finds the automation root (manifest → Testing/Automation
+//      → root), needs @types/node + typescript declared AND installed (hoisted counts), only for a Playwright project;
+//      validate-setup's `Automation types` row: WARN with the install command / PASS / NOT_RUN.
+{
+  const mk = (name, pkg, { manifest = null, installed = [], hoisted = [] } = {}) => {
+    const r = path.join(tmp, 'types-' + name);
+    const auto = path.join(r, manifest || 'Testing/Automation');
+    fs.mkdirSync(auto, { recursive: true });
+    if (manifest) { fs.mkdirSync(path.join(r, 'Testing'), { recursive: true }); fs.writeFileSync(path.join(r, 'Testing', 'qa-manifest.json'), JSON.stringify({ paths: { automationRoot: manifest } })); }
+    if (pkg) fs.writeFileSync(path.join(auto, 'package.json'), JSON.stringify(pkg));
+    for (const [base, list] of [[auto, installed], [r, hoisted]]) for (const p of list) { const d = path.join(base, 'node_modules', ...p.split('/')); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, 'package.json'), JSON.stringify({ name: p, version: '9.9.9' })); }
+    return r;
+  };
+  const pw = { devDependencies: { '@playwright/test': '^1.50.0' } };
+  const both = { devDependencies: { '@playwright/test': '^1.50.0', '@types/node': '^22', typescript: '^5' } };
+  const sNone = scanAutomationTypes(mk('none', pw));
+  const sDeclared = scanAutomationTypes(mk('declared', both));
+  const sOk = scanAutomationTypes(mk('ok', both, { installed: ['@types/node', 'typescript'] }));
+  const sHoisted = scanAutomationTypes(mk('hoisted', both, { hoisted: ['@types/node', 'typescript'] }));
+  const sManifest = scanAutomationTypes(mk('manifest', pw, { manifest: 'e2e' }));
+  const sNotPw = scanAutomationTypes(mk('notpw', { devDependencies: {} }));
+  const sNoPkg = scanAutomationTypes(mk('nopkg', null));
+  const scanOk = stable(sNone.missing) === stable(['@types/node', 'typescript']) && sNone.installCommand === 'npm install --save-dev @types/node typescript' && sNone.automationRoot === 'Testing/Automation'
+    && stable(sDeclared.missing) === stable(['@types/node', 'typescript'])
+    && sOk.missing.length === 0 && sOk.installed['@types/node'] === '9.9.9' && sOk.installCommand === null
+    && sHoisted.missing.length === 0
+    && sManifest.automationRoot === 'e2e' && sManifest.missing.length === 2
+    && sNotPw.playwrightProject === false && sNotPw.missing.length === 0
+    && sNoPkg.packageJson === false && sNoPkg.missing.length === 0;
+  const rowOf = (r) => { const out = spawnSync(process.execPath, [path.join(here, 'validate-setup.mjs'), '--root', r], { encoding: 'utf8', timeout: 120000 }); try { return (JSON.parse(out.stdout).rows || []).find((x) => x.item === 'Automation types') || null; } catch { return null; } };
+  const rWarn = rowOf(path.join(tmp, 'types-none'));
+  const rPass = rowOf(path.join(tmp, 'types-ok'));
+  const rNa = rowOf(path.join(tmp, 'types-nopkg'));
+  const rowsOk = rWarn?.status === 'WARN' && /npm install --save-dev @types\/node typescript/.test(rWarn.reason) && rPass?.status === 'PASS' && rNa?.status === 'NOT_RUN';
+  check(16, 'automation type definitions: @types/node + typescript declared AND installed (hoisted counts) in the automation root (manifest → Testing/Automation → root), only for a Playwright project; validate-setup row WARN with the install command / PASS / NOT_RUN',
+    scanOk && rowsOk, { sNone, sDeclared, sOk, sHoisted, sManifest, sNotPw, sNoPkg, rWarn, rPass, rNa });
 }
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}

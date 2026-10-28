@@ -27,6 +27,13 @@ close-out checks do not apply; no test in scope uses a modifier so the modifier-
 no subject; the project has no API fixtures so the teardown-for-`api_setup` check has no subject.
 The reason must name **why the rule has no subject**, not why you did not get to it.
 
+**Browser-evidence items in a backend-only scope (3.0).** Items 14, 15, 16a, 19, 46a, 46b and 49 have no subject only when
+no TC and no test in scope is `ui` / `hybrid` — the `no-browser-tests` predicate, decided by `check.mjs` from the
+validator's `counts.layers` AND `tcLayer` over the TC document. A model-written N/A for them is rejected; when either
+side shows a browser test (or a test whose layer is unresolved) they stay applicable, and at B they are never N/A.
+Items 51-54 are N/A only when their own predicate (`api-tests`, `db-tests`, `data-changes`, `api-db-tests`) has no
+subject; 54 is never N/A while any API / DB test is in scope.
+
 It is **never** correct to record `N/A` because:
 
 - the validator could not analyse a file (that is `unresolved` — the check applies, the tool
@@ -98,6 +105,27 @@ actually checked.
 
 ---
 
+### One command per checkpoint — the deterministic steps are the script's, the verdicts are the gate's
+
+`check.mjs checkpoint --checkpoint A|B` (B through `run-data.mjs finalize`) runs, in order and stopping at the first
+failure: (B: a valid, applicable PASS of Checkpoint A covering every final file at its current content; the
+results-freshness check written to the draft run file) → snapshot (the freeze) → the mechanical checks (reused only
+when a COMPLETE earlier run recorded them for this snapshot and the same tools) → (B: the runtime checks) → then either
+`AWAITING_REVIEW` — exit 4, the expected handoff, with `artifacts/checks/{snapshot}/semantic-{A|B}.template.json`
+listing every semantic result still missing, its `status` / `reason` / `evidence` EMPTY — or, with `--review
+{semantic.json}` (a batch naming the frozen snapshot), the validated batch and the gate. It never writes a semantic
+verdict, and a template copied back unfilled is rejected. Exit codes (always, not only `--strict`): PASS 0 · FAIL 1 ·
+BLOCKED 2 · NOT_RUN 3 · AWAITING_REVIEW 4.
+
+**Coordination is bounded and never mistaken for a result.** The compliance processes take their slots in the capacity
+ledger inside ONE `--max-wait` budget per call (default 120 s, capped at 240 s) covering every lock and reservation;
+holders are re-judged on a fresh process table while waiting, and partial reservations are released on any failure. No
+slot within the budget → `BLOCKED` with `coordination { outcome, waitedMs, holders[] }` naming each holder (run id, run
+file, age, alive) — a coordination failure, not a code or test result: nothing is recorded, the same call later records
+afresh. Wait for the holder, or let `capacity.mjs sweep` free an ended one; a forced release is the user's last resort,
+never yours. `--no-ledger` / `QA_LEDGER=off` take the established exclusive reservation, bounded the same way; no safe
+coordination → BLOCKED before any tool starts.
+
 ## 2. The reusable checklist
 
 Derived from every rule `SKILL.md` and its references encode, not only from the validator's rule list. For each item:
@@ -134,10 +162,10 @@ Items marked `M+S` need both — a clean grep does not prove compliance.
 | 14 | Every test captures assertion-point evidence — **directly or through a method it calls**. Never report it missing from a direct-call search alone | M + S | A |
 | 15 | Evidence is never captured from `afterEach`/`afterAll`; exactly one per test | M | A |
 | 16a | The call sits at the assertion point and before teardown (code) | S (the scanner cannot prove placement) | A, B |
-| 16b | This phase's heartbeats show each PASS test's `evidence` record BEFORE its `teardown` record | M (`run-data.mjs verify`) | **B only** |
+| 16b | This phase's heartbeats show each PASS test's `evidence` record BEFORE its `teardown` record — the evidence that test owes under the run's screenshot choice (`delivery.screenshots`: a PASS owes no image under `failed` / `none`; a record is always owed); none owed → PASS "nothing to order" | M (`run-data.mjs verify`) | **B only** |
 | 17 | Evidence helper, screenshot config and output roots exist and are writable | S | A |
-| 18 | The images, the run file (`.runs/phase-N.json`), the report's phase section, the bug file entries and the rendered HTML were **actually produced**, associated with the right TC, and correspond to the final tested code | S | **B only** |
-| 19 | No PASS whose image shows a cleaned-up screen | S | **B only** |
+| 18 | The images, the run file (`.runs/phase-N.json`), the report's phase section, the bug file entries and the rendered HTML were **actually produced**, associated with the right TC, and correspond to the final tested code — the images the run's screenshot choice owes (`all`: every executed attempt; `failed`: failing attempts; `none`: none) and the page only under `delivery.report: html` | S | **B only** |
+| 19 | No PASS whose image shows a cleaned-up screen — under `screenshots: failed` / `none` no PASS has an image: PASS with that reason (never N/A) | S | **B only** |
 
 At Checkpoint A only the *implementation and configuration* of evidence and reporting are verified.
 Runtime artifacts do not exist yet: record them as `scheduled for Checkpoint B`, **never PASS**.
@@ -201,6 +229,15 @@ Runtime artifacts do not exist yet: record them as `scheduled for Checkpoint B`,
 | 49 | The network guard is attached in every spec's `beforeEach` / `afterEach` beside the console guard; every limited mid-test call goes through `rateLimitSlot()` in the page-object method right before the triggering action; no other pacing sleep in any layer | M (`network-guard-missing`) + S | A, B |
 | 50 | No scratch probe in the delivered scope: `scratch.mjs clean` returned `removed` / `absent`, and no scratch output is cited as a TC result, evidence, re-run, burn-in, isolation or freshness proof (`<scratch_investigation>`) | S | A, B |
 
+### API and DB layers (3.0 — `api-db.md`, `code-craft.md` §16-19)
+
+| # | Check | How | Gate |
+|---|---|---|---|
+| 51 | `[API]` lines run through `api/` endpoint clients over the recorded request: every call declares the effect of its mapping row (from a verified contract, never the HTTP method), `maxRedirects: 0`, no raw request, no auth literal; the document layer and the code layer agree | M (`api-*`, `layer-mismatch`, `layer-unresolved`) + S | A, B |
+| 52 | `[DB]` lines run through `db/` query objects over the recorded client: no SQL or driver in a spec, structured writes only, the connection only from the QC variable, the identity verified | M (`db-*`) + S | A, B |
+| 53 | Data changes: every write consented for its TC, on a `test` / `staging` target, on run-owned records only (cascade closure, triggers, row count verified), read back, then torn down or retained — nothing in doubt, nothing refused left unreported | M (`*-unledgered`, `run-data.mjs verify`) + S | A (code), B (ledgers) |
+| 54 | A valid redacted record for every API / DB / hybrid attempt — one per test at its assertion point, schema `skill5-record/1`, matching its TC and attempt, every backend Expected line with a passing assertion in a PASS, no secret | M (`record-*`, `run-data.mjs verify`) + S | A (code), B (records) |
+
 ---
 
 ## 3. Checkpoint A — before execution
@@ -219,13 +256,12 @@ fixtures, helpers, configuration and evidence/reporting code they touch.
 
 **Procedure:**
 
-1. **Snapshot, then the mechanical checks in ONE call.** Freeze the scope, then let `check.mjs` run the
-   project's own type check, the validator, the config inventory and — with `--lint`, where the project has
-   a typed ESLint — the lint, side by side within the compliance limit (2 processes, through the capacity
-   ledger's `compliance` class), and write one mechanical result per tool against the snapshot:
+1. **ONE command: snapshot, then the mechanical checks** (§1 *One command per checkpoint*). It freezes the scope and
+   runs the project's own type check, the validator, the config inventory, the run protections and — with `--lint`,
+   where the project has a typed ESLint — the lint, within the compliance limit and the coordination budget, then
+   stops at `AWAITING_REVIEW` with the review template:
    ```text
-   node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs snapshot --checkpoint A --root . --results-root {results_root} --phase {N} --files {in-scope specs + the page objects, components, fixtures and helpers they touch} --tc {source_tc_doc} --data {TEST-DATA md} --req {REQ files} --run-file {run_file} --inventory {reports_folder}/automation-inventory.md --require-steps
-   node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs run --root . --files {the same list} --tc {source_tc_doc} --req {REQ files} --inventory {reports_folder}/automation-inventory.md --require-steps --results-root {results_root} --snapshot {snapshotId} [--lint]
+   node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs checkpoint --checkpoint A --root . --results-root {results_root} --phase {N} --files {in-scope specs + the page objects, components, fixtures and helpers they touch} --tc {source_tc_doc} --data {TEST-DATA md} --req {REQ files} --run-file {run_file} --inventory {reports_folder}/automation-inventory.md --require-steps [--lint]
    ```
    `--files` carries the page objects and helpers too: the wait, positional-selector and
    `networkidle` rules apply in every layer, and a file the scanner never sees is never checked.
@@ -249,19 +285,18 @@ fixtures, helpers, configuration and evidence/reporting code they touch.
    recommendations — never defer them, never list them for the user to approve, never ask anyone
    to say "fix 1". Only an unresolved **business** decision (one that changes what the expected
    behaviour is) goes to the user.
-4. **Repeat the affected checks after every repair** — a repair invalidates what it touched: take a new
-   snapshot and run `check.mjs run` again (its results belong to the new snapshot id; the old ones are stale).
+4. **Repeat the affected checks after every repair** — a repair invalidates what it touched: run the same
+   `check.mjs checkpoint` command again (a new snapshot id; the old results are stale).
 5. **Proceed with the compliant scope only.** Tests still blocked are isolated and reported
    against the original scope; the run continues for everything independent of them.
-6. **Record every semantic result in ONE batch, then let the gate decide.** One result per check (`unit: scope`)
-   for every `S` item of §2 gated A — `verified-semantic` with `file:line` evidence, or `unresolved` with why;
-   runtime items are recorded `scheduled-for-B` by the gate itself. Write them all to
-   `{results_root}/artifacts/checks/{snapshotId}/semantic-A.json` — `[{ "check": "{id}", "unit": "scope", "status":
-   "verified-semantic", "reason": "{what was read and decided}", "evidence": ["{file:line}", …], "executor":
-   "SB-{P|Q|E|D|H}" }, …]` — and record the file with one call:
+6. **Fill the review template, then let the gate decide — the same command with `--review`.** Copy
+   `artifacts/checks/{snapshotId}/semantic-A.template.json` to `semantic-A.json` beside it and fill EVERY entry from your
+   review: `verified-semantic` with `file:line` evidence, `unresolved` with why, or `FAIL`; runtime items are recorded
+   `scheduled-for-B` by the gate itself. The file is `{ "snapshot": "{snapshotId}", "results": [{ "check": "{id}", "unit":
+   "scope", "status": "…", "reason": "{what was read and decided}", "evidence": ["{file:line}", …], "executor":
+   "SB-{P|Q|E|D|H}" }, …] }`:
    ```text
-   node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs record --results-root {results_root} --snapshot {snapshotId} --batch {results_root}/artifacts/checks/{snapshotId}/semantic-A.json
-   node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs gate --checkpoint A --results-root {results_root} --phase {N} --snapshot {snapshotId}
+   node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs checkpoint --checkpoint A {the same arguments as step 1} --review {results_root}/artifacts/checks/{snapshotId}/semantic-A.json
    ```
    The batch is checked as a whole before anything is written: an invalid entry, a second result for the same check,
    one that contradicts or repeats a recorded result, another snapshot id or a scope that changed since the snapshot
@@ -330,25 +365,22 @@ The procedure of record is §4a (`<checkpoint_b>`), including what to do when it
 debugging, before `AUTOMATION COMPLETE`. Work the §2 checklist again. **Order: drafts → freeze →
 validations → gate → publish** (`<publication>` in `final-run.md`): the run file, the report, the bug file and
 the draft page are written as DRAFTS under `{results_root}/artifacts/drafts/phase-{N}/`, the results-freshness
-check (step 4) is recorded in the draft run file's `impact.final_check`, and only then is the scope frozen:
-```text
-node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs snapshot --checkpoint B --root . --results-root {results_root} --phase {N} --files {final in-scope files} --tc {source_tc_doc} --data {TEST-DATA md} --req {REQ files} --inventory {reports_folder}/automation-inventory.md --require-steps --drafts {results_root}/artifacts/drafts/phase-{N} --screenshots {screenshots_root}/phase-{N}
-```
-Nothing is edited from here to the gate — a re-hash that differs voids the checkpoint. Gate record A must exist.
+check (step 4) is recorded in the draft run file's `impact.final_check`, and only then is the scope frozen — all of it
+done by ONE command, `run-data.mjs finalize` (`<publication>` in `final-run.md`), which calls `check.mjs checkpoint
+--checkpoint B` after drafting. Nothing is edited from the freeze to the gate — a re-hash that differs voids the
+checkpoint, and the second `finalize` call refuses rather than re-drafting. A valid, applicable PASS of Checkpoint A must
+cover every final file at its current content (refresh A on files changed by a heal first).
 
 1. **Repeat the FULL review on the FINAL code — including every file that passed Checkpoint A.**
    Debugging changes code; A's results describe the code as it was then, not as it is now.
    **Both halves again, not just the fast one:**
-   - *mechanical* — `check.mjs run … --snapshot {snapshotId B}` over the final files (type check, validator,
-     config inventory, lint — one call), which records the new `scopeDigest`;
-   - *runtime* — `node .claude/skills/link-qc-5-test-run-automation/scripts/run-data.mjs verify --run-file
-     {results_root}/artifacts/drafts/phase-{N}/.runs/phase-{N}.json --snapshot {snapshotId B}` decides the
-     runtime checks on this phase's own evidence and records them (16b, 18, 22, 23, 25b, 31-34, 37, 38, 43,
-     45, 46b, 48a, 48b, 50) — always, even when no source file changed;
+   - *mechanical* and *runtime* — run by `finalize` (type check, validator, config inventory, run protections, lint;
+     then `run-data.mjs verify` on this phase's own evidence: 16b, 18, 22, 23, 25b, 31-34, 37, 38, 43, 45, 46b, 48a, 48b,
+     50 — always, even when no source file changed); a FAIL there stops before the review with the items named;
    - *semantic* — re-review every `S` item of `references/compliance-checkpoints.md` §2 against
      the final code: layer ownership, whether each assertion still verifies its required outcome,
      evidence placement, and each honoured exception's substance. A clean re-scan is not a
-     repeated review. Record the results in one batch (`check.mjs record --batch …/semantic-B.json`, as at A).
+     repeated review. Fill `semantic-B.template.json` (as at A) and pass it to `finalize --review`.
    `check.mjs carry --from {snapshotId A} --to {snapshotId B}` may run beside it: SHADOW ONLY — it changes
    nothing about this full review.
 2. **Confirm debugging introduced no shortcuts:** no weakened assertion, no broken POM boundary,
@@ -375,22 +407,18 @@ Nothing is edited from here to the gate — a re-hash that differs voids the che
      report, never folded into the pass count;
    - Requirement → TC → automated test → execution result is mappable end to end, and the three
      coverage figures are reported separately (`<coverage_measurement>`).
-4. **Results-freshness check — every reported result ran on the code it reports.** Run
-   `node .claude/skills/link-qc-5-test-run-automation/scripts/impact.mjs select --root {automation_root}
-   --spec {spec files} --progress {results_root}/artifacts/progress --run-file {run_file}` on the
-   final code: `stale: []` for every TC reported with a result (a stale TC is re-run, or reported
-   `NOT_RUN` with `not started: code changed after its run`); every `fresh_by_member_only[]` TC
-   reviewed semantically (the changed member is truly unreachable from it — `verified-semantic` with
-   `file:line`, else re-run it); the outcome recorded in the draft run file's `impact.final_check` BEFORE
-   the freeze (the gate reads it there). This per-TC proof replaces "any result older than the last code
-   change"; an applicable check that did not run is `unresolved`, never PASS.
-5. **The gate, then publication.**
-   ```text
-   node .claude/skills/link-qc-5-test-run-automation/scripts/check.mjs gate --checkpoint B --results-root {results_root} --phase {N} --snapshot {snapshotId B}
-   ```
-   It writes `.runs/phase-{N}.checkpoint-B.json` with the frozen draft hashes. Only on `PASS`:
-   `run-data.mjs publish` promotes the drafts byte for byte and renders the page from them + the gate record
-   (`<publication>`). `FAIL` / `BLOCKED` → nothing is published; repair, re-draft, and freeze again.
+4. **Results-freshness check — every reported result ran on the code it reports.** `finalize` runs `impact.mjs
+   select` on the final code and writes the outcome to the draft run file's `impact.final_check` BEFORE the freeze (the
+   gate reads it there): `stale: []` for every TC reported with a result — a stale TC stops `finalize` (re-run it, or report
+   it `NOT_RUN` with `not started: code changed after its run`); every `fresh_by_member_only[]` TC needs your semantic
+   review (the changed member is truly unreachable from it — `file:line`, else re-run it), given as `--member-reviews
+   {json}` `{"TC-…": "file:line — why"}`; without it `finalize` stops at `AWAITING_REVIEW` (step `member-review`) before
+   the freeze. This per-TC proof replaces "any result older than the last code change"; an applicable check that did not
+   run is `unresolved`, never PASS.
+5. **The gate, then publication — `finalize --review {semantic-B.json}`.** On the frozen drafts only: the validated batch,
+   the gate (`.runs/phase-{N}.checkpoint-B.json` with the frozen draft hashes), and only on `PASS` the publication of
+   exactly those drafts (`<publication>`). `FAIL` / `BLOCKED` → nothing is published; repair, re-draft, and freeze again
+   (`finalize` without `--review`).
 
 **If an automation defect is found here:** repair it immediately → re-run the relevant static
 checks → **rerun the affected tests**, selected by `impact.mjs select` (its closure includes every

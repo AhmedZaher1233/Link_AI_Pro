@@ -24,7 +24,7 @@ applied and which skipped (with reason) in the output header.
 | **P2 — Async wait** | If a control depends on a response from another control, wait for population to complete. Confirm loading appeared then cleared. | Cascading dropdowns, dynamic lists, dependent fields |
 | **P3 — Explicit trigger** | Selections alone do NOT commit changes. Submit, apply, save, or confirm must be its own step, followed by load-then-clear confirmation. | Any commit-before-update flow |
 | **P4 — Navigation matches state** | Use the navigation type that matches state architecture. A tab switch within the same page preserves state; a full-page navigation resets it. | State persistence test cases |
-| **P5 — Page-load precondition** | Every test case must declare the view is fully loaded before any interaction: no overlay, no spinner, content visible. | Every test case that loads a screen |
+| **P5 — Page-load precondition** | Every test case must declare the view is fully loaded before any interaction: no overlay, no spinner, content visible. | Every test case that loads a screen (not a pure `api` / `db` / `api+db` TC — "API and DB test cases") |
 
 ## Automation-friendliness — the full user journey rule
 
@@ -68,6 +68,9 @@ depend on them):
 | **Logical target** | Human-readable element name with the display label in every required locale |
 | **Value / outcome** | Exact value entered or selected, or the condition being verified |
 | **Locale note** | State explicitly if text or layout differs between locales |
+
+An `[API]` / `[DB]` line follows its own grammar instead ("API and DB test cases" below): the
+method / entity is its action, the endpoint / entity its target, the payload / filter its value.
 
 BAD: "User fills the form and submits." / "Verify the result."
 GOOD: "Click the Save button — confirm the button label reads 'Save' in English and its exact
@@ -249,7 +252,7 @@ and write the reference into the TC the moment you need the thing:
 
 | ID | What | Written in the TC as |
 |---|---|---|
-| `E{n}` | an environment row — `E1` is always the application base URL; `E2`, `E3`… one per service the TCs reach (mail sandbox, SMS test provider, admin portal…). `Value` is `unknown — asked by 3b/3c` when the learning file has no `[type: env]` line for it | `Open the portal [E1]`, `Open the mail sandbox [E2]` |
+| `E{n}` | an environment row — `E1` is always the application base URL; `E2`, `E3`… one per service the TCs reach (mail sandbox, SMS test provider, admin portal, `API base`, `Database`, `Environment class`…). `Value` is `unknown — asked by 3b/3c` when the learning file has no `[type: env]` line for it. A `Database` value is a logical identity `{db name} @ {server alias} ({engine})`, never a connection string; `Environment class` is `test` / `staging` / `production` ("API and DB test cases") | `Open the portal [E1]`, `Open the mail sandbox [E2]`, `[API] GET [E3] /orders` |
 | `A{n}` | an account — one row per account, never per role (a role may own several accounts; the ID, never the role, identifies one). Username from the learning file or "unknown"; never a password | `Login as Administrator [A1]`, `the SMS received on the test phone [A2]` |
 | `D{n}` | a data item (below) | `Data Oracle: price list "Sample" [D2]`, `Shared data: order "Sample" [D3]` |
 
@@ -341,7 +344,8 @@ sub-lists; an empty optional value is `—`, never blank and never omitted. `AI 
 field that is **omitted** when it does not apply (a 2-space-indented `- ` sub-list when present —
 "AI / chatbot test cases" below). A `<!-- tc-evidence -->`
 comment after the block belongs to 3b / 3c — never write or edit one here. A step or
-expected-result line that needs a person starts with `[HUMAN] ` ("Out-of-browser outcomes").
+expected-result line that needs a person starts with `[HUMAN] ` ("Out-of-browser outcomes"); an
+API or database line starts with `[API] ` / `[DB] ` ("API and DB test cases").
 
 | Field | Description |
 |-------|-------------|
@@ -437,6 +441,80 @@ shape and adds the optional `AI Oracle` sub-list right after `Data Oracle`:
   `draft`. The field enters the canonical TC hash only when present; skill 4 publishes its lines
   verbatim in the last ADO step's expected text.
 
+## API and DB test cases — only behind the layer gate
+
+The requirement may state behaviour a screen does not show: an API's status code and response,
+a record the system stores, a status saved after a UI action. Such behaviour is designed as
+**`[API]` / `[DB]` lines** — but only for the layers the tester confirmed (SKILL.md invariant 16).
+
+**Layer gate (step 6).** Collect the **layer candidates** while reading the source: every
+statement naming an API contract (an endpoint, a request / response, a status code, an OpenAPI
+file given as input) and every persistence rule ("is stored", "an audit row is written", "the
+status is saved as …"). None → no question, UI only. Otherwise ONE question in the
+`open-questions.md` shape, joined to the step-6 ask:
+
+```text
+Q-{n} — Test layers. The source describes {n} API behaviours (REQ-…, REQ-…) and {m} persistence
+rules (REQ-…). Which layers should I design? UI only · + API · + DB · + hybrid (UI action, then an
+API / DB check) — several may be chosen. Recommendation: {e.g. + hybrid for REQ-…: the saved
+status is not visible on any screen}. Pending until answered: those REQs are designed UI-only.
+```
+
+`--layers ui,api,db,hybrid` answers it in advance. A pipeline run with no answer designs UI only
+and lists every candidate as `Q-{n} (layer candidate)`. Record the answer in the header line
+`**Test layers:** ui, api` (`deliverables.md` §2) — a record, never read as an input by a later run.
+
+**Markers.** A Steps or Expected Result line that starts with `[API] ` or `[DB] ` is a backend
+line (the `[HUMAN]` precedent — no new field). The TC's **test layer** is derived from the lines,
+never written:
+
+| Layer | When | Skill 5 runs it in | Evidence |
+|---|---|---|---|
+| `ui` | no `[API]` / `[DB]` line (every TC without the markers) | browser project | image |
+| `hybrid` | ≥ 1 unmarked step **and** ≥ 1 `[API]` / `[DB]` line | browser project | image **and** record |
+| `api` | every action step `[API]`, no `[DB]` line | `backend` project | record |
+| `db` | every action step `[DB]`, no `[API]` line | `backend` project | record |
+| `api+db` | no unmarked step, both markers | `backend` project | record |
+| `unknown` | backend markers but no `[API]` / `[DB]` action step, or an unmarked Expected line in a TC with no UI step | — the review page BLOCKs | — |
+
+Only **Steps** are actions: Preconditions, `Data effect`, cleanup notes and every other field
+never decide the layer. `[HUMAN]` is neutral. In a TC without a UI step, **every Expected line is
+marked**.
+
+**Grammar.**
+
+| Line | Shape |
+|---|---|
+| API call (Steps) | `[API] {METHOD} [E{n}] {path} as [A{n}] with [D{n}] \| {inline payload}` — `as [A{n}]` names the role, never a token or a mechanism; `with …` only when there is a body |
+| Capture | `… → capture body.{json path} as $name` (also from a UI step: `→ capture the order number shown as $order`) |
+| API assertion (Expected) | `[API] status {code}` · `[API] body.{path} = "{literal}"` \| `= $name` · `[API] body.{path} is string\|number\|boolean\|array\|object\|null` · `[API] body.{path} has {n} items` · `[API] body matches schema [E{n}]#{schema name}` · `[API] header {name} present` |
+| DB check (Steps or Expected) | `[DB] Check that the {entity} record where {attribute} = $name \| [D{n}] \| "{literal}" has {attribute} = "{literal}"` · `… has {n} rows` · `… does not exist` |
+| DB write (Steps) | `[DB] Create \| Update \| Delete the {entity} record …` — requires `Data effect` (`creates` / `modifies` / `deletes`) and names a record **created earlier in this TC** or a `[D{n}]` item whose TEST-DATA row says "created by preparation" — never a pre-existing record |
+
+- **Several calls per TC** — each `[API]` line is one call; later lines reuse `$name` values. A
+  negative response is a normal assertion (`[API] status 400`, `[API] body.error.code =
+  "VALIDATION"`). A create / update / delete TC proves the change with a read-back line (a GET or
+  a `[DB] Check …`) in the same TC.
+- **No invention.** The expected status, body and stored values come from the approved
+  requirement only. A concrete path or table / column name is written only when the approved
+  source names it (invariant 10); otherwise business words (`[API] Create an order as [A1] …`,
+  `[DB] Check that the order record …`) plus a `Q-{n}` for the contract — skill 5 maps business
+  words to an endpoint / query only from a verified contract and never guesses.
+- **Configuration by reference.** The API host is an `API base` `[E{n}]` row; a database is a
+  `Database` row (`orders DB @ db-test (PostgreSQL)`). Every environment used by a data-changing
+  TC needs an `Environment class` row — unknown counts as production, and skill 5 refuses every
+  data change there. No token, key or connection string in any line or row (a `token:` / `api key
+  =` shape is refused by skill 4).
+- **Data-changing TCs** (an `[API]` call that changes data, a `[DB]` write, or `Data effect ≠
+  read-only`) run in skill 5 only after the tester's per-run "yes" (its data-changes gate) and
+  only on records the run created; skill 5 cleans up after asking, and refuses a write it cannot
+  prove safe — so design such a TC on dedicated data.
+- **Smoke / P5.** A pure `api` / `db` / `api+db` TC has no screen: P5 and "1 smoke per screen" do
+  not apply; mark the one call that proves the service alive `Smoke: YES` when it is critical.
+- **Manual runners.** 3b / 3c / 5b cannot run a backend line: they validate the UI part and stop
+  there (`draft — not app-validated (api/db step — automation only)` / `PARTIAL — out of tool`).
+  Such a TC is normally `Automation Candidate: YES`.
+
 ## Automation suitability (proposal only — the human decides)
 
 Mark each TC as an Automation Candidate using these heuristics:
@@ -451,6 +529,7 @@ Mark each TC as an Automation Candidate using these heuristics:
 | One-time scenario with no regression value | NO — overhead exceeds value |
 | Exploratory / discovery-oriented scenario | NO — manual preferred |
 | Requirement not implemented yet (`entry-cases.md` §4 — tester's answer or skill-4 report) | Defer — mark YES/NO on merit, but note "pending implementation" |
+| `[API]` / `[DB]` lines ("API and DB test cases") | YES by default — only skill 5 can execute them; NO only with a stated reason |
 | One or more `[HUMAN]` steps ("Out-of-browser outcomes") | Does **not** force NO — decide on the steps around them. `YES` with `[HUMAN]` steps = "partially automatable — human step(s) {n}": skill 5 automates up to the first human step and reports `partial (human step: n)`; the manual-only row (category `Human-observed step`) names the human part |
 
 The human reviewer can flip any marking during review.

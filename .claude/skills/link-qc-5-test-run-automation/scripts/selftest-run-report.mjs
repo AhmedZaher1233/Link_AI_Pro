@@ -913,6 +913,105 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
   check('36 skill 9 retest update of the latest phase: 1.x and 2.0 run files render PASS, no gate claim, gate records untouched', p, {});
 }
 
+/* 37 — 3.0 API / DB evidence: a `.record.json` link renders as "View record" with its channel kind, never as an <img>;
+      a missing record warns like any evidence file; an unreadable one warns record-unreadable; a record that still
+      carries a credential-shaped value BLOCKs the page; `PARTIAL — api/db step pending` + `out of tool: api/db step {n}`
+      and the backend INCOMPLETE reasons (`data_write_refused (cascade)`, `evidence_invalid (redaction)`) are accepted
+      without a warning. */
+{
+  const p = [];
+  const S = '../../screenshots/US-1234-create-order/phase-1/TC-001/chromium--none--r0/';
+  const ROW = '| TC-001 | REQ-01 | Create an order with valid data | PASS | parallel | 00:00:41 | — | [attempt-1.png](' + S + 'attempt-1.png) |';
+  const withRecord = (s) => s.replace(ROW, ROW.replace(/ \|$/, ' · [attempt-1.record.json](' + S + 'attempt-1.record.json) |'));
+  const record = (extra) => JSON.stringify({ schema: 'skill5-record/1', tc: 'TC-001', test_id: 't1', title: 'Create an order', project: 'chromium', attempt: 1, retry: 0, layer: 'hybrid',
+    entries: [{ id: 'e1', seq: 1, step: 3, step_title: 'Check the order row', purpose: 'test', channel: 'db', op: 'select', sql: 'SELECT status FROM orders WHERE id = $1', params: ['<string:8>'], row_count: 1, ...extra },
+      { id: 'e2', seq: 2, step: 4, step_title: 'Read the order back', purpose: 'test', channel: 'api', method: 'GET', path: '/orders/{id}', status: 200, headers: { authorization: '[redacted]' } }],
+    assertions: [{ id: 'a1', tc_line: 'ER2', entry_ref: 'e1', target: 'rows[0].status', outcome: 'pass' }], redaction: { mode: 'deny-by-default' }, identity: 'verified', sha256: 'sha256:0' }, null, 2) + '\n';
+  const recPath = (t) => path.join(t.dir, 'screenshots', 'US-1234-create-order', 'phase-1', 'TC-001', 'chromium--none--r0', 'attempt-1.record.json');
+  // a) the record renders as a link with its kind
+  {
+    const t = tmpCopy(withRecord);
+    try {
+      fs.writeFileSync(recPath(t), record({}));
+      const r = render({ reportPath: t.report, root: t.dir });
+      if (r.payload.gate === 'BLOCKED') p.push('a: gate BLOCKED ' + kinds(r).join(','));
+      const html = r.html || '';
+      if (!html.includes('View record')) p.push('a: "View record" not rendered');
+      if (!html.includes('DB + API record')) p.push('a: the record kind (DB + API) is not shown');
+      if (/<img[^>]+attempt-1\.record\.json/.test(html)) p.push('a: a record is rendered as an <img>');
+      const bad = wkinds(r).filter((k) => /^record-|^evidence-/.test(k));
+      if (bad.length) p.push('a: unexpected warnings ' + bad.join(','));
+    } finally { t.cleanup(); }
+  }
+  // b) a missing record warns, never blocks
+  {
+    const t = tmpCopy(withRecord);
+    try {
+      const r = render({ reportPath: t.report, root: t.dir });
+      if (!wkinds(r).includes('evidence-file-missing')) p.push('b: a missing record did not warn evidence-file-missing');
+      if (r.payload.gate === 'BLOCKED') p.push('b: a missing record BLOCKed');
+    } finally { t.cleanup(); }
+  }
+  // c) an unreadable record warns record-unreadable
+  {
+    const t = tmpCopy(withRecord);
+    try {
+      fs.writeFileSync(recPath(t), '{ not json');
+      const r = render({ reportPath: t.report, root: t.dir });
+      if (!wkinds(r).includes('record-unreadable')) p.push('c: an unreadable record did not warn record-unreadable');
+    } finally { t.cleanup(); }
+  }
+  // d) a credential left in a record BLOCKs the page (Bearer, JWT, user:pass@ URL)
+  for (const [label, leak] of [['bearer', { headers: { authorization: 'Bearer abcdefghijklmnopqrstuvwx' } }], ['jwt', { note: 'eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.c2lnbmF0dXJlXzEy' }], ['url', { dsn: 'postgres://qa_user:s3cretpass@db.example.com/orders' }]]) {
+    const t = tmpCopy(withRecord);
+    try {
+      fs.writeFileSync(recPath(t), record(leak));
+      const r = render({ reportPath: t.report, root: t.dir });
+      if (r.payload.gate !== 'BLOCKED' || !kinds(r).includes('secret-literal')) p.push('d ' + label + ': a leaking record did not BLOCK (gate ' + r.payload.gate + ')');
+      if ((r.html || '').includes('View record')) p.push('d ' + label + ': the leaking record is still linked');
+    } finally { t.cleanup(); }
+  }
+  // e) the backend statuses and classifications are accepted without a warning
+  {
+    const banned = ['partial-without-reason', 'partial-without-step', 'unknown-classification', 'incomplete-without-variants'];
+    const muts = {
+      partial: (s) => s.replace('| PARTIAL — human step pending | parallel | 00:00:47 | human step: 4 |', '| PARTIAL — api/db step pending | parallel | 00:00:47 | out of tool: api/db step 4 |'),
+      cascade: (s) => s.replace('| INCOMPLETE | parallel | 00:00:58 | incomplete: chromium--variation-b--r0 |', '| INCOMPLETE | parallel | 00:00:58 | data_write_refused (cascade) |'),
+      redaction: (s) => s.replace('| INCOMPLETE | parallel | 00:00:58 | incomplete: chromium--variation-b--r0 |', '| INCOMPLETE | parallel | 00:00:58 | evidence_invalid (redaction) |'),
+    };
+    for (const [label, mut] of Object.entries(muts)) {
+      const before = read(REPORT);
+      if (mut(before) === before) { p.push('e ' + label + ': the fixture row to mutate was not found'); continue; }
+      const t = tmpCopy(mut);
+      try {
+        const r = render({ reportPath: t.report, root: t.dir });
+        const bad = r.payload.warnings.filter((w) => banned.includes(w.kind));
+        if (bad.length) p.push('e ' + label + ': ' + JSON.stringify(bad));
+        if (kinds(r).includes('unknown-enum')) p.push('e ' + label + ': rejected as unknown-enum');
+      } finally { t.cleanup(); }
+    }
+  }
+  // f) `### Retained test records` / `### In-doubt test records` render as tables, no unknown-subsection; a secret there BLOCKs
+  {
+    const sections = '\n### Retained test records\n\n| Resource | Key | TC | Reason |\n|---|---|---|---|\n| orders | qa-r1-3 | TC-001 | QC chose keep |\n\n### In-doubt test records\n\n| Resource | Target identity | TC | Since |\n|---|---|---|---|\n| orders | qa-r1-4 | TC-001 | phase 2 positive |\n';
+    const add = (extra) => (s) => s.replace(/\s*$/, '\n' + extra);
+    const t = tmpCopy(add(sections));
+    try {
+      const r = render({ reportPath: t.report, root: t.dir });
+      const html = r.html || '';
+      if (wkinds(r).includes('unknown-subsection')) p.push('f: the new subsections warned unknown-subsection');
+      if (!html.includes('Retained test records') || !html.includes('qa-r1-3')) p.push('f: retained records not rendered');
+      if (!html.includes('In-doubt test records') || !html.includes('qa-r1-4')) p.push('f: in-doubt records not rendered');
+    } finally { t.cleanup(); }
+    const t2 = tmpCopy(add(sections.replace('qa-r1-3', 'password=hunter22')));
+    try {
+      const r = render({ reportPath: t2.report, root: t2.dir });
+      if (!kinds(r).includes('secret-literal')) p.push('f: a secret in the retained table did not BLOCK');
+    } finally { t2.cleanup(); }
+  }
+  check('37 API / DB records: linked as "View record" (never <img>), missing / unreadable warn, a leaking record BLOCKs, backend statuses accepted, retained / in-doubt tables', p, {});
+}
+
 const out = {
   tool: 'selftest-render-run-report',
   skill: path.basename(path.resolve(here, '..')),

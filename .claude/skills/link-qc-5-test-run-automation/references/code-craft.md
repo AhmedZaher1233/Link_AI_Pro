@@ -104,7 +104,8 @@ chain; a locator scoped by an earlier assignment needs the comment).
   `helpers/admission.ts` (`assets/admission.template.ts`, always installed, inert without `PW_ADMISSION_FILE`)
   holds two automatic fixtures: `workerAdmission` (worker scope, no dependencies) and `unitAdmission` (test
   scope). Playwright sets a fixture up before another only when the other DEPENDS on it, so: the project's
-  fixtures file extends `helpers/admission`'s `test` (and specs import `test` / `expect` from it); every
+  `test.extend` module (its fixtures module — never a Playwright config) extends `helpers/admission`'s `test` (and specs
+  import `test` / `expect` from it); every
   side-effecting worker fixture lists `workerAdmission`; every side-effecting test fixture (login, data
   creation, a `prerequest/` wrapper) lists `unitAdmission`; every side-effecting `beforeAll` takes
   `workerAdmission` as a parameter. Then no new unit of work starts its side effects while the runner says
@@ -147,12 +148,17 @@ with none). Contract:
 | `viewport` / `deviceScaleFactor` | `1440×900` / `1` |
 | `locale` / `timezoneId` | from the env layer (`PW_LOCALE`, `PW_TZ`), defaults `en-US` / `UTC`; an `ar` project with `locale: 'ar-SA'` ONLY when the application reads the browser locale |
 | `testMatch` / `baseURL` / env handling | the project's own; registering a new spec is part of PHASE 2 |
+| `backend` project (3.0, only when the document has `[API]` / `[DB]` lines) | no browser `use`, `testMatch: /\.(api\|db)\.spec\.ts$/`; the browser project gets the matching `testIgnore` — `<backend_layers>` routes the TCs |
 
 Per-run values reach the config only through environment variables set on each stage command
 (`PW_STAGE_JSON`, `PW_PROGRESS_FILE`, `PW_OUTPUT_DIR`, `PW_GLOBAL_TIMEOUT`, `PW_HEADLESS`,
 `PW_WORKERS`, `PW_PHASE`, `PW_STAGE_ATTEMPT`, `PW_RATE_LIMIT_FILE`, `PW_RATE_LIMIT_STATE`,
-`PW_RATE_LIMITS`, and for the helpers `PW_ADMISSION_FILE`, `PW_UNIT_SCOPES`, `PW_UNIT_MAP`, `PW_LANE`,
-`PW_CANCEL_FILE`, `PW_DIAGNOSTICS_DIR`, `PW_ENV_ID`). `PW_RATE_LIMIT_STATE` is the environment's SHARED
+`PW_RATE_LIMITS`, `PW_SCREENSHOTS` (the run's screenshot choice, read by the evidence helper — `results-and-evidence.md`),
+and for the helpers `PW_ADMISSION_FILE`, `PW_UNIT_SCOPES`, `PW_UNIT_MAP`, `PW_LANE`,
+`PW_CANCEL_FILE`, `PW_DIAGNOSTICS_DIR`, `PW_ENV_ID`, and for the API / DB helpers `PW_SCREENSHOTS_ROOT`, `PW_RUN_ID`,
+`PW_DATA_LEDGER_FILE`, `PW_DATA_LEDGER_DIR`, `PW_DATA_CHANGES_TCS`, `PW_DATA_CHANGES_SETUP`, `PW_DATA_CLEANUP`,
+`PW_DATA_TEARDOWN`, `PW_API_HOSTS`, `PW_DB_EXPECTED_IDENTITY`, `PW_DB_PRODUCTION_MARKERS`, `PW_DB_ENV_VAR` — the
+data-changes ones only for an environment of class `test` / `staging`). `PW_RATE_LIMIT_STATE` is the environment's SHARED
 book in the coordination directory (`rate-limits/{bookId}.json` — one per group of overlapping environment identities)
 when the run holds an environment lease —
 no run deletes another run's state or lock. Nothing is rewritten per story, so the compliance
@@ -321,6 +327,79 @@ Deviations with the version that provides it.
 | role-first locators | source-confirmed `data-testid` first, then role | the project's test contract is in its source; role is the fallback, not the default |
 | one command per run | one command per run-plan GROUP and stage | serial describes do not exclude each other across workers; command ordering is what isolates shared data |
 | `retries: 2` in CI | `retries: 0` | a flaky test is a defect to classify, not a number to absorb |
+| a shared API token / `storageState` for API tests | a pure API TC authenticates per test through the project's API-auth helper, else the login endpoint with the `{ROLE}_USER` / `{ROLE}_PASSWORD` variables; the returned token is registered as a secret, never written | the same isolation as the UI login; a token never reaches code, a record or a log |
+| follow redirects by default | `maxRedirects: 0`; each 3xx validated and followed by the helper | a mutation must never be re-sent to a host nobody verified (§16) |
 
 A future reader who "fixes" one of these to match a blog post breaks a rule that another part of
 the skill relies on. Change them only on an explicit user instruction, and update the row here.
+
+## 16. API endpoint clients (3.0) [M — validator `api-*`]
+
+`api/{Area}Api.ts` holds the endpoint methods, their `expectX()` assertions and the `cleanup` of what they create; a
+spec calls client methods only (a raw `request.*` / `fetch` in a spec or page object is `api-raw-request`, like a raw
+locator). A fixture wraps Playwright's `request` ONCE per test with `attachApiRecord(request, testInfo)` and hands the
+client the recorded request (`assets/api-record.template.ts` header has the fixture lines).
+
+- Every call passes `effect` from the inventory mapping row (`<backend_layers>` §3) — `api-effect-undeclared` /
+  `api-effect-mismatch` are non-exemptible. `purpose: 'setup'` only in `prerequest/` / fixtures
+  (`api-mutation-in-setup-unlabelled` otherwise).
+- `maxRedirects: 0` always (`api-redirect-enabled` when overridden); a TC that expects a 3xx asserts it with
+  `expectRedirect: true`.
+- `keep` lists the JSON paths the TC asserts or captures — everything else is reduced to its shape in the record.
+- Auth by role through the API-auth helper (§15 row); no `Authorization` / cookie / key literal (`api-secret-header`,
+  non-exemptible). Hybrid TCs keep the UI login and may use `page.request` through the same wrapper.
+- An assertion names its Expected line: an `expectX(…, 'ER1')` method wraps its `expect` in
+  `assertRecorded(target, { line: 'ER1' }, () => …)` (`helpers/record.ts`) → `assertions[]` in the record; a backend
+  Expected line without a passing assertion turns a PASS into `evidence_invalid`.
+- A create / update / delete TC asserts the response, then reads the resource back (GET or a `[DB]` check) in the
+  same TC. A PUT / PATCH / DELETE takes ids only from this run's ledger (a captured `$name` or a `D{n}` this run
+  prepared) — the helper refuses any other id before sending.
+
+## 17. DB query objects and the driver (3.0) [M — validator `db-*`]
+
+`db/{Area}Db.ts` holds named reads (`db.read(name, sql, params, { keepColumns })` — a SELECT with a column list,
+parameterised) and the three structured writes `db.insert({ table, values })`, `db.update({ table, key, set })`,
+`db.delete({ table, key })`; write SQL text anywhere is `db-write-freeform` (non-exemptible). Raw SQL or a driver
+import in a spec is `db-raw-sql` / `db-driver-import`.
+
+- `helpers/db.ts` (`assets/db.template.ts`) is the ONE place a driver is reached — `dbClientFromEnv(name)` reads the
+  connection string only from the QC variable (`QA_DB_URL`, `QA_DB_{NAME}_URL`, or `PW_DB_ENV_VAR`); a literal
+  connection string is `db-connection-literal` (non-exemptible), another variable `db-env-not-qc` (review → BLOCKED).
+  An existing project client is wrapped into the `Adapter` shape instead of adding a second driver.
+- `attachDbRecord(adapter, testInfo)` verifies the connected identity first and resolves this run's in-doubt intents;
+  a write then passes the gate, ownership, the full cascade closure (every level), the trigger rule (readable and
+  INSERT-only, otherwise refused whatever the consent), the pre-allocated insert identity, one transaction with
+  before / after counts and checksums of every closure table and the `rowCount` guard, then the read-back — the
+  order and the refusal names are in the template header. An engine or table that cannot answer one of those
+  questions gets no write.
+- One connection per worker (pool max 1); `TIMEOUTS.db.query` bounds every statement.
+
+## 18. The evidence record and redaction (3.0) [M — validator `record-*`]
+
+An `api`, `db`, `api+db` or `hybrid` test calls `captureRecord(testInfo)` ONCE, at the assertion point, before teardown
+— a hybrid test also keeps its image (`record-missing` / `record-in-hook` / `record-duplicate` non-exemptible,
+`record-placement-unproven` review → BLOCKED). The record (`skill5-record/1`, `attempt-{a}.record.json` beside the
+image path, never overwritten; `attempt-{a}-failed.record.json` for a failed attempt, written by `reportRecord` in the
+fixture's teardown) carries the entries (one per call / statement, with the open `step()`), the assertions (each with
+its `ER{n}`), the redaction summary, the DB identity and a seal.
+
+Redaction is deny-by-default and fail-closed (`assets/redact.template.ts`, the byte-identical core of
+`scripts/redact.mjs`): header values except an allowlist, query values, every JSON leaf outside `keep`, SQL string
+literals, parameters and unasserted columns are reduced to `<type:len>` / `[redacted]`; credential, key, PII and card
+patterns are masked; before a write the serialised record is scanned for the run's actual secrets (the role
+passwords, the connection string, tokens a login returned) in raw, URL-encoded and base64 form — a hit writes NO record
+and the attempt becomes `evidence_invalid (redaction)`. Never log a body or a row yourself.
+
+## 19. The ownership ledger and teardown (3.0) [M — validator `*-unledgered`]
+
+`helpers/data-ledger.ts` appends one fsynced JSONL line per state change to the command's ledger
+(`PW_DATA_LEDGER_FILE`): `intent` → `committed` → `verified` → `teardown-done` | `teardown-failed` | `retained`, or
+`rolled_back`; `recovered` / `in-doubt` after a crash. It is the ONLY proof that a record belongs to the run; every
+write in `api/` / `db/` goes through the recorded request / client (`api-mutation-unledgered` / `db-write-unledgered`,
+non-exemptible). Teardown removes the test's own records after its record, in reverse order, through the same guarded
+path; a teardown failure turns a PASS into `cleanup_incomplete`. The post-run clean-up is the setup journey
+`tests/_cleanup/data-ledger.cleanup.api.spec.ts` (`assets/data-ledger.cleanup.spec.template.ts`) — `<backend_results>`
+§6 decides when it runs. Beside it, `tests/_cleanup/registry.ts` maps each API resource name the clients ledger to its
+client's delete: `export const registry: Record<string, (request: RecordedRequest, id: string) => Promise<unknown>> =
+{ orders: (r, id) => new OrdersApi(r).cleanup('orders', id) }` — a resource without an entry stays retained and is
+listed.

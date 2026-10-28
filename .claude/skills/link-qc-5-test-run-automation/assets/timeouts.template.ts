@@ -59,6 +59,13 @@ export const TIMEOUTS = {
   stall: {
     silence: 55_000,
   },
+  /** One API call of helpers/api-record.ts (each redirect hop gets its own) and one statement of helpers/db-record.ts — FINITE. */
+  api: {
+    request: 30_000,
+  },
+  db: {
+    query: 30_000,
+  },
   /** The whole stall-diagnostics capture (screenshot, ARIA snapshot, in-flight requests, last records) — bounded on its own, never charged to the step. */
   diagnostics: 30_000,
   /**

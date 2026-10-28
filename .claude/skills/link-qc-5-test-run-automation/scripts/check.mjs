@@ -28,9 +28,14 @@
 //             carried as linked current-snapshot results. It never writes a result and never affects a gate.
 //   harness   B20: a harness pass is reused only on an exact cache-key match (implementation, harness, fixtures,
 //             goldens, assets, lockfiles, Node, platform, arch, locale / timezone, QA_* / PW_* settings, version).
+//   checkpoint the whole checkpoint in ONE command (3.1): B preconditions (a valid, applicable PASS of A; the freshness
+//             check written to the draft run file before the freeze) → snapshot → mechanical (reused only when complete)
+//             → B runtime verify → AWAITING_REVIEW with an empty template, or (--review) the validated batch → gate.
 //
-// It never edits code, a report, a run file or a draft. Writes: artifacts/checks/**, the gate records and the harness
-// cache — nothing else. Exit 0 by default; --strict maps run / gate: PASS 0 · FAIL 1 · BLOCKED 2 · NOT_RUN 3.
+// It never edits code, a report or a draft — the one exception is `checkpoint --checkpoint B`, which writes the
+// deterministic impact.final_check into the DRAFT run file before freezing it. Writes: artifacts/checks/**, the gate
+// records, the harness cache. Exit 0 by default for the legacy subcommands (--strict maps run / gate: PASS 0 · FAIL 1 ·
+// BLOCKED 2 · NOT_RUN 3); `checkpoint` always exits PASS 0 · FAIL 1 · BLOCKED 2 · NOT_RUN 3 · AWAITING_REVIEW 4.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -40,7 +45,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs, print, isFile, isDir, read, posix, sha256, loadStripped, resolveModule, isSpecFile } from './scan-lib.mjs';
 import * as V from './validate-automation.mjs';
 import { inventory, reconcile } from './config-inventory.mjs';
-import { hashDocument } from './tc-hash.mjs';
+import { hashDocument, parseTcDocument, tcLayer } from './tc-hash.mjs';
+import { resolveBin } from './project-env.mjs';
 
 export const SCHEMA = 'skill5-check/1';
 export const SNAPSHOT_SCHEMA = 'skill5-snapshot/1';
@@ -102,6 +108,13 @@ function writeJsonAtomic(file, obj) {
   fs.renameSync(tmp, file);
 }
 
+function writeTextAtomic(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = file + '.tmp-' + process.pid + '-' + crypto.randomBytes(4).toString('hex');
+  fs.writeFileSync(tmp, text);
+  try { fs.renameSync(tmp, file); } catch (e) { try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ } throw e; }
+}
+
 function readJson(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } }
 
 /** `metadata.version` of a SKILL.md front matter, or null. */
@@ -155,9 +168,12 @@ const rulesMappedTo = (id) => Object.keys(RULE_TO_CHECK).filter((r) => RULE_TO_C
    Mechanical results are recorded by `check.mjs run --snapshot`. A mechanical `unresolved` (open review / notRun items,
    a tool that did not run) is closed only by a `verified-semantic` scope result of the same check; a mechanical FAIL
    is never closed — it is repaired, and the repair is a new snapshot. */
+// naAtB: the check's predicate is decided by the script alone (`no-browser-tests`), so its N/A holds at Checkpoint B too —
+// a never-N/A item of a phase with no browser test has no subject; a model can never claim it (3.0).
 const K = (id, short, kind, A, B, executor, cls, extra = {}) => Object.freeze({
-  id, short, kind, A, B, executor, cls, tools: [], na: null, naPart: null, ...extra, rules: rulesMappedTo(id), neverNA: NEVER_NA_AT_B.includes(id),
+  id, short, kind, A, B, executor, cls, tools: [], na: null, naPart: null, naAtB: false, ...extra, rules: rulesMappedTo(id), neverNA: NEVER_NA_AT_B.includes(id) && !extra.naAtB,
 });
+const NO_BROWSER = { na: 'no-browser-tests', naAtB: true };
 
 export const CHECKS = Object.freeze([
   K('1', 'No raw locator, navigation, evaluate or keyboard / mouse driving in a spec', 'Src', 'MS', 'MS', 'V + SB-P', 2),
@@ -173,13 +189,13 @@ export const CHECKS = Object.freeze([
   K('11', 'Expected values trace to an approved requirement', 'Src', 'S', 'S', 'SB-Q', 1),
   K('12', 'TC ↔ requirement conflicts reported, not silently resolved', 'Src', 'S', 'S', 'SB-Q', 1),
   K('13', 'Weak assertions repaired regardless of aggregate coverage', 'Src', 'S', 'S', 'SB-Q', 3),
-  K('14', 'Every test captures assertion-point evidence, directly or through a method', 'Src', 'MS', 'MS', 'V + SB-E', 2),
-  K('15', 'No evidence from after-hooks; exactly one per test', 'Src', 'M', 'M', 'V', 1),
-  K('16a', 'Evidence call at the assertion point, before teardown (code)', 'Src', 'MS', 'MS', 'V + SB-E', 2),
+  K('14', 'Every test captures assertion-point evidence, directly or through a method', 'Src', 'MS', 'MS', 'V + SB-E', 2, NO_BROWSER),
+  K('15', 'No evidence from after-hooks; exactly one per test', 'Src', 'M', 'M', 'V', 1, NO_BROWSER),
+  K('16a', 'Evidence call at the assertion point, before teardown (code)', 'Src', 'MS', 'MS', 'V + SB-E', 2, NO_BROWSER),
   K('16b', "This phase's heartbeats show each captured image before teardown started", 'Rt', '', 'R', 'S', 4),
   K('17', 'Evidence helper, screenshot config and output roots exist and are writable', 'Src', 'S', 'S', 'S', 1),
   K('18', 'Images, run file, report section, bug entries and page actually produced, right TC, final code', 'Rt', '', 'RS', 'S + SB-E', 4),
-  K('19', 'No PASS image of a cleaned-up screen', 'Rt', '', 'RS', 'S + SB-E', 4),
+  K('19', 'No PASS image of a cleaned-up screen', 'Rt', '', 'RS', 'S + SB-E', 4, NO_BROWSER),
   K('20', 'No focused execution', 'Src', 'M', 'M', 'V', 1),
   K('21', 'Every skip / fixme / fail / slow carries a traceable reason', 'Src', 'MS', 'MS', 'V + SB-E', 2),
   K('22', 'Expected failures and extended timeouts shown distinctly in the report', 'Rt', '', 'R', 'S', 4, { na: 'fail-slow' }),
@@ -207,13 +223,18 @@ export const CHECKS = Object.freeze([
   K('43', 'Timeouts only from timeouts.ts; initial values and calibration records; the run protections active (reconcile)', 'Src/Rt', 'MS', 'MSR', 'V (B8) + S + SB-H', 1, { tools: ['protections'] }),
   K('44', 'ONE shared playwright.config.ts; extra configs consolidated or reported', 'Src', 'MS', 'MS', 'S + SB-H', 1, { tools: ['configs'] }),
   K('45', 'Created data named by uniqueName() / swept by runPrefix(); cleanup flags', 'Src+Rt', 'S', 'SR', 'SB-D', 1),
-  K('46a', 'Console guard attached in beforeEach and reported in afterEach (code)', 'Src', 'M', 'M', 'V (B8)', 1),
-  K('46b', 'Console reports produced for every executed test; unexpected entries under Deviations', 'Rt', '', 'R', 'S', 4),
+  K('46a', 'Console guard attached in beforeEach and reported in afterEach (code)', 'Src', 'M', 'M', 'V (B8)', 1, NO_BROWSER),
+  K('46b', 'Console reports produced for every executed browser test; unexpected entries under Deviations', 'Rt', '', 'R', 'S', 4, NO_BROWSER),
   K('47', 'Page-object / component / locator / fixture craft; .gitignore lines', 'Src', 'MS', 'MS', 'SB-P (+ S)', 1),
   K('48a', 'Stops only on FROZEN verdicts or the documented ceiling stop', 'Rt', '', 'R', 'S', 4),
   K('48b', 'Every watchdog / stall / admission-wait / timeout event of the phase classified', 'Rt', '', 'R', 'S', 4),
-  K('49', 'Network guard attached beside the console guard; rateLimitSlot() placement', 'Src', 'MS', 'MS', 'V (B8) + SB-H', 1, { naPart: 'rate-limit-step' }),
+  K('49', 'Network guard attached beside the console guard; rateLimitSlot() placement', 'Src', 'MS', 'MS', 'V (B8) + SB-H', 1, { naPart: 'rate-limit-step', ...NO_BROWSER }),
   K('50', 'No scratch probe in the delivered scope; scratch.mjs clean done', 'Rt', 'S', 'R', 'S', 4),
+  // 3.0 — [API] / [DB] lines (skill 3's layer gate)
+  K('51', 'API lines run through api/ endpoint clients over the recorded request: effect declared from the mapping, redirects validated, no raw request, no secret literal', 'Src', 'MS', 'MS', 'V + SB-P', 2, { na: 'api-tests' }),
+  K('52', 'DB lines run through db/ query objects over the recorded client: no SQL or driver in a spec, connection only from the QC variable, the identity verified', 'Src', 'MS', 'MS', 'V + SB-P', 2, { na: 'db-tests' }),
+  K('53', 'Data changes: the per-TC data-changes consent, structured writes on run-owned records only (cascades / triggers / row count verified), every write read back, torn down or retained, never production, nothing in doubt', 'Src+Rt', 'MS', 'MSR', 'V + SB-D', 1, { na: 'data-changes' }),
+  K('54', 'A valid redacted record for every API / DB attempt — one per test at its assertion point, traceable to its TC, step, assertion and attempt', 'Src+Rt', 'MS', 'MSR', 'V + SB-E', 2, { na: 'api-db-tests' }),
 ]);
 
 const CHECK_BY_ID = new Map(CHECKS.map((c) => [c.id, c]));
@@ -389,7 +410,7 @@ function gapsOf(runJson) {
   return Array.isArray(dr && dr.gaps) ? dr.gaps : [];
 }
 
-export function predicatesOf({ root, files, runJson, validator }) {
+export function predicatesOf({ root, files, runJson, validator, tcText }) {
   const texts = files.map((f) => ({ f, t: read(path.resolve(root, f)) || '' }));
   const apiText = texts.filter((x) => /\bapi_setup\b/.test(x.t)).map((x) => x.f);
   const prereq = texts.filter((x) => /\bfrom\s*['"][^'"]*prerequest\/|require\(\s*['"][^'"]*prerequest\//.test(x.t)).map((x) => x.f);
@@ -399,7 +420,30 @@ export function predicatesOf({ root, files, runJson, validator }) {
   const limits = (runJson && runJson.run_plan && Array.isArray(runJson.run_plan.rate_limits)) ? runJson.run_plan.rate_limits : [];
   const stepLimits = limits.filter((l) => l && l.at === 'step').map((l) => l.service || '?');
   const slotCalls = texts.filter((x) => /\brateLimitSlot\s*\(/.test(x.t)).map((x) => x.f);
+  // 3.0 — test layers: the document (tc-hash tcLayer over the frozen TC document) and the code (the validator's layer counts).
+  // A predicate has NO subject only when both sides are known and both show none — an unknown side keeps the check applicable.
+  const docTcs = tcText ? parseTcDocument(tcText) : [];
+  const docL = docTcs.map((t) => ({ id: t.id, ...tcLayer(t) }));
+  const vl = validator && validator.counts && validator.counts.layers ? validator.counts.layers : null;
+  const vu = validator && validator.counts && validator.counts.layerUse ? validator.counts.layerUse : null;
+  const browserCode = vl ? vl.ui + vl.hybrid + vl.unresolved : null;
+  const browserDoc = docTcs.length ? docL.filter((t) => /^(ui|hybrid|unknown)$/.test(t.layer)).length : null;
+  const apiCode = vu ? vu.api : null; const dbCode = vu ? vu.db : null;
+  const apiDoc = docL.filter((t) => t.apiSteps + t.apiExpected > 0).length;
+  const dbDoc = docL.filter((t) => t.dbSteps + t.dbExpected > 0).length;
+  const BACKEND_WRITE = /^\s*\[DB\]\s*(create|update|delete|insert|remove)\b|^\s*\[API\]\s*(post|put|patch|delete)\b/i;
+  const writeDoc = docTcs.filter((t) => ['Steps', 'Expected Result'].some((name) => { const k = Object.keys(t.fields).find((x) => x.toLowerCase() === name.toLowerCase()); return k && [t.fields[k].value, ...t.fields[k].items].some((l) => BACKEND_WRITE.test(String(l || ''))); })).map((t) => t.id);
+  const writeCode = validator && validator.counts ? validator.counts.mutationMembers || 0 : null;
+  const dbGaps = gapsOf(runJson).filter((g) => /prepared\s*\(db\)|^\s*db\s*$/i.test(String(g.decision || ''))).map((g) => g.gap || '?');
+  const ev = (code, doc) => (code === null ? 'code layers unknown' : code + ' test(s) in code') + ' · ' + (doc === null ? 'no TC document' : doc + ' TC(s) in the document');
+  const none = (code, doc) => code === 0 && (doc === 0 || doc === null);
   return {
+    'no-browser-tests': { noSubject: browserCode === 0 && browserDoc === 0, evidence: 'ui / hybrid / unresolved: ' + ev(browserCode, browserDoc) + ' — decided by the script, never claimed' },
+    'api-tests': { noSubject: none(apiCode, docTcs.length ? apiDoc : null), evidence: 'API: ' + ev(apiCode, docTcs.length ? apiDoc : null) },
+    'db-tests': { noSubject: none(dbCode, docTcs.length ? dbDoc : null), evidence: 'DB: ' + ev(dbCode, docTcs.length ? dbDoc : null) },
+    'data-changes': { noSubject: writeCode === 0 && !writeDoc.length && !dbGaps.length, evidence: (writeCode === null ? 'code writes unknown' : writeCode + ' data-changing api/ · db/ call(s)') + ' · ' + writeDoc.length + ' TC(s) with an [API] mutation / [DB] write line' + (writeDoc.length ? ' (' + writeDoc.slice(0, 8).join(', ') + ')' : '') + ' · ' + dbGaps.length + ' readiness gap(s) prepared through the database' },
+    'api-db-tests': { noSubject: none(apiCode, docTcs.length ? apiDoc : null) && none(dbCode, docTcs.length ? dbDoc : null), evidence: 'API / DB: ' + ev(apiCode === null || dbCode === null ? null : apiCode + dbCode, docTcs.length ? apiDoc + dbDoc : null) },
+
     'api-setup': { noSubject: !apiText.length && !prereq.length && !apiGaps.length, evidence: apiText.length + ' scoped file(s) mention api_setup · ' + prereq.length + ' import a prerequest/ function · ' + apiGaps.length + ' readiness gap(s) prepared through the API' },
     'fail-slow': { noSubject: !failSlow.length, evidence: failSlow.length ? failSlow.slice(0, 10).join('; ') : 'no test.fail / test.slow / describe.fail / describe.slow in ' + files.length + ' scoped file(s)' },
     exceptions: { noSubject: exceptions === 0, evidence: exceptions === null ? 'validator exceptions unknown' : exceptions + ' exception(s) honoured by the validator' },
@@ -471,7 +515,7 @@ export function snapshotBody(inputs, { skillDir = SKILL_DIR } = {}) {
     facts: {
       validatorRuleIds: Object.keys(RULES).sort(),
       lintFloatingPromises: lint.floatingPromises,
-      predicates: predicatesOf({ root, files: inputs.files, runJson, validator }),
+      predicates: predicatesOf({ root, files: inputs.files, runJson, validator, tcText: inputs.tc ? read(path.resolve(root, inputs.tc)) : null }),
     },
   };
   if (inputs.checkpoint === 'B') {
@@ -731,6 +775,8 @@ function fromTool(unit, c) {
     const i = c.configs;
     if (!i || i.error) return { status: 'unresolved', reason: 'the config inventory did not run' + (i && i.error ? ': ' + i.error : ''), evidence: [] };
     if (i.verdict === 'none') return { status: 'FAIL', reason: 'no playwright*.config.* found — the one shared configuration is missing', evidence: [] };
+    if (i.ambiguous && i.ambiguous.length) return { status: 'unresolved', reason: 'the shared configuration is ambiguous (' + i.ambiguous.length + ' equal candidates) — name it (--config / qa-manifest framework.configFile); never decided by order', evidence: i.ambiguous.slice(0, 20) };
+    if (!i.shared) return { status: 'unresolved', reason: 'no shared configuration resolved from the project (' + (i.sharedError || 'no candidate passed the config check') + ')', evidence: (i.rejected || []).slice(0, 20).map((x) => x.file + ' — ' + x.reason) };
     if (i.verdict === 'multiple') return { status: 'unresolved', reason: (i.configs.length - 1) + ' extra configuration(s) — each must be consolidated or listed under "Configurations not merged" with its blocking setting', evidence: i.configs.filter((x) => x.file !== i.shared).slice(0, 20).map((x) => x.file + ' ' + x.mergeable) };
     return { status: 'verified-mechanical', reason: 'one shared configuration: ' + i.shared, evidence: [] };
   }
@@ -741,6 +787,9 @@ function fromTool(unit, c) {
     if (!r || r.error) return { status: 'unresolved', reason: 'the protections check did not run' + (r && r.error ? ': ' + r.error : ''), evidence: [] };
     if (r.outcome === 'BLOCKED') return { status: 'unresolved', reason: r.reason || 'reconcile BLOCKED', evidence: [] };
     if ((r.blocking || []).length) return { status: 'FAIL', reason: r.blocking.length + ' run protection(s) not active (unbounded operation / disabled protection / above target without an exception)', evidence: r.blocking.slice(0, 20) };
+    // a setting whose effective value could not be established, or an outdated helper reconcile would not replace, is never
+    // reported active: a verified-semantic scope result (what was read, file:line) closes it, or the repair does
+    if ((r.unresolved || []).length) return { status: 'unresolved', reason: r.unresolved.length + ' run protection(s) not proven (an expression, a config package, an ambiguous config or an outdated helper kept as it is)', evidence: r.unresolved.slice(0, 20) };
     return { status: 'verified-mechanical', reason: 'every run protection active: ' + (r.settings || []).length + ' effective setting(s) checked (finite budgets, stall keys, helpers, retries 0, visible local browsers)', evidence: [] };
   }
   if (unit === 'tool:lint') {
@@ -826,7 +875,7 @@ export function parseTscErrors(text, cwd, root) {
 }
 
 async function runTsc({ tscPath, tsconfig, cwd, root, timeoutMs, onSpawn }) {
-  if (!tscPath) return { status: 'notRun', reason: 'TypeScript not found (node_modules/typescript/bin/tsc under the automation root or the project root, or --tsc) — the type check did not run; never recorded PASS' };
+  if (!tscPath) return { status: 'notRun', reason: 'TypeScript not found from the automation root (Node resolution, then every node_modules folder up to the drive root), or pass --tsc — the type check did not run; never recorded PASS' };
   if (!tsconfig) return { status: 'notRun', reason: 'no tsconfig.json under the automation root or the project root (--tsconfig)' };
   const r = await spawnCollect(process.execPath, [tscPath, '--noEmit', '-p', tsconfig, '--pretty', 'false'], { cwd, timeoutMs, onSpawn });
   const raw = filtered((r.stdout || '') + (r.stderr ? '\n' + r.stderr : ''));
@@ -839,7 +888,7 @@ async function runTsc({ tscPath, tsconfig, cwd, root, timeoutMs, onSpawn }) {
 }
 
 async function runLint({ eslintPath, files, cwd, root, timeoutMs, onSpawn }) {
-  if (!eslintPath) return { status: 'notRun', reason: 'ESLint not found (node_modules/eslint/bin/eslint.js, or --eslint)', floating: [], problems: 0 };
+  if (!eslintPath) return { status: 'notRun', reason: 'ESLint not found from the automation root (Node resolution, then every node_modules folder upward), or pass --eslint', floating: [], problems: 0 };
   const r = await spawnCollect(process.execPath, [eslintPath, '--format', 'json', '--no-error-on-unmatched-pattern', ...files.map((f) => path.resolve(root, f))], { cwd, timeoutMs, onSpawn });
   if (r.error) return { status: 'notRun', reason: 'ESLint could not start: ' + r.error, floating: [], problems: 0 };
   if (r.timedOut) return { status: 'notRun', reason: 'ESLint exceeded ' + Math.round(timeoutMs / 1000) + ' s and was stopped', floating: [], problems: 0 };
@@ -861,49 +910,121 @@ function cpuIdleCores(sampleMs = 200) {
   return dt > 0 ? os.cpus().length * ((b.idle - a.idle) / dt) : os.cpus().length;
 }
 
-/** The compliance limit: the capacity ledger's `compliance` class when ./capacity.mjs works, else `limit` here. */
-export async function complianceSlots({ limit = null, runId = null, runFile = null, noLedger = false, warnings = [] } = {}) {
-  const local = (n) => ({ mode: 'local', limit: n, selfHeld: true, acquire: async () => null, release: async () => {}, activate: async () => {}, close: async () => {} });
+/**
+ * The compliance limit through the capacity ledger's `compliance` class — inside ONE end-to-end coordination budget
+ * (`maxWaitMs`, default 120 s, capped at 240 s so a call always ends before an outer 300 s tool limit): every lock
+ * acquisition and every reservation of this invocation shares the same deadline. Before reserving, one FRESH process
+ * table lets the ledger sweep resolve entries a killed check.mjs left behind, and every retry re-judges holders on a
+ * fresh table (`snapshot`). A timeout is a COORDINATION failure (BLOCKED, the holders named) — never an uncoordinated
+ * fallback, never a forced release. --no-ledger / QA_LEDGER=off → the established exclusive reservation, bounded the same
+ * way. No safe coordination (capacity.mjs missing, an unwritable coordination directory, an unreadable ledger) →
+ * `mode: 'blocked'` and nothing starts. Returns the slots object runChecks uses; `diagnostics` collects every refusal.
+ */
+export const DEFAULT_MAX_WAIT_MS = 120000;
+export const MAX_WAIT_CAP_MS = 240000;
+export async function complianceSlots({ limit = null, runId = null, runFile = null, noLedger = false, warnings = [], maxWaitMs = DEFAULT_MAX_WAIT_MS, env = process.env, capModule = null } = {}) {
   const want = Number(limit) > 0 ? Number(limit) : DEFAULT_LIMIT;
-  if (noLedger) return local(want);
+  const budget = Math.max(1000, Math.min(MAX_WAIT_CAP_MS, Number(maxWaitMs) > 0 ? Number(maxWaitMs) : DEFAULT_MAX_WAIT_MS));
+  const t0 = Date.now();
+  const deadline = t0 + budget;
+  const diagnostics = { budgetMs: budget, waitedMs: 0, refusals: [], holders: [], outcome: 'OK' };
+  const blocked = (reason, extra = {}) => ({ mode: 'blocked', limit: 1, selfHeld: false, reason, diagnostics: { ...diagnostics, outcome: 'NO_SAFE_COORDINATION', reason, ...extra },
+    acquire: async () => { throw new Error(reason); }, release: async () => {}, activate: async () => {}, close: async () => {} });
   let cap;
-  try { cap = await import(pathToFileURL(path.join(here, 'capacity.mjs')).href); }
-  catch (e) { warnings.push('capacity ledger unavailable (' + e.message + ') — compliance limit ' + want + ' applied in this process only'); return local(want); }
+  try { cap = capModule || await import(pathToFileURL(path.join(here, 'capacity.mjs')).href); }
+  catch (e) { return blocked('no safe coordination — capacity.mjs could not be loaded (' + e.message + '); nothing was started (restore the skill folder with /sync-skills)'); }
+  const exclusive = !!noLedger || String((env && env.QA_LEDGER) || '').trim().toLowerCase() === 'off';
+  let dir;
   try {
-    const dir = cap.resolveCapacityDir();
-    const cfg = cap.readConfig(dir) || {};
-    const classLimit = Math.max(1, Math.min(want, Number(cfg.classes && cfg.classes.compliance) || DEFAULT_LIMIT));
-    const owner = { runId: runId || 'check-' + process.pid, runFile: runFile || null };
-    const demand = (cap.BOOTSTRAP_DEMAND && cap.BOOTSTRAP_DEMAND.compliance) || null;
-    const idle = cpuIdleCores();
-    const admission = typeof cap.admissionCheck === 'function' ? (ledger) => cap.admissionCheck({
-      availableMb: os.freemem() / MB, idleCores: idle,
-      committed: typeof cap.committedOutstanding === 'function' ? cap.committedOutstanding((ledger && ledger.entries) || [], {}, Date.now()) : { memMb: 0, cpu: 0 },
-      demand: demand || { memMb: 0, cpu: 0 }, reserves: cap.reservesFor({ totalMemMb: os.totalmem() / MB, cpus: os.cpus().length }), pressure: false, leaseValid: true,
-    }) : null;
-    // a tool process (type check, lint) brings its projected memory and passes the memory / CPU admission (§6.4);
-    // this process itself (validator, inventory — in-process, light) only takes a class slot
-    const reserveOne = async (tool) => {
-      const r = await cap.reserve({ dir, cls: 'compliance', units: 1, limit: classLimit, demand: tool ? demand : null, owner, admission: tool ? admission : null, waitMs: tool ? 300000 : 600000 });
-      if (!r || !r.ok) throw new Error((r && r.reason) || 'not granted');
-      return r.token;
-    };
-    const self = classLimit >= 2 ? await reserveOne(false) : null;
-    return {
-      mode: 'ledger', limit: classLimit, selfHeld: !!self,
-      acquire: async () => reserveOne(true),
-      activate: async (token, pid) => { if (token && typeof cap.activate === 'function') await cap.activate({ dir, token, pid }); },
-      // the tool process has exited (its close event) before the release: nothing recorded is alive any more
-      release: async (token) => { if (token) await cap.release({ dir, token, rows: [] }); },
-      close: async () => { if (self) await cap.release({ dir, token: self, rows: [] }); },
-    };
-  } catch (e) {
-    warnings.push('capacity ledger not used (' + e.message + ') — compliance limit ' + want + ' applied in this process only');
-    return local(want);
+    dir = cap.resolveCapacityDir(env);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.accessSync(dir, fs.constants.W_OK);
+  } catch (e) { return blocked('no safe coordination — the coordination directory ' + (dir ? posix(dir) : '(unresolved)') + ' is not writable (' + (e.code || e.message) + '); nothing was started'); }
+  const led0 = cap.readLedger(dir);
+  if (led0.error) return blocked('no safe coordination — ' + led0.error);
+  const remaining = () => Math.max(0, deadline - Date.now());
+  // a FRESH process table on every use — liveness is never judged on an old listing
+  const fresh = async () => {
+    if (remaining() < 500) return null;
+    try { const s = await cap.processSnapshot({ timeoutMs: Math.max(500, Math.min(10000, remaining())) }); return s && Array.isArray(s.rows) ? s.rows : null; } catch { return null; }
+  };
+  try { const rows0 = await fresh(); if (rows0 && typeof cap.sweep === 'function') await cap.sweep({ dir, rows: rows0 }); } catch (e) { warnings.push('ledger sweep skipped (' + e.message + ') — stale entries are re-judged while waiting'); }
+  const cfg = cap.readConfig(dir) || {};
+  const classLimit = exclusive ? 1 : Math.max(1, Math.min(want, Number(cfg.classes && cfg.classes.compliance) || DEFAULT_LIMIT));
+  const owner = { runId: runId || 'check-' + process.pid, runFile: runFile || null };
+  const demand = (cap.BOOTSTRAP_DEMAND && cap.BOOTSTRAP_DEMAND.compliance) || null;
+  const admission = typeof cap.admissionCheck === 'function' ? (ledger) => cap.admissionCheck({
+    availableMb: os.freemem() / MB, idleCores: cpuIdleCores(),
+    committed: typeof cap.committedOutstanding === 'function' ? cap.committedOutstanding((ledger && ledger.entries) || [], {}, Date.now()) : { memMb: 0, cpu: 0 },
+    demand: demand || { memMb: 0, cpu: 0 }, reserves: cap.reservesFor({ totalMemMb: os.totalmem() / MB, cpus: os.cpus().length }), pressure: false, leaseValid: true,
+  }) : null;
+  const held = new Set();
+  const describe = (r, rows) => (r.holders || []).map((h) => ({ token: h.token ? String(h.token).slice(0, 8) : null, runId: h.runId ?? null, runFile: h.runFile ?? null, kind: h.kind || (h.lock ? 'lock' : null), state: h.state || null, since: h.since ?? null, pid: h.pid ?? null,
+    alive: rows && h.pid ? rows.some((x) => Number(x.pid) === Number(h.pid)) : null }));
+  const reserveOne = async (tool) => {
+    if (remaining() <= 0) { diagnostics.outcome = 'TIMEOUT'; throw new Error('coordination budget of ' + Math.round(budget / 1000) + ' s used up before a compliance slot was free'); }
+    let r;
+    try {
+      r = await cap.reserve({ dir, cls: 'compliance', units: 1, limit: classLimit, demand: tool ? demand : null, owner, admission: tool && !exclusive ? admission : null,
+        exclusive, liveness: exclusive ? 'pid' : 'table', waitMs: remaining(), deadline, pollMs: 2000, snapshot: fresh });
+    } catch (e) { r = { ok: false, code: e && e.code === 'ELOCKBUSY' ? 'lock-busy' : 'coordination', reason: e.message, holders: e && e.owner ? [{ lock: 'ledger', pid: e.owner.pid ?? null }] : [] }; }
+    diagnostics.waitedMs = Date.now() - t0;
+    if (!r || !r.ok) {
+      const rows = await fresh();
+      diagnostics.outcome = r && r.code === 'ledger-error' ? 'NO_SAFE_COORDINATION' : 'TIMEOUT';
+      diagnostics.refusals.push({ code: (r && r.code) || 'refused', reason: filtered((r && r.reason) || 'not granted').slice(0, 400) });
+      diagnostics.holders = describe(r || {}, rows);
+      throw new Error((r && r.reason) || 'not granted');
+    }
+    held.add(r.token);
+    return r.token;
+  };
+  const releaseOne = async (token) => { if (!token) return; held.delete(token); try { await cap.release({ dir, token, rows: [] }); } catch (e) { warnings.push('a compliance slot could not be released at once (' + e.message + ') — the next sweep frees it'); } };
+  // this process itself (validator, inventory — in-process, light) takes one class slot when the limit leaves room for a tool;
+  // exclusive mode: ONE exclusive reservation covers the whole call (tools run one after another under it)
+  let self = null;
+  if (exclusive || classLimit >= 2) {
+    try { self = await reserveOne(false); }
+    catch (e) { return { ...blocked('coordination: ' + e.message + ' — waited ' + Math.round((Date.now() - t0) / 1000) + ' s of the ' + Math.round(budget / 1000) + ' s budget'), diagnostics: { ...diagnostics, reason: e.message } }; }
   }
+  return {
+    mode: exclusive ? 'exclusive' : 'ledger', limit: exclusive ? 2 : classLimit, selfHeld: !!self, diagnostics, deadline,
+    acquire: async () => (exclusive ? null : reserveOne(true)),
+    activate: async (token, pid) => { if (token && typeof cap.activate === 'function') await cap.activate({ dir, token, pid }); },
+    // the tool process has exited (its close event) before the release: nothing recorded is alive any more
+    release: async (token) => releaseOne(token),
+    // every reservation this call still holds — the self slot and any partial one — is released, also after a failure
+    close: async () => { for (const t of [...held]) await releaseOne(t); },
+  };
 }
 
 function firstFile(list) { return list.find((p) => p && isFile(p)) || null; }
+
+/** The project's own TypeScript / ESLint (Node resolution from the automation root, then every node_modules upward) and
+ *  the key of everything a mechanical result depends on besides the snapshot (tool paths and versions, Node, --lint). */
+export function resolveTools({ root, autoDir, tsc = null, eslint = null, lint = false }) {
+  const tscRes = tsc ? { file: path.resolve(root, tsc), version: null } : resolveBin(autoDir, 'typescript', 'bin/tsc', { binName: 'tsc' });
+  const tscPath = tscRes.file && isFile(tscRes.file) ? tscRes.file : null;
+  const eslintRes = lint ? (eslint ? { file: path.resolve(root, eslint), version: null } : resolveBin(autoDir, 'eslint', 'bin/eslint.js', { binName: 'eslint' })) : { file: null, version: null };
+  const eslintPath = eslintRes.file && isFile(eslintRes.file) ? eslintRes.file : null;
+  const toolKey = shaOf({ tsc: tscPath ? relTo(root, tscPath) : null, tscVersion: tscRes.version || null, tscSha: tscPath ? fileSha(tscPath) : null,
+    eslint: eslintPath ? relTo(root, eslintPath) : null, eslintVersion: eslintRes.version || null, lint: !!lint, node: process.version });
+  return { tscPath, tscVersion: tscRes.version || null, eslintPath, eslintVersion: eslintRes.version || null, lintAsked: !!lint, toolKey };
+}
+
+const mechanicalMarkerOf = (resultsRoot, snapshotId) => path.join(checksDir(resultsRoot, snapshotId), 'mechanical.json');
+/** May the mechanical results already recorded for this snapshot be reused? Only when a COMPLETE run recorded them for
+ *  the same snapshot and the same tool inputs (record existence alone is never enough). */
+export function mechanicalReusable({ resultsRoot, snapshotId, toolKey }) {
+  const m = readJson(mechanicalMarkerOf(resultsRoot, snapshotId));
+  if (!m) return { reusable: false, why: 'no complete mechanical run recorded for this snapshot' };
+  if (m.snapshotId !== snapshotId) return { reusable: false, why: 'the mechanical record belongs to another snapshot' };
+  if (!m.complete) return { reusable: false, why: 'the earlier mechanical run did not complete' };
+  if (m.toolKey !== toolKey) return { reusable: false, why: 'a tool, its version or --lint changed since the mechanical run' };
+  const lines = readResults(resultsFile(resultsRoot, snapshotId)).filter((r) => !r._invalid && r.snapshotId === snapshotId && String(r.unit || '').startsWith('tool:') && r.executor !== 'M');
+  if (lines.length !== m.units) return { reusable: false, why: 'the recorded mechanical results (' + lines.length + ') do not match the completed run (' + m.units + ')' };
+  return { reusable: true, why: 'complete mechanical run of ' + m.at + ' (gate ' + m.gate + ')', gate: m.gate, at: m.at, full: m.full || null };
+}
 
 function worstGate(components, lintAsked) {
   const v = components.validator;
@@ -937,12 +1058,14 @@ export async function runChecks(o) {
   if (!inputs.files.length) return early({ ...base, gate: 'NOT_RUN', reason: 'no --files: name the in-scope specs and the page objects, fixtures and helpers they touch', warnings });
   const root = inputs.root;
   const autoDir = path.resolve(root, inputs.automationRoot);
-  const tscPath = o.tsc ? path.resolve(root, o.tsc) : firstFile([path.join(autoDir, 'node_modules', 'typescript', 'bin', 'tsc'), path.join(root, 'node_modules', 'typescript', 'bin', 'tsc')]);
+  const tools = resolveTools({ root, autoDir, tsc: o.tsc, eslint: o.eslint, lint: !!o.lint });
+  const { tscPath, eslintPath, lintAsked, toolKey } = tools;
   const tsconfig = inputs.tsconfig ? path.resolve(root, inputs.tsconfig) : firstFile([path.join(autoDir, 'tsconfig.json'), path.join(root, 'tsconfig.json')]);
-  const lintAsked = !!o.lint;
-  const eslintPath = lintAsked ? (o.eslint ? path.resolve(root, o.eslint) : firstFile([path.join(autoDir, 'node_modules', 'eslint', 'bin', 'eslint.js'), path.join(root, 'node_modules', 'eslint', 'bin', 'eslint.js')])) : null;
   const timeoutMs = Number(o.toolTimeoutMs) > 0 ? Number(o.toolTimeoutMs) : 600000;
-  const slots = o.slots || await complianceSlots({ limit: o.limit, runId: o.runId, runFile: inputs.runFile, noLedger: o.noLedger, warnings });
+  const slots = o.slots || await complianceSlots({ limit: o.limit, runId: o.runId, runFile: inputs.runFile, noLedger: o.noLedger, warnings, maxWaitMs: o.maxWaitMs, env: o.env || process.env });
+  // no safe coordination, or no slot within the budget: nothing starts and nothing is recorded — a coordination failure,
+  // never a code or test result (a later call on the same snapshot records the mechanical results afresh)
+  if (slots.mode === 'blocked') return early({ ...base, gate: 'BLOCKED', snapshotId: snapshot ? snapshot.snapshotId : null, reason: slots.reason, coordination: slots.diagnostics, recorded: 0, warnings });
   const spawnLimit = Math.max(1, slots.limit - (slots.selfHeld && slots.limit >= 2 ? 1 : 0));
   const spawnJobs = [{ name: 'tsc', run: (token) => (o.runTool ? o.runTool('tsc', token) : runTsc({ tscPath, tsconfig, cwd: autoDir, root, timeoutMs, onSpawn: (pid) => slots.activate(token, pid) })) }];
   if (lintAsked) spawnJobs.push({ name: 'lint', run: (token) => (o.runTool ? o.runTool('lint', token) : runLint({ eslintPath, files: inputs.files, cwd: autoDir, root, timeoutMs, onSpawn: (pid) => slots.activate(token, pid) })) });
@@ -955,24 +1078,36 @@ export async function runChecks(o) {
   components.timeouts = timeoutReport({ root, automationRoot: inputs.automationRoot, configFiles: (components.configs.configs || []).map((c) => c.file) });
   try { components.protections = reconcile({ root, automationRoot: inputs.automationRoot, runFile: inputs.runFile }); } catch (e) { components.protections = { error: e.message }; }
   const lf = lintFacts([autoDir, root]);
-  const { results, maxActive } = await pool;
-  try { await slots.close(); } catch { /* the ledger sweep resolves it */ }
+  let pooled;
+  try { pooled = await pool; } finally { try { await slots.close(); } catch { /* the ledger sweep resolves it */ } }
+  const { results, maxActive } = pooled;
   components.tsc = results[0];
   components.lint = lintAsked ? results[1] : null;
   if (components.lint) components.lint.deterministicFloatingPromises = lf.floatingPromises;
+  const coordinationFailed = results.some((r) => r && r.status === 'notRun' && /^no compliance slot/.test(String(r.reason || '')));
   const gate = worstGate(components, lintAsked);
 
-  // mechanical results for the frozen snapshot
+  // mechanical results for the frozen snapshot — recorded only by a COMPLETE run (a tool that never got a compliance slot
+  // leaves nothing behind, so the retry records them); an incomplete or other-tool earlier set is replaced, never doubled
   let recorded = null;
   let recordNote = null;
-  if (snapshot) {
-    const file = resultsFile(resultsRoot, snapshot.snapshotId);
-    const already = readResults(file).some((r) => String(r.unit || '').startsWith('tool:') && r.snapshotId === snapshot.snapshotId && r.executor !== 'M');
-    if (already) { recorded = 0; recordNote = 'mechanical results for this snapshot already exist — not recorded twice (a second set would be duplicates the gate rejects)'; }
+  if (snapshot && coordinationFailed) { recorded = 0; recordNote = 'not recorded: a tool never got a compliance slot (coordination, not a code result) — run again on the same snapshot'; }
+  else if (snapshot) {
+    const sid = snapshot.snapshotId;
+    const file = resultsFile(resultsRoot, sid);
+    const reuse = mechanicalReusable({ resultsRoot, snapshotId: sid, toolKey });
+    const isMech = (r) => !r._invalid && String(r.unit || '').startsWith('tool:') && r.snapshotId === sid && r.executor !== 'M';
+    const existing = readResults(file).filter(isMech);
+    if (existing.length && reuse.reusable) { recorded = 0; recordNote = 'mechanical results for this snapshot already exist (' + reuse.why + ') — not recorded twice (a second set would be duplicates the gate rejects)'; }
     else {
-      const recs = mechanicalRecords({ checkpoint: snapshot.body.checkpoint, facts: snapshot.body.facts, snapshotId: snapshot.snapshotId, components, at });
+      const recs = mechanicalRecords({ checkpoint: snapshot.body.checkpoint, facts: snapshot.body.facts, snapshotId: sid, components, at });
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.appendFileSync(file, recs.map((r) => JSON.stringify(r)).join('\n') + (recs.length ? '\n' : ''));
+      if (existing.length) {
+        const keep = readResults(file).filter((r) => !isMech(r)).map(({ _line, ...r }) => r).filter((r) => !r._invalid);
+        writeTextAtomic(file, keep.map((r) => JSON.stringify(r)).join('\n') + (keep.length ? '\n' : '') + recs.map((r) => JSON.stringify(r)).join('\n') + (recs.length ? '\n' : ''));
+        recordNote = 'earlier mechanical results of this snapshot replaced (' + reuse.why + ')';
+      } else fs.appendFileSync(file, recs.map((r) => JSON.stringify(r)).join('\n') + (recs.length ? '\n' : ''));
+      writeJsonAtomic(mechanicalMarkerOf(resultsRoot, sid), { snapshotId: sid, toolKey, complete: true, units: recs.length, gate, at });
       recorded = recs.length;
     }
   }
@@ -985,6 +1120,8 @@ export async function runChecks(o) {
   const full = {
     ...base, gate, at, snapshotId: snapshot ? snapshot.snapshotId : null, root: posix(root), automationRoot: inputs.automationRoot, files: inputs.files,
     slots: { mode: slots.mode, limit: slots.limit, spawnLimit, maxActive },
+    coordination: slots.diagnostics || null,
+    tools: { tsc: tools.tscPath ? relTo(root, tools.tscPath) : null, tscVersion: tools.tscVersion, eslint: tools.eslintPath ? relTo(root, tools.eslintPath) : null, eslintVersion: tools.eslintVersion },
     components: {
       tsc: components.tsc, lint: components.lint,
       validator: v.error ? { error: v.error } : { gate: v.gate, gateReason: v.gateReason, counts: v.counts, findings: v.findings, review: v.review, notRun: v.notRun, exceptions: v.exceptions, fingerprint: v.fingerprint, scope: v.scope, pageScan: v.pageScan },
@@ -1011,7 +1148,8 @@ export async function runChecks(o) {
       timeouts: { unlimited: components.timeouts.unlimited.length, long: components.timeouts.long.length, items: [...components.timeouts.unlimited.map((u) => u.file + ' ' + u.setting + ' ' + u.value), ...components.timeouts.long.map((l) => l.key + ' ' + l.ms + ' ms')].slice(0, 10) },
       protections: components.protections && !components.protections.error ? { outcome: components.protections.outcome, blocking: (components.protections.blocking || []).slice(0, 10), conflicts: (components.protections.conflicts || []).length } : { error: components.protections && components.protections.error },
     },
-    slots: full.slots, recorded, recordNote: recordNote || undefined, full: fullPath ? posix(fullPath) : null, warnings,
+    slots: full.slots, ...(slots.diagnostics && (slots.diagnostics.outcome !== 'OK' || slots.diagnostics.waitedMs > 5000) ? { coordination: slots.diagnostics } : {}),
+    recorded, recordNote: recordNote || undefined, full: fullPath ? posix(fullPath) : null, warnings,
   };
   return { compact, full };
 }
@@ -1162,6 +1300,181 @@ export function runGate({ resultsRoot, snapshotId, checkpoint, phase = null, imp
   return { record: rec, written };
 }
 
+/* ---------------- checkpoint — ONE orchestration command per checkpoint (deterministic steps only) ----------------
+   snapshot → mechanical (reused only when complete for this snapshot and these tools) → (B) runtime verify → the
+   semantic review handoff → record --batch → gate. It never writes a semantic verdict: without --review it stops at
+   AWAITING_REVIEW with an EMPTY template of the results still missing; with --review the batch must name the frozen
+   snapshot and is validated as a whole (recordBatch). B also needs a valid, applicable Checkpoint A PASS (every B-scope
+   file covered by a PASS gate A at its current content) and the results-freshness check, written to the draft run file
+   BEFORE the freeze. Every step stops the chain on failure. Exit codes (checkpoint / finalize — not --strict-only):
+   PASS 0 · FAIL 1 · BLOCKED 2 · NOT_RUN 3 · AWAITING_REVIEW 4. */
+export const ORCHESTRATION_EXIT = Object.freeze({ PASS: 0, FAIL: 1, BLOCKED: 2, NOT_RUN: 3, AWAITING_REVIEW: 4 });
+
+/** Every PASS gate A of the phase (one per snapshot folder) → file → the hashes those gates covered. */
+export function checkpointACoverage(resultsRoot, phase) {
+  const covered = new Map();
+  const gates = [];
+  for (const id of readdirSafe(path.join(resultsRoot, 'artifacts', 'checks'))) {
+    const g = readJson(path.join(checksDir(resultsRoot, id), 'gate-A.json'));
+    if (!g || g.checkpoint !== 'A' || Number(g.phase) !== Number(phase)) continue;
+    gates.push({ snapshotId: g.snapshotId, verdict: g.verdict, decidedAt: g.decidedAt, rehash: !!(g.rehash && g.rehash.matched) });
+    if (g.verdict !== 'PASS' || !(g.rehash && g.rehash.matched)) continue;
+    const s = loadSnapshot(resultsRoot, g.snapshotId);
+    if (!s) continue;
+    for (const [f, h] of Object.entries(s.body.files || {})) { if (!covered.has(f)) covered.set(f, new Set()); covered.get(f).add(h); }
+  }
+  return { covered, gates };
+}
+
+/** Is gate A valid and applicable for this B scope? → { ok, reason, uncovered[] } */
+export function checkpointAApplies({ root, resultsRoot, phase, files }) {
+  const rec = readJson(gateRecordPath(resultsRoot, phase, 'A'));
+  if (!rec) return { ok: false, reason: 'no Checkpoint A gate record for phase ' + phase + ' (.runs/phase-' + phase + '.checkpoint-A.json)', uncovered: [] };
+  if (rec.checkpoint !== 'A' || Number(rec.phase) !== Number(phase)) return { ok: false, reason: 'the Checkpoint A record is not this phase\'s', uncovered: [] };
+  if (rec.verdict !== 'PASS') return { ok: false, reason: 'the latest Checkpoint A of phase ' + phase + ' is ' + rec.verdict + ', not PASS', uncovered: [] };
+  if (!(rec.rehash && rec.rehash.matched)) return { ok: false, reason: 'the latest Checkpoint A was void (its scope changed before its gate)', uncovered: [] };
+  const { covered } = checkpointACoverage(resultsRoot, phase);
+  const uncovered = [];
+  for (const f of files) {
+    const k = posix(f);
+    const now = fileSha(path.resolve(root, f));
+    if (!covered.has(k) || !covered.get(k).has(now)) uncovered.push(k);
+  }
+  return uncovered.length ? { ok: false, reason: uncovered.length + ' file(s) of the final scope are not covered by a PASS Checkpoint A at their current content — refresh Checkpoint A on them (check.mjs checkpoint --checkpoint A)', uncovered } : { ok: true, reason: null, uncovered };
+}
+
+/**
+ * The results-freshness check (`<checkpoint_b>` step 4) on the final code, written to the DRAFT run file's
+ * impact.final_check BEFORE the freeze — rewritten only when its content changed, so a repeated call never edits a
+ * frozen draft. memberReviews {TC: "file:line … why the changed member is unreachable"} fill fresh_by_member_only[].review.
+ */
+export async function freshnessCheck({ root, automationRoot, files, resultsRoot, runFile, memberReviews = null, now = null, write = true }) {
+  let impact;
+  try { impact = await import(pathToFileURL(path.join(here, 'impact.mjs')).href); } catch (e) { return { ok: false, reason: 'impact.mjs could not be loaded: ' + e.message }; }
+  const run = readJson(runFile);
+  if (!run) return { ok: false, reason: 'the draft run file is unreadable: ' + posix(runFile) };
+  const autoAbs = path.resolve(root, automationRoot);
+  const specs = files.filter((f) => isSpecFile(f)).map((f) => path.resolve(root, f));
+  let sel;
+  try { sel = impact.selectStale({ root: autoAbs, specs, progressDir: path.join(resultsRoot, 'artifacts', 'progress'), runPlan: run.run_plan || null }); }
+  catch (e) { return { ok: false, reason: 'the freshness selection failed: ' + e.message }; }
+  const prev = (run.impact && run.impact.final_check) || {};
+  const prevReview = new Map((prev.fresh_by_member_only || []).filter((x) => x && x.tc).map((x) => [x.tc, x.review || null]));
+  const member = sel.fresh_by_member_only.map((tc) => ({ tc, review: (memberReviews && typeof memberReviews[tc] === 'string' && memberReviews[tc].trim().length >= 8 ? memberReviews[tc].trim() : null) || prevReview.get(tc) || null }));
+  const body = { stale: sel.stale.map((s) => ({ tc: s.tc, changed: s.changed, reason: s.reason })), fresh_by_member_only: member, unknown: sel.unknown.map((u) => u.tc || u) };
+  const same = canon({ stale: prev.stale || [], fresh_by_member_only: prev.fresh_by_member_only || [], unknown: prev.unknown || [] }) === canon(body);
+  // read-only (a frozen draft): a different result is reported, never written — the freeze is not silently re-made
+  if (!same && !write) return { ok: true, written: false, changedSinceFreeze: true, stale: body.stale, memberOnly: member, needsReview: [], unknown: body.unknown, warnings: [] };
+  if (!same) writeJsonAtomic(runFile, { ...run, impact: { ...(run.impact || {}), final_check: { at: (now ? new Date(now) : new Date()).toISOString(), ...body } } });
+  return { ok: true, written: !same, stale: body.stale, memberOnly: member, needsReview: member.filter((m) => !m.review).map((m) => m.tc), unknown: body.unknown, warnings: (sel.warnings || []).slice(0, 5) };
+}
+
+/** The semantic results the gate still misses for this snapshot — the EMPTY review template (never a verdict). */
+export function reviewTemplate({ resultsRoot, snapshot, checkpoint }) {
+  const records = readResults(resultsFile(resultsRoot, snapshot.snapshotId));
+  const d = decideGate({ checkpoint, snapshot, records, rehashResult: { matched: true, differences: [] }, freshness: { known: true, stale: [], source: 'template' } });
+  const openBy = new Map();
+  for (const r of records) if (!r._invalid && r.snapshotId === snapshot.snapshotId && r.status === 'unresolved') openBy.set(String(r.checkId), [...(openBy.get(String(r.checkId)) || []), ...(r.evidenceRef || []).slice(0, 3)]);
+  const items = d.rejected.filter((x) => x.why === 'missing' && CHECK_BY_ID.has(String(x.checkId))).map((x) => {
+    const c = CHECK_BY_ID.get(String(x.checkId));
+    return { check: c.id, unit: x.unit, status: null, reason: null, evidence: [], executor: null,
+      question: c.short + (/semantic scope result must close/.test(x.detail || '') ? ' — closes the open mechanical items' + (openBy.get(c.id) ? ': ' + openBy.get(c.id).slice(0, 3).join('; ') : '') : '') };
+  });
+  return { snapshot: snapshot.snapshotId, checkpoint, instructions: 'fill status (verified-semantic | unresolved | FAIL | N/A only with its predicate), reason (what was read and decided) and evidence (file:line) for EVERY entry; never copy a status you did not decide', results: items };
+}
+
+export async function checkpointRun(o) {
+  const root = path.resolve(o.root || process.cwd());
+  const checkpoint = String(o.checkpoint || '').toUpperCase();
+  const phase = Number(o.phase);
+  const resultsRoot = o.resultsRoot ? path.resolve(root, o.resultsRoot) : null;
+  const head = { tool: 'check', schema: SCHEMA, cmd: 'checkpoint', checkpoint, phase: phase || null };
+  const steps = [];
+  const stop = (outcome, step, reason, extra = {}) => ({ ...head, outcome, step, reason, steps, ...extra, exit: ORCHESTRATION_EXIT[outcome] ?? 2 });
+  const errs = [];
+  if (!['A', 'B'].includes(checkpoint)) errs.push('--checkpoint A|B');
+  if (!resultsRoot) errs.push('--results-root <dir>');
+  if (!(phase > 0)) errs.push('--phase N');
+  if (!(o.files || []).length) errs.push('--files <in-scope files>');
+  if (errs.length) return stop('BLOCKED', 'inputs', 'required: ' + errs.join(', '));
+  const automationRoot = automationRootOf(root, o.automationRoot);
+  const files = uniq(o.files.map((f) => relTo(root, path.resolve(root, f))));
+  const draftsDir = checkpoint === 'B' ? (o.drafts ? path.resolve(root, o.drafts) : path.join(resultsRoot, 'artifacts', 'drafts', 'phase-' + phase)) : null;
+  let runFile = o.runFile ? path.resolve(root, o.runFile) : null;
+  if (checkpoint === 'B') {
+    // 1. preconditions: a valid, applicable PASS of A; the drafts; freshness written before the freeze
+    const a = checkpointAApplies({ root, resultsRoot, phase, files });
+    steps.push({ step: 'checkpoint-A', ok: a.ok, ...(a.ok ? {} : { reason: a.reason }) });
+    if (!a.ok) return stop('BLOCKED', 'checkpoint-A', a.reason, { uncovered: a.uncovered.slice(0, 20) });
+    const draftRun = path.join(draftsDir, '.runs', 'phase-' + phase + '.json');
+    if (!isFile(draftRun)) return stop('BLOCKED', 'drafts', 'no draft run file at ' + posix(path.relative(root, draftRun)) + ' — draft first (run-data.mjs finalize)');
+    runFile = draftRun;
+    const fr = await freshnessCheck({ root, automationRoot, files, resultsRoot, runFile, memberReviews: o.memberReviews || null, now: o.now, write: !o.readOnly });
+    steps.push({ step: 'freshness', ok: fr.ok && !(fr.stale || []).length && !fr.changedSinceFreeze, stale: fr.ok ? fr.stale.length : null, memberOnly: fr.ok ? fr.memberOnly.length : null, written: fr.ok ? fr.written : null });
+    if (!fr.ok) return stop('BLOCKED', 'freshness', fr.reason);
+    if (fr.changedSinceFreeze) return stop('BLOCKED', 'freshness', 'the results freshness differs from the frozen draft (code or results changed after the freeze) — nothing recorded; freeze again (run-data.mjs finalize without --review)');
+    if (fr.stale.length) return stop('BLOCKED', 'freshness', fr.stale.length + ' reported result(s) ran on older code — re-run them (impact.mjs select) before Checkpoint B', { stale: fr.stale.slice(0, 20).map((s) => s.tc + (s.changed.length ? ' (' + s.changed.slice(0, 3).join(', ') + ')' : '')) });
+    if (fr.needsReview.length) return stop('AWAITING_REVIEW', 'member-review', 'fresh_by_member_only TCs need a semantic review BEFORE the freeze: pass --member-reviews <json> {"TC-…": "file:line — why the changed member is unreachable from it"} (else re-run them)', { memberOnly: fr.needsReview });
+  }
+  // 2. snapshot (freeze)
+  let s;
+  try { s = takeSnapshot({ root, automationRoot, resultsRoot, checkpoint, phase, files, tc: o.tc, data: o.data, req: o.req || [], runFile, inventory: o.inventory, requireSteps: !!o.requireSteps, draftsDir, screenshotsDir: o.screenshots, tsconfig: o.tsconfig, now: o.now }); }
+  catch (e) { return stop('BLOCKED', 'snapshot', 'the snapshot failed: ' + e.message); }
+  const sid = s.snapshotId;
+  steps.push({ step: 'snapshot', ok: true, snapshotId: sid, reused: s.reused });
+  if (checkpoint === 'B' && !s.snapshot.body.drafts) return stop('BLOCKED', 'snapshot', 'the drafts folder is empty — Checkpoint B freezes the drafts', { snapshotId: sid });
+  // 3. mechanical — reused only when a COMPLETE run recorded it for this snapshot and these tool inputs
+  const autoDir = path.resolve(root, automationRoot);
+  const tools = resolveTools({ root, autoDir, tsc: o.tsc, eslint: o.eslint, lint: !!o.lint });
+  const reuse = mechanicalReusable({ resultsRoot, snapshotId: sid, toolKey: tools.toolKey });
+  let mech = null;
+  if (reuse.reusable) { steps.push({ step: 'mechanical', ok: reuse.gate !== 'FAIL', reused: true, gate: reuse.gate, why: reuse.why }); mech = { gate: reuse.gate, reused: true }; }
+  else {
+    const { compact } = await runChecks({ root, resultsRoot, snapshotId: sid, tsc: o.tsc, eslint: o.eslint, lint: !!o.lint, limit: o.limit, noLedger: !!o.noLedger, maxWaitMs: o.maxWaitMs, runId: o.runId, env: o.env, slots: o.slots, runTool: o.runTool });
+    mech = compact;
+    steps.push({ step: 'mechanical', ok: compact.gate !== 'FAIL' && !compact.void && !(compact.coordination && compact.coordination.outcome !== 'OK'), gate: compact.gate, recorded: compact.recorded, full: compact.full || null });
+    if (compact.void) return stop('BLOCKED', 'mechanical', compact.reason, { snapshotId: sid });
+    if (compact.coordination && compact.coordination.outcome !== 'OK') return stop('BLOCKED', 'mechanical', 'coordination, not a code or test result: ' + (compact.reason || (compact.coordination.refusals[0] || {}).reason || 'no compliance slot within the budget'), { snapshotId: sid, coordination: compact.coordination });
+    if (compact.gate === 'FAIL') {
+      const c = compact.components || {};
+      return stop('FAIL', 'mechanical', 'the mechanical checks found violations — repair them; the repair is a new snapshot', { snapshotId: sid, first: [...((c.tsc && c.tsc.first) || []), ...((c.validator && c.validator.open) || [])].slice(0, 10), full: compact.full || null });
+    }
+  }
+  // 4. (B) runtime checks on this phase's own evidence
+  if (checkpoint === 'B') {
+    let rd;
+    try { rd = await import(pathToFileURL(path.join(here, 'run-data.mjs')).href); } catch (e) { return stop('BLOCKED', 'runtime', 'run-data.mjs could not be loaded: ' + e.message, { snapshotId: sid }); }
+    const v = rd.runData({ _: ['verify'], 'run-file': runFile, 'results-root': resultsRoot, snapshot: sid });
+    const failing = Object.entries(v.checks || {}).filter(([, c]) => c.status === 'FAIL').map(([id, c]) => id + ': ' + c.evidence);
+    steps.push({ step: 'runtime', ok: v.outcome === 'PASS' || (v.outcome !== 'FAIL' && v.outcome !== 'BLOCKED' && v.outcome !== 'NOT_RUN'), outcome: v.outcome, recorded: v.recorded ? v.recorded.written.length : 0 });
+    if (!v.checks) return stop('BLOCKED', 'runtime', 'the runtime checks could not run: ' + (v.reason || v.outcome), { snapshotId: sid });
+    if (failing.length) return stop('FAIL', 'runtime', failing.length + ' runtime check(s) failed on this phase\'s evidence', { snapshotId: sid, failing: failing.slice(0, 10) });
+  }
+  // 5. the semantic review: a handoff without --review, a validated whole batch with it
+  if (!o.review) {
+    const tpl = reviewTemplate({ resultsRoot, snapshot: s.snapshot, checkpoint });
+    const file = path.join(checksDir(resultsRoot, sid), 'semantic-' + checkpoint + '.template.json');
+    writeJsonAtomic(file, tpl);
+    return stop('AWAITING_REVIEW', 'review', tpl.results.length + ' semantic result(s) needed for snapshot ' + sid + ' — fill a copy of the template (semantic-' + checkpoint + '.json beside it) and call again with --review', {
+      snapshotId: sid, template: posix(path.relative(root, file)), needed: tpl.results.map((x) => x.check + ' ' + x.unit).slice(0, 60), mechanical: mech ? mech.gate : null });
+  }
+  const text = read(path.resolve(root, o.review));
+  if (text === null) return stop('BLOCKED', 'review', '--review file not found: ' + o.review, { snapshotId: sid });
+  const parsed = parseBatch(text);
+  if (parsed.error) return stop('BLOCKED', 'review', parsed.error, { snapshotId: sid });
+  if (!parsed.snapshotId || String(parsed.snapshotId) !== String(sid)) return stop('BLOCKED', 'review', 'the review names snapshot ' + (parsed.snapshotId || '(none)') + ', not the frozen ' + sid + ' — a review must be written for the frozen scope ({ "snapshot": "' + sid + '", "results": [ … ] })', { snapshotId: sid });
+  const r = recordBatch({ resultsRoot, snapshotId: sid, entries: parsed.entries, batchSnapshotId: parsed.snapshotId });
+  steps.push({ step: 'record', ok: r.ok, written: r.written, errors: r.ok ? 0 : r.errors.length });
+  if (!r.ok) return stop('BLOCKED', 'record', 'the review batch was rejected as a whole — nothing recorded', { snapshotId: sid, errors: r.errors.slice(0, 20) });
+  // 6. the gate
+  const g = runGate({ resultsRoot, snapshotId: sid, checkpoint, phase });
+  if (g.error) return stop('BLOCKED', 'gate', g.error, { snapshotId: sid });
+  const rec = g.record;
+  const openList = [...rec.rejected.map((x) => x.checkId + ' ' + x.unit + ' ' + x.why), ...rec.fail.map((x) => x.checkId + ' ' + x.unit + ' FAIL'), ...rec.open.map((x) => x.checkId + ' ' + x.unit + ' unresolved')];
+  steps.push({ step: 'gate', ok: rec.verdict === 'PASS', verdict: rec.verdict });
+  return stop(rec.verdict, 'gate', rec.verdict === 'PASS' ? 'Checkpoint ' + checkpoint + ' PASS on snapshot ' + sid : openList.length + ' open item(s)', { snapshotId: sid, counts: rec.counts, open: openList.slice(0, 10), more: Math.max(0, openList.length - 10), record: g.written ? posix(path.relative(root, g.written)) : null });
+}
+
 /* ---------------- carry (B7) — SHADOW ONLY ---------------- */
 
 // Revision 3 §7 dependency table, mapped onto snapshot sections. Runtime checks are never carried. Without a per-test
@@ -1260,7 +1573,8 @@ export async function harnessRun({ name, force = false, dryRun = false, skillDir
 const HELP = {
   tool: 'check', schema: SCHEMA,
   usage: [
-    'node check.mjs run --root <project> --files <a,b|@list> [--automation-root <dir>] [--tc <TEST-CASES md>] [--req <REQ files,…>] [--inventory <automation-inventory.md>] [--require-steps] [--tsconfig <file>] [--tsc <tsc js>] [--lint] [--eslint <eslint.js>] [--limit 2] [--no-ledger] [--run-file <.runs/phase-N.json>] [--results-root <dir>] [--snapshot <id>] [--full] [--strict] [--pretty]',
+    'node check.mjs checkpoint --checkpoint A|B --root <project> --results-root <dir> --phase N --files <a,b|@list> [--tc <md>] [--data <TEST-DATA md>] [--req <files>] [--run-file <json>] [--inventory <md>] [--require-steps] [--lint] [--drafts <dir>] [--screenshots <dir>] [--max-wait <ms>] [--member-reviews <json>] [--review <semantic-{A|B}.json>] [--pretty]',
+    'node check.mjs run --root <project> --files <a,b|@list> [--automation-root <dir>] [--tc <TEST-CASES md>] [--req <REQ files,…>] [--inventory <automation-inventory.md>] [--require-steps] [--tsconfig <file>] [--tsc <tsc js>] [--lint] [--eslint <eslint.js>] [--limit 2] [--no-ledger] [--max-wait <ms>] [--run-file <.runs/phase-N.json>] [--results-root <dir>] [--snapshot <id>] [--full] [--strict] [--pretty]',
     'node check.mjs snapshot --checkpoint A|B --root <project> --results-root <dir> --phase N --files <a,b|@list> [--automation-root <dir>] [--tc <md>] [--data <TEST-DATA md>] [--req <files>] [--run-file <json>] [--inventory <md>] [--require-steps] [--drafts <dir>] [--screenshots <dir>] [--pretty]',
     'node check.mjs record --results-root <dir> --snapshot <id> (--batch <results.json> | --check <id> --unit scope|phase|file:<path> --status <status> --reason "<what was read and why>" [--evidence <file:line,…>] [--executor M|SB-P|SB-Q|SB-E|SB-D|SB-H|V|S]) [--strict]',
     'node check.mjs gate --checkpoint A|B --results-root <dir> --snapshot <id> [--phase N] [--impact <impact select payload json>] [--dry-run] [--strict] [--pretty]',
@@ -1268,6 +1582,8 @@ const HELP = {
     'node check.mjs harness --name <selftest-*.mjs> [--force] [--dry-run] [--pretty]',
   ],
   notes: [
+    'checkpoint = the whole procedure in ONE command: (B: a valid, applicable PASS of Checkpoint A + the freshness check written to the draft run file) → snapshot → mechanical (reused only when complete for this snapshot and tools) → (B: runtime verify) → without --review it stops AWAITING_REVIEW with an EMPTY template of the semantic results still missing; with --review (a batch naming the frozen snapshot) → record --batch → gate. It never writes a semantic verdict. Exit (always, not only --strict): PASS 0 · FAIL 1 · BLOCKED 2 · NOT_RUN 3 · AWAITING_REVIEW 4.',
+    'Coordination: one --max-wait budget (default 120 s, capped 240 s) covers every ledger lock and compliance reservation of the call; a timeout is BLOCKED with the holders named — a coordination failure, never a code result, never a forced release, nothing recorded. --no-ledger / QA_LEDGER=off = an exclusive reservation, bounded the same way; no safe coordination → BLOCKED before any tool starts.',
     'Order per checkpoint: snapshot (freeze) → run --snapshot (mechanical results) → record (one semantic result per check, unit scope; runtime results unit phase at B) → gate (writes .runs/phase-N.checkpoint-{A|B}.json).',
     'record --batch <results.json>: every semantic result of the checkpoint in ONE call — a JSON array of { check, unit, status, reason, evidence: [file:line,…], executor } (or { snapshot, results: [...] }); validated as a whole first: an invalid, stale, duplicate or contradictory entry, or a snapshot whose scope changed, rejects the batch and nothing is written.',
     'Result statuses: ' + RESULT_STATUSES.join(' · ') + '. Missing, stale, contradictory and duplicate results BLOCK the gate; they are never merged.',
@@ -1289,10 +1605,20 @@ async function main() {
     const { compact, full } = await runChecks({
       root, automationRoot: str(args['automation-root']), files: filesArg(args.files, root), tc: str(args.tc), data: str(args.data), req: csv(args.req),
       inventory: str(args.inventory), requireSteps: !!args['require-steps'], tsconfig: str(args.tsconfig), tsc: str(args.tsc), lint: !!args.lint, eslint: str(args.eslint),
-      limit: Number(args.limit) || null, noLedger: !!args['no-ledger'], resultsRoot: rr, snapshotId: str(args.snapshot), runFile: str(args['run-file']),
+      limit: Number(args.limit) || null, noLedger: !!args['no-ledger'], maxWaitMs: Number(args['max-wait']) || null, resultsRoot: rr, snapshotId: str(args.snapshot), runFile: str(args['run-file']),
     });
     printOut(args.full ? full : compact, args);
     return args.strict ? (STRICT_EXIT[compact.gate] ?? 0) : 0;
+  }
+  if (cmd === 'checkpoint') {
+    let memberReviews = null;
+    if (str(args['member-reviews'])) { try { memberReviews = JSON.parse((read(path.resolve(root, args['member-reviews'])) || '').replace(/^﻿/, '')); } catch (e) { printOut({ tool: 'check', schema: SCHEMA, cmd, outcome: 'BLOCKED', step: 'inputs', reason: '--member-reviews is not valid JSON: ' + e.message }, args); return ORCHESTRATION_EXIT.BLOCKED; } }
+    const r = await checkpointRun({ root, checkpoint: args.checkpoint, phase: Number(args.phase), resultsRoot: str(args['results-root']), automationRoot: str(args['automation-root']), files: filesArg(args.files, root),
+      tc: str(args.tc), data: str(args.data), req: csv(args.req), runFile: str(args['run-file']), inventory: str(args.inventory), requireSteps: !!args['require-steps'], drafts: str(args.drafts), screenshots: str(args.screenshots),
+      tsconfig: str(args.tsconfig), tsc: str(args.tsc), eslint: str(args.eslint), lint: !!args.lint, limit: Number(args.limit) || null, noLedger: !!args['no-ledger'], maxWaitMs: Number(args['max-wait']) || null,
+      review: str(args.review), memberReviews });
+    printOut(r, args);
+    return r.exit;
   }
   if (cmd === 'snapshot') {
     const checkpoint = String(args.checkpoint || '').toUpperCase();
@@ -1363,7 +1689,7 @@ const isMain = (() => { try { return fs.realpathSync.native(process.argv[1] || '
 if (isMain) {
   main().then((code) => process.exit(code), (e) => {
     const args = parseArgs(process.argv.slice(2));
-    print({ tool: 'check', schema: SCHEMA, verdict: 'BLOCKED', gate: 'BLOCKED', error: 'internal error: ' + e.message }, args);
-    process.exit(args.strict ? 2 : 0);
+    print({ tool: 'check', schema: SCHEMA, verdict: 'BLOCKED', gate: 'BLOCKED', outcome: 'BLOCKED', error: 'internal error in ' + (args._[0] || 'check') + ': ' + e.message }, args);
+    process.exit(args.strict || args._[0] === 'checkpoint' ? 2 : 0);
   });
 }

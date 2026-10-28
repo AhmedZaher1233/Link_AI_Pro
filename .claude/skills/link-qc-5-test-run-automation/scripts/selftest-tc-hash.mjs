@@ -13,7 +13,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { hashDocument, parseTcDocument, parseTestData, tcHash, canonicalTc, normText, HASH_VERSION } from './tc-hash.mjs';
+import { hashDocument, parseTcDocument, parseTestData, tcHash, canonicalTc, normText, tcLayer, HASH_VERSION } from './tc-hash.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FX = path.join(here, 'fixtures', 'tc-hash');
@@ -200,6 +200,46 @@ const expectDifferent = (p, label, h) => { if (h.hash === GOLDEN) p.push(label +
   expectSame(p, 'AI Oracle —', hashOf(mutate(TC_TEXT, ANCHOR, ANCHOR + '\n- **AI Oracle:** —')));
   if (hashOf().canonical.includes('AI Oracle=')) p.push('a TC without the field carries an AI Oracle part');
   check('15 optional AI Oracle: absent / — → golden; present → content-sensitive, format-insensitive', p, { withAi: h1.hash.slice(0, 12) });
+}
+
+/* 16 — the test layer (tcLayer) from the [API] / [DB] markers: a positive, a negative and a misclassification guard per layer; the layer never enters the hash. */
+{
+  const p = [];
+  const tcOf = (steps, expected, extra = '') => parseTcDocument('### TC-L-01 — layer\n- **Preconditions:**\n  1. [DB] Order "A-1" [D1] exists (prepared).\n' + extra + '- **Steps:**\n' + steps.map((s, i) => '  ' + (i + 1) + '. ' + s).join('\n') + '\n- **Expected Result:**\n' + expected.map((s) => '  - ' + s).join('\n') + '\n- **Data effect:** creates [DB] cleanup: delete the order\n')[0];
+  const L = (steps, expected, extra) => tcLayer(tcOf(steps, expected, extra)).layer;
+  const UI = 'Open Orders — the list is visible.'; const API = '[API] POST [E2] /api/orders as [A1] with [D1] → capture body.id as $order';
+  const DB = '[DB] Create the order record for [D1]'; const HUMAN = '[HUMAN] Read the code from the phone.';
+  const expectL = (label, got, want) => { if (got !== want) p.push(label + ': ' + got + ' (expected ' + want + ')'); };
+  // ui
+  expectL('ui positive', L([UI, UI], ['The order is listed.']), 'ui');
+  expectL('ui: [DB] in Preconditions / Data effect is metadata, never a layer', L([UI], ['The order is listed.']), 'ui');
+  expectL('ui: [HUMAN] steps only, no backend marker → legacy ui', L([HUMAN], ['A person confirms.']), 'ui');
+  // hybrid
+  expectL('hybrid positive (UI step + [DB] expected)', L([UI], ['The order is listed.', '[DB] Check that the order record where id = $order has status = "Pending"']), 'hybrid');
+  expectL('hybrid positive (UI step + [API] step)', L([UI, API], ['[API] status 201']), 'hybrid');
+  expectL('hybrid negative: [HUMAN] is no UI step', L([HUMAN, API], ['[API] status 201']), 'api');
+  // api
+  expectL('api positive', L([API, '[API] GET [E2] /api/orders/$order as [A1]'], ['[API] status 200', '[API] body.status = "Pending"']), 'api');
+  expectL('api with a neutral [HUMAN] step', L([API, HUMAN], ['[API] status 201']), 'api');
+  expectL('api misclassified: an unmarked Expected line in a TC without UI steps', L([API], ['[API] status 201', 'The order is created.']), 'unknown');
+  // db
+  expectL('db positive', L([DB], ['[DB] Check that the order record where name = "A-1" has 1 rows']), 'db');
+  expectL('db negative: a [DB] write plus a UI step is hybrid', L([DB, UI], ['The order is listed.']), 'hybrid');
+  // api+db
+  expectL('api+db positive (API step, DB expected)', L([API], ['[API] status 201', '[DB] Check that the order record where id = $order has status = "Pending"']), 'api+db');
+  expectL('api+db positive (both steps)', L([DB, API], ['[API] status 200']), 'api+db');
+  // unknown
+  expectL('unknown: backend expected only, no action step', L([HUMAN], ['[DB] Check that the order record does not exist']), 'unknown');
+  expectL('unknown: marker mid-line is no marker', L(['Send the [API] call'], ['The order is created.']), 'ui');
+  // the hash: a marker is step text (changes the hash), the layer itself is never hashed
+  const base = tcOf([UI], ['The order is listed.']); const marked = tcOf(['[API] ' + UI], ['The order is listed.']);
+  if (tcHash(base, null) === tcHash(marked, null)) p.push('adding a marker to a step did not change the hash');
+  if (canonicalTc(base, null).includes('layer')) p.push('the layer entered the canonical form');
+  const r = spawnSync(process.execPath, [path.join(here, 'tc-hash.mjs'), '--tc', TC_FILE, '--layers'], { encoding: 'utf8' });
+  const j = JSON.parse(r.stdout || '{}');
+  if (!j.layers || j.layers[ID] !== 'ui') p.push('--layers did not report the fixture TC as ui: ' + JSON.stringify(j.layers));
+  if (j.hashes && j.hashes[ID] !== GOLDEN) p.push('--layers changed the hash');
+  check('16 tcLayer: ui / hybrid / api / db / api+db / unknown — positives, negatives and misclassification guards; never hashed', p, {});
 }
 
 const out = {

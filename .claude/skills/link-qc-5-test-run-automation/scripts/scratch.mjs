@@ -39,6 +39,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs, print, posix, isFile, isDir, read, stripSource } from './scan-lib.mjs';
 import { filterLine, killTree } from './run-stage.mjs';
+import { resolvePlaywrightCli } from './project-env.mjs';
 
 export const SCHEMA = 'skill5-scratch/1';
 export const SCRATCH_REL = 'test-results/qa-scratch';
@@ -46,14 +47,16 @@ export const OVERLAY = 'scratch.config.ts';
 export const NOTICE = 'Investigation only — never a TC result, evidence, coverage, burn-in, isolation check or freshness proof; the official result of a TC comes only from run-stage.mjs.';
 const DEFAULT_TIMEOUT = 120000, MAX_TIMEOUT = 600000, KILL_MARGIN = 15000, BUSY_WINDOW = 120000, KEEP_LINES = 80, DEFAULT_CAPACITY_WAIT = 120000;
 const here = path.dirname(fileURLToPath(import.meta.url));
-const RUN_ENV = /^(PW_STAGE_JSON|PW_PROGRESS_FILE|PW_PHASE|PW_STAGE_ATTEMPT|PW_RATE_LIMIT_FILE|PW_RATE_LIMIT_STATE|PW_RATE_LIMITS|PW_GLOBAL_TIMEOUT|PW_WORKERS|PW_OUTPUT_DIR|PW_HEADLESS|PW_SCRATCH_JSON)$/;
+const RUN_ENV = /^(PW_STAGE_JSON|PW_PROGRESS_FILE|PW_PHASE|PW_STAGE_ATTEMPT|PW_RATE_LIMIT_FILE|PW_RATE_LIMIT_STATE|PW_RATE_LIMITS|PW_GLOBAL_TIMEOUT|PW_WORKERS|PW_OUTPUT_DIR|PW_HEADLESS|PW_SCRATCH_JSON|PW_SCREENSHOTS)$/;
 const SECRET_NAME = /(PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|CONNECTION_?STRING)/i;
 const CONFIGS = ['playwright.config.ts', 'playwright.config.mts', 'playwright.config.js', 'playwright.config.mjs'];
 const SKIP_WALK = new Set(['node_modules', '.git', 'test-results']);
 
 // What a probe may not contain — checked with comments removed (string literals kept: titles and imports count).
 export const FORBIDDEN = [
-  { id: 'official-evidence', re: /\bcaptureEvidence\b/, why: 'official evidence is captured only inside a run-stage.mjs run' },
+  { id: 'official-evidence', re: /\b(captureEvidence|captureRecord)\b/, why: 'official evidence (an image or an API / DB record) is captured only inside a run-stage.mjs run' },
+  // 3.0 — a probe never changes data: no recorded write, no write SQL, no data-changing request
+  { id: 'data-change', re: /\.\s*(insert|update|delete)\s*\(\s*\{\s*table\b|['"`]\s*(insert\s+into|update\s+[\w."[\]]+\s+set|delete\s+from|merge\s+into|truncate)\b|\b(?:request|api)\s*\??\.\s*(post|put|patch|delete)\s*\(/i, why: 'an investigation probe reads only — it never writes a record, sends write SQL or a data-changing request' },
   { id: 'own-screenshot', re: /\.screenshot\s*\(/, why: 'the overlay captures screenshots into out/; an explicit screenshot can write anywhere' },
   { id: 'storage-state', re: /\bstorageState\b/, why: 'no saved login state — log in through the login page object (code-craft §15)' },
   { id: 'file-write', re: /from\s+['"](node:)?fs(\/promises)?['"]|require\(\s*['"](node:)?fs|\b(writeFile|appendFile|createWriteStream|mkdir)(Sync)?\s*\(/, why: 'a probe writes no file' },
@@ -105,12 +108,10 @@ export default {
 `;
 }
 
+// the project's own Playwright CLI — the ONE resolution rule of project-env.mjs (Node resolution from the automation root,
+// then every node_modules upward; an explicit --cli that does not exist is never replaced)
 export function findCli(root, explicit) {
-  if (typeof explicit === 'string') { const p = path.resolve(root, explicit); return isFile(p) ? p : null; }
-  for (let dir = path.resolve(root); ; dir = path.dirname(dir)) {
-    for (const c of [['@playwright', 'test', 'cli.js'], ['playwright', 'cli.js']]) { const p = path.join(dir, 'node_modules', ...c); if (isFile(p)) return p; }
-    if (path.dirname(dir) === dir) return null;
-  }
+  return resolvePlaywrightCli(root, typeof explicit === 'string' ? explicit : null).cli || null;
 }
 
 const inside = (dir, p) => { const r = path.relative(dir, p); return Boolean(r) && !r.startsWith('..') && !path.isAbsolute(r); };

@@ -16,7 +16,11 @@ skill's Q&A and, if project-wide, to `## Project Knowledge`.
 Required inputs — missing from the task input AND the learning file → ASK the user
 (interactive) or BLOCKED (pipeline):
 
-1. **TC document path** — skill 3's `TEST-CASES-{feature}.md`. Read its `Status:` line:
+1. **TC document path** — skill 3's `TEST-CASES-{feature}.md`. Read ONLY its approval metadata here — Grep its
+   `Status:` line(s) (the header block before the first `## `), never the whole document: the document is read in full
+   ONCE, at **Writing Automation Code**, and that reading is reused while its sha256 (`{run_file}.source_sha256`) is
+   unchanged — later activities re-read only the TCs whose `tc-hash.mjs --ids` hash changed. No `Status:` line, several
+   that differ, or any value other than `APPROVED` is NOT approval:
    - `APPROVED` → proceed.
    - anything else (`PENDING HUMAN REVIEW`, another value, no line) → **ask ONCE**, before any
      other question and before anything is written, with the value found and three choices:
@@ -53,6 +57,25 @@ Required inputs — missing from the task input AND the learning file → ASK th
    Azure lookup happens at all.
 3. **Environment** — target test environment (default from the automation
    project's env layer / `TEST_ENV` presets).
+4. **Delivery — asked at the start of EVERY run** (never read from the learning file, never reused from an earlier
+   run): ONE message with two questions, sent as the first question of the run — together with the approval question
+   when that one is asked — before anything is written:
+   - **Report:** **A) HTML page + markdown** (recommended — `TEST-RUN-REPORT-{feature}.html` rendered from the
+     markdown) or **B) Markdown only** (`TEST-RUN-REPORT-{feature}.md` + `BUG-REPORT-{feature}.md`; the renderer still
+     checks the markdown — its gate runs — but no page is written).
+   - **Screenshots:** **A) Every TC** (recommended — the assertion-point image of every executed attempt, plus the
+     failure image of a failing one), **B) Failed TCs only** (a passing attempt gets no image; a failing attempt gets
+     the screen at the failure and its failure image), **C) None** (no image at all — the report's Evidence column
+     shows `—`, and a bug has no image for skill 8 to attach). API / DB records are not screenshots: they are always
+     written.
+   `--report html|md` and `--screenshots all|failed|none` answer it in advance (never re-asked); a pipeline run
+   without them uses **html + all** (the behaviour before this question existed). Record the answer in the run file as
+   it is created (`<project_profile>`): `{run_file}.delivery { report, screenshots, source: asked | flag | default,
+   decided_at }` — the scripts read it
+   from there (`run-stage.mjs` passes `PW_SCREENSHOTS` to every command; `run-data.mjs` verify, finalize and publish
+   follow it). The choice holds for this run only and is never written to the learning file. It changes what is
+   produced, never a verdict: a missing image the choice does not owe is no finding, an image it owes is still
+   checked (`compliance-checkpoints.md` items 16b, 18, 19).
 
 **Environment lease — right after the environment and `{run_file}` are resolved, BEFORE any readiness
 probe, data preparation or test touches the environment** (`<capacity_and_lease>`, `execution.md`): one
@@ -113,7 +136,7 @@ Resolve:
 
 | Profile key | Auto-detection | Default when nothing is found |
 |---|---|---|
-| `automation_root` | an EXISTING Playwright project (search for `playwright.config.ts`) is reused — never duplicated. No existing project → `Testing/Automation/` per the `generate-testing-structure` layout | `Testing/Automation/` (new project) |
+| `automation_root` | `qa-manifest.json` `paths.automationRoot`, else the folder of the shared config `config-inventory.mjs` resolves (`shared`, `sharedSource` — skill installations and their fixtures are never searched; `ambiguous[]` → ask which, never pick) — an EXISTING Playwright project is reused, never duplicated. No existing project → `Testing/Automation/` per the `generate-testing-structure` layout | `Testing/Automation/` (new project) |
 | `ado_mode` | per `<input_gate>` — never asked, never blocking | `local` |
 | `ado_org` / `ado_project` | task input → derive from `git remote` → `ADO-MAP.md` header written by skill 4 (its `hosting:` field says cloud or self-hosted; the self-hosted server — `@tiberriver256/mcp-server-azure-devops` — exposes `get_work_item` / `update_work_item` / `manage_work_item_link` and no test plan / suite tools) | only needed under `ado_mode = linked`; unresolvable → `local` — **never asked** |
 | `run_command` | from the automation project's config + docs | `cd {automation_root} && npx playwright test {file} --project={browser_project}` |
@@ -131,14 +154,14 @@ Resolve:
 | `user_story_name` | the per-story leaf folder name skill 3 used (e.g. `US-1234-create-order`) — the `US-*` leaf; the `SPEC-*` parent is carried separately by `spec_level` | same |
 | `screenshots_root` | `{automation_root}/screenshots/{spec_level}{user_story_name}/` — one folder per User Story holding `phase-{N}/{TC-ID}/{variant_slug}/attempt-{a}.png` — **immutable history, never replaced or deleted** (see `<result_organization>`) | same |
 | `stage_json_path` | the JSON file the EFFECTIVE config writes per stage command: `PW_STAGE_JSON` when the shared config's env-driven JSON reporter is active, else its own `outputFile` (pass it as `run-stage.mjs --stage-json-source`) | `{results_root}/artifacts/stages/…` |
-| `shared_config` | `{automation_root}/playwright.config.ts` — the ONE configuration every story runs from (`<shared_config>`); never a second or per-story file | same |
+| `shared_config` | `config-inventory.mjs` `shared` — the ONE configuration every story runs from (`<shared_config>`), resolved by the order in `references/schemas/paths-and-evidence.md` §3; never a second or per-story file, never a file moved to satisfy discovery | `{automation_root}/playwright.config.ts` |
 | `timeout_policy` | `{automation_root}/timeouts.ts` — the one source of every timeout (code-craft §9); from `assets/timeouts.template.ts` when absent; calibrated per `<first_run>` step 2b | same |
 | `playwright_version` | `@playwright/test` in `{automation_root}/package.json`, confirmed by `npx playwright --version`; gates tags / `--last-failed` / native step timeout per `references/code-craft.md` §14. **< 1.42 → BLOCKED before generation** with the upgrade command | must be resolved; never assumed |
 | `progress_file` | `{results_root}/artifacts/progress/{stage}-{group}[-attempt{n}].jsonl` — set by `run-stage.mjs` per command (run-report.md §3) | same |
 | `run_file` | `{results_root}/.runs/phase-{N}.json` — ONE file per phase with every machine artifact of the run (schema `skill6-run/1`, run-report.md §7); created now with `status: planning`, immutable once final | same |
 | `run_report_md` | `{results_root}/TEST-RUN-REPORT-{feature}.md` (`{feature}` = the stem of `TEST-CASES-{feature}.md`) — one `## Phase N` section per run, appended (run-report.md §4) | same |
 | `bug_report_md` | `{results_root}/BUG-REPORT-{feature}.md` — one `### BUG-n` entry per defect (run-report.md §5) | same |
-| `run_report_html` | `{results_root}/TEST-RUN-REPORT-{feature}.html` — rendered by `scripts/render-run-report.mjs --write`, never hand-written | same |
+| `run_report_html` | `{results_root}/TEST-RUN-REPORT-{feature}.html` — rendered by `scripts/render-run-report.mjs --write`, never hand-written; not written when the run chose markdown only (`delivery.report: md`, `<input_gate>` item 4) | same |
 | `coverage_root` | `{results_root}/coverage/` — three static coverage CSVs (see `<coverage_measurement>`), rewritten every run | same |
 | `coverage_target` | automation coverage target % from L3 (`docs/steering/L3-*.md`, e.g. "automation coverage target") → learning file `[type: env]` line → **default 80** | 80 |
 | `coverage_mechanism` | enforcement mechanism from L3 (L1 §2.4: `hard block` / `soft block` / `report-only`) → **default `soft block`** | soft block |
@@ -147,6 +170,9 @@ Resolve:
 | `workers_parallel` | only for the legacy `--scheduler groups` (default 2). A normal run never sizes workers: the Auto ceiling (`capacity.mjs`, host memory / CPU, bounded by `config.json machineMaxWorkers`) and the dispatcher's ramp decide, admission lowers per launch, every change recorded; `--workers N`, `QA_MAX_WORKERS` and `qa-manifest.json` `execution.maxWorkers` may only LOWER the ceiling. Serial groups, the isolation check and the burn-in always `--workers 1` | 2 (legacy) |
 | `headed` | **true by default** (visible Google Chrome window); task input `--headless` or no display available → false (`PW_HEADLESS=1` on every command), reported as a Deviation | true |
 | `qa_standards` | glob `docs/steering/*` | L1/L2/L3 + testing-strategy |
+
+**Stored form.** Every root and path in the run file is POSIX and relative to `{automation_root}` (the rows above show
+where they live, not how they are written) — `references/schemas/paths-and-evidence.md` §1-§2.
 
 **Resolved paths are immutable for the run.** Once `tc_output_folder`, `spec_level`,
 `results_root`, `logs_root` or `screenshots_root` is resolved for a run, it is immutable for
@@ -173,6 +199,10 @@ An EXISTING automation project (any folder that already has a `playwright.config
 internal convention — never create a parallel `Testing/Automation/` beside it; the
 per-User-Story `reports/{spec_level}{user_story_name}/` and `automation-logs/{spec_level}{user_story_name}/` trees are created
 INSIDE whatever `{automation_root}` resolves to.
+
+**API / DB TCs (3.0).** When the document has `[API]` / `[DB]` lines, load `api-db.md` now: its `<backend_layers>` §2
+adds the profile keys `api_client`, `api_auth`, `db_client`, `db_access`, the one driver question and the
+environment class / API hosts / DB identity read from TEST-DATA.
 
 **Mandatory reading before any code:** `./CLAUDE.md` + the `qa_standards` files.
 Steering priority: the resolution rules in docs/steering/README.md, then CLAUDE.md, skill rules, and last the learning file.

@@ -66,7 +66,9 @@ tagged `@unverified-assumption` and counted *Assumed*. Full rules: `references/a
    `tests/{Area}_Tests/` folders · `pages/` (+ `pages/components/`) · `prerequest/`
    · `helpers/` (the evidence hook `helpers/evidence.ts`, see `<result_organization>`; `steps.ts`,
    `progress-reporter.ts`, `console-guard.ts`, `test-data.ts` — copied from `assets/*.template.ts`
-   when absent; `network-guard.ts`, `rate-limit.ts` and `admission.ts` — always installed, `<shared_config>` step 6)
+   when absent; `network-guard.ts`, `rate-limit.ts`, `admission.ts` and, since 3.0, `record.ts`, `redact.ts`, `data-ledger.ts`,
+   `api-record.ts`, `db-record.ts` — always installed, `<shared_config>` step 6) · 3.0, only with `[API]` / `[DB]` lines:
+   `api/` endpoint clients · `db/` query objects · `helpers/db.ts` · `tests/_cleanup/`
    · the env layer (`utils/env`) · the ONE `playwright.config.ts` + `timeouts.ts`
    (no `playwright.us-*.config.ts` may remain — see `<shared_config>`) · `.gitignore` per
    `references/code-craft.md` §12 · `reports/{spec_level}{user_story_name}/` ·
@@ -125,6 +127,10 @@ another class already opens) is a Checkpoint A failure, whatever folder or agent
    `[type: trick]` line per screen (`- [module: Orders] [page: Order list] [type: trick] Page object
    OrderListPage covers the orders list; OrdersOverview was rejected as a duplicate on the same
    route.`) so the next run reuses the decision instead of re-deriving it.
+6. **API / DB layers (3.0)** — for a document with `[API]` / `[DB]` lines the inventory also holds the **API / DB
+   mapping** table (operation · method · path · effect · evidence, `api-db.md` `<backend_layers>` §3) and the
+   `api/` / `db/` classes are decided like page objects (`reuse` / `extend` / `create`); the code follows
+   `code-craft.md` §16-19; backend specs are `*.api.spec.ts` / `*.db.spec.ts`, a hybrid TC stays in its UI spec.
 </automation_inventory>
 
 <pom_mandatory>
@@ -233,10 +239,17 @@ when the project has no convention of its own. Where it does — a different fix
 `automation.layers` in `Testing/qa-manifest.json` so the validator checks the same boundaries
 instead of assuming these names.
 
-**The type check and the validator run together:** `scripts/check.mjs run` (`compliance-checkpoints.md` §3a)
-runs the project's own `tsc --noEmit` and the validator in ONE call, side by side within the compliance
-limit, and prints a compact summary (the full output under `artifacts/checks/`) — never two separate calls
-per repair. A project without TypeScript in `node_modules` reports the type check `notRun`, never clean.
+**The type check and the validator run together:** `scripts/check.mjs checkpoint --checkpoint A` (`compliance-checkpoints.md`
+§3a) runs the project's own `tsc --noEmit` (found the way Node resolves it from the automation root) and the validator
+in ONE call, side by side within the compliance limit, and prints a compact summary (the full output under
+`artifacts/checks/`) — never two separate calls per repair. A project without TypeScript reports the type check
+`notRun`, never clean. **The helpers need Node's type definitions:** they import `node:fs` / `node:crypto` / `node:path`
+and read `process.env`, so the automation project needs `@types/node` and `typescript` as devDependencies (skill 1's row
+`Automation types` installs them). Errors such as "Cannot find name 'process'" or "Cannot find module 'node:fs'" from
+`helpers/*.ts` mean they are missing — never a code defect to work around (no `// @ts-ignore`, no local shim): ask ONCE
+to add them (`npm install --save-dev @types/node typescript` in the automation root, normal permission flow; pipeline →
+the type check stays `unresolved` with that reason), and a project `tsconfig.json` with its own `types` list must name
+`"node"`.
 
 **Verify your typecheck actually runs.** Some automation projects' `tsconfig.json` makes
 `npx tsc --noEmit -p tsconfig.json` report **zero errors even for a deliberate type error**

@@ -403,7 +403,9 @@ export function isStraightLine(code, start, at) {
 
 /* ---------------- file discovery ---------------- */
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', 'test-results', 'playwright-report', '.next', 'out']);
+// dependency / generated output, and agent / skill installations (a synced skill ships its own fixtures and examples —
+// never the project's code): .claude, .agents, … and any folder holding a SKILL.md
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', 'test-results', 'playwright-report', '.next', 'out', '.claude', '.agents', '.codex', '.cursor', '.windsurf', '.playwright-cli']);
 
 export function walk(dir, predicate, depth = 12, acc = []) {
   if (depth < 0 || !isDir(dir)) return acc;
@@ -412,7 +414,7 @@ export function walk(dir, predicate, depth = 12, acc = []) {
   for (const e of entries) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
-      if (SKIP_DIRS.has(e.name)) continue;
+      if (SKIP_DIRS.has(e.name) || isFile(path.join(full, 'SKILL.md'))) continue;
       walk(full, predicate, depth - 1, acc);
     } else if (e.isFile() && predicate(full)) acc.push(full);
   }

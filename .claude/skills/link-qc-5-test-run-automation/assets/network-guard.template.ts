@@ -1,3 +1,4 @@
+// @link-qc-5-template network-guard 3.1.0
 // helpers/network-guard.ts — notice when the application refuses, fails or advertises a limit (skill 5,
 // references/code-craft.md §11).
 //
@@ -127,6 +128,47 @@ export type NetworkGuard = {
   /** Annotate; never throws, never fails the test by itself. */
   report(testInfo: TestInfo): Promise<void>;
 };
+
+/**
+ * The same classification for a response the PAGE never saw — an APIRequestContext call of helpers/api-record.ts
+ * (skill 5 3.0). It writes the same record shape to PW_RATE_LIMIT_FILE (`source: 'api'`) and feeds the same shared
+ * rate-limit book, so browser traffic and API traffic to one backend share one quota and one cool-down. Never throws.
+ */
+export function recordApiResponse(r: { method: string; url: string; status: number; headers: Record<string, string>; startedAt: number; tcs: string[]; worker: number; requestId: string; step: string | null }): 'refused' | 'unavailable' | 'server-error' | 'policy' | null {
+  try {
+    const u = new URL(r.url);
+    const now = Date.now();
+    const h: Record<string, string> = {};
+    for (const [k, v] of Object.entries(r.headers || {})) h[k.toLowerCase()] = String(v);
+    const rl = rateHeaders(h, now);
+    const path = pathTemplate(u.pathname);
+    const service = matchService(r.method, u.pathname);
+    const account = currentAccountId();
+    const exhausted = rl.present && (rl.remaining === null || rl.remaining <= 0 || h['retry-after'] !== undefined);
+    let kind: 'refused' | 'unavailable' | 'server-error' | 'policy' | null = null;
+    if (r.status === 429 || ((r.status === 403 || r.status === 503) && exhausted) || learnedThrottle(service, r.status)) kind = 'refused';
+    else if (r.status === 503 && h['retry-after'] !== undefined) kind = 'unavailable';
+    else if (r.status >= 500) kind = 'server-error';
+    else if (rl.present) kind = 'policy';
+    if (!kind) return null;
+    const deadline = kind === 'refused' || kind === 'unavailable' ? retryAfterAt(h['retry-after'], now) ?? (kind === 'refused' ? rl.resetAtMs : null) : null;
+    const file = process.env.PW_RATE_LIMIT_FILE;
+    if (file) {
+      mkdirSync(dirname(file), { recursive: true });
+      appendFileSync(file, JSON.stringify({
+        at: new Date().toISOString(), worker: r.worker, tc: r.tcs, source: 'api', kind, step: r.step, request_id: r.requestId, method: r.method, path, url: u.origin + path, host: u.origin, account,
+        status: r.status, retry_after_s: deadline !== null ? Math.max(0, Math.round((deadline - now) / 1000)) : null, retry_after_at: deadline !== null ? new Date(deadline).toISOString() : null,
+        limit: rl.limit, remaining: rl.remaining, reset_s: rl.resetS, policy: rl.limit !== null || rl.windowS !== null ? (rl.limit ?? '?') + ';w=' + (rl.windowS ?? '?') : null,
+        window_s: rl.windowS, latency_ms: now - r.startedAt, error: null,
+      }) + '\n');
+    }
+    if (kind === 'refused') void noteRefusal({ method: r.method, path, service, account, status: r.status, deadlineMs: deadline }).catch(() => undefined);
+    if ((kind === 'refused' || kind === 'policy') && (rl.limit !== null || (rl.remaining !== null && rl.remaining <= 0))) {
+      void noteAdvertisedLimit({ method: r.method, path, service, account, limit: rl.limit, remaining: rl.remaining, resetAtMs: rl.resetAtMs, windowMs: rl.windowS !== null ? rl.windowS * 1000 : null }).catch(() => undefined);
+    }
+    return kind;
+  } catch { return null; }
+}
 
 export async function attachNetworkGuard(page: Page, testInfo: TestInfo): Promise<NetworkGuard> {
   const tcs = tcIdsOf(testInfo.title);

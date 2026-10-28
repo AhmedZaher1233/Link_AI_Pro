@@ -6,6 +6,178 @@ their next `/sync-skills`, so every entry under *Unreleased* is a release once i
 
 ## [Unreleased]
 
+### Skill 5 3.1.0 — fewer model round trips, bounded coordination, a report pipeline that no longer needs repair scripts
+
+**Implemented; not runtime-tested.** No harness, syntax check or consumer run was executed for this change (by request);
+the selftest cases below were added or adjusted statically and must be run before a commit. Driven by the failure
+observations of a real run: the `hb` crash, burn-in evidence missed by the merge, missing `req_id`, a checkpoint that waited
+on the capacity ledger until the outer 300 s timeout, a skill fixture chosen as the shared config, a wrong Playwright
+install-location assumption, repeated model-driven process / memory probing and ad hoc `judge.js` / `build-report.js`.
+MINOR: new subcommands, flags and a module; every existing subcommand keeps its payload shape.
+
+- **link-qc-5-test-run-automation 3.1.0**
+  - Report pipeline (`run-data.mjs`): a freshness-failed command gets an empty heartbeat view (the `hb` crash in `verify`
+    fixed); each attempt's evidence is paired by execution identity — command, TC, project, repeat, retry, worker slot,
+    then start time / own folder / one-worker order (`pairSpan`), ambiguity → `evidence_issue` + `evidence-ambiguous`,
+    never a guess; `req_id` from the run file, the coverage snapshot AND the TC document's `Requirement` field, a
+    disagreement → `req_id_conflict`, check 31 `unresolved`; ONE canonical path form (`canonicalPath`, automation-root
+    relative; project-relative / absolute accepted and normalised by `merge --write`; `locate` no longer mistakes the
+    project root for the automation root). New `judge` (the model's judgements, validated as a whole), `report --write`
+    (the draft phase section written by the script, idempotent, earlier phases untouched), `finalize` (drafts → merge →
+    judge → freshness → acceptance → report → bug header → draft page → Checkpoint B → `AWAITING_REVIEW`; with `--review`:
+    the frozen drafts only → gate → publish → final acceptance; a per-phase lock; exit codes always mapped). `publish`
+    takes `expectSnapshotId`. A crash names subcommand, phase and run file.
+  - Checkpoints (`check.mjs`): new `checkpoint --checkpoint A|B` — one command per checkpoint, AWAITING_REVIEW (exit 4)
+    with an EMPTY review template, `--review` validated as a whole and required to name the frozen snapshot; B requires a
+    PASS Checkpoint A covering every final file at its current content and writes the freshness check before the freeze
+    (`--member-reviews` for `fresh_by_member_only[]`); mechanical results reused only from a complete run on the same
+    snapshot and tools (`mechanical.json` marker), an incomplete set replaced, never doubled. Coordination: ONE
+    `--max-wait` budget (default 120 s, cap 240 s) for every lock and reservation, a fresh process table per retry, a
+    sweep first, partial reservations released, BLOCKED with `coordination.holders[]` on timeout — no uncoordinated
+    fallback, nothing recorded; `--no-ledger` / `QA_LEDGER=off` = an exclusive reservation. tsc / ESLint resolved like Node.
+  - `capacity.mjs`: `reserve({ deadline })` (one budget, a busy lock becomes a refusal naming its owner); richer
+    `holders[]`; `autoCeiling` flags a host that can never hold one worker (`insufficient`); the force-release hint is
+    worded as a user-run last resort.
+  - Discovery (new `project-env.mjs`): the project's Playwright CLI / TypeScript / ESLint resolved by Node resolution then
+    every `node_modules` upward (never `{cwd}/node_modules` only); project walks exclude dependency / generated folders and
+    skill installations (`.claude`, `.agents`, …, any `SKILL.md` folder and its fixtures) — `scan-lib.mjs` walk too (5b
+    mirror re-copied); the ONE shared config by explicit → manifest → automation root → package script → project root,
+    `ambiguous[]` instead of a pick. `config-inventory.mjs` uses it (and the manifest's automation root by default).
+  - Migration (`config-inventory.mjs reconcile`): the effective config follows imported config modules; a setting is
+    edited in the file that holds it; a missing timeout only into the TOP-LEVEL `use`; an expression / unreadable config
+    package → `unresolved` (nothing inserted, `tool:protections` unresolved, never PASS); helper templates carry
+    `// @link-qc-5-template {name} {version}` and are installed with a `sha256=` stamp; an outdated helper is replaced only
+    when that hash proves it untouched, a customised / unknown-version one is kept and reported; `refresh[]`.
+  - Parallel readiness: destructive resets and server-clock changes are barriers — HTTP calls by URL path (`/dev/reset`,
+    `/clock`, …), data-receiver resets, reset functions, SQL `TRUNCATE`, in the test, hooks, fixtures, global setup and
+    helper / page-object functions reached through the import closure; browser clocks and run-owned data excluded; an
+    unplaceable reset in setup runs alone; `readiness.conflicts_brief[]`; the fingerprint covers helper CONTENTS.
+  - Runner (`run-stage.mjs`): `preflight` (one compact readiness answer, one bounded GET, launches nothing); the CLI
+    resolved upward; `PW_SCREENSHOTS_ROOT` and the stage message's evidence folder from the canonical screenshots root;
+    insufficient capacity → BLOCKED before side effects; exclusive mode admits on host memory too; concise live log (▶ / ✓
+    / ✗ / ⏸ lines from heartbeats) + `artifacts/diagnostics/…/playwright-output.log` with the full output; status.json
+    per-worker TC + start, done counts, waits; every output credential-filtered.
+  - Templates: markers on the always-installed helpers; `progress-reporter` records `repeat`.
+  - References: new `schemas/paths-and-evidence.md` (the one home of path forms, discovery, roots, repeats, evidence
+    pairing, live output); `script-payloads.md` gains *Inputs* and the orchestration outputs; SKILL.md / intake (approval
+    metadata only; the document read once) / execution (`<environment_gate>` = preflight) / compliance-checkpoints (§1
+    orchestration + coordination) / final-run (`judge`, `report --write`, `finalize`) / run-plan-and-config / results-and-
+    evidence / run-report / code-craft / structured-returns updated; rule-registry R47-R49; INPUT.txt.
+  - Delivery question (user decision, 2026-10-28): at the start of every run ONE message asks the report format — HTML
+    page + markdown, or markdown only — and the screenshots — every TC, failed TCs only, or none (`intake.md` item 4;
+    `--report html|md` / `--screenshots all|failed|none` answer it; pipeline → html + all; never persisted). Recorded in
+    `{run_file}.delivery`; `run-stage.mjs` passes `PW_SCREENSHOTS` to every command (`--screenshot-policy` overrides it
+    for one call); the project's evidence helper honours it (spec code unchanged under every choice). `run-data.mjs`
+    `deliveryOf` / `imageOwed`: verify 16b / 18 require only the images the choice owes (records of API / DB tests
+    always), the page only under `html`; under `md` finalize and publish still run the renderer's gate but write no page
+    (`page: null`, `reportFormat`, `stalePage`); a `- **Delivery:**` Run bullet; no `**Screenshots:**` line under
+    `none`. A run file without `delivery` behaves exactly as before.
+  - Selftests updated statically: run-data 12-15, check 17 / 21 / 22 (and cases 11 / 14 inject local slots and an
+    explicit missing tsc), config-inventory 9, parallel-plan 15, run-stage 1 / 11 (the full output now lives in the
+    diagnostics file) / 41 (`screenshotPolicyOf`).
+- **link-qc-5b-test-run-manual-cli**: `scripts/scan-lib.mjs` re-copied (mirror of skill 5's — the walk skips skill
+  installations).
+- **link-qc-5-test-run-automation — type-check fixes** (verified: `npm run typecheck` 0 errors, `selftest-redact.mjs` PASS):
+  `redact.mjs` (+ the byte-identical core of `assets/redact.template.ts`) declares the optional `stats` parameter as
+  `stats = null` — before, a consumer's `tsc --noEmit` (Checkpoint A) failed with TS2554 on `helpers/api-record.ts` /
+  `helpers/db-record.ts`, which call the redaction functions without it (behaviour unchanged: `stats` is only tested
+  for truthiness). `scripts/fixtures/api-db/fake-db.ts` types its adapter parameters. `code-generation.md`: "Cannot find
+  name 'process'" from the helpers means `@types/node` / `typescript` are missing — ask once to install, never a shim.
+- **link-qc-1-generate-update-testing-structure**: new row `Automation types` (WARN at worst) + preflight
+  `automationTypes` (`scanAutomationTypes`, `AUTOMATION_DEV_PACKAGES`): the automation project must declare and have
+  installed `@types/node` and `typescript`; Mode B/C/new installs the missing ones in the automation root
+  (`npm install --save-dev …`, step 6, `toolchain.md` "Type definitions", `validation-contract.md`, INPUT.txt). Selftest
+  case 16 (17/17 PASS).
+- **Repository (authoring only, never synced):** root `package.json` (devDependencies `@types/node`, `@playwright/test`,
+  `typescript`; `npm run typecheck`), `tsconfig.json` (maps the consumer layout onto `assets/*.template.ts` for the editor),
+  `.gitignore` (`node_modules/`).
+- **link-qc-9-retesting**: the automation retest passes `--screenshot-policy all` (its images are the close / reopen
+  evidence whatever phase N chose); the re-render writes the page only when phase N's `delivery.report` is `html`
+  (or absent).
+
+### Skill 5 3.0.0 — API and DB test cases
+
+**Implemented, not runtime-tested in a consumer project.** Every harness below ran in this repository (results in the
+last bullet); a real API / DB end-to-end run in a consumer project stays `NOT_RUN` until it is performed, and harness
+success is not runtime validation. MAJOR: a new human gate (data changes), stricter evidence semantics (a backend test
+owes a valid record) and a new Playwright project. User decisions 2026-10-26 / 2026-10-27: pure + hybrid shapes; DB
+reads and writes; the project's DB client, else ONE question to add the driver; manual runners report backend steps
+out of tool; skill 3 asks before designing API / DB TCs (layer gate); a per-TC data-changes gate; both answerable by
+flag, never persisted.
+
+- **link-qc-3-generate-manual-test-cases** (mirrored renderer in 3b / 3c)
+  - Layer gate: ONE question when the source describes API behaviour or persistence rules (`--layers ui,api,db,hybrid`;
+    pipeline → UI only, candidates as open questions); `Test layers:` header line (a record, never an input).
+  - `[API]` / `[DB]` step markers in Steps / Expected Result (`tc-design.md` § "API and DB test cases": call grammar,
+    `→ capture … as $name`, status / body / type / count / schema / header assertions, DB checks and structured writes,
+    cross-layer captures); invariant 10 narrowed (paths only in `[API]` lines, tables only in `[DB]` lines, hosts stay
+    `[E{n}]`, no credential / connection string); no invention — a path / table only when the approved source names it.
+  - TEST-DATA Environment kinds `API base`, `Database` (logical identity), `Environment class`; self-review check 20.
+  - Renderer: `layerOf` (step-for-step copy of `tcLayer`), `unknown` layer BLOCKs, `capture-unresolved` /
+    `layer-not-confirmed` / `layer-gate-unrecorded` warnings, layer badges / counts / tile in EN and AR, numbered
+    Expected lists, widened secret shapes (Bearer, JWT, `scheme://user:pass@`); case 32; goldens unchanged.
+- **link-qc-3b / 3c** — `[API]` / `[DB]` lines are out of tool: at best `draft — not app-validated (api/db step —
+  automation only)` (new draft reason in the mirrored `validation-states.md`); the UI part is validated as usual.
+- **link-qc-4-publish-test-cases-azure** — `tc-hash.mjs` `tcLayer` + `--layers` (hash and `HASH_VERSION` unchanged; copied
+  to skill 5); `ado-sync-plan.mjs` facts `apiSteps` / `dbSteps` / `layer` and owned tags `api-step` / `db-step` only when
+  present; `[API]` / `[DB]` lines exempt from the verb remap, pure backend TCs exempt from login-first; case 23.
+- **link-qc-5-test-run-automation** `3.0.0`
+  - New reference `api-db.md` (`<backend_layers>`, `<data_changes_gate>`, `<backend_results>`), code-craft §16-19 (API
+    clients, DB query objects + driver, the record and redaction, the ownership ledger), checklist items 51-54, registry
+    rows R39-R46, validator / run-report / payload documentation, `--allow-data-changes`.
+  - Layers: `ui` · `api` · `db` · `api+db` · `hybrid` · `unknown` from `tcLayer`; api / db / api+db in a browserless
+    `backend` project (`*.api.spec.ts` / `*.db.spec.ts`; the browser project ignores them); `layer-mismatch`
+    (non-exemptible) and `layer-unresolved` (scanner gate BLOCKED); run-data 25b checks the project per layer.
+  - Mapping from a verified contract only, the effect (`read` · `mutation` · `auth` · `unknown`) decided by the contract,
+    never by the HTTP method; `api-effect-undeclared` / `api-effect-mismatch` (non-exemptible); a conflict with the TC's
+    `Data effect` parks the TC.
+  - Data-changes gate (per TC list, in the test-data message) enforced at runtime: `PW_DATA_CHANGES_TCS` only for a
+    `test` / `staging` target; DB identity verified on connect; structured writes by full primary key on ledger-owned
+    records only; full cascade closure at every level, triggers readable and INSERT-only or refused whatever the consent,
+    one transaction with before / after counts / checksums and the row-count guard, read-back; fsynced write-ahead ledger
+    with pre-allocated insert identity and in-doubt recovery by read-only lookup; API `maxRedirects: 0` with every 3xx
+    target validated before sending (a mutation re-sent only on 307 / 308 to a permitted host); ids for PUT / PATCH /
+    DELETE only from the ledger.
+  - Evidence: `skill5-record/1` records (`attempt-{a}[-failed].record.json`) — deny-by-default redaction
+    (`scripts/redact.mjs`, byte-identical core in `assets/redact.template.ts`), known-secret scan in raw / URL-encoded /
+    base64 form (a hit → no record → `evidence_invalid (redaction)`); post-command record validation in `run-stage.mjs`;
+    run-data 18 / 37 / 38 / 54 layer-aware, 53 from the ledgers (FAIL outranks doubt), 46b never vacuous; acceptance
+    counts unresolved mappings, refused consented TCs and in-doubt writes.
+  - `check.mjs`: checks 51-54 with their predicates; `no-browser-tests` (script-decided, `naAtB`) on 14, 15, 16a, 19,
+    46a, 46b, 49 — a model N/A is rejected; `expected-differences.md` ED-18 / ED-19.
+  - `run-stage.mjs`: comma-list `--project`, the backend environment per command (`BACKEND_ENV_KEYS`), helper error
+    prefixes mapped fail-closed (§B6 of the plan), per-command ledger, `data_ledger` summary; `capacity.mjs`
+    `BOOTSTRAP_DEMAND.backend`; `parallel-plan.mjs --inventory` (mutation claims from the mapping, `serial-mutation`
+    lane); `impact.mjs` data extensions sql / graphql / yaml; `scratch.mjs` refuses `captureRecord` and data changes.
+  - `run-data.mjs report` returns `retainedTable` / `inDoubtTable`; the run report renders "View record" links (never
+    an image; a leaking record BLOCKs) and the `### Retained test records` / `### In-doubt test records` tables; the
+    report header shows an object `environment`'s name.
+  - Templates: `record`, `redact`, `data-ledger`, `api-record`, `db-record` (always installed, inert without backend
+    tests), `db` (pg / mssql / mysql2 adapters), `data-ledger.cleanup.spec`; `network-guard` exports
+    `recordApiResponse`; `timeouts` `api.request` / `db.query`; the config template's `backend` project.
+  - New harnesses `selftest-redact.mjs` (9) and `selftest-api-db.mjs` (5, real Playwright); new cases: validator 27-31,
+    check 20, run-data 11, run-report 37, run-stage 41, capacity 27, impact 45, parallel-plan 14, tc-hash 16.
+  - Deviation from the plan: the post-run clean-up is a setup group (`--stage setup --groups data-cleanup`), not a new
+    `--stage cleanup`; in-doubt writes are resolved by `db-record` on its next attach, not by a run-stage orphan scan.
+- **link-qc-5b-test-run-manual-cli** — `PARTIAL — api/db step pending` with `out of tool: api/db step {n}`; NOT_RUN
+  `not started: api/db only — run skill 5`; the run-report renderer / template / harness mirror re-copied.
+- **link-qc-8 / 7 / 9** — `qc-contract.md` §6b record-file identity check (three mirrors); skill 9 retests a bug with a
+  backend step through the automation only.
+- **link-qc-1** — `testing-layout.md` (`api/`, `db/`, `tests/_cleanup/`, record files), `toolchain.md` (the DB driver is
+  skill 5's question, no setup row), learning-template Automation Model hint.
+- **link-qc-10** — profile section `API and data layer` (API entry points, DB engine / ORM, migrations).
+- **Repo** — README (skill 3 and skill 5 sections, harness list), CLAUDE.md (layout, scripts, hard rule, TC contract,
+  redact mirror, twenty-six harnesses).
+- Harnesses (run one after another on 2026-10-27, Playwright 1.63.0 from the local npx cache): 25 of 26 pass — skill 1
+  (16), skill 4 ado-sync (23), skill 3 / 3b / 3c (34 each, mirror case 0 included), skill 5 validator (31), run-report
+  (37), watchdog (15), config-inventory (8), tc-hash (16), run-stage (41, both the default and the
+  `QA_LEDGER_SELFTEST=on` variant), impact (45), references (4), profile-run (7), check (20), run-data (11), coverage
+  (6), capacity (27), parallel-plan (14), dispatch (14), admission (5), redact (9), api-db (5, none NOT_RUN — the
+  hybrid case ran in headless Chromium), 5b run-report (37) and manual-run (5). **`selftest-scratch.mjs` FAILS case 13**
+  ("a full ceiling must refuse the probe") — it fails identically on an unmodified `HEAD` copy on this machine, so
+  it predates this change; not fixed here. Mirror hashes: `qc-contract.md` ×3, report shell ×5 (unchanged),
+  `azure-mcp-troubleshooting.md` ×9 (unchanged), `tc-hash.mjs` ×2, the 5 ↔ 5b run-report set — all identical.
+
 ### Skill 5 2.0.0 — Auto workers, dispatch by default, active stall protection, run-protection reconcile
 
 **Implemented, not runtime-tested.** No harness, script, syntax check, Playwright run, browser or benchmark was executed

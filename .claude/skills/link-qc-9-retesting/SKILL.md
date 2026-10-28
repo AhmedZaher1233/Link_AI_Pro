@@ -42,7 +42,7 @@ retest). Resolve configuration through contract §2 before asking; see INPUT.txt
 | Bug | Route |
 |---|---|
 | BUG-REPORT bug whose TC is carried by a test of skill 5's automation AND held by the latest phase's run plan (automation-rerun.md §1) | **automation re-run** — `run-stage.mjs --run rerun` against `.runs/phase-N.json` |
-| BUG-REPORT bug otherwise — not automated, the latest phase is a skill 5b manual run, or in no run-plan group | **playwright-cli** — the full TC when it has a row in the latest phase, else the bug's own steps (browser-cli.md §1) |
+| BUG-REPORT bug otherwise — not automated, the latest phase is a skill 5b manual run, or in no run-plan group | **playwright-cli** — the full TC when it has a row in the latest phase, else the bug's own steps (browser-cli.md §1) — **unless the reproduction needs an `[API]` / `[DB]` line** (the bug's own steps or, for the full TC, any backend line before the failing step): then **NOT_RUN** `api/db step — automation only (skill 5)`, never improvised; a bug whose own steps are UI-only keeps this route |
 | UI bug (skill 6 report) | **playwright-cli** — the bug's own steps; ledger only |
 
 Automation that cannot start leaves its bugs unobserved (`NOT_RUN` + reason) — never retested

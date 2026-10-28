@@ -276,6 +276,13 @@ Generated: {YYYY-MM-DD} · Head: {git short sha} · Tracked files: {N}
 | Suite | Path | Command | Authoritative? |
 |---|---|---|---|
 
+## API and data layer
+| Item | Value | Evidence |
+|---|---|---|
+| API entry points | {route / controller globs, OpenAPI file path, or "none found"} | {file:line} |
+| DB engine / ORM | {engine and ORM / client package, or "none found"} | {manifest or config path} |
+| Migrations | {migration / schema / entity globs, or "none found"} | {path} |
+
 ## Authoritative docs consulted
 - {path} — {what it dictates}
 
@@ -286,6 +293,9 @@ Generated: {YYYY-MM-DD} · Head: {git short sha} · Tracked files: {N}
 **Staleness check on later runs**: if the recorded head sha differs and
 `git diff --name-only <recorded-sha>..HEAD` touches manifests, workspace config, or adds top-level directories,
 re-run 0.3–0.6 and rewrite the profile. Otherwise reuse it as-is.
+
+The `API and data layer` section is read by link-qc-5 (3.0) before it maps an `[API]` / `[DB]` step to an endpoint or a
+table — fill it from the layer map (no extra search), never with a connection string or a host.
 
 Tell the user in one line whether you built a new profile or reused a cached one.
 

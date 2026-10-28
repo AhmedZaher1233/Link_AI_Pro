@@ -1,5 +1,5 @@
 SKILL: link-qc-5-test-run-automation
-VERSION: 2.0.0 (SKILL.md front-matter metadata.version — /sync-skills shows installed → available)
+VERSION: 3.0.0 (SKILL.md front-matter metadata.version — /sync-skills shows installed → available)
 WHAT IT DOES: Takes skill 3's TC document → generates Playwright automation (POM
 mandatory) → passes a pre-run COMPLIANCE CHECKPOINT → measures static coverage → resolves
 test-data readiness with you → runs
@@ -64,9 +64,40 @@ OPTIONAL:
                                    "Status: APPROVED" in the document, --unapproved runs it as
                                    it is); a pipeline run on an unapproved document without
                                    one of them is BLOCKED
-  7. --parallel-shadow           — OPTIONAL experiment: also compare the readiness check's plan with
+  6b. --report html|md            — answer the DELIVERY question in advance: html = the markdown report
+                                   + the rendered HTML page (default), md = the markdown files only
+                                   (no page; the markdown is still checked by the renderer)
+      --screenshots all|failed|none — all = an image for every TC attempt (default), failed = images
+                                   only for failed TCs, none = no screenshots (API / DB records are
+                                   always written). Without these flags the run ASKS both at its
+                                   start, every run; a pipeline run uses html + all. Never remembered.
+  7. --allow-data-changes all|TC-01,TC-03|none
+                                 — answer the DATA-CHANGES question in advance (API / DB TCs, see
+                                   below); a pipeline run without it changes no data. Never remembered.
+  8. --parallel-shadow           — OPTIONAL experiment: also compare the readiness check's plan with
                                    the hand-built run plan and record the differences. Off by default;
                                    changes nothing in the run
+
+API AND DB TEST CASES (3.0): a TC whose steps skill 3 marked [API] or [DB] is automated too —
+  pure API, pure DB, API + DB, or hybrid (UI steps plus backend checks). Backend TCs run in a
+  "backend" Playwright project without a browser, through endpoint clients (api/) and query
+  objects (db/) mapped from the application's own contract (OpenAPI file, routes, migrations) —
+  never a guessed endpoint, table or value. Their evidence is a REDACTED RECORD
+  (attempt-{a}.record.json beside the screenshots: calls, statements, assertions — secrets,
+  personal data and unasserted values masked); a hybrid TC keeps its screenshot too.
+  What you are asked, at most once each, in the messages the run already sends:
+    - no database client in the project → "add the pg / mssql / mysql2 devDependency?"
+      (no → the DB TCs are NOT_RUN "db unavailable")
+    - in the test-data message: which DATA-CHANGING TCs may write — all · a TC-ID list · none.
+      Shown with the verified target (API host, the database the connection really reached,
+      the environment class). Production, an unknown class or an unverified database → nothing
+      may write, no question. Writes touch only records THIS run created (a broad WHERE, a
+      cascade or trigger that would reach other data, an unexpected row count → refused and
+      rolled back, whatever you answered).
+    - after the run, with the keep / clean-up question: what to do with the records it kept.
+  Needs: TEST-DATA rows "API base", "Database" (a logical name, never a connection string) and
+  "Environment class"; the connection string only in a QC-named environment variable
+  (QA_DB_URL / QA_DB_{NAME}_URL), never typed in chat.
 
 COMPLIANCE GATES: the run passes through TWO mandatory compliance checkpoints, and BOTH must
   pass before the skill claims the automation is compliant.
@@ -252,7 +283,8 @@ OUTPUT — WHAT YOU GET
                                          steps, expected / actual, the failure screenshot (relative
                                          link) and a per-phase History; resolved only after a passing
                                          retest
-      TEST-RUN-REPORT-{feature}.html   ← BOTH files rendered into one page by
+      TEST-RUN-REPORT-{feature}.html   ← (only when you chose the HTML report — the default)
+                                         BOTH files rendered into one page by
                                          scripts/render-run-report.mjs after every run: separate
                                          "Test Results" and "Bugs" sections, screenshot thumbnails
                                          with a "View screenshot" viewer (zoom, scroll, open the
@@ -295,9 +327,14 @@ OUTPUT — WHAT YOU GET
       artifacts/drafts/phase-N/        ← the report set before Checkpoint B (published unchanged after it)
       artifacts/checks/{snapshot}/     ← each checkpoint's snapshot, results and full tool output
       artifacts/parallel-plan.json     ← the parallel readiness check
-      artifacts/diagnostics/phase-N/   ← stall diagnostics of a step that stayed silent
+      artifacts/diagnostics/phase-N/   ← per command: playwright-output.log (the FULL Playwright output —
+                                         stack traces, console; credential-filtered) + stall diagnostics
       artifacts/reconcile/{time}/      ← originals of every setting file the reconcile changed + summary.md
-      artifacts/progress/status.json   ← live: Auto ceiling, active workers, the TCs each runs
+      artifacts/progress/status.json   ← live: Auto ceiling, active workers, per worker its TC and start, done
+                                         counts, what the stage waits for
+      artifacts/progress/preflight.json ← the environment / capacity / tool readiness answer of the run
+      artifacts/judgements-phase-N.json ← your classifications, Heal Log, deviations and bugs, validated by
+                                         run-data.mjs judge (finalize --judgements) — never a hand-edited run file
   Nothing else is written at that top level.
   {QA_CAPACITY_DIR | ~/.link-ai-pro/capacity}/  ← machine-wide, outside every project: config.json (the
                                          upper bound of the Auto ceiling — yours to write, optional),
@@ -307,12 +344,19 @@ OUTPUT — WHAT YOU GET
   {automation_root}/screenshots/[SPEC-{spec-name}/]US-{id}-{name}/
       phase-{N}/{TC-ID}/{browser}--{variation}--r{n}/attempt-{a}.png   ← EVERY attempt of every
                                          variant, taken at the ASSERTION POINT (before any data
-                                         cleanup); attempt-{a}-failed.png on failure. NEVER
+                                         cleanup); attempt-{a}-failed.png on failure. With
+                                         --screenshots failed only failing attempts have images;
+                                         with --screenshots none there are none. NEVER
                                          overwritten or deleted — earlier attempts and phases stay
+      …/attempt-{a}.record.json                                       ← 3.0: the REDACTED record of an API / DB / hybrid
+                                         attempt (beside its image path; a backend TC has no image);
+                                         shown as "View record" in the page
   {automation_root}/playwright.config.ts  ← the ONE shared config, updated in place (never a per-story file)
   {automation_root}/timeouts.ts           ← the timeout policy (initial values → calibrated after the first run)
   {automation_root}/helpers/steps.ts · progress-reporter.ts · console-guard.ts · test-data.ts  ← copied from the skill's templates when absent
   {automation_root}/helpers/network-guard.ts · rate-limit.ts · admission.ts  ← always installed (no effect until a rate limit is known / the runner publishes an admission state)
+  {automation_root}/helpers/record.ts · redact.ts · data-ledger.ts · api-record.ts · db-record.ts  ← 3.0, always installed (no effect without [API] / [DB] TCs); helpers/db.ts only for [DB] TCs without a project DB helper
+  {automation_root}/api/ · db/ · tests/_cleanup/  ← 3.0: endpoint clients, query objects, the post-run clean-up journey (only with [API] / [DB] TCs)
   + the timeout record in the run file (initial values, first-run events, adjustments with reasons and
     evidence, the watchdog probe result — each NOT_RUN with the reason when no run happened), summarised
     on one "Timeouts" line of the final message

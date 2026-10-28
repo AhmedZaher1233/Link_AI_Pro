@@ -10,7 +10,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { inventory, reconcile } from './config-inventory.mjs';
+import crypto from 'node:crypto';
+import { inventory, reconcile, helperState, topLevelUseIndex } from './config-inventory.mjs';
+
+const eq9 = (p, what, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) p.push(what + ': ' + JSON.stringify(got) + ' != ' + JSON.stringify(want)); };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fx = (t) => path.join(here, 'fixtures', 'config-inventory', t);
@@ -163,6 +166,68 @@ const after = inventory({ root: fx('after'), automationRoot: 'Testing/Automation
     if (again.changes.length) p.push('a second apply changed something: ' + JSON.stringify(again.changes));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
   check('8 reconcile: precise statuses, dry-run writes nothing, apply backs up + fixes supported shapes, conflicts kept, idempotent', p, {});
+}
+
+/* 9 — 3.1 discovery and migration: a synced skill's fixture config is never found or chosen (the project's own is); two
+   equal candidates are ambiguous (no shared, reconcile changes no config); a missing timeout goes into the TOP-LEVEL use,
+   never a project's; an outdated helper is replaced only when its recorded template hash proves it untouched — a
+   customised one is kept and reported; a second apply changes nothing. */
+{
+  const p = [];
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-discovery-'));
+  const cfgText = (extra = '') => ["import { defineConfig } from '@playwright/test';", "import { TIMEOUTS } from './timeouts';", 'export default defineConfig({', '  retries: 0,', '  projects: [{ name: "chromium", use: { actionTimeout: TIMEOUTS.action } }],', '  use: {', '    actionTimeout: TIMEOUTS.action,', '  },' + extra, '});', ''].join('\n');
+  try {
+    const auto = path.join(root, 'Testing', 'Automation');
+    const skillFx = path.join(root, '.claude', 'skills', 'some-skill', 'scripts', 'fixtures', 'a');
+    fs.mkdirSync(skillFx, { recursive: true });
+    fs.writeFileSync(path.join(root, '.claude', 'skills', 'some-skill', 'SKILL.md'), '---\nname: some-skill\n---\n');
+    fs.writeFileSync(path.join(skillFx, 'playwright.config.ts'), cfgText());
+    fs.mkdirSync(path.join(auto, 'helpers'), { recursive: true });
+    fs.writeFileSync(path.join(auto, 'playwright.config.ts'), cfgText());
+    fs.writeFileSync(path.join(auto, 'timeouts.ts'), ['export const TIMEOUTS = {', '  test: { default: 90_000 },', '  action: 15_000,', '  navigation: 30_000,', '  stall: { silence: 30_000 },', '  diagnostics: { keep: 5 },', '  admission: { max_wait: 600_000 },', '  rate_limit: { cooldown: 60_000 },', '} as const;', ''].join('\n'));
+    const inv = inventory({ root, automationRoot: 'Testing/Automation' });
+    eq9(p, 'the project config is shared', [inv.shared, inv.sharedSource], ['Testing/Automation/playwright.config.ts', 'automation root']);
+    if (inv.configs.some((c) => /\.claude/.test(c.file))) p.push('a skill fixture config was listed: ' + inv.configs.map((c) => c.file).join(', '));
+    eq9(p, 'verdict single', inv.verdict, 'single');
+    // the missing navigationTimeout goes into the TOP-LEVEL use (the project use already has actionTimeout)
+    const rr = 'Testing/Automation/reports/US-1';
+    const a1 = reconcile({ root, automationRoot: 'Testing/Automation', resultsRoot: rr, apply: true, env: {}, now: new Date('2026-10-28T10:00:00Z') });
+    const after = fs.readFileSync(path.join(auto, 'playwright.config.ts'), 'utf8');
+    const topUse = after.slice(after.indexOf('  use: {'));
+    if (!/navigationTimeout: TIMEOUTS\.navigation/.test(topUse) || /projects:[^\n]*navigationTimeout/.test(after)) p.push('navigationTimeout not inserted into the top-level use only:\n' + after);
+    // helpers: absent → installed with a stamped marker
+    const steps = path.join(auto, 'helpers', 'steps.ts');
+    const installed = fs.existsSync(steps) ? fs.readFileSync(steps, 'utf8') : '';
+    if (!/@link-qc-5-template steps \d+\.\d+\.\d+ sha256=[0-9a-f]{64}/.test(installed)) p.push('the installed helper carries no stamped template marker');
+    eq9(p, 'the installed copy is current', helperState(installed, fs.readFileSync(path.join(here, '..', 'assets', 'steps.template.ts'), 'utf8'), 'steps').state, 'current');
+    // an untouched copy of an OLDER template version (its recorded hash matches its content) → replaced, backed up
+    const oldBody = '// helpers/steps.ts — an older template body\nexport const step = () => null;\n';
+    const shaOf = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+    fs.writeFileSync(steps, '// @link-qc-5-template steps 3.0.0 sha256=' + shaOf(oldBody) + '\n' + oldBody);
+    // a CUSTOMISED older copy (content changed after install) → kept, reported
+    const pr = path.join(auto, 'helpers', 'progress-reporter.ts');
+    const prBody = '// helpers/progress-reporter.ts — older\nexport default class X {}\n';
+    fs.writeFileSync(pr, '// @link-qc-5-template progress-reporter 3.0.0 sha256=' + shaOf(prBody) + '\n' + prBody + '// a local change\n');
+    const a2 = reconcile({ root, automationRoot: 'Testing/Automation', resultsRoot: rr, apply: true, env: {}, now: new Date('2026-10-28T10:05:00Z') });
+    if (!/@link-qc-5-template steps \d+\.\d+\.\d+ sha256=/.test(fs.readFileSync(steps, 'utf8')) || /an older template body/.test(fs.readFileSync(steps, 'utf8'))) p.push('the untouched older helper was not upgraded');
+    if (!a2.backup || !fs.existsSync(path.join(root, a2.backup, 'Testing', 'Automation', 'helpers', 'steps.ts'))) p.push('the upgraded helper was not backed up');
+    if (!/a local change/.test(fs.readFileSync(pr, 'utf8'))) p.push('a customised helper was overwritten');
+    if (!a2.conflicts.some((c) => /progress-reporter/.test(c.file || '') && /modified after install/.test(c.reason))) p.push('the customised helper is not reported: ' + JSON.stringify(a2.conflicts));
+    const a3 = reconcile({ root, automationRoot: 'Testing/Automation', resultsRoot: rr, apply: true, env: {}, now: new Date('2026-10-28T10:10:00Z') });
+    if (a3.changes.length) p.push('a third apply changed something: ' + JSON.stringify(a3.changes));
+    // two equal candidates at the project root and none in the automation root → ambiguous, no shared, no config edit
+    fs.rmSync(path.join(auto, 'playwright.config.ts'));
+    fs.writeFileSync(path.join(root, 'playwright.config.ts'), cfgText());
+    fs.writeFileSync(path.join(root, 'playwright.config.js'), cfgText());
+    const amb = inventory({ root, automationRoot: 'Testing/Automation' });
+    eq9(p, 'ambiguous, never the first', [amb.shared, amb.ambiguous.length], [null, 2]);
+    const ra = reconcile({ root, automationRoot: 'Testing/Automation', env: {} });
+    if (!ra.conflicts.some((c) => /ambiguous/.test(c.reason))) p.push('reconcile does not report the ambiguous config');
+    if (ra.planned.some((x) => /playwright\.config/.test(x.file))) p.push('reconcile planned a config edit on an ambiguous config');
+    eq9(p, 'top-level use index ignores a project use', topLevelUseIndex(cfgText()) === cfgText().indexOf('  use: {') + '  use: {'.length - 1, true);
+    void a1;
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  check('9 discovery skips skill fixtures, ambiguity reported, top-level use only, hash-verified helper upgrade, idempotent', p, {});
 }
 
 const out = {

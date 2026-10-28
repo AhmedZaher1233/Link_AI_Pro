@@ -548,6 +548,23 @@ export const GOLDEN_SHARED_TC_HASH = '935858124e72e0dd04faac4bdcc7870cd70171fbb0
   check('22 optional AI Oracle: absent / — → golden; present → content-sensitive, format-insensitive', p, { withAi: h1.hash.slice(0, 12) });
 }
 
+/* 23 — [API] / [DB] step markers: owned tags api-step / db-step beside human-step, the layer on the row; a TC without a marker keeps its exact row shape (the goldens). */
+{
+  const p = [];
+  const tc = TC.replace(/(### TC-SYNC-02 [\s\S]*?- \*\*Steps:\*\*\n)/, '$1  1. [API] POST [E1] /api/products as [A1] with "Widget" → capture body.id as $product\n')
+    .replace(/(### TC-SYNC-02 [\s\S]*?- \*\*Expected Result:\*\* )([^\n]*)/, '$1$2\n  - [DB] Check that the product record where id = $product does not exist');
+  if (tc === TC) p.push('fixture anchors for TC-SYNC-02 moved');
+  const plan = mkPlan({ tcText: tc });
+  const t2 = tcOf(plan, 'TC-SYNC-02');
+  if (!t2.intendedTags.includes('api-step') || !t2.intendedTags.includes('db-step')) p.push('markers did not yield api-step / db-step: ' + JSON.stringify(t2.intendedTags));
+  if (t2.layer !== 'hybrid' || t2.apiSteps !== 1 || t2.dbSteps !== 1) p.push('row layer / counts ' + JSON.stringify({ layer: t2.layer, api: t2.apiSteps, db: t2.dbSteps }));
+  const t1 = tcOf(plan, 'TC-SYNC-01');
+  if ('layer' in t1 || t1.intendedTags.includes('api-step')) p.push('an unmarked TC gained layer facts or a backend tag');
+  if (plan.counts.apiStep !== 1 || plan.counts.dbStep !== 1) p.push('counts ' + JSON.stringify({ api: plan.counts.apiStep, db: plan.counts.dbStep }));
+  if ('apiStep' in mkPlan().counts) p.push('a document without markers gained apiStep / dbStep counts');
+  check('23 [API] / [DB] markers → owned api-step / db-step tags and the row layer; unmarked rows unchanged', p, {});
+}
+
 const out = {
   tool: 'selftest-ado-sync',
   ran: cases.length,

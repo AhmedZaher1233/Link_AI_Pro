@@ -753,6 +753,57 @@ for (const s5name of ['link-qc-5-test-run-automation', 'link-qc-5b-test-run-manu
   check('31 navigation: section ids, contents panel, sort / filter script, typed headers, no external request', p, {});
 }
 
+/* 32 — [API] / [DB] lines: the test layer is derived like tc-hash tcLayer (hybrid / api), badged, counted, keyed; an
+   Expected sub-list renders as a list; an unknown layer BLOCKs; a $name used before its capture warns; the `Test layers:`
+   line is shown and checked; a token reference in a header line is no secret, a Bearer / JWT / URL-credential literal is;
+   the plain sample keeps its payload shape (no layer counts). */
+{
+  const p = [];
+  const base = render({ tcPath: SAMPLE, root: here });
+  if ('layers' in base.payload.counts || 'backendTcs' in base.payload.counts) p.push('the plain sample gained layer counts');
+  const HYBRID_FROM = '- **Expected Result:** The grid shows all 36 rows across 2024-2026.\n';
+  const HYBRID_TO = '- **Expected Result:** The grid shows all 36 rows across 2024-2026.\n  - [DB] Check that the KPI filter record where user = [A1] has year = "all"\n';
+  const API_FROM = '- **Steps:**\n  1. Open the Filter panel and set Display Type to "Year" without selecting a year.\n  2. Click Apply.\n- **Expected Result:** A validation message "Select a year" appears under the Year field and the grid does not reload.\n';
+  const API_TO = '- **Steps:**\n  1. [API] POST [E1] /api/kpi/filter as [A1] with {"year": null} → capture body.traceId as $trace\n  2. [API] GET [E1] /api/kpi/filter/$trace as [A1]\n- **Expected Result:**\n  - [API] status 400\n  - [API] body.error.code = "SELECT_YEAR"\n  - [API] body.items is array\n';
+  const mk = (extra = (s) => s) => tmpCopy((s) => { for (const a of [HYBRID_FROM, API_FROM]) if (!s.includes(a)) throw new Error('sample anchor moved: ' + a.slice(0, 40)); return extra(s.replace(HYBRID_FROM, HYBRID_TO).replace(API_FROM, API_TO).replace('**Tag convention:** —\n', '**Tag convention:** —\n**Test layers:** ui, api, hybrid\n')); });
+  const t = mk();
+  try {
+    const r = render({ tcPath: t.tc, root: t.dir });
+    if (r.payload.gate !== 'PASS') p.push('gate ' + r.payload.gate + ' ' + r.payload.gateReason);
+    const L = r.payload.counts.layers || {};
+    if (L.hybrid !== 1 || L.api !== 1 || r.payload.counts.backendTcs !== 2) p.push('layer counts ' + JSON.stringify(L));
+    if (r.payload.counts.apiLines !== 5 || r.payload.counts.dbLines !== 1) p.push('line counts api ' + r.payload.counts.apiLines + ' db ' + r.payload.counts.dbLines);
+    const card = (id) => ((r.html || '').match(new RegExp('<details class="card tc" id="' + id + '">[\\s\\S]*?</details>')) || [''])[0];
+    if (!/<span class="badge type">API<\/span>/.test(card('TC-KPI-03'))) p.push('API layer badge missing');
+    if (!/<span class="badge type">UI \+ API \/ DB<\/span>/.test(card('TC-KPI-02'))) p.push('hybrid layer badge missing');
+    if ((card('TC-KPI-03').match(/<li class="backend">/g) || []).length !== 5) p.push('expected 5 backend list lines on the API card');
+    if (/<span class="badge type">(API|DB|UI \+)/.test(card('TC-KPI-01'))) p.push('a UI TC got a layer badge');
+    if (!/Test layers/.test(r.html || '') || !/ui, api, hybrid/.test(r.html || '')) p.push('Test layers meta line not shown');
+    if (r.payload.warnings.some((w) => /^(capture-unresolved|layer-not-confirmed|layer-gate-unrecorded)$/.test(w.kind))) p.push('unexpected layer warning: ' + JSON.stringify(r.payload.warnings.filter((w) => /layer|capture/.test(w.kind))));
+    const keys = deriveKeys(buildModel(parseTcDocument(read(t.tc)), parseTestData(read(SAMPLE_DATA)), { feature: 'kpi-filter' }));
+    if (!/^\[API\] status 400$/.test(keys['tc.TC-KPI-03.expected.1'] || '')) p.push('Expected sub-list line is not a key with its marker');
+    if (!/^\[DB\] Check/.test(keys['tc.TC-KPI-02.expected.1'] || '')) p.push('hybrid [DB] expected line not keyed');
+  } finally { t.cleanup(); }
+  // unknown layer: an unmarked Expected line in a TC without a UI step → BLOCKED
+  const u = mk((s) => s.replace('  - [API] body.items is array\n', '  - [API] body.items is array\n  - The user sees an error.\n'));
+  try { const r = render({ tcPath: u.tc, root: u.dir }); if (r.payload.gate !== 'BLOCKED' || !kinds(r).includes('layer-unknown')) p.push('unknown layer did not BLOCK: ' + r.payload.gate + ' ' + kinds(r).join(',')); } finally { u.cleanup(); }
+  // $name before capture, layer not confirmed by the header
+  const w = mk((s) => s.replace('  2. [API] GET [E1] /api/kpi/filter/$trace as [A1]', '  2. [API] GET [E1] /api/kpi/filter/$other as [A1]').replace('**Test layers:** ui, api, hybrid', '**Test layers:** ui, api'));
+  try {
+    const r = render({ tcPath: w.tc, root: w.dir });
+    if (!r.payload.warnings.some((x) => x.kind === 'capture-unresolved' && /\$other/.test(x.detail))) p.push('$other used before capture did not warn');
+    if (!r.payload.warnings.some((x) => x.kind === 'layer-not-confirmed' && x.id === 'TC-KPI-02')) p.push('hybrid TC not in Test layers did not warn');
+    if (r.payload.gate === 'BLOCKED') p.push('warnings must not block');
+  } finally { w.cleanup(); }
+  // secrets: a token reference is no secret; Bearer / JWT / URL-credential literals are
+  const sec = (line) => { const x = mk((s) => s.replace('  2. [API] GET [E1] /api/kpi/filter/$trace as [A1]', '  2. ' + line)); try { return kinds(render({ tcPath: x.tc, root: x.dir })).includes('secret-literal'); } finally { x.cleanup(); } };
+  if (sec('[API] GET [E1] /api/kpi/filter/$trace as [A1] with header api-key: [E1]')) p.push('a token reference after api-key: was taken for a secret');
+  if (!sec('[API] GET [E1] /api/kpi as [A1] with header Authorization: Bearer abcdefghijklmnop0123')) p.push('a Bearer literal was not refused');
+  if (!sec('[API] GET [E1] /api/kpi with eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.SflKxwRJSMeKKF2QT4f')) p.push('a JWT literal was not refused');
+  if (!sec('[DB] Check that the KPI record exists in postgres://qa:Secr3t@db-test/kpi')) p.push('a URL credential was not refused');
+  check('32 [API] / [DB] lines: layer derived, badged, counted, keyed; unknown BLOCKs; capture / Test-layers warnings; secret shapes', p, {});
+}
+
 const out = {
   tool: 'selftest-render-tc-review',
   skill: path.basename(skillDir),

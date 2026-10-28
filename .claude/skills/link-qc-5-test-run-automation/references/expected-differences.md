@@ -45,6 +45,8 @@ results equal the legacy validator gate) and the same semantic review.
 | ED-14 | 35 | semantic | the project's `tsc --noEmit` (`tool:tsc`) | stricter (a type error is a FAIL) | `selftest-check.mjs` case 11 |
 | ED-15 | 33, 34, 36, 39, 47 | semantic | validator rules that already existed in 1.2.0 (`outcome-coverage-unassessed`, `trace-uncovered-id`, `manifest-unreadable`, `exception-*`, `absolute-url`) now enter the gate as the check's mechanical result | stricter (their findings can no longer be overlooked) | `selftest-check.mjs` case 1 (rule mapping) |
 | ED-16 | 44 | semantic, `config-inventory.mjs` consulted | `config-inventory.mjs` is a mechanical unit (`tool:configs`) | equal | `selftest-check.mjs` case 1 |
+| ED-18 | 51, 52, 53, 54 | — (no API / DB test cases before 3.0) | new checks for `[API]` / `[DB]` lines: 51 the API layer, 52 the DB layer, 53 data changes (consent, run-owned structured writes, read-back, teardown, never production, nothing in doubt), 54 a valid redacted record per backend attempt; each N/A only when its predicate (`api-tests`, `db-tests`, `data-changes`, `api-db-tests`) shows no subject in the code AND the TC document | stricter (a legacy run has no subject: every one is N/A with the predicate's evidence) | `selftest.mjs` cases 27-32, `selftest-check.mjs` case 20, `selftest-run-data.mjs` case 11 |
+| ED-19 | 14, 15, 16a, 19, 38, 46a, 46b, 49 | the image, console and network items applied to every test | layer-scoped evidence: an api / db / api+db test owes a record (check 54) instead of an image; the image / console / network items stay never-N/A for every phase with a browser test and are N/A only through the script-decided `no-browser-tests` predicate (zero ui / hybrid tests in the code AND in the TC document — never claimed by the model); 38 also covers records, request headers and connection strings | equal for every browser test; stricter for backend tests (record, not nothing) | `selftest-check.mjs` cases 1, 20, `selftest-run-data.mjs` case 11 |
 | ED-17 | 43 | semantic review of the timeout policy | `tool:protections` — `config-inventory.mjs reconcile` (dry-run) is a mechanical unit: an unbounded action / navigation / test budget, a disabled protection (retries > 0, a forced local headless, a missing helper or stall key, QA_LEDGER=off, a persistent browser profile) or a value above its target without an approved exception is a FAIL | stricter (a disabled protection can no longer be read past) | `selftest-check.mjs` case 1 (units), `selftest-config-inventory.mjs` |
 
 ## 3. Parity table — every check of `scripts/check.mjs` `CHECKS`
@@ -68,13 +70,13 @@ B · parity.
 | 11 | S · A,B | A: S · B: S | — | — | — | identical |
 | 12 | S · A,B | A: S · B: S | — | — | — | identical |
 | 13 | S · A,B | A: S · B: S | — | — | — | identical |
-| 14 | M+S · A | A: MS · B: MS | 4 | — | — | differs: ED-5 |
-| 15 | M · A | A: M · B: M | 2 | — | — | differs: ED-5 |
-| 16a | S · A | A: MS · B: MS | 1 | — | — | differs: ED-6, ED-5 |
+| 14 | M+S · A | A: MS · B: MS | 4 | no-browser-tests | — | differs: ED-5, ED-19 |
+| 15 | M · A | A: M · B: M | 2 | no-browser-tests | — | differs: ED-5, ED-19 |
+| 16a | S · A | A: MS · B: MS | 1 | no-browser-tests | — | differs: ED-6, ED-5, ED-19 |
 | 16b | S · A | A: — · B: R | — | — | yes | differs: ED-6 |
 | 17 | S · A | A: S · B: S | — | — | — | differs: ED-5 |
 | 18 | S · B | A: — · B: RS | — | — | yes | differs: ED-10, ED-12 |
-| 19 | S · B | A: — · B: RS | — | — | yes | differs: ED-10, ED-12 |
+| 19 | S · B | A: — · B: RS | — | no-browser-tests | — | differs: ED-10, ED-12, ED-19 |
 | 20 | M · A,B | A: M · B: M | 1 | — | — | identical |
 | 21 | M+S · A,B | A: MS · B: MS | 2 | — | — | identical |
 | 22 | S · B | A: — · B: R | — | fail-slow | — | differs: ED-11, ED-12 |
@@ -94,7 +96,7 @@ B · parity.
 | 35 | S · A,B | A: M · B: M | — | — | — | differs: ED-14 |
 | 36 | S · A,B | A: MS · B: MS | 1 | — | — | differs: ED-15 |
 | 37 | S · A,B | A: S · B: R | — | — | — | differs: ED-12 |
-| 38 | M+S · A,B | A: MS · B: MSR | 1 | — | — | differs: ED-12 |
+| 38 | M+S · A,B | A: MS · B: MSR | 3 | — | — | differs: ED-12, ED-19 |
 | 39 | S · A,B | A: MS · B: MS | 5 | exceptions | — | differs: ED-11, ED-15 |
 | 40 | M+S · A,B | A: MS · B: MS | 1 | — | — | identical |
 | 41 | M+S · A,B | A: MS · B: MS | 1 | — | — | identical |
@@ -102,15 +104,19 @@ B · parity.
 | 43 | S · A,B | A: MS · B: MSR | 1 | — | — | differs: ED-4, ED-12, ED-17 |
 | 44 | S · A,B | A: MS · B: MS | — | — | — | differs: ED-16 |
 | 45 | S · A,B | A: S · B: SR | — | — | — | differs: ED-12 |
-| 46a | S · A,B | A: M · B: M | 1 | — | — | differs: ED-8, ED-4 |
-| 46b | S · A,B | A: — · B: R | — | — | yes | differs: ED-8 |
+| 46a | S · A,B | A: M · B: M | 1 | no-browser-tests | — | differs: ED-8, ED-4, ED-19 |
+| 46b | S · A,B | A: — · B: R | — | no-browser-tests | — | differs: ED-8, ED-19 |
 | 47 | S · A,B | A: MS · B: MS | 2 | — | — | differs: ED-4, ED-15 |
 | 48a | S · B | A: — · B: R | — | — | yes | differs: ED-9 |
 | 48b | S · B | A: — · B: R | — | — | yes | differs: ED-9 |
-| 49 | S · A,B | A: MS · B: MS | 1 | part: rate-limit-step | — | differs: ED-4, ED-11 |
+| 49 | S · A,B | A: MS · B: MS | 1 | no-browser-tests · part: rate-limit-step | — | differs: ED-4, ED-11, ED-19 |
 | 50 | S · A,B | A: S · B: R | — | — | — | differs: ED-12 |
+| 51 | new · — | A: MS · B: MS | 9 | api-tests | — | differs: ED-18 |
+| 52 | new · — | A: MS · B: MS | 7 | db-tests | — | differs: ED-18 |
+| 53 | new · — | A: MS · B: MSR | 7 | data-changes | — | differs: ED-18 |
+| 54 | new · — | A: MS · B: MSR | 9 | api-db-tests | — | differs: ED-18 |
 
-Totals: 20 identical · 34 differ (every difference stricter or equal — none turns a legacy FAIL / BLOCKED into a
+Totals: 20 identical · 38 differ (every difference stricter or equal — none turns a legacy FAIL / BLOCKED into a
 PASS).
 
 ## 4. Result-visible changes outside the checklist (not covered by the parity rule)

@@ -63,7 +63,7 @@
 
 ### Automation Model (skill 5)
 #### Knowledge
-<!-- pages that already have page objects (page names only), how to run, environment presets, heal patterns -->
+<!-- pages that already have page objects (page names only), how to run, environment presets, heal patterns; API / DB mapping decisions (operation → endpoint or table, its effect and the evidence), the DB client, the database production markers (names, never a connection string) -->
 #### Questions and Answers
 
 ### Manual Run Model (skill 5b)

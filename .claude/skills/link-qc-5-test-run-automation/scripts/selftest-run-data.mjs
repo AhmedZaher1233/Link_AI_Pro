@@ -13,8 +13,9 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  locate, loadSummaries, phaseCommands, buildExecutions, mergePhase, applyMerge, reportFragments, readinessTable, handoff, verifyRuntime,
+  locate, loadSummaries, phaseCommands, buildExecutions, mergePhase, applyMerge, reportFragments, ledgerSections, readinessTable, handoff, verifyRuntime,
   recordChecks, computeAcceptance, gateRecords, initDrafts, publishPhase, runData, hhmmss, variationSlug, planAt, stageText,
+  pairSpan, canonicalPath, resolveReqId, applyJudgements, deliveryOf, imageOwed,
 } from './run-data.mjs';
 import { render, pageState } from './render-run-report.mjs';
 
@@ -191,7 +192,7 @@ const frozenOf = (t) => ({ drafts: { 'TEST-RUN-REPORT-sample.md': sha(path.join(
     const { mctx, m } = load(t.runFile);
     const v = verifyRuntime(mctx, m, { learning: path.join(FX, 'learning.md') });
     eq(p, 'gate', v.gate, 'PASS');
-    eq(p, 'check ids (natural order — integer-like object keys always enumerate first)', Object.keys(v.checks).sort((x, y) => x.localeCompare(y, 'en', { numeric: true })), ['16b', '18', '22', '23', '25b', '31', '32', '33', '34', '37', '38', '43', '45', '46b', '48a', '48b', '50']);
+    eq(p, 'check ids (natural order — integer-like object keys always enumerate first)', Object.keys(v.checks).sort((x, y) => x.localeCompare(y, 'en', { numeric: true })), ['16b', '18', '22', '23', '25b', '31', '32', '33', '34', '37', '38', '43', '45', '46b', '48a', '48b', '50', '53', '54']);
     for (const [id, c] of Object.entries(v.checks)) if (c.status !== 'PASS') p.push(id + ' ' + c.status + ': ' + c.evidence + ' ' + JSON.stringify(c.details));
     eq(p, '16b evidence', v.checks['16b'].evidence, '7 passing tests: evidence recorded before teardown');
     eq(p, '18 evidence', v.checks['18'].evidence, '9 attempt images on disk; draft report, bug file, run file and page present');
@@ -201,11 +202,11 @@ const frozenOf = (t) => ({ drafts: { 'TEST-RUN-REPORT-sample.md': sha(path.join(
     eq(p, '38 scanned', v.checks['38'].evidence, '5 file(s) scanned, no credential-shaped value');
     eq(p, 'freshness', v.freshness.status, 'PASS');
     const rec = recordChecks(mctx.resultsRoot, 'snap-b', v.checks);
-    eq(p, 'records written', rec.written.length, 17);
+    eq(p, 'records written', rec.written.length, 19);
     const lines = fs.readFileSync(rec.file, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     if (!lines.every((x) => x.executor === 'S' && x.unit === 'phase' && x.snapshotId === 'snap-b' && x.status === 'verified-mechanical')) p.push('record shape ' + JSON.stringify(lines[0]));
     const again = recordChecks(mctx.resultsRoot, 'snap-b', v.checks);
-    eq(p, 'second record: nothing written twice', [again.written.length, again.skipped.length], [0, 17]);
+    eq(p, 'second record: nothing written twice', [again.written.length, again.skipped.length], [0, 19]);
     check('5 verify: all runtime checks PASS, zero events PASS with evidence, one record per check and snapshot', p, { gate: v.gate });
   } finally { t.cleanup(); }
 }
@@ -384,6 +385,242 @@ const frozenOf = (t) => ({ drafts: { 'TEST-RUN-REPORT-sample.md': sha(path.join(
     if (bad.status !== 0 || JSON.parse(bad.stdout).outcome !== 'BLOCKED') p.push('an unknown subcommand must be BLOCKED with exit 0 (no --strict)');
   } finally { t.cleanup(); }
   check('10 helpers and CLI exit codes', p, {});
+}
+
+/* 11 — test layers (3.0): the evidence a TC owes follows its layer (an image for ui / hybrid, a record for api / db /
+   api+db / hybrid), fail-closed — a missing, malformed, mismatched or unsealed record, or a PASS whose record holds a
+   failed assertion, FAILs 18 / 54; backend TCs belong to the backend project (25b); 46b is unresolved, never a vacuous
+   PASS, when only backend tests ran; check 53 reads the ownership ledgers (consent, production, ownership, read-back,
+   in doubt) and acceptance counts what the run could not start or prove. Synthetic phase on a temp folder. */
+{
+  const p = [];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-run-data-layers-'));
+  try {
+    const ar = dir; const rr = path.join(dir, 'reports', 'US-1');
+    const shotsRel = 'screenshots/US-1';
+    const recDir = (tc, slug) => path.join(ar, shotsRel, 'phase-1', tc, slug);
+    const { sealRecord } = await import('./redact.mjs');
+    const writeRec = (tc, slug, a, extra = {}) => {
+      const rec = { schema: 'skill5-record/1', tc, tcs: [tc], test_id: 't', title: '[' + tc + ']', project: slug.split('--')[0], attempt: a, retry: 0, layer: 'api', identity: null, entries: [{ id: 'e1', seq: 1, step: null, step_title: null, purpose: 'test', channel: 'api', method: 'POST', path: '/api/orders', status: 201 }], assertions: [{ id: 'a1', tc_line: 'ER1', entry_ref: 'e1', target: 'status', outcome: 'pass' }], redaction: {}, ...extra };
+      const sealed = sealRecord(rec, []);
+      fs.mkdirSync(recDir(tc, slug), { recursive: true });
+      fs.writeFileSync(path.join(recDir(tc, slug), 'attempt-' + a + '.record.json'), sealed.text);
+      return shotsRel + '/phase-1/' + tc + '/' + slug + '/attempt-' + a + '.record.json';
+    };
+    const okRec = writeRec('TC-A1', 'backend--none--r0', 1);
+    const failedAssert = writeRec('TC-A2', 'backend--none--r0', 1, { assertions: [{ id: 'a1', tc_line: 'ER1', entry_ref: 'e1', target: 'status', outcome: 'fail' }] });
+    const wrongTc = writeRec('TC-OTHER', 'backend--none--r0', 1);
+    fs.mkdirSync(recDir('TC-A4', 'backend--none--r0'), { recursive: true });
+    fs.writeFileSync(path.join(recDir('TC-A4', 'backend--none--r0'), 'attempt-1.record.json'), '{not json');
+    const brokenRec = shotsRel + '/phase-1/TC-A4/backend--none--r0/attempt-1.record.json';
+    const hybImg = shotsRel + '/phase-1/TC-H1/chromium--none--r0/attempt-1.png';
+    fs.mkdirSync(path.dirname(path.join(ar, hybImg)), { recursive: true }); fs.writeFileSync(path.join(ar, hybImg), 'PNG stub');
+    const run = {
+      schema: 'skill6-run/1', phase: 1, run_id: 'run-1', screenshots_root: shotsRel, results_root: 'reports/US-1', feature: 'layers',
+      environment: { class: 'test' }, data_changes: { consent: 'yes', tcs: ['TC-A1'] },
+      run_plan: { projects: ['chromium', 'backend'], backend_project: 'backend', layers: { 'TC-A1': 'api', 'TC-A2': 'api', 'TC-A3': 'api', 'TC-A4': 'db', 'TC-A5': 'api', 'TC-H1': 'hybrid', 'TC-U1': 'ui' }, backend_lines: { 'TC-A1': ['ER1'], 'TC-A2': ['ER1'] } },
+    };
+    const att = (status, extra) => ({ attempt: 1, status, evidence_screenshot: null, failure_screenshot: null, ...extra });
+    const merged = { results: [
+      { tc_id: 'TC-A1', status: 'PASS', variants: [{ variant_slug: 'backend--none--r0', attempts: [att('PASS', { evidence_record: okRec })] }] },
+      { tc_id: 'TC-A2', status: 'PASS', variants: [{ variant_slug: 'backend--none--r0', attempts: [att('PASS', { evidence_record: failedAssert })] }] },
+      { tc_id: 'TC-A3', status: 'PASS', variants: [{ variant_slug: 'backend--none--r0', attempts: [att('PASS', { evidence_record: wrongTc })] }] },
+      { tc_id: 'TC-A4', status: 'PASS', variants: [{ variant_slug: 'backend--none--r0', attempts: [att('PASS', { evidence_record: brokenRec })] }] },
+      { tc_id: 'TC-A5', status: 'PASS', variants: [{ variant_slug: 'backend--none--r0', attempts: [att('PASS')] }] },
+      { tc_id: 'TC-H1', status: 'PASS', variants: [{ variant_slug: 'chromium--none--r0', attempts: [att('PASS', { evidence_screenshot: hybImg })] }] },
+    ], watchdog_events: [], totals: { total: 6 } };
+    // the ledger: one consented create (ok), one unconsented, one update of a record nobody created, one in doubt
+    const prog = path.join(rr, 'artifacts', 'progress'); fs.mkdirSync(prog, { recursive: true });
+    const L = (o) => JSON.stringify({ at: '2026-10-27T10:00:00Z', run_id: 'run-1', channel: 'db', ...o });
+    fs.writeFileSync(path.join(prog, 'run-1-positive-g1.data-ledger.jsonl'), [
+      L({ state: 'intent', write_id: 'w1', tc: 'TC-A1', op: 'insert', table: 'orders', key: { id: 'n1' }, purpose: 'test' }), L({ state: 'committed', write_id: 'w1', tc: 'TC-A1', op: 'insert', table: 'orders', key: { id: 'n1' } }), L({ state: 'verified', write_id: 'w1', tc: 'TC-A1', op: 'insert', table: 'orders', key: { id: 'n1' } }), L({ state: 'retained', write_id: 'r1', tc: 'TC-A1', op: 'insert', table: 'orders', key: { id: 'n1' } }),
+      L({ state: 'intent', write_id: 'w2', tc: 'TC-A2', op: 'insert', table: 'orders', key: { id: 'n2' }, purpose: 'test' }), L({ state: 'committed', write_id: 'w2', tc: 'TC-A2', op: 'insert', table: 'orders', key: { id: 'n2' } }), L({ state: 'verified', write_id: 'w2', tc: 'TC-A2', op: 'insert', table: 'orders', key: { id: 'n2' } }),
+      L({ state: 'intent', write_id: 'w3', tc: 'TC-A1', op: 'update', table: 'orders', key: { id: 'pre-1' }, purpose: 'test' }), L({ state: 'committed', write_id: 'w3', tc: 'TC-A1', op: 'update', table: 'orders', key: { id: 'pre-1' } }), L({ state: 'verified', write_id: 'w3', tc: 'TC-A1', op: 'update', table: 'orders', key: { id: 'pre-1' } }),
+    ].join('\n') + '\n');
+    const ctx = { run, phase: 1, automationRoot: ar, resultsRoot: rr, rrRel: 'reports/US-1', runFile: path.join(rr, '.runs', 'phase-1.json'), summaries: [], cmds: [], execs: [] };
+    const v = verifyRuntime(ctx, merged, {});
+    const d18 = (v.checks['18'].details || []).join(' | ');
+    if (!/TC-A5 backend--none--r0 attempt 1: API \/ DB record missing/.test(d18)) p.push('18: a backend PASS without a record was not refused: ' + d18);
+    if (/TC-A\d[^|]*image missing/.test(d18)) p.push('18: a backend TC was held to an image: ' + d18);
+    if (!/TC-H1 chromium--none--r0 attempt 1: API \/ DB record missing/.test(d18)) p.push('18: a hybrid PASS without its record was not refused: ' + d18);
+    const d54 = (v.checks['54'].details || []).join(' | ');
+    eq(p, '54 status', v.checks['54'].status, 'FAIL');
+    for (const [tc, re] of [['TC-A2', /failed assertion/], ['TC-A3', /tc "TC-OTHER" is not TC-A3/], ['TC-A4', /not valid JSON/], ['TC-A5', /no record/], ['TC-H1', /no record/]]) if (!new RegExp(tc + '[^|]*' + re.source).test(d54)) p.push('54: ' + tc + ' not refused for ' + re + ': ' + d54);
+    if (/TC-A1/.test(d54)) p.push('54: the valid record of TC-A1 was refused: ' + d54);
+    const d53 = (v.checks['53'].details || []).join(' | ');
+    eq(p, '53 status', v.checks['53'].status, 'FAIL');
+    if (!/TC-A2: insert[^|]*without the per-TC data-changes consent/.test(d53)) p.push('53: an unconsented write passed: ' + d53);
+    if (!/TC-A1: update orders \{"id":"pre-1"\} on a record this run did not create/.test(d53)) p.push('53: an update of a pre-existing record passed: ' + d53);
+    // in doubt → unresolved, and acceptance names it
+    fs.appendFileSync(path.join(prog, 'run-1-positive-g1.data-ledger.jsonl'), L({ state: 'intent', write_id: 'w9', tc: 'TC-A1', op: 'insert', table: 'orders', key: { id: 'n9' }, purpose: 'test' }) + '\n');
+    const v2 = verifyRuntime(ctx, merged, {});
+    eq(p, '53 with an intent in doubt beside the FAILs', v2.checks['53'].status, 'FAIL');
+    if (!/intent without an outcome/.test((v2.checks['53'].details || []).join(' '))) p.push('53: the in-doubt intent is not listed');
+    const doubtOnly = { ...ctx, run: { ...run, data_changes: { consent: 'yes', tcs: ['TC-A1', 'TC-A2'] } } };
+    fs.writeFileSync(path.join(prog, 'run-1-positive-g1.data-ledger.jsonl'), [L({ state: 'intent', write_id: 'w1', tc: 'TC-A1', op: 'insert', table: 'orders', key: { id: 'n1' }, purpose: 'test' }), L({ state: 'committed', write_id: 'w1', tc: 'TC-A1', op: 'insert', table: 'orders', key: { id: 'n1' } }), L({ state: 'verified', write_id: 'w1', tc: 'TC-A1', op: 'insert', table: 'orders', key: { id: 'n1' } }), L({ state: 'intent', write_id: 'w9', tc: 'TC-A1', op: 'insert', table: 'orders', key: { id: 'n9' }, purpose: 'test' })].join('\n') + '\n');
+    eq(p, '53 with only an intent in doubt', verifyRuntime(doubtOnly, merged, {}).checks['53'].status, 'unresolved');
+    // the two 3.0 report sub-sections come from the ledgers: n1 kept (never torn down), n9 in doubt — keys only
+    const sec = ledgerSections(doubtOnly);
+    if (!/### Retained test records/.test(sec.retainedTable || '') || !(sec.retainedTable || '').includes('| orders | {"id":"n1"} | TC-A1 | not torn down (verified) |')) p.push('ledgerSections: retained table ' + JSON.stringify(sec.retainedTable));
+    if (!/### In-doubt test records/.test(sec.inDoubtTable || '') || !/n9/.test(sec.inDoubtTable || '') || /n1/.test(sec.inDoubtTable || '')) p.push('ledgerSections: in-doubt table ' + JSON.stringify(sec.inDoubtTable));
+    if (Object.keys(ledgerSections({ ...doubtOnly, resultsRoot: path.join(dir, 'none') })).length) p.push('ledgerSections: a run without ledgers got sub-sections');
+    // production / an unrecorded class: every write refused
+    const v3 = verifyRuntime({ ...ctx, run: { ...run, environment: { class: 'production' } } }, merged, {});
+    if (!/class "production"/.test((v3.checks['53'].details || []).join(' '))) p.push('53: a write on production was not refused');
+    // 46b: only backend tests ran → unresolved (no vacuous PASS)
+    const spans = [{ worker: 0, tc: 'TC-A1', tcs: ['TC-A1'], start: 1, end: 2, status: 'passed', events: [], cmd: { stage: 'positive', group: 'g1', attempt: 1 } }];
+    const v4 = verifyRuntime({ ...ctx, cmds: [{ hb: { spans, teardowns: 0, consoleReports: 0 }, stage: 'positive', group: 'g1', attempt: 1, summary: {}, workers: 1, tcs: ['TC-A1'] }] }, merged, {});
+    eq(p, '46b with only backend tests executed', v4.checks['46b'].status, 'unresolved');
+    // 25b: a backend TC in the browser project, a ui TC in the backend project
+    const execs = [{ tc: 'TC-A1', ran: true, project: 'chromium', modifiers: [] }, { tc: 'TC-U1', ran: true, project: 'backend', modifiers: [] }];
+    const v5 = verifyRuntime({ ...ctx, execs }, merged, {});
+    const d25 = (v5.checks['25b'].details || []).join(' | ');
+    if (!/TC-A1: a api TC ran in the chromium project/.test(d25) || !/TC-U1: a ui TC ran in the backend project/.test(d25)) p.push('25b: wrong-project runs not refused: ' + d25);
+    // acceptance: an API TC without a verdict for a reason the run must fix, and the in-doubt write
+    const acc = computeAcceptance(ctx, { ...merged, results: [...merged.results, { tc_id: 'TC-A6', status: 'NOT_RUN', status_reason: 'not started: mapping unresolved (Q-3)' }, { tc_id: 'TC-A1', status: 'NOT_RUN', status_reason: 'not started: data changes not permitted' }, { tc_id: 'TC-A7', status: 'NOT_RUN', status_reason: 'not started: data changes not permitted' }], parallel_checks: [] }, { A: null, B: null });
+    const r = acc.reasons.join(' | ');
+    if (!/TC-A6 \(not started: mapping unresolved/.test(r)) p.push('acceptance: an unresolved mapping did not make the run NOT ACCEPTED: ' + r);
+    if (!/consented data-changing TC refused: TC-A1/.test(r)) p.push('acceptance: a consented TC refused anyway was not named');
+    if (/TC-A7/.test(r)) p.push('acceptance: a TC the tester did not consent to made the run NOT ACCEPTED');
+    if (!/in doubt after a crash/.test(r)) p.push('acceptance: the in-doubt write was not named');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  check('11 layers: image / record per layer fail closed (18, 54), project per layer (25b), 46b never vacuous, ledger rules (53), acceptance', p, {});
+}
+
+/* 12 — 3.1 report-pipeline fixes: a freshness-failed command never crashes verify (the `hb` crash); evidence is paired
+   by execution identity (repeat, worker, start time, own folder, one-worker order) and an ambiguous identity stays
+   unresolved; one canonical path form; requirement ids from every source, a disagreement is a conflict. */
+{
+  const p = [];
+  const t = tmp();
+  try {
+    // a freshness-FAIL command in the latest summary: phaseCommands gives it an (empty) heartbeat view, verify runs
+    const sums = fs.readdirSync(path.join(t.story, 'artifacts', 'progress')).filter((f) => /\.summary\.json$/.test(f)).sort();
+    t.edit(t.summary(sums[sums.length - 1]), (o) => { (o.groups || [])[0] && ((o.groups[0].freshness = { gate: 'FAIL' })); return o; });
+    let crashed = null;
+    try { const { ctx, m, mctx } = load(t.runFile); const c = ctx.cmds.find((x) => x.freshness === 'FAIL'); if (!c || !Array.isArray(c.hb.spans) || !c.excluded) p.push('the freshness-failed command has no empty heartbeat view'); verifyRuntime(mctx, m, {}); }
+    catch (e) { crashed = e.message; }
+    if (crashed) p.push('verify crashed on a freshness-failed command: ' + crashed);
+  } finally { t.cleanup(); }
+  // pairing — a burn-in command (workers 1) with three repeats of one TC and no start times / repeat in the heartbeats
+  const mk = (id, start, folder, extra = {}) => ({ id, worker: 0, tc: 'TC-9', tcs: ['TC-9'], start, end: start + 900, status: 'passed', project: null, retry: null, repeat: null, ...extra,
+    events: [{ event: 'evidence', path: 'screenshots/S/phase-1/TC-9/' + folder + '/attempt-1.png', _at: start + 500 }] });
+  const cmd = { workers: 1, hb: { spans: [mk(0, 1000, 'chromium--none--r0'), mk(1, 3000, 'chromium--none--r1'), mk(2, 5000, 'chromium--none--r2')] } };
+  const row = (repeat, extra = {}) => ({ project: 'chromium', repeat, retry: null, parallelIndex: null, startTime: null, ...extra });
+  const taken = new Set();
+  const got = [0, 1, 2].map((r) => { const k = pairSpan(cmd, row(r), 'TC-9', taken, { actual: 'chromium--none--r' + r, automationRoot: os.tmpdir() }); if (k.span) taken.add(k.span.id + '|TC-9'); return k.span ? k.span.id : null; });
+  eq(p, 'burn-in repeats paired by their own folder', got, [0, 1, 2]);
+  // the same three spans in ONE folder (a helper that ignores repeatEachIndex) — one worker: start order within the identity
+  const same = { workers: 1, hb: { spans: [mk(0, 1000, 'chromium--none--r0'), mk(1, 3000, 'chromium--none--r0'), mk(2, 5000, 'chromium--none--r0')] } };
+  const t2 = new Set();
+  const got2 = [0, 1, 2].map((r) => { const k = pairSpan(same, row(r), 'TC-9', t2, { actual: 'chromium--none--r' + r, automationRoot: os.tmpdir() }); if (k.span) t2.add(k.span.id + '|TC-9'); return k.span ? k.span.id : null; });
+  eq(p, 'one worker, one folder: start order within the identity', got2, [0, 1, 2]);
+  // two workers, no start time, no folder difference: ambiguous — never a guess
+  const multi = { workers: 2, hb: { spans: [mk(0, 1000, 'chromium--none--r0'), mk(1, 1100, 'chromium--none--r0', { worker: 1 })] } };
+  eq(p, 'two workers without identity → ambiguous', !!pairSpan(multi, row(0), 'TC-9', new Set(), { actual: 'chromium--none--r0', automationRoot: os.tmpdir() }).ambiguous, true);
+  // the worker slot and the start time decide when present
+  eq(p, 'worker + start time', pairSpan(multi, row(0, { parallelIndex: 1, startTime: new Date(1100).toISOString() }), 'TC-9', new Set(), {}).span.id, 1);
+  // paths — the canonical stored form from project-relative and absolute values
+  const ar = path.join(os.tmpdir(), 'qa-paths', 'Testing', 'Automation');
+  eq(p, 'project-relative → canonical', canonicalPath('Testing/Automation/screenshots/US-1/', ar), 'screenshots/US-1');
+  eq(p, 'absolute → canonical', canonicalPath(path.join(ar, 'reports', 'US-1'), ar), 'reports/US-1');
+  eq(p, 'canonical stays', canonicalPath('./reports/US-1', ar), 'reports/US-1');
+  // requirement ids
+  eq(p, 'agreeing sources', resolveReqId(null, new Set(['REQ-01', 'REQ-02']), new Set(['REQ-02'])), { value: 'REQ-02' });
+  eq(p, 'run-file value kept when consistent', resolveReqId('REQ-01', new Set(['REQ-01']), null), { value: 'REQ-01' });
+  eq(p, 'disagreement is a conflict, never a pick', !!resolveReqId(null, new Set(['REQ-01']), new Set(['REQ-05'])).conflict, true);
+  check('12 3.1 pipeline: no hb crash, identity pairing (ambiguous stays unresolved), canonical paths, req_id conflicts', p, {});
+}
+
+/* 13 — judge: the model's judgements validated as a whole (unknown TC, vocabulary, FAIL unclassified, duplicates →
+   nothing written); a valid set lands in the model-owned fields only and survives the next merge. */
+{
+  const p = [];
+  const t = tmp();
+  try {
+    mergeWrite(t);
+    const run = t.json(t.runFile);
+    const fails = run.results.filter((r) => r.status === 'FAIL').map((r) => r.tc_id);
+    const bad = applyJudgements(run, { results: { 'TC-404': { classification: 'app_bug' } }, parallel_checks: [{ tc: 'TC-002' }, { tc: 'TC-002' }] });
+    if (!bad.errors.length || bad.run) p.push('an invalid set was accepted');
+    if (!bad.errors.some((e) => /TC-404/.test(e))) p.push('the unknown TC was not named');
+    const wrong = applyJudgements(run, { results: Object.fromEntries(fails.map((tc) => [tc, { classification: 'looks broken' }])) });
+    if (fails.length && !wrong.errors.some((e) => /a FAIL takes one of/.test(e))) p.push('a FAIL classification outside the catalogue was accepted');
+    const good = { results: Object.fromEntries(fails.map((tc) => [tc, { classification: 'app_bug', root_cause: 'the server rejects a valid order', severity: 'High' }])), deviations: ['harness deviation'] };
+    const w = runData({ _: ['judge'], 'run-file': t.runFile, judgements: (() => { const f = path.join(t.dir, 'judgements.json'); fs.writeFileSync(f, JSON.stringify(good)); return f; })(), write: true });
+    eq(p, 'valid judgements written', [w.outcome, (w.errors || []).length], ['OK', 0]);
+    mergeWrite(t);
+    const after = t.json(t.runFile);
+    for (const tc of fails) eq(p, tc + ' classification kept by the next merge', after.results.find((r) => r.tc_id === tc).classification, 'app_bug');
+    eq(p, 'deviations replaced', after.deviations, ['harness deviation']);
+    const pub = runData({ _: ['judge'], 'run-file': t.pubRunFile, judgements: path.join(t.dir, 'judgements.json'), write: true });
+    if (pub.outcome === 'OK' && pub.writes && pub.writes.length) p.push('judge wrote a PUBLISHED run file');
+  } finally { t.cleanup(); }
+  check('13 judge: validated as a whole, model-owned fields only, drafts only, kept by merge', p, {});
+}
+
+/* 14 — report --write: the script writes the draft phase section (header, one history row, the frozen sub-section
+   order) and a second write is byte-identical (idempotent); earlier phases untouched; never the published report. */
+{
+  const p = [];
+  const t = tmp();
+  try {
+    mergeWrite(t);
+    const md = path.join(t.drafts, 'TEST-RUN-REPORT-sample.md');
+    const r1 = runData({ _: ['report'], 'run-file': t.runFile, write: true });
+    eq(p, 'report --write outcome', r1.outcome, 'OK');
+    const once = fs.readFileSync(md, 'utf8');
+    if (!/^## Phase 1 — /m.test(once) || !/^### Results$/m.test(once) || !/^### Stages$/m.test(once)) p.push('the phase section was not written');
+    if ((once.match(/^## Phase 1 — /gm) || []).length !== 1) p.push('the phase heading is not unique');
+    const order = [...once.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
+    if (order.indexOf('Run') > order.indexOf('Results') || order.indexOf('Results') > order.indexOf('Deviations')) p.push('sub-sections out of the frozen order: ' + order.join(' · '));
+    runData({ _: ['report'], 'run-file': t.runFile, write: true });
+    if (fs.readFileSync(md, 'utf8') !== once) p.push('a second report --write changed the draft (not idempotent)');
+    const pub = runData({ _: ['report'], 'run-file': t.pubRunFile, write: true });
+    eq(p, 'never the published report', pub.outcome, 'BLOCKED');
+  } finally { t.cleanup(); }
+  check('14 report --write: the draft phase section by script, frozen order, idempotent, drafts only', p, {});
+}
+
+/* 15 — delivery (3.1): the run's report / screenshot choice. `failed` → only the FAIL attempts (TC-002 / TC-003
+   attempt 1, each with its -failed image) owe an image; `none` → none; 16b has nothing to order on this UI-only fixture;
+   `md` → check 18 needs no page and publish writes none; absent → html + all (case 5 / 9 unchanged). */
+{
+  const p = [];
+  eq(p, 'defaults', deliveryOf({}), { report: 'html', screenshots: 'all', source: 'default' });
+  eq(p, 'unknown values fall back', deliveryOf({ delivery: { report: 'pdf', screenshots: 'some' } }), { report: 'html', screenshots: 'all', source: 'default' });
+  eq(p, 'imageOwed', [imageOwed('all', 'PASS'), imageOwed('all', 'SKIP'), imageOwed('failed', 'PASS'), imageOwed('failed', 'FAIL'), imageOwed('none', 'FAIL')], [true, false, false, true, false]);
+  const KEEP_FAILED = new Set([1, 2, 4, 5]); // TC-002 / TC-003 attempt-1 + their -failed images
+  const verifyWith = (delivery, keep) => {
+    const t = tmp();
+    try {
+      mergeWrite(t);
+      t.edit(t.runFile, (o) => ({ ...o, delivery }));
+      SHOTS.forEach((s, i) => { if (!keep.has(i)) fs.rmSync(path.join(t.dir, s), { force: true }); });
+      const { mctx, m } = load(t.runFile);
+      return verifyRuntime(mctx, m, {});
+    } finally { t.cleanup(); }
+  };
+  const vf = verifyWith({ report: 'md', screenshots: 'failed', source: 'flag' }, KEEP_FAILED);
+  eq(p, 'failed + md: 18', [vf.checks['18'].status, vf.checks['18'].evidence], ['PASS', '2 attempt images (screenshots: failed only) on disk; draft report, bug file, run file (markdown only — no page by the run\'s choice) present']);
+  eq(p, 'failed: 16b nothing owed', [vf.checks['16b'].status, /none owes evidence under the run's screenshot choice \(`failed`\)/.test(vf.checks['16b'].evidence)], ['PASS', true]);
+  const vfMissing = verifyWith({ report: 'md', screenshots: 'failed', source: 'flag' }, new Set([2, 4, 5]));
+  if (vfMissing.checks['18'].status !== 'FAIL' || !/TC-002/.test((vfMissing.checks['18'].details || []).join(' '))) p.push('failed: a FAIL attempt without its image passed 18: ' + JSON.stringify(vfMissing.checks['18']));
+  const vn = verifyWith({ report: 'html', screenshots: 'none', source: 'asked' }, new Set());
+  // html: the draft page is owed — none was rendered in this case, so 18 names exactly that and no image
+  const d18 = (vn.checks['18'].details || []).join(' | ');
+  if (vn.checks['18'].status !== 'FAIL' || !/TEST-RUN-REPORT-sample\.html missing/.test(d18) || /image/.test(d18)) p.push('none + html: 18 must miss only the page: ' + JSON.stringify(vn.checks['18']));
+  // publish under md: the markdown promoted, the renderer gate run, no page written
+  const t = tmp();
+  try {
+    mergeWrite(t);
+    t.edit(t.runFile, (o) => ({ ...o, delivery: { report: 'md', screenshots: 'all', source: 'asked' } }));
+    writeGate(t, 'B', gate('B', 'PASS', { frozen: frozenOf(t) }));
+    const r = publishPhase({ resultsRoot: t.story, phase: 1 });
+    eq(p, 'md publish', [r.outcome, r.page, r.reportFormat, r.promoted], ['PUBLISHED', null, 'md', ['TEST-RUN-REPORT-sample.md', 'BUG-REPORT-sample.md', '.runs/phase-1.json']]);
+    if (fs.existsSync(path.join(t.story, 'TEST-RUN-REPORT-sample.html'))) p.push('md publish wrote a page');
+  } finally { t.cleanup(); }
+  check('15 delivery: screenshots all / failed / none owed per attempt, markdown only publishes no page, defaults unchanged', p, {});
 }
 
 const out = {

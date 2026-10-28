@@ -17,20 +17,25 @@ data is NOT re-checked here as a whole-run condition; it was settled per require
 
 Before executing: grep `Testing/project-learning.md` for `[type: env]` lines first — known
 environment quirks, VPN/proxy notes, slicing thresholds and past fixes are applied before
-diagnosing anything anew. Then confirm the app/base URL responds and required services are
-healthy. Any check fails → **ENVIRONMENT_BLOCKED**
-(name the unhealthy dependency; action for ops/human — NOT a code defect).
-Do not execute. Every environment
-fact learned or fixed in this gate is written back as a plain-English `[type: env]` line
-under `## Automation Tricks`.
+diagnosing anything anew. Then ONE preflight call answers the rest — never a process listing, a memory probe, a
+hand-made URL check or a trial browser launch of your own:
+```text
+node .claude/skills/link-qc-5-test-run-automation/scripts/run-stage.mjs preflight --run-file {run_file} --cwd {automation_root} --env-id {env_id} --probe-url {E1 URL}
+```
+It returns `verdict` (`ready` · `restricted` · `blocked`) with its reason, `environment {status, ms}` (one bounded GET, no
+credentials), `lease`, `capacity {ceiling, source, free, used, availableMb, admissibleNow}`, `workers {start, max, why}`,
+`coordination`, `display`, `playwright {cli, version}` and `config {shared, source}` (detail:
+`artifacts/progress/preflight.json`). `blocked` with an unreachable / 5xx environment → **ENVIRONMENT_BLOCKED** (name the
+dependency; action for ops — NOT a code defect); any other `blocked` (no Playwright CLI, no safe coordination, insufficient
+capacity, a lease held elsewhere) → BLOCKED with that reason. `restricted` runs, and its reasons go into the run-start
+message (exclusive execution, headless, no free slot or no admissible worker right now — the stage then waits, bounded by
+`--max-wait`, never forced). Do not execute on `blocked`. Every environment fact learned or fixed in this gate is written
+back as a plain-English `[type: env]` line under `## Automation Tricks`.
 
-**The browser must be visible.** `{headed}` is true by default: confirm a display is
-available (an interactive Windows session, not a headless CI agent) by launching one headed
-Google Chrome window through the shared `playwright.config.ts` (`channel: 'chrome'`) before the
-stages start — Chrome absent → `npx playwright install chrome`, or the environment gate reports
-it. If no window can open, fall back to `PW_HEADLESS=1` for this run, say so in the chat
-immediately, and list it under Deviations — never silently run headless when the user expects
-to watch.
+**The browser must be visible.** `{headed}` is true by default; the runner decides it (`display` in the preflight and every
+stage payload): no graphical desktop or CI → headless for the run, said in the chat at once and listed under Deviations —
+never silently headless when the user expects to watch. A Chrome that will not start surfaces in the first stage as an
+`environment_failure` with its output in `artifacts/diagnostics/`.
 
 **Failure evidence must be capturable — and every TC must leave an assertion-point screenshot.**
 Before the first run confirm, and add when missing (noted in the Placement Manifest): the shared
@@ -65,6 +70,10 @@ this is the exception, not the routine.
   lowering in the payload's `ledger.lowered[]`. Runs of other stories, projects or skill 9 on this machine share
   the same ledger: a command that cannot be admitted waits up to `--max-wait` (10 min), then its TCs — and the
   rest of the stage — are `NOT_RUN` `not started: admission timeout ({reason})` / `not started: host pressure`.
+- **Low memory never forces execution and never switches coordination off.** A host whose total memory / cores can
+  never hold one worker of the stage's kind beside its reserve → the stage is BLOCKED before any side effect (`insufficient
+  capacity`); a host short only right now → commands wait for admission (bounded), in every mode — exclusive execution
+  admits on the host's memory too.
 - **Host pressure.** A 2 s sampler (memory below the reserve, CPU ≥ 90 % for 30 s, event-loop lag) publishes
   `paused` to the stage's admission file (`artifacts/progress/admission.json`) within a second: no new command
   is spawned and — in projects with `helpers/admission.ts` — no new test starts its side effects; running tests
@@ -88,9 +97,9 @@ this is the exception, not the routine.
   so the stage runs SERIALLY (scheduler `auto` → `serial`; an explicit `--scheduler dispatch` is refused). A coordination directory that is not writable, or an unreadable `ledger.json`,
   starts nothing: outcome `BLOCKED` "no safe coordination". `node .claude/skills/link-qc-5-test-run-automation/scripts/capacity.mjs
   status` shows the ledger; a crashed run's leftovers are resolved by the next sweep on a table, `node … run-stage.mjs
-  reclaim` (run by the user) ends only orphaned trees the ledger recorded, and `capacity.mjs release --token {t}
-  --force` (user-run, after checking that none of its browsers is open) frees one entry no table can confirm. You never
-  run these yourself.
+  reclaim` (run by the user) ends only orphaned trees the ledger recorded, and — only as the user's last resort, after
+  confirming none of its processes or browsers is open — `capacity.mjs release --token {t} --force` frees one entry no
+  table can confirm. You never run these yourself, and a wait is never "fixed" by a forced release.
 - **What it means for the run's acceptance:** a required TC left `NOT_RUN` by an admission timeout, host
   pressure, a deferral, the lease or missing coordination makes the run NOT ACCEPTED (`<run_acceptance>`) until
   it runs.
@@ -107,10 +116,10 @@ stops.
 
 **Chat messages — exactly these:**
 1. **Run start** — one message, in the same turn that launches the first stage: the TC counts per stage, the
-   paced services of `rate_limits[]`, the readiness line (`<parallel_readiness>`: units, pool, run-alone count, or why
-   the run is serial), the Auto ceiling with its basis, the start of 2 workers ramping within it, headed or why not,
-   the environment lease, the initial timeout values, the
-   progress-log path to tail (`Get-Content -Wait <path>` on Windows) and — only when this conversation already
+   paced services of `rate_limits[]`, the readiness line (`<parallel_readiness>`: units, pool, run-alone count, the
+   payload's `conflicts_brief[]` one-liners, or why the run is serial), the preflight line (ceiling with its basis,
+   `workers.start` ramping within it, headed or why not, the lease, any `restricted` reason), the initial timeout values,
+   the progress-log path to tail (`Get-Content -Wait <path>` on Windows) and — only when this conversation already
    holds earlier work — the one fresh-session line (`SKILL.md` *Progress and messages*).
 2. **After Smoke** — the payload's `update` (counts, failures, blockers, the smoke-gate line, the
    isolation-check line and the rate-limit line when they apply), plus the gate decision when the
@@ -144,9 +153,12 @@ activity transition is one progress-log line, appended in the same turn as that 
 tool call. A smoke retry, a re-queue and the isolation check report inside their stage's message
 (`--label`); the re-run has its own stage messages, labelled "re-run".
 
-**The progress log.** `run-stage.mjs` writes the execution entries (each command's start / stop / end,
-the line output, a 30 s status line with counts, current TC, elapsed, the estimate and the watchdog
-verdict); you append the activity entries (time · activity · status).
+**The progress log — concise; the detail beside it** (`references/schemas/paths-and-evidence.md` §7). `run-stage.mjs`
+writes the execution entries: each command's start / stop / end and a pointer to its full output
+(`artifacts/diagnostics/phase-{N}/{command}/playwright-output.log`), one line per test start (`▶ w{n} TC`), per test end
+(`✓` / `✗` / `–` with its first error line) and per wait (`⏸` admission, rate limit, deferral; capacity in `status.json`),
+and a 30 s status line with counts, current TC, elapsed, the estimate and the watchdog verdict; you append the activity
+entries (time · activity · status). Read the diagnostics file only to diagnose a failure — never the whole log to count.
 
 **Playwright execution mechanics — every test command of a run goes through `scripts/run-stage.mjs`:**
 - **One call per stage of a pass** — `setup` · `smoke` · `positive` · `negative`, each with
@@ -158,7 +170,7 @@ verdict); you append the activity entries (time · activity · status).
   ```text
   node .claude/skills/link-qc-5-test-run-automation/scripts/run-stage.mjs --run-file {run_file} --stage {stage} --run first|rerun
     --stage-tcs {the approved document's TCs of this stage} --ceilings auto --timeouts {timeout_policy}
-    --log {progress_log} --project {browser_project} --cwd {automation_root} --spec {this story's spec files} --env-id {env_id}
+    --log {progress_log} --project {browser_project}[,{backend_project}] --cwd {automation_root} --spec {this story's spec files} --env-id {env_id}
     --units {results_root}/artifacts/parallel-plan.json
     [--groups …] [--tcs …] [--burn-in {healed TCs}] [--extra repeat-each=N|last-failed|workers=N]
     [--cooldown {TIMEOUTS.rate_limit.cooldown}] [--cooldown-max {TIMEOUTS.rate_limit.cooldown_max}]
@@ -326,20 +338,18 @@ isolation check, a smoke retry, the re-run or the burn-in — each a new attempt
        and `structured-returns.md` now — and still complete `{run_file}` (`status: stopped-smoke-gate`),
        append the phase section (`**Outcome:** SMOKE GATE FAILED`), record every smoke failure in
        `{bug_report_md}` in full `<bug_report_format>`, list every positive/negative TC `NOT_RUN` —
-       `smoke gate failed (application errors)` — and render (the page shows the banner). State the gate
+       `smoke gate failed (application errors)` — and render (the page shows the banner) — all through
+       `run-data.mjs finalize` (`<publication>`), never by hand. State the gate
        result in the ADO summary comment and the final chat summary. A STOP in the re-run:
        `<second_run>` step 1.6 (fresh first-run results stand).
 3. **Positive stage** — `--stage positive`: `@positive` with `--grep-invert "@smoke"` (smoke tests
    already ran in this pass); then its cumulative message.
 4. **Negative stage** — `--stage negative`: `@negative` with `--grep-invert "@smoke"` — same
    order; then the run's cumulative message.
-5. Merge the stage JSONs into `{run_file}.merged` (per variant, per attempt — rules in
-   `<second_run>`), then into the single `{run_file}` / `{run_report_html}` —
-   per-stage counts preserved, each TC carrying its `run_group` / `run_mode` and its
-   variants, and the report shows the stage order, the group order, the gate outcome, and
-   planned vs actual duration. Before the merge, every stage planned in the run plan must
-   have a fresh stage JSON — or an explicit "stage not run — smoke gate STOP" marker;
-   otherwise STOP as in the freshness gate.
+5. The merge of the stage JSONs into `{run_file}` and the report is `run-data.mjs finalize` (`<second_run>` steps
+   2-4, `<publication>`) — per-stage counts, each TC's `run_group` / `run_mode` and variants, stage and group order, the
+   gate outcome and planned vs actual duration come from it. Every stage planned in the run plan must have a fresh stage
+   JSON — or an explicit "stage not run — smoke gate STOP" marker; otherwise STOP as in the freshness gate.
 </staged_execution>
 
 <first_run>
@@ -364,6 +374,7 @@ isolation check, a smoke retry, the re-run or the burn-in — each a new attempt
    | `selector_failure` | Element not found by its selector — stale/wrong locator | SELF-HEAL: fix the page-object locator |
    | `assertion_failure` | Element found, assertion wrong — test-code defect (bad wait, wrong expected mapping from the TC doc) | SELF-HEAL: fix wait strategy / assertion mapping |
    | `app_bug` | Test is correct; the application violates the approved TC | DO NOT TOUCH THE TEST — add to bug list |
+   | `api_contract_failure` / `db_assertion_failure` (3.0) | An `[API]` status / body assertion or a `[DB]` check failed on a correct test — the `app_bug` of a backend line (`api-db.md` `<backend_results>`); a wrong mapping or expected-value mapping is `assertion_failure` | DO NOT TOUCH THE TEST — add to bug list (the record is the evidence); the helpers' refusals (`data_write_refused`, `redirect_refused`, `evidence_invalid` …) are never bugs and never healed away |
    | `environment_failure` | Service down, auth expired, VPN/proxy/tunnel errors | ENVIRONMENT_BLOCKED path |
    | `data_missing` | The data a TC needs is absent at run time. Requirement was `READY` / `prepared` and verified in PHASE 2.6 → environment regression (ENVIRONMENT_BLOCKED path, name the requirement). Requirement was a `skip — data_missing` / `skip — not creatable` / `skip — QC declined` decision → the TC is `SKIP` with that reason — not a failure, not healed. A preparation created it but it is gone → re-run that setup group once (seed-once still holds: find-or-create), then treat as regression | per the two cases |
    | `timeout_failure` | A step deadline, a TC budget, the outer ceiling or the watchdog fired. The record carries TC-ID, step, elapsed, expected condition, trace / screenshot path | **Calibrate from evidence (step 2b), never by number.** Open the trace: the operation legitimately completes after the deadline → raise THAT key in `timeouts.ts` with the reason; a broken locator / failed operation → `selector_failure` / `assertion_failure` heal; a frozen step (no progress, Playwright's timeout could not act) → environment / driver defect, report it, never re-time it. A timeout on one run alone never establishes the required duration; retries are never added to absorb one |

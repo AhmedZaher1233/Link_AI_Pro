@@ -1,3 +1,4 @@
+// @link-qc-5-template progress-reporter 3.1.0
 // helpers/progress-reporter.ts — ADDITIVE incremental reporter (skill 5, references/code-craft.md §9).
 //
 // Copied by link-qc-5-test-run-automation into {automation_root}/helpers/progress-reporter.ts when absent and
@@ -5,7 +6,7 @@
 //
 // Playwright's `json` reporter writes only when the whole command ends, so a run the watchdog has to
 // kill would lose every result. This reporter appends ONE line per finished test as it happens:
-//   {PW_PROGRESS_FILE minus .jsonl}.results.jsonl   { at, worker, tc[], title, status, duration_ms, retry, project, error, annotations[], annotation_notes? }
+//   {PW_PROGRESS_FILE minus .jsonl}.results.jsonl   { at, worker, tc[], title, status, duration_ms, retry, repeat, project, error, annotations[], annotation_notes? }
 // and the test-level heartbeat records (`test-start` / `test-end`) to PW_PROGRESS_FILE itself, so
 // scripts/watchdog.mjs can tell completed, interrupted and never-started tests apart.
 // `annotations` lists the annotation TYPES of the test (never their descriptions), e.g. `skip`, `admission-timeout`,
@@ -57,7 +58,8 @@ export default class ProgressReporter implements Reporter {
 
   onTestBegin(test: TestCase, result: TestResult) {
     const tc = tcIdsOf(test.title);
-    this.append(this.heartbeatFile, { worker: result.parallelIndex, tc: tc.join(',') || test.title, event: 'test-start', retry: result.retry, project: test.parent.project()?.name ?? null });
+    // repeat = the --repeat-each index: with project + retry + worker it is the execution identity the evidence pairing uses
+    this.append(this.heartbeatFile, { worker: result.parallelIndex, tc: tc.join(',') || test.title, event: 'test-start', retry: result.retry, repeat: test.repeatEachIndex, project: test.parent.project()?.name ?? null });
   }
 
   onTestEnd(test: TestCase, result: TestResult) {
@@ -69,6 +71,7 @@ export default class ProgressReporter implements Reporter {
       status: result.status,               // passed | failed | timedOut | skipped | interrupted
       duration_ms: result.duration,
       retry: result.retry,
+      repeat: test.repeatEachIndex,
       project: test.parent.project()?.name ?? null,
       error: result.error?.message?.slice(0, 200) ?? null,
       annotations: annotationTypes(test, result),

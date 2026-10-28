@@ -107,7 +107,7 @@ export const HOLD_CLOSED_GRACE_MS = 120000;
 export const HOLD_OPEN_GRACE_MS = 15 * 60 * 1000;
 export const ENDED_KEEP = 200;
 // per worker (Playwright) or per process (compliance), the ×1.5 bootstrap safety already applied (§4.3)
-export const BOOTSTRAP_DEMAND = Object.freeze({ headed: { memMb: 1536, cpu: 1.5 }, headless: { memMb: 768, cpu: 0.75 }, compliance: { memMb: 1536, cpu: 1 } });
+export const BOOTSTRAP_DEMAND = Object.freeze({ headed: { memMb: 1536, cpu: 1.5 }, headless: { memMb: 768, cpu: 0.75 }, compliance: { memMb: 1536, cpu: 1 }, backend: { memMb: 256, cpu: 0.25 } });
 // this process's start time as the OS reports it to within milliseconds (the process table is compared with a 2 s tolerance)
 export const SELF_START = Date.now() - Math.round(process.uptime() * 1000);
 
@@ -187,7 +187,13 @@ export function autoCeiling({ totalMemMb, cpus, ci = false, kind = 'headed', upp
   basis.byMem = byMem;
   basis.byCpu = byCpu;
   const value = Math.max(1, Math.min(upper, byMem, byCpu));
-  return { value, basis, reason: null };
+  // 1 stays the ceiling's floor (an upper bound, never a launch decision); a host whose TOTAL memory / cores cannot hold
+  // one worker of this kind beside the reserve is flagged — the runner blocks before any side effect instead of waiting
+  // for an admission that can never come (and never launches anyway: admission still decides every launch)
+  const insufficient = byMem < 1 || byCpu < 1;
+  return { value, basis, reason: null, ...(insufficient ? { insufficient: true, insufficientReason: 'this host cannot hold one ' + kind + ' worker beside its reserve: '
+    + (byMem < 1 ? totalMemMb + ' MB total − ' + reserves.memMb + ' MB reserve < ' + per.memMb + ' MB per worker' : '') + (byMem < 1 && byCpu < 1 ? '; ' : '')
+    + (byCpu < 1 ? cpus + ' cores − ' + reserves.cores + ' reserved < ' + per.cpu + ' per worker' : '') } : {}) };
 }
 
 // The ceiling is Auto (above), bounded by config.json machineMaxWorkers when set (an absolute upper bound written by hand
@@ -222,7 +228,7 @@ export function resolveCeiling({ dir = resolveCapacityDir(), env = process.env, 
   consider('manifest', manifest && manifest.execution ? manifest.execution.maxWorkers : undefined);
   consider('--workers', workersFlag);
   return { ceiling, base, source, configured: !!cfg.machineMaxWorkers, upper: { value: cfg.error ? 1 : upper, from: cfg.machineMaxWorkers ? 'config' : 'AUTO_MAX' },
-    auto: auto ? { value: auto.value, basis: auto.basis, reason: auto.reason } : null, lowered, refusedRaises, invalid, configError: cfg.error || null, classes: cfg.classes };
+    auto: auto ? { value: auto.value, basis: auto.basis, reason: auto.reason, ...(auto.insufficient ? { insufficient: true, insufficientReason: auto.insufficientReason } : {}) } : null, lowered, refusedRaises, invalid, configError: cfg.error || null, classes: cfg.classes };
 }
 
 export const isCi = (env = process.env) => !!(env && env.CI) && !/^(0|false|no)$/i.test(String(env.CI).trim());
@@ -765,14 +771,19 @@ const rowsOf = (s) => (Array.isArray(s) ? s : s && Array.isArray(s.rows) ? s.row
 // why a live entry still holds its slots — for the refusal a waiting caller reports
 function holderNote(e) {
   const who = (e.kind === 'session-hold' ? 'session hold' + (e.session ? ' "' + e.session + '"' : '') : 'command') + ' of run ' + ((e.owner && e.owner.runId) || '?');
-  if (e.state === 'releasing' && e.confirm === 'table') return who + ' has ended but could not be confirmed stopped (' + (e.unconfirmed || 'its processes are still alive or no process table') + ') — `capacity.mjs sweep` frees it once a table shows it gone; after checking that none of its browsers is open, `capacity.mjs release --token ' + e.token + ' --force`';
+  if (e.state === 'releasing' && e.confirm === 'table') return who + ' has ended but could not be confirmed stopped (' + (e.unconfirmed || 'its processes are still alive or no process table') + ') — `capacity.mjs sweep` frees it once a table shows it gone (last resort, user-run, only after confirming none of its processes or browsers is open: `capacity.mjs release --token ' + e.token + ' --force`)';
   if (e.state === 'orphaned') return who + ' is orphaned: its owner is gone but its processes run on (`capacity.mjs reclaim`, user-run)';
   return who + ' (' + e.state + ')';
 }
 export async function reserve(opts = {}) {
   const { dir = resolveCapacityDir(), cls = 'playwright', units: rawUnits, limit: rawLimit = null, demand = null, owner = {}, environment = null,
     admission = null, waitMs = 0, pollMs = 2000, onWait = null, now = Date.now, lock = {}, exclusive = false, liveness = 'table', exists = pidExists, kind = null,
-    confirm = null, session = null, label = null, snapshot = null, confirmEveryMs = CONFIRM_EVERY_MS, machineCeiling = null } = opts;
+    confirm = null, session = null, label = null, snapshot = null, confirmEveryMs = CONFIRM_EVERY_MS, machineCeiling = null, deadline = null } = opts;
+  // deadline (absolute ms, optional): ONE end-to-end budget for the caller — every lock acquisition inside the wait gives up
+  // by it, and a busy ledger lock becomes a refusal (code lock-busy, its owner named) instead of a throw; without it the
+  // established behaviour (a LockBusyError after the lock's own give-up time) is unchanged
+  const dl = Number.isFinite(Number(deadline)) && Number(deadline) > 0 ? Number(deadline) : null;
+  const lockFor = () => (dl ? { ...lock, giveUpMs: Math.max(1, Math.min(lock.giveUpMs ?? 10000, dl - Date.now())) } : lock);
   const units = posInt(rawUnits);
   if (units === null) return { ok: false, code: 'invalid', reason: 'units must be a positive integer', waitedMs: 0 };
   const own = cls === 'playwright' && (rawLimit === null || rawLimit === undefined || !posInt(machineCeiling)) ? resolveCeiling({ dir }) : null;
@@ -798,7 +809,8 @@ export async function reserve(opts = {}) {
       lastConfirm = Date.now();
       try { rows = rowsOf(await snapshot()); } catch { rows = null; }
     }
-    const res = await mutateLedger(dir, (led, ctl) => {
+    let res;
+    try { res = await mutateLedger(dir, (led, ctl) => {
       if (led.error) { ctl.skip(); return { ok: false, code: 'ledger-error', reason: led.error }; }
       const nowMs = nowOf(now);
       const before = (led.queue || []).length;
@@ -825,7 +837,9 @@ export async function reserve(opts = {}) {
       const busy = (code, reason, extra = {}) => {
         if (!queued && led.queue.length === before && !pruned.changed && !(confirmed && confirmed.changed)) ctl.skip();
         const notes = uniq(live.filter((e) => e.state !== 'active' && e.state !== 'spawning').map(holderNote));
-        return { ok: false, code, reason: reason + (notes.length ? ' — ' + notes.join('; ') : ''), free, used, limit, holders: live.map((e) => ({ token: e.token, state: e.state, runId: e.owner ? e.owner.runId : null, kind: e.kind || 'command', units: e.units })), ...extra };
+        return { ok: false, code, reason: reason + (notes.length ? ' — ' + notes.join('; ') : ''), free, used, limit,
+          holders: live.map((e) => ({ token: e.token, state: e.state, runId: e.owner ? e.owner.runId : null, kind: e.kind || 'command', units: e.units,
+            runFile: e.owner ? e.owner.runFile ?? null : null, pid: e.owner ? e.owner.pid ?? null : null, since: e.createdAt || null, heartbeatAt: e.heartbeatAt || null, ...(e.label ? { label: e.label } : {}) })), ...extra };
       };
       const excl = live.find((e) => e.exclusive);
       if (excl) return busy('exclusive', 'exclusive execution in progress (run ' + ((excl.owner && excl.owner.runId) || '?') + ') — one Playwright command at a time on this machine while the ledger is off for it');
@@ -842,16 +856,19 @@ export async function reserve(opts = {}) {
         exclusive: !!exclusive, liveness: liveness === 'pid' ? 'pid' : 'table', ...(confirm === 'table' ? { confirm: 'table' } : {}), ...(kind ? { kind } : {}), ...(session ? { session: String(session) } : {}), ...(label ? { label: String(label).slice(0, 120) } : {}) };
       led.entries.push(entry);
       return { ok: true, token, entry, limit, used: used + units };
-    }, lock);
+    }, lockFor()); } catch (e) {
+      if (!dl || !(e instanceof LockBusyError)) throw e;
+      res = { ok: false, code: 'lock-busy', reason: 'the capacity ledger lock stayed busy: ' + e.message, holders: e.owner ? [{ lock: 'ledger', pid: e.owner.pid ?? null, host: e.owner.host || null, since: e.owner.at || null }] : [] };
+    }
     const waitedMs = Date.now() - t0;
     refused = !res.ok;
     if (res.ok) return { ...res, waitedMs };
-    if (res.code === 'ledger-error' || waitedMs >= waitMs) {
-      if (queued) { try { await mutateLedger(dir, (led) => { led.queue = (led.queue || []).filter((x) => x.token !== token); }, lock); } catch { /* the waiter expires by its ttl */ } }
+    if (res.code === 'ledger-error' || waitedMs >= waitMs || (dl && Date.now() >= dl)) {
+      if (queued) { try { await mutateLedger(dir, (led) => { led.queue = (led.queue || []).filter((x) => x.token !== token); }, dl ? { ...lock, giveUpMs: 2000 } : lock); } catch { /* the waiter expires by its ttl */ } }
       return { ...res, waitedMs };
     }
     if (onWait) { try { onWait({ ...res, waitedMs }); } catch { /* a callback never breaks the wait */ } }
-    await sleep(Math.max(1, Math.min(pollMs, waitMs - waitedMs)));
+    await sleep(Math.max(1, Math.min(pollMs, waitMs - waitedMs, dl ? dl - Date.now() : Infinity)));
   }
 }
 

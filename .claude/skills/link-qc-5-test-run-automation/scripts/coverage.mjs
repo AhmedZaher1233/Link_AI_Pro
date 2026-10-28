@@ -153,32 +153,48 @@ export function computeCoverage(j, { target = null, targetSource = null, mechani
     csvLine(['Category', 'User Story', 'TC-ID', 'Scenario', 'Why Manual', 'Priority']),
     ...order.flatMap((c) => manualRows.filter((x) => x.category === c).map((x) => csvLine([c, story, x.t.tc, x.t.scenario || x.t.title || DASH, x.t.whyManual || x.t.note || '-', x.priority]))),
   ].join('\n') + '\n';
-  // the report's `### Coverage` block
-  const row = (name, c) => '| ' + name + ' | ' + c.total + ' | ' + c.full + ' | ' + c.partial + ' | ' + c.none + ' | ' + (c.weightedPct === null ? DASH : c.weightedPct) + ' |';
-  const sign = (x) => (x > 0 ? '+' + x : String(x));
-  let deltaText;
-  if (!delta.against) deltaText = '**Δ:** no prior measurement';
-  else {
-    const parts = [];
-    if (delta.improved.length) parts.push('improved ' + delta.improved.join(', '));
-    if (delta.regressed.length) parts.push('regressed ' + delta.regressed.join(', '));
-    if (delta.added.length) parts.push('TCs added +' + delta.added.length + ' (' + delta.added.join(', ') + ')');
-    if (delta.removed.length) parts.push('TCs removed -' + delta.removed.length + ' (' + delta.removed.join(', ') + ')');
-    deltaText = '**Δ vs ' + (previous.phase ? 'phase ' + previous.phase : delta.against) + ':** ' + (delta.pctChange === null ? DASH : sign(delta.pctChange) + ' pts') + (parts.length ? ' — ' + parts.join(' · ') : ' — no TC changed');
-  }
-  const fragment = [
-    '| Stage | Total TCs | Fully | Partially | Not | Weighted % |', '|---|---|---|---|---|---|',
-    ...STAGES.filter((s) => byStage[s]).map((s) => row(STAGE_TITLE[s], byStage[s])), row('**Total**', total), '',
-    '**Target:** ' + tgt + '% (' + src + ', ' + mech + ') — **' + verdict + '** · ' + deltaText, '',
-    '| Requirement | Outcome | Asserted by |', '|---|---|---|',
-    ...reqs.map((r) => '| ' + r.id + ' | ' + r.outcome + ' | ' + ((r.assertedBy || []).join(', ') || DASH) + ' |'),
-  ].join('\n');
+  // the report's `### Coverage` block — one implementation, shared with run-data.mjs report --write
+  const fragment = coverageFragment(snapshot, { totals: total, previousPhase: previous ? previous.phase ?? null : null });
   const verdictLog = verdict === 'BELOW TARGET' ? 'BELOW TARGET → repairing' : verdict === 'user override' ? 'BELOW TARGET → user override' : verdict;
   const logLine = 'Validating Automation Code — coverage: ' + (pct === null ? DASH : pct) + '% weighted (Full ' + total.full + ' · Partial ' + total.partial + ' · None ' + total.none + ') — target ' + tgt + '% (' + src + ') — ' + verdictLog;
   return {
     outcome: errors.length ? 'BLOCKED' : 'OK', verdict, weightedPct: pct, target: tgt, targetSource: src, mechanism: mech, byStage, totals: total, requirements: reqTotals, manual, delta,
     gaps: tcs.filter((t) => t.status !== 'Fully Covered' && isYes(t.candidate)).map((t) => t.tc), missingTcs: missing, snapshot, fragment, logLine, csv: { summary, detail, manual: manualCsv }, errors, warnings,
   };
+}
+
+/**
+ * The `### Coverage` block (without its heading) from a coverage_snapshot — the ONE renderer: coverage.mjs uses it for its
+ * payload and run-data.mjs report --write for the draft report. `totals` / `previousPhase` are taken from the snapshot
+ * (its tcs and delta.against) when not given.
+ */
+export function coverageFragment(snapshot, { totals = null, previousPhase = null } = {}) {
+  const s = snapshot || {};
+  const byStage = s.byStage || {};
+  const statuses = Object.values(s.tcs || {});
+  const total = totals || { total: statuses.length, full: statuses.filter((x) => x === 'Fully Covered').length, partial: statuses.filter((x) => x === 'Partially Covered').length, none: statuses.filter((x) => x === 'Not Covered').length, weightedPct: s.weightedPct ?? null };
+  const reqs = Array.isArray(s.requirements) ? s.requirements : [];
+  const delta = s.delta || { against: null };
+  const row = (name, c) => '| ' + name + ' | ' + c.total + ' | ' + c.full + ' | ' + c.partial + ' | ' + c.none + ' | ' + (c.weightedPct === null || c.weightedPct === undefined ? DASH : c.weightedPct) + ' |';
+  const sign = (x) => (x > 0 ? '+' + x : String(x));
+  let deltaText;
+  if (!delta.against) deltaText = '**Δ:** no prior measurement';
+  else {
+    const parts = [];
+    if ((delta.improved || []).length) parts.push('improved ' + delta.improved.join(', '));
+    if ((delta.regressed || []).length) parts.push('regressed ' + delta.regressed.join(', '));
+    if ((delta.added || []).length) parts.push('TCs added +' + delta.added.length + ' (' + delta.added.join(', ') + ')');
+    if ((delta.removed || []).length) parts.push('TCs removed -' + delta.removed.length + ' (' + delta.removed.join(', ') + ')');
+    const ph = previousPhase ?? ((String(delta.against).match(/phase-(\d+)\.json/) || [])[1] || null);
+    deltaText = '**Δ vs ' + (ph ? 'phase ' + ph : delta.against) + ':** ' + (delta.pctChange === null || delta.pctChange === undefined ? DASH : sign(delta.pctChange) + ' pts') + (parts.length ? ' — ' + parts.join(' · ') : ' — no TC changed');
+  }
+  return [
+    '| Stage | Total TCs | Fully | Partially | Not | Weighted % |', '|---|---|---|---|---|---|',
+    ...STAGES.filter((st) => byStage[st]).map((st) => row(STAGE_TITLE[st], byStage[st])), row('**Total**', total), '',
+    '**Target:** ' + s.target + '% (' + s.targetSource + ', ' + s.mechanism + ') — **' + s.verdict + '** · ' + deltaText, '',
+    '| Requirement | Outcome | Asserted by |', '|---|---|---|',
+    ...reqs.map((r) => '| ' + r.id + ' | ' + r.outcome + ' | ' + ((r.assertedBy || []).join(', ') || DASH) + ' |'),
+  ].join('\n');
 }
 
 function writeAtomic(file, text) {

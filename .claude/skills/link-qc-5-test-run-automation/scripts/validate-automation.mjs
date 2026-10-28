@@ -26,6 +26,7 @@ import {
   loadStripped, matchDelim, splitArgs, findBodyRange, testIdentifiers, findBlocks,
   importMap, findMemberBody, isStraightLine, walk, isSpecFile, isCodeFile, ancestorOfKind,
 } from './scan-lib.mjs';
+import { parseTcDocument, tcLayer } from './tc-hash.mjs';
 
 export const SCHEMA_VERSION = 1;
 
@@ -93,6 +94,33 @@ export const RULES = {
   'console-guard-missing':       { severity: 'review',    exemptible: true,  title: 'Console guard not attached in beforeEach and reported in afterEach' },
   'network-guard-missing':       { severity: 'review',    exemptible: true,  title: 'Network guard not attached in beforeEach and reported in afterEach' },
   'admission-contract':          { severity: 'review',    exemptible: true,  title: 'Side-effecting fixture or beforeAll can start before admission (workerAdmission / unitAdmission)' },
+
+  // 3.0 — test layers ([API] / [DB] lines, skill 3's layer gate). Evidence and record rules are fail-closed: a missing or
+  // bypassed record is a violation, never a review item; layer-unresolved is the second review item that moves the gate.
+  'layer-mismatch':              { severity: 'violation', exemptible: false, title: 'Test layer of the code differs from the TC document, or the spec file runs it in the wrong Playwright project' },
+  'layer-unresolved':            { severity: 'review',    exemptible: false, title: 'Test layer (ui / api / db) could not be established — the evidence it owes is undetermined' },
+  'record-missing':              { severity: 'violation', exemptible: false, title: 'No assertion-point record captured by an API / DB test, directly or through the methods it calls' },
+  'record-in-hook':              { severity: 'violation', exemptible: false, title: 'Assertion-point record captured from a teardown hook' },
+  'record-duplicate':            { severity: 'violation', exemptible: false, title: 'More than one assertion-point record call in one test' },
+  'record-call-found':           { severity: 'info',      exemptible: false, title: 'Record call site found on a straight-line path (execution not proven)' },
+  'record-conditional':          { severity: 'review',    exemptible: false, title: 'Record reached only through a branch, loop, callback or early return' },
+  'record-unresolved':           { severity: 'review',    exemptible: false, title: 'Record could not be traced — a call hop was unfollowable' },
+  'record-placement-unproven':   { severity: 'review',    exemptible: false, title: 'Record placement relative to teardown cannot be established statically' },
+  'api-raw-request':             { severity: 'violation', exemptible: true,  title: 'Raw HTTP request in a spec, or a request that bypasses the recorded API layer' },
+  'api-record-missing':          { severity: 'violation', exemptible: false, title: 'API test without the recorded request (attachApiRecord) in its spec or fixture module' },
+  'api-mutation-unledgered':     { severity: 'violation', exemptible: false, title: 'API client bypasses the recorded request (fetch / newContext / an HTTP library) — no record, no ledger, no gate check' },
+  'api-effect-undeclared':       { severity: 'violation', exemptible: false, title: 'API client call without a declared effect (read · mutation · auth · unknown)' },
+  'api-effect-mismatch':         { severity: 'violation', exemptible: false, title: 'API client call declares another effect than the automation-inventory mapping row' },
+  'api-redirect-enabled':        { severity: 'violation', exemptible: false, title: 'Automatic redirects enabled — every redirect target is validated before a request is sent' },
+  'api-secret-header':           { severity: 'violation', exemptible: false, title: 'Token, key or cookie literal in a request header or body' },
+  'api-mutation-in-setup-unlabelled': { severity: 'review', exemptible: false, title: 'Data-changing request in setup code without purpose: "setup"' },
+  'db-raw-sql':                  { severity: 'violation', exemptible: true,  title: 'SQL text in a spec — queries belong in a db/ query object' },
+  'db-driver-import':            { severity: 'violation', exemptible: true,  title: 'Database driver imported outside db/ and helpers/db' },
+  'db-connection-literal':       { severity: 'violation', exemptible: false, title: 'Connection string with a credential in automation code' },
+  'db-env-not-qc':               { severity: 'review',    exemptible: true,  title: 'Database connection read from an environment variable that is not the QC-named one' },
+  'db-record-missing':           { severity: 'violation', exemptible: false, title: 'DB test without the recorded client (attachDbRecord), or a db/ read that bypasses it' },
+  'db-write-unledgered':         { severity: 'violation', exemptible: false, title: 'Database write that bypasses the ledger (ORM / driver write on an unrecorded client)' },
+  'db-write-freeform':           { severity: 'violation', exemptible: false, title: 'Write SQL text instead of the structured insert / update / delete of the recorded client' },
 };
 
 // Every rule → the compliance-checkpoints.md §2 item(s) it decides or feeds (Revision 3.1 numbering: 16a / 25a /
@@ -114,6 +142,12 @@ export const RULE_CHECKS = {
   'absolute-url': ['47'], 'manifest-unreadable': ['36'],
   'constant-redeclared': ['6'], 'empty-catch': ['28'], 'timeout-literal': ['43'],
   'console-guard-missing': ['46a'], 'network-guard-missing': ['49'], 'admission-contract': ['25a', '47'],
+  // 3.0 — 51 API layer · 52 DB layer · 53 data changes · 54 records
+  'layer-mismatch': ['51', '52'], 'layer-unresolved': ['51', '52'],
+  'record-missing': ['54'], 'record-in-hook': ['54'], 'record-duplicate': ['54'], 'record-call-found': ['54'], 'record-conditional': ['54'], 'record-unresolved': ['54'], 'record-placement-unproven': ['54'],
+  'api-raw-request': ['51'], 'api-record-missing': ['51', '54'], 'api-mutation-unledgered': ['51', '53'], 'api-effect-undeclared': ['51', '53'], 'api-effect-mismatch': ['51', '53'], 'api-redirect-enabled': ['51', '53'],
+  'api-secret-header': ['38', '51'], 'api-mutation-in-setup-unlabelled': ['53'],
+  'db-raw-sql': ['52'], 'db-driver-import': ['52'], 'db-connection-literal': ['38', '52'], 'db-env-not-qc': ['52'], 'db-record-missing': ['52', '54'], 'db-write-unledgered': ['53'], 'db-write-freeform': ['53'],
 };
 
 export const LIMITS = [
@@ -136,6 +170,8 @@ export const LIMITS = [
   'The B8 rules (constant-redeclared, empty-catch, timeout-literal, console-guard-missing, network-guard-missing, admission-contract) are staged at severity review: every finding is an open item for the checkpoint and none moves the scanner gate. They match names and shapes only: constant-redeclared reads spec-level numeric declarations whose name says timeout / tolerance / threshold / delay / deadline / wait / retry / interval / poll / ms (and any TIMEOUTS declaration); timeout-literal reads timeout / actionTimeout / navigationTimeout / globalTimeout / deadline object properties and .setTimeout / setDefaultTimeout / setDefaultNavigationTimeout calls whose value is a numeric literal or a numeric constant of the same file (timeouts.ts itself is the policy and is skipped); a value imported from another module is invisible.',
   'empty-catch fires on a catch block or a .catch() handler with an empty body ({} , a lone ";", undefined, void 0) and no comment inside it. A comment inside the block is the documented swallow (evidence-only helpers, best-effort cleanup) and never fires; a value fallback such as .catch(() => false) is not flagged here and stays a semantic item of check 28.',
   'The guard rules run only when the guard helper is DEFINED under the automation root (attachConsoleGuard / attachNetworkGuard, or the names given with --console-guard-fn / --network-guard-fn); otherwise they land in notRun[]. A test is covered when a beforeEach of its file or of an enclosing describe calls the helper with its handle kept and an afterEach covering it calls handle.report(); attachment through a fixture counts when the module the spec imports its test function from calls the helper (one hop — that fixture is then trusted to report).',
+  'Test layers (3.0): a test is ui when it destructures page / context / browser or reaches a pages/ object, api when it destructures request or reaches an api/ client, db when it reaches a db/ object — directly, through a `new X()` of an import, or through a fixture of the module it imports its test function from whose body does `new X()` of such an import (one hop). A seeding fixture that only calls request internally does not make a test api. Nothing found → ui in a project without api/ and db/ folders, else layer-unresolved (review, the scanner gate BLOCKED). With a TC document behind --tc-ids, the document layer (tc-hash tcLayer) is compared exactly with the code layer (layer-mismatch); the evidence a test owes is the union of both: an image for ui / hybrid, a record for api / db / api+db / hybrid.',
+  'API / DB rules read names and shapes: SQL is recognised by its leading keyword in a string literal; a driver by its import specifier; a declared effect by an `effect:` property with a string literal in the call options; a redirect override by a numeric `maxRedirects:` other than 0; a secret header by the previous string literal naming authorization / cookie / x-api-key / … or a Bearer / Basic / JWT-shaped literal. Whether a write touches a record the run did not create cannot be decided statically — db-record refuses it at runtime and run-data check 53 fails it.',
   'admission-contract runs only when {automation root}/helpers/admission.(ts|js|mts|cts|mjs|cjs) exists. Fixture dependencies are traced inside one test.extend({…}) object of one file (a dependency defined elsewhere is named as untraceable); "side-effecting" is a heuristic — a call into a prerequest/ import, request.post / put / patch / delete, a page-object create / add / save / update / delete / remove / submit / approve / reject / upload / import / assign method, or a login / sign-in call. A side effect behind dynamic dispatch is invisible.',
 ];
 
@@ -162,6 +198,8 @@ function resolvePaths(root, args, pushFinding) {
     automationRoot: str(args['automation-root']) || p.automationRoot || 'Testing/Automation',
     tests: str(args['tests-path']) || p.tests || 'Testing/Automation/tests',
     pages: str(args['pages-path']) || p.pages || 'Testing/Automation/pages',
+    api: str(args['api-path']) || p.api || path.posix.join(str(args['automation-root']) || p.automationRoot || 'Testing/Automation', 'api'),
+    db: str(args['db-path']) || p.db || path.posix.join(str(args['automation-root']) || p.automationRoot || 'Testing/Automation', 'db'),
     layers,
   };
 }
@@ -344,11 +382,12 @@ function receiverTargets(spec, block, imports, opts, skipNames) {
 }
 
 function guessFixtureFile(name, opts) {
-  if (!opts.pagesDir || !isDir(opts.pagesDir)) return null;
+  const dirs = [opts.pagesDir, opts.apiDir, opts.dbDir].filter((d) => d && isDir(d));
+  if (!dirs.length) return null;
   const norm = (x) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
   const want = norm(name);
   if (want.length < 4) return null;
-  const files = walk(opts.pagesDir, isCodeFile, 6);
+  const files = dirs.flatMap((d) => walk(d, isCodeFile, 6));
   for (const f of files) {
     const base = norm(path.basename(f).replace(/\.[^.]+$/, ''));
     if (base === want || base.startsWith(want) || want.startsWith(base)) return f;
@@ -451,6 +490,11 @@ export function analyze(opts) {
   const testsDir = path.resolve(root, paths.tests);
   const pagesDir = path.resolve(root, paths.pages);
   const automationDir = path.resolve(root, paths.automationRoot);
+  const apiDir = path.resolve(root, paths.api || path.posix.join(paths.automationRoot, 'api'));
+  const dbDir = path.resolve(root, paths.db || path.posix.join(paths.automationRoot, 'db'));
+  const dirs = { pagesDir, apiDir, dbDir, automationDir };
+  // A project with an api/ or db/ layer: an unresolved test layer is a review item there, `ui` everywhere else.
+  const backendProject = isDir(apiDir) || isDir(dbDir);
 
   /* --- scope --- */
   let files = [];
@@ -482,19 +526,29 @@ export function analyze(opts) {
   if (!reqIds) addNotRun('outcome-coverage-unassessed', 'no --req-ids supplied; requirement outcome coverage was not assessed here');
 
   const requireSteps = !!(opts.requireSteps || (opts.args || {})['require-steps']);
+  const recordFn = opts.recordFn || str((opts.args || {})['record-fn']) || 'captureRecord';
+  const recordReG = new RegExp('\\b' + recordFn + '\\s*\\(', 'g');
+  const docLayers = opts.docLayers !== undefined ? opts.docLayers : docLayersOf(root, (opts.args || {})['tc-ids']);
+  const dbEnvAllowed = new Set(String(opts.dbEnv || (opts.args || {})['db-env'] || '').split(',').map((x) => x.trim()).filter(Boolean));
+  const layerTests = [];
+  const layerCounts = { ui: 0, hybrid: 0, api: 0, db: 0, 'api+db': 0, unresolved: 0 };
+  const layerUse = { ui: 0, api: 0, db: 0 };
+  const backendCounts = { mutationMembers: 0 };
+  const need = { record: 0, api: 0, db: 0 };
   const evidenceFn = opts.evidenceFn || str((opts.args || {})['evidence-fn']) || 'captureEvidence';
   const evidenceRe = new RegExp('\\b' + evidenceFn + '\\s*\\(');
   const evidenceReG = new RegExp('\\b' + evidenceFn + '\\s*\\(', 'g');
 
   /* --- architecture --- */
   const layersKnown = !!(paths.layers || isDir(pagesDir));
-  const analysisOpts = { pagesDir, root };
+  const analysisOpts = { pagesDir, apiDir, dbDir, root };
 
   /* --- B8 preconditions: the guard helpers and the admission layer the project actually has --- */
   const consoleFn = opts.consoleGuardFn || str((opts.args || {})['console-guard-fn']) || 'attachConsoleGuard';
   const networkFn = opts.networkGuardFn || str((opts.args || {})['network-guard-fn']) || 'attachNetworkGuard';
   const guardHelpers = { console: helperDefinedUnder(automationDir, consoleFn, cache, root), network: helperDefinedUnder(automationDir, networkFn, cache, root) };
   const admissionHelper = admissionHelperIn(automationDir, root);
+  const recordHelpers = { api: helperDefinedUnder(automationDir, 'attachApiRecord', cache, root), db: helperDefinedUnder(automationDir, 'attachDbRecord', cache, root), record: helperDefinedUnder(automationDir, recordFn, cache, root) };
   let specsWithTests = 0;
 
   const filesScanned = [];
@@ -544,6 +598,27 @@ export function analyze(opts) {
     const testBlocks = blocks.filter((b) => b.body && (b.kind === 'test' || /^test\.(skip|fixme|fail|slow)$/.test(b.kind)));
     const describeBlocks = blocks.filter((b) => b.body && b.kind.startsWith('describe'));
 
+    /* --- test layers (3.0): what each test touches, its document layer, the evidence it owes --- */
+    const fileImports = importMap(s, file);
+    const fixKinds = isSpec && testBlocks.length ? fixtureKinds(s, file, cache, dirs) : new Map();
+    const layerOf = new Map();
+    for (const b of testBlocks) {
+      const L = testLayerOf(s, b, blocks, fileImports, fixKinds, dirs);
+      const code = L.layer || (backendProject ? 'unresolved' : 'ui');
+      const tcs = b.title && !b.title.template ? titleTokens(b.title.text, /^TC-/) : [];
+      const docs = docLayers ? tcs.map((t) => docLayers.get(t)).filter(Boolean) : [];
+      const image = needsImage(code) || docs.some((d) => d === 'ui' || d === 'hybrid');
+      const record = needsRecord(code) || docs.some(needsRecord);
+      const usesApi = L.uses.api || docs.some((d) => d === 'api' || d === 'api+db' || d === 'hybrid');
+      const usesDb = L.uses.db || docs.some((d) => d === 'db' || d === 'api+db');
+      layerOf.set(b, { code, uses: L.uses, via: L.via, tcs, docs, image, record, usesApi, usesDb });
+      layerCounts[code]++; for (const k of ['ui', 'api', 'db']) if (L.uses[k]) layerUse[k]++;
+      if (record) need.record++; if (usesApi) need.api++; if (usesDb) need.db++;
+      layerTests.push({ file: relFile, line: b.line, tcs, layer: code, document: docs.length ? uniqList(docs).join(',') : null, via: L.via });
+    }
+    const browserTests = testBlocks.filter((b) => !isBackendLayer(layerOf.get(b).code));
+    const backendBodies = testBlocks.filter((b) => isBackendLayer(layerOf.get(b).code)).map((b) => b.body);
+
     /* --- rule 1: focused execution --- */
     for (const b of blocks) {
       if (b.kind === 'test.only' || b.kind === 'describe.only') add('focus-only', b.line, b.ident + '.' + b.chain.join('.') + ' would silence every other test in the run. Use --grep / --project / --last-failed for a targeted run instead of editing the file.');
@@ -571,9 +646,12 @@ export function analyze(opts) {
       if (!layersKnown) {
         add('pom-architecture-unknown', 1, 'Neither qa-manifest.json automation.layers nor a pages folder was found, so layer ownership could not be established; POM rules were not applied to this file.');
       } else {
-        scanPom(s, add);
+        scanPom(s, add, (off) => backendBodies.some((r) => off >= r.start && off < r.end));
       }
+      // queries and drivers belong in db/ (3.0): SQL text in a spec is the same violation as an inline selector
+      for (const lit of s.strings) if (SQL_ANY.test(lit.value)) add('db-raw-sql', lit.line, 'SQL text in a spec — a query belongs in a db/ query object read through the recorded client (read(name, sql, params)); the spec calls that object only.');
     }
+    scanBackendText(s, relFile, file, dirs, add, isSpec);
 
     /* --- rule 7 + 8: waits, credentials, URLs (all layers) --- */
     for (const m of s.code.matchAll(/\bpage\s*\??\.\s*waitForTimeout\s*\(/g)) {
@@ -601,6 +679,7 @@ export function analyze(opts) {
     for (const m of s.code.matchAll(/\.\s*(first|last)\s*\(\s*\)|\.\s*nth\s*\(/g)) {
       const line = s.lineOf(m.index);
       if (fileFindings.some((f) => f.ruleId === 'pom-chained-locator' && f.line === line)) continue;
+      if (backendBodies.some((r) => m.index >= r.start && m.index < r.end)) continue;   // first() on response data in an api / db test is no locator
       const chain = receiverChain(s.code, m.index);
       if (isScopedChain(chain)) continue;
       const just = adjacentJustification(s, line, 15, null);
@@ -624,10 +703,11 @@ export function analyze(opts) {
     if (isSpec) scanConstants(s, add);
     scanEmptyCatch(s, add);
     scanTimeoutLiterals(s, relFile, add);
-    if (isSpec && testBlocks.length) {
+    // the console / network guards watch a page — they apply to the browser-project tests only (3.0)
+    if (isSpec && browserTests.length) {
       specsWithTests++;
-      if (guardHelpers.console) scanGuard('console-guard-missing', consoleFn, 'console guard', s, file, blocks, testBlocks, cache, add);
-      if (guardHelpers.network) scanGuard('network-guard-missing', networkFn, 'network guard', s, file, blocks, testBlocks, cache, add);
+      if (guardHelpers.console) scanGuard('console-guard-missing', consoleFn, 'console guard', s, file, blocks, browserTests, cache, add);
+      if (guardHelpers.network) scanGuard('network-guard-missing', networkFn, 'network guard', s, file, blocks, browserTests, cache, add);
     }
     if (admissionHelper) scanAdmission(s, file, blocks, add);
 
@@ -671,10 +751,54 @@ export function analyze(opts) {
         if (r.file) supportFilesRead.add(r.file);
       }
 
-      // evidence
-      const direct = [...bodyCode.matchAll(evidenceReG)].map((m) => b.body.start + m.index);
+      // layer (3.0): the document layer must equal the code layer; backend-only tests live in *.api.spec / *.db.spec files
+      const lay = layerOf.get(b);
+      if (lay.code === 'unresolved') add('layer-unresolved', b.line, 'The test layer could not be established: the test touches no page / context / browser, no request, and no pages/ · api/ · db/ object this scan can resolve (' + (lay.via.join('; ') || 'nothing found') + '). Whether it owes an image or a record is undetermined — resolve it (destructure the fixture it uses, or construct the layer object in the spec) or close it by review.');
+      for (const t of lay.tcs) {
+        const d = docLayers ? docLayers.get(t) : null;
+        if (d && d !== 'unknown' && lay.code !== 'unresolved' && d !== lay.code) add('layer-mismatch', b.line, t + ' is a ' + d + ' test case in the TC document but this test is ' + lay.code + ' (' + (lay.via.join('; ') || 'nothing found') + ') — implement the layer the document designed (an [API] / [DB] line through api/ / db/, a UI line through a page object), never a substitute.', { tc: t, document: d, code: lay.code });
+      }
+      if (isSpec && (backendProject || BACKEND_SPEC.test(file))) {
+        if (isBackendLayer(lay.code) && !BACKEND_SPEC.test(file)) add('layer-mismatch', b.line, 'A ' + lay.code + ' test in a browser spec file — it would run in the browser project. Move it to a *.api.spec.ts / *.db.spec.ts file (the backend project).', { code: lay.code, specKind: 'browser' });
+        if (!isBackendLayer(lay.code) && lay.code !== 'unresolved' && BACKEND_SPEC.test(file)) add('layer-mismatch', b.line, 'A ' + lay.code + ' test in a backend spec file (' + path.basename(file) + ') — the backend project has no browser. Move it to a browser spec file.', { code: lay.code, specKind: 'backend' });
+      }
+      // API / DB through their layers only (3.0): no raw request, the recorded request and client attached
+      for (const m of bodyCode.matchAll(RAW_REQUEST)) add('api-raw-request', s.lineOf(b.body.start + m.index), 'Raw ' + m[0].replace(/\s+/g, '').replace(/\($/, '') + '() in a test — an API call belongs in an api/ endpoint client over the recorded request; the spec calls client methods only.');
+      for (const m of bodyCode.matchAll(BYPASS_CALL)) add('api-raw-request', s.lineOf(b.body.start + m.index + (m[1] || '').length), 'A request outside the recorded API layer (' + (m[2] || m[0].trim()) + ') — no record, no ledger, no gate check.');
+      if (/(^|[^\w$.])new\s+[A-Za-z_$][\w$]*\s*\(\s*request\b/.test(bodyCode)) add('api-raw-request', b.line, 'An api/ client is built over the raw request fixture — build it over the recorded request (the fixture that calls attachApiRecord) so every call is recorded, paced and gated.');
+      if (lay.usesApi) {
+        if (!recordHelpers.api) { if (!notRun.some((x) => x.ruleId === 'api-record-missing')) addNotRun('api-record-missing', 'no attachApiRecord() definition under the automation root (' + paths.automationRoot + ') — the skill installs helpers/api-record.ts; without it no API call is recorded, paced or gated', 'api tests'); }
+        else if (!/\battachApiRecord\s*\(/.test(s.code) && !fixtureModuleCalls(s, file, cache, '\\battachApiRecord\\s*\\(')) add('api-record-missing', b.line, 'This API test reaches no recorded request: neither the spec nor the fixture module it imports its test function from calls attachApiRecord() — its calls would leave no record and pass no gate check.');
+      }
+      if (lay.usesDb) {
+        if (!recordHelpers.db) { if (!notRun.some((x) => x.ruleId === 'db-record-missing')) addNotRun('db-record-missing', 'no attachDbRecord() definition under the automation root (' + paths.automationRoot + ') — the skill installs helpers/db-record.ts; without it no query is recorded and no write is bounded', 'db tests'); }
+        else if (!/\battachDbRecord\s*\(/.test(s.code) && !fixtureModuleCalls(s, file, cache, '\\battachDbRecord\\s*\\(')) add('db-record-missing', b.line, 'This DB test reaches no recorded client: neither the spec nor its fixture module calls attachDbRecord() — its queries would leave no record and its writes no ledger.');
+      }
+
+      // record (3.0) — api / db / api+db / hybrid tests: one assertion-point record, the same rules as the image
+      if (lay.record) {
+        const directR = [...bodyCode.matchAll(recordReG)].map((m) => b.body.start + m.index);
+        recordReG.lastIndex = 0;
+        if (directR.length > 1) add('record-duplicate', s.lineOf(directR[1]), directR.length + ' ' + recordFn + '() calls in one test — exactly one assertion-point record per test (every request / query of the test is an entry in it).');
+        else if (directR.length === 1) {
+          const at = directR[0];
+          if (isStraightLine(s.code, b.body.start, at)) { if (CLEANUP_WORDS.test(s.code.slice(b.body.start, at))) add('record-placement-unproven', s.lineOf(at), 'A cleanup-looking call appears before ' + recordFn + '() — confirm the record still holds the state the Expected Result names.'); }
+          else add('record-conditional', s.lineOf(at), recordFn + '() is reached through a branch, loop, callback or after an early return — an attempt could finish with no record.');
+        } else {
+          const r = resolveIndirect(s, b, new RegExp(recordReG.source, 'g'), analysisOpts, cache, imports, expectIds);
+          if (r.status === 'found') { add('record-call-found', b.line, 'No direct ' + recordFn + '(); a call site was found on a straight-line path in ' + rel(root, r.file) + ':' + r.line + ' via ' + r.via + '.', { resolvedIn: rel(root, r.file), resolvedLine: r.line, via: r.via }); add('record-placement-unproven', b.line, 'The record is captured inside ' + r.via + ' — whether it runs at the assertion point and before teardown cannot be established statically.'); }
+          else if (r.status === 'conditional') add('record-conditional', b.line, 'The only ' + recordFn + '() found is reached through a branch, loop, callback or after an early return (' + rel(root, r.file) + ':' + r.line + ' via ' + r.via + ').');
+          else if (r.status === 'unresolved') add('record-unresolved', b.line, 'No direct ' + recordFn + '(), and the call chain could not be followed: ' + r.brokenHops.map((h) => h.name + ' (' + h.reason + ')').join('; ') + '.', { brokenHops: r.brokenHops });
+          else add('record-missing', b.line, 'This ' + lay.code + ' test owes a record (its API / DB lines are evidence) but no ' + recordFn + '() is in its body or in any method it calls — the attempt would end without evidence and can never PASS.');
+          if (r.file) supportFilesRead.add(r.file);
+        }
+      }
+
+      // evidence — the assertion-point image, owed by ui / hybrid tests (and every test of a project without a backend layer)
+      const direct = lay.image ? [...bodyCode.matchAll(evidenceReG)].map((m) => b.body.start + m.index) : [];
       evidenceReG.lastIndex = 0;
-      if (direct.length > 1) {
+      if (!lay.image) { /* a pure api / db / api+db test owes a record, not an image (item 54) */ }
+      else if (direct.length > 1) {
         add('evidence-duplicate', s.lineOf(direct[1]), direct.length + ' ' + evidenceFn + '() calls in one test — exactly one assertion-point image per test.');
       } else if (direct.length === 1) {
         const at = direct[0];
@@ -719,6 +843,9 @@ export function analyze(opts) {
       const m = evidenceReG.exec(hookCode);
       evidenceReG.lastIndex = 0;
       if (m) add('evidence-in-hook', s.lineOf(h.body.start + m.index), evidenceFn + '() called from ' + h.kind.split('.')[1] + ' — teardown has already run, so the image would contradict the result it is attached to. Failure-attachment copying belongs here; the assertion-point image does not.');
+      const r = recordReG.exec(hookCode);
+      recordReG.lastIndex = 0;
+      if (r) add('record-in-hook', s.lineOf(h.body.start + r.index), recordFn + '() called from ' + h.kind.split('.')[1] + ' — the assertion-point record is written in the test at its assertion point; the hook only writes the failure record.');
     }
 
     /* --- describe traceability --- */
@@ -787,6 +914,25 @@ export function analyze(opts) {
   const pageScan = scanPageClasses({ root, automationDir, files, cache, inventoryArg, push, addNotRun });
   for (const f of pageScan.classes) if (!fileHashes[f.file]) fileHashes[f.file] = f.sha256;
 
+  /* --- backend pass (3.0): every non-spec automation file of a project with an api/ or db/ layer --- */
+  let backendFiles = 0;
+  if (backendProject) {
+    const mapping = mappingRows(root, inventoryArg);
+    const scannedRel = new Set(filesScanned.map((f) => f.file));
+    for (const abs of walk(automationDir, (p) => isCodeFile(p) && !isSpecFile(p), 12)) {
+      if (scannedRel.has(rel(root, abs))) continue;
+      const s = loadStripped(abs, cache);
+      if (!s || s.parseError) continue;
+      backendFiles++;
+      const relFile = rel(root, abs);
+      if (!fileHashes[relFile]) fileHashes[relFile] = sha256(s.src);
+      const add = (ruleId, line, message, extra) => { const r = RULES[ruleId]; findings.push({ ruleId, severity: r ? r.severity : 'warning', file: relFile, line, message, ...(extra || {}) }); };
+      scanBackendText(s, relFile, abs, dirs, add);
+      scanBackendMembers(s, relFile, abs, dirs, mapping, dbEnvAllowed, add, backendCounts);
+    }
+  }
+  if (need.record && !recordHelpers.record) addNotRun('record-missing', 'no ' + recordFn + '() definition under the automation root (' + paths.automationRoot + ') — the skill installs helpers/record.ts; for a project equivalent under another name pass --record-fn <name>, otherwise close check 54 by semantic review', 'api / db tests');
+
   /* --- fingerprint --- */
   for (const f of supportFilesRead) {
     const r = rel(root, f);
@@ -799,7 +945,7 @@ export function analyze(opts) {
   const fp = digestOf(fileHashes);
 
   /* --- counts and gate --- */
-  const counts = { files: filesScanned.length, tests: filesScanned.reduce((a, f) => a + f.tests, 0), violation: 0, warning: 0, review: 0, info: 0, exceptions: exceptions.length, notRun: notRun.length, byRule: {}, byFile: {} };
+  const counts = { files: filesScanned.length, tests: filesScanned.reduce((a, f) => a + f.tests, 0), violation: 0, warning: 0, review: 0, info: 0, exceptions: exceptions.length, notRun: notRun.length, byRule: {}, byFile: {}, layers: layerCounts, layerUse, mutationMembers: backendCounts.mutationMembers };
   for (const f of findings) {
     counts[f.severity] = (counts[f.severity] || 0) + 1;
     counts.byRule[f.ruleId] = (counts.byRule[f.ruleId] || 0) + 1;
@@ -820,6 +966,10 @@ export function analyze(opts) {
   } else if (counts.violation > 0) {
     gate = 'FAIL';
     gateReason = counts.violation + ' violation(s) in ' + Object.keys(counts.byFile).length + ' file(s)';
+  } else if (layerCounts.unresolved > 0) {
+    // the second review item that moves the scanner gate: which evidence a test owes is undecided until its layer is
+    gate = 'BLOCKED';
+    gateReason = layerCounts.unresolved + ' test(s) whose layer (ui / api / db) could not be established (layer-unresolved) — whether they owe an image or a record is undetermined';
   } else if (pageScan.undecided > 0) {
     // The one review item that moves the scanner gate: Checkpoint A cannot open until every
     // candidate pair has a decision row, and the row IS the documented semantic review —
@@ -839,13 +989,14 @@ export function analyze(opts) {
     generatedOn: new Date().toISOString(),
     config: {
       manifest: paths.manifestFile, manifestState: paths.manifestState,
-      paths: { tests: paths.tests, pages: paths.pages, automationRoot: paths.automationRoot },
-      layersDeclared: !!paths.layers, scopeMode, evidenceFn, requireSteps,
+      paths: { tests: paths.tests, pages: paths.pages, automationRoot: paths.automationRoot, api: rel(root, apiDir), db: rel(root, dbDir) },
+      layersDeclared: !!paths.layers, scopeMode, evidenceFn, recordFn, requireSteps, backendProject, backendFiles,
+      recordHelpers, documentLayers: docLayers ? docLayers.size : null,
       allowFile: allow.file, inventoryFile: pageScan.inventory.file,
       idSources: { tcIds: tcIdSource, tcIdCount: tcIds ? tcIds.size : 0, reqIds: reqIdSource, reqIdCount: reqIds ? reqIds.size : 0 },
       b8: { consoleGuardFn: consoleFn, consoleGuardHelper: guardHelpers.console, networkGuardFn: networkFn, networkGuardHelper: guardHelpers.network, admissionHelper },
     },
-    scope: { filesScanned, supportFilesRead: [...supportFilesRead].map((f) => rel(root, f)), unreadable, parseFailures },
+    scope: { filesScanned, supportFilesRead: [...supportFilesRead].map((f) => rel(root, f)), unreadable, parseFailures, tests: layerTests },
     pageScan: {
       note: 'Every page class under the automation root (constructor takes a Page, or extends a page class), wherever it lives. Candidate pairs are evidence for the automation inventory, never a verdict; an undecided pair keeps the scanner gate BLOCKED until its inventory row is passed with --inventory.',
       root: rel(root, automationDir), filesScanned: pageScan.filesScanned, classes: pageScan.classes.map((c) => ({ file: c.file, line: c.line, name: c.name, extends: c.extends, routes: c.routes, locators: c.locators.length })),
@@ -873,7 +1024,7 @@ export function analyze(opts) {
 
 /* ---------------- helpers used by analyze ---------------- */
 
-function scanPom(s, add) {
+function scanPom(s, add, inBackendTest = () => false) {
   const checks = [
     ['pom-raw-locator', /\b(page|ctx|context)\s*\??\.\s*(locator|getByTestId|getByRole|getByLabel|getByPlaceholder|getByText|getByTitle|getByAltText|frameLocator)\s*\(/g, 'Raw locator in a spec — selectors belong in the page object.'],
     ['pom-navigation', /\bpage\s*\??\.\s*(goto|reload|goBack|goForward|waitForSelector|addInitScript|setContent|route)\s*\(/g, 'Raw page driving in a spec — wrap it in a page-object method.'],
@@ -884,6 +1035,7 @@ function scanPom(s, add) {
 
   for (const m of s.code.matchAll(/\b([A-Za-z_$][\w$]*)\s*\??\.\s*([A-Za-z_$][\w$]*)\s*\??\.\s*(locator|count|innerText|textContent|nth|first|last|all|getBy[A-Za-z]+)\s*\(/g)) {
     if (NON_RECEIVERS.has(m[1])) continue;
+    if (inBackendTest(m.index)) continue;   // result.rows.count() / body.items.first() in an api / db test is data, not a locator
     add('pom-chained-locator', s.lineOf(m.index), 'Chaining .' + m[3] + '() off ' + m[1] + '.' + m[2] + ' reaches through an exposed locator — that is the same violation as an inline selector, one level deeper. Add a page-object method that returns the result.');
   }
 
@@ -932,6 +1084,212 @@ function titleTokens(title, re) {
     for (const part of m[1].split(','))
       if (re.test(part.trim())) out.push(part.trim());
   return out;
+}
+
+/* ---------------- test layers + API / DB rules (3.0) ----------------
+   The layer decides the Playwright project and the evidence a test owes (an image for ui / hybrid, a record for api /
+   db / api+db / hybrid). It is read from what the test touches — never guessed: nothing found is `unresolved` in a
+   project that has an api/ or db/ layer (review, the scanner gate BLOCKED), and `ui` in every other project. */
+
+const BROWSER_PARAMS = new Set(['page', 'context', 'browser']);
+const DB_DRIVERS = /^(?:pg|pg-promise|postgres|mysql|mysql2(?:\/promise)?|mssql|tedious|oracledb|mongodb|mongoose|@prisma\/client|knex|typeorm|sequelize|better-sqlite3|sqlite3|ioredis|redis)$/;
+// SELECT needs a column list of SQL tokens before FROM ("Select a country from the list" is a label, not a query)
+const SQL_ANY = /^\s*(?:select\s+(?:distinct\s+|top\s+\d+\s+)?(?:\*|[\w.*"[\]()]+(?:\s*,\s*[\w.*"[\]()]+)*)\s+from\s+[\w."[\]]+|insert\s+into\s|update\s+[\w."[\]]+\s+set\s|delete\s+from\s|merge\s+into\s|truncate\s|exec(?:ute)?\s+[\w.[\]]+|with\s+\w+\s+as\s*\()/i;
+const SQL_WRITE = /^\s*(?:insert\s+into\s|update\s+[\w."[\]]+\s+set\s|delete\s+from\s|merge\s+into\s|truncate\s|alter\s+table\s|drop\s+table\s|create\s+table\s)/i;
+const CONN_LITERAL = /^[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:[^\s@/]+@|(?:^|;)\s*(?:password|pwd)\s*=\s*[^;\s]{3,}/i;
+const SECRET_HEADER_KEYS = /^(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|apikey|x-auth-token|x-access-token|x-csrf-token|x-xsrf-token)$/i;
+const TOKEN_VALUE = /^(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}$|^eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}$/;
+const QC_DB_ENV = /^QA_DB(?:_[A-Z0-9]+)*_URL$/;
+const EFFECTS = new Set(['read', 'mutation', 'auth', 'unknown']);
+const LEDGER_RECEIVERS = new Set(['db', 'ledger', 'dbRecord', 'recorded']);
+const RECORD_HELPER_FILES = /(^|[\\/])helpers[\\/](?:record|api-record|db-record|redact)\.(?:ts|js|mts|cts|mjs|cjs)$/;
+const DB_ADAPTER_FILE = /(^|[\\/])helpers[\\/]db\.(?:ts|js|mts|cts|mjs|cjs)$/;
+const BACKEND_SPEC = /\.(?:api|db)\.spec\.[cm]?[jt]sx?$/i;
+const RAW_REQUEST = /\b(request|apiContext|apiRequest)\s*\??\.\s*(get|post|put|patch|delete|head|fetch)\s*\(|\bpage\s*\??\.\s*request\s*\??\.\s*(get|post|put|patch|delete|head|fetch)\s*\(/g;
+const BYPASS_CALL = /(^|[^\w$.])(fetch|axios|got|superagent)\s*[.(]|\b(?:globalThis|window|self)\s*\??\.\s*fetch\s*\(|\.\s*newContext\s*\(|\bhttps?\s*\.\s*(?:request|get)\s*\(/g;
+const ORM_WRITE = /\b([A-Za-z_$][\w$]*)((?:\s*\??\.\s*[A-Za-z_$][\w$]*)*?)\s*\??\.\s*(create|createMany|update|updateMany|upsert|delete|deleteMany|insert|save|remove|destroy|bulkCreate|truncate|increment|decrement|\$executeRaw|\$executeRawUnsafe)\s*\(/g;
+const DB_READ = /\b([A-Za-z_$][\w$]*)((?:\s*\??\.\s*[A-Za-z_$][\w$]*)*?)\s*\??\.\s*(query|execute|raw|\$queryRaw|\$queryRawUnsafe|findFirst|findMany|findUnique|findOne|findAll|findByPk|aggregate)\s*\(/g;
+
+const needsImage = (l) => l === 'ui' || l === 'hybrid' || l === 'unresolved';
+const needsRecord = (l) => l === 'api' || l === 'db' || l === 'api+db' || l === 'hybrid';
+const isBackendLayer = (l) => l === 'api' || l === 'db' || l === 'api+db';
+const layerFrom = (u) => (u.ui ? (u.api || u.db ? 'hybrid' : 'ui') : u.api && u.db ? 'api+db' : u.api ? 'api' : u.db ? 'db' : null);
+const under = (file, dir) => !!file && !!dir && path.resolve(file).toLowerCase().startsWith(path.resolve(dir).toLowerCase() + path.sep);
+const kindOfFile = (file, dirs) => (under(file, dirs.apiDir) ? 'api' : under(file, dirs.dbDir) ? 'db' : under(file, dirs.pagesDir) ? 'ui' : null);
+// a path inside the automation root (helpers/…, prerequest/…) — never matched against the absolute path
+const autoRel = (abs, dirs) => (dirs.automationDir ? path.relative(dirs.automationDir, abs) : abs);
+
+/** TC document behind --tc-ids → Map(TC-ID → layer), or null when the source is not a TC document. */
+function docLayersOf(root, tcArg) {
+  if (!tcArg || tcArg === true) return null;
+  const abs = path.resolve(root, String(tcArg));
+  if (!isFile(abs) || !/\.md$/i.test(abs)) return null;
+  const tcs = parseTcDocument(read(abs) || '');
+  if (!tcs.length) return null;
+  return new Map(tcs.map((t) => [t.id, tcLayer(t).layer]));
+}
+
+/** Fixture name → 'ui' | 'api' | 'db' for the fixtures whose VALUE is a layer object (one hop: the module the spec imports its test function from). */
+function fixtureKinds(s, file, cache, dirs) {
+  const out = new Map();
+  const imports = importMap(s, file);
+  for (const id of testIdentifiers(s).ids) {
+    const imp = imports.get(id);
+    if (!imp || !imp.file) continue;
+    const mod = loadStripped(imp.file, cache);
+    if (!mod || mod.parseError) continue;
+    const modImports = importMap(mod, mod.file);
+    for (const d of fixtureDefinitions(mod)) {
+      const body = mod.code.slice(d.body.start, d.body.end);
+      if (!/(^|[^\w$.])use\s*\(/.test(body)) continue;
+      let kind = null;
+      if (/\battachApiRecord\s*\(/.test(body)) kind = 'api';
+      else if (/\battachDbRecord\s*\(/.test(body)) kind = 'db';
+      else {
+        const vars = new Map();
+        for (const m of body.matchAll(/\b([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?new\s+([A-Za-z_$][\w$]*)\s*\(/g)) vars.set(m[1], m[2]);
+        const used = /(^|[^\w$.])use\s*\(\s*(?:new\s+([A-Za-z_$][\w$]*)|([A-Za-z_$][\w$]*))/.exec(body);
+        const cls = used ? used[2] || vars.get(used[3]) : null;
+        const ci = cls ? modImports.get(cls) : null;
+        if (ci && ci.file) kind = kindOfFile(ci.file, dirs);
+      }
+      if (kind) out.set(d.name, kind);
+    }
+  }
+  return out;
+}
+
+/** What one test touches → { layer, uses: {ui, api, db}, via[] }. `layer` is null when nothing was found. */
+function testLayerOf(s, b, blocks, imports, fixKinds, dirs) {
+  const u = { ui: false, api: false, db: false };
+  const via = [];
+  const mark = (k, why) => { if (!u[k]) via.push(k + ': ' + why); u[k] = true; };
+  const take = (names, where) => {
+    for (const n of names) {
+      if (BROWSER_PARAMS.has(n)) mark('ui', n + where);
+      else if (n === 'request') mark('api', 'request' + where);
+      else if (fixKinds.has(n)) mark(fixKinds.get(n), n + ' fixture' + where);
+    }
+  };
+  const arg = (b.args || []).find(([a, c]) => b.body.start >= a && b.body.start <= c);
+  if (arg) take(paramDeps(s.code, arg[0], b.body.start).names, '');
+  for (const h of coveringHooks(blocks, b, 'beforeEach')) if (h.args && h.args.length) { const [fa] = h.args[h.args.length - 1]; take(paramDeps(s.code, fa, h.body.start).names.filter((n) => BROWSER_PARAMS.has(n)), ' (beforeEach)'); }
+  const body = s.code.slice(b.body.start, b.body.end);
+  const fileVars = new Map();
+  for (const m of s.code.matchAll(/\b([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?new\s+([A-Za-z_$][\w$]*)\s*\(/g)) fileVars.set(m[1], m[2]);
+  for (const [name, imp] of imports) {
+    if (!imp.file) continue;
+    const k = kindOfFile(imp.file, dirs);
+    if (!k) continue;
+    if (new RegExp('(^|[^\\w$.])' + escRe(name) + '\\s*[.(]').test(body) || new RegExp('\\bnew\\s+' + escRe(name) + '\\s*\\(').test(body)) { mark(k, name); continue; }
+    for (const [v, cls] of fileVars) if (cls === name && new RegExp('(^|[^\\w$.])' + escRe(v) + '\\s*\\??\\.').test(body)) { mark(k, v + ' (' + name + ')'); break; }
+  }
+  if (/\bpage\s*\??\.\s*request\b/.test(body)) { mark('ui', 'page.request'); mark('api', 'page.request'); }
+  return { layer: layerFrom(u), uses: u, via };
+}
+
+/** An `effect:` string literal inside the call's argument range, or null. */
+function effectOf(s, open, close) {
+  const seg = s.code.slice(open, close);
+  const m = /\beffect\s*:\s*/.exec(seg);
+  if (!m) return null;
+  const at = open + m.index + m[0].length;
+  const lit = s.strings.find((t) => t.start === at);
+  return lit ? lit.value : '(not a literal)';
+}
+const normPathTemplate = (p) => String(p || '').split('?')[0].replace(/\$\{[^}]*\}|\{[^}]*\}|:[A-Za-z_]\w*|<[^>]*>/g, '{}').replace(/\/+$/, '').toLowerCase();
+
+/** The API / DB mapping table of the automation inventory (columns Method | Path | Effect, found by name). */
+function mappingRows(root, inventoryArg) {
+  if (!inventoryArg) return [];
+  const text = read(path.resolve(root, String(inventoryArg)));
+  if (text === null) return [];
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.replace(/\*\*|`/g, '').trim());
+  const rows = [];
+  for (let i = 0; i + 1 < lines.length; i++) {
+    if (!/^\s*\|/.test(lines[i]) || !/^\s*\|?\s*:?-+/.test(lines[i + 1])) continue;
+    const h = cells(lines[i]).map((x) => x.toLowerCase());
+    const ci = { method: h.findIndex((x) => /^method/.test(x)), path: h.findIndex((x) => /^(path|endpoint)/.test(x)), effect: h.findIndex((x) => /^effect/.test(x)) };
+    if (ci.method < 0 || ci.path < 0 || ci.effect < 0) continue;
+    for (let j = i + 2; j < lines.length && /^\s*\|/.test(lines[j]); j++) {
+      const c = cells(lines[j]);
+      rows.push({ line: j + 1, method: (c[ci.method] || '').toUpperCase(), path: normPathTemplate(c[ci.path]), effect: (c[ci.effect] || '').toLowerCase().split(/\s/)[0] });
+    }
+    i += 1;
+  }
+  return rows;
+}
+
+/** Rules that read any automation file: connection literals, secret header values, redirect overrides, driver imports, write SQL. */
+function scanBackendText(s, relFile, abs, dirs, add, inSpec = false) {
+  const inRoot = autoRel(abs, dirs);
+  const exemptHelper = RECORD_HELPER_FILES.test(inRoot);
+  for (let i = 0; i < s.strings.length; i++) {
+    const lit = s.strings[i];
+    if (CONN_LITERAL.test(lit.value)) add('db-connection-literal', lit.line, 'Connection string with a credential in a literal — the connection string lives only in the QC-named environment variable (db_access: env:{VAR}), never in a file.');
+    const prev = s.strings[i - 1];
+    const keyed = prev && /:\s*$/.test(s.code.slice(prev.end + 1, lit.start)) && SECRET_HEADER_KEYS.test(prev.value);
+    if (!exemptHelper && ((keyed && lit.value.length >= 8 && !/^\$\{|process\.env|^<|REPLACE|xxxx/i.test(lit.value)) || TOKEN_VALUE.test(lit.value.trim()))) add('api-secret-header', lit.line, 'A token, key or cookie written as a literal' + (keyed ? ' for "' + prev.value + '"' : '') + ' — authenticate through the API-auth helper / the role\'s environment variables, never a value in code.');
+    if (!exemptHelper && !inSpec && SQL_WRITE.test(lit.value)) add('db-write-freeform', lit.line, 'Write SQL text — a test changes data only through the recorded client\'s structured insert / update / delete (db-record), which bounds every statement to run-owned primary keys, checks cascades and triggers, and ledgers the write.');
+    if (/(?:from|require\(|import\()\s*$/.test(s.code.slice(Math.max(0, lit.start - 12), lit.start)) && DB_DRIVERS.test(lit.value) && !under(abs, dirs.dbDir) && !DB_ADAPTER_FILE.test(inRoot)) add('db-driver-import', lit.line, 'Database driver "' + lit.value + '" imported outside db/ and helpers/db — the driver is reached only through the db/ layer over the recorded client.');
+  }
+  for (const m of s.code.matchAll(/\bmaxRedirects\s*:\s*(\d+)/g)) if (Number(m[1]) !== 0) add('api-redirect-enabled', s.lineOf(m.index), 'maxRedirects: ' + m[1] + ' follows redirects automatically — every call keeps maxRedirects: 0 and the recorded request validates each Location against the permitted hosts BEFORE sending (and never re-sends a mutation after 301 / 302 / 303).');
+}
+
+/** api/ and db/ member rules, prerequest / fixture labels. Runs over every non-spec automation file of a project with a backend layer. */
+function scanBackendMembers(s, relFile, abs, dirs, mapping, dbEnvAllowed, add, counts) {
+  const inRoot = autoRel(abs, dirs);
+  if (RECORD_HELPER_FILES.test(inRoot)) return;
+  if (under(abs, dirs.apiDir)) {
+    for (const m of s.code.matchAll(BYPASS_CALL)) add('api-mutation-unledgered', s.lineOf(m.index + (m[1] || '').length), 'The API client sends a request outside the recorded request (' + (m[2] || m[0].trim()) + ') — no record, no resource ledger, no data-changes gate check, no redirect validation. Use the recorded request the fixture hands over.');
+    for (const m of s.code.matchAll(/\b([A-Za-z_$][\w$]*)\s*\??\.\s*(get|post|put|patch|delete|head|fetch)\s*\(/g)) {
+      if (!/request|api|http|client|ctx/i.test(m[1]) || COLLECTION_RECEIVERS.has(m[1])) continue;
+      const open = m.index + m[0].length - 1;
+      const close = matchDelim(s.code, open);
+      if (close < 0) continue;
+      const eff = effectOf(s, open, close);
+      const line = s.lineOf(m.index);
+      if (!eff || !EFFECTS.has(eff)) { add('api-effect-undeclared', line, m[1] + '.' + m[2] + '() declares no effect' + (eff ? ' ("' + eff + '" is not read / mutation / auth / unknown)' : '') + ' — every call carries effect: "read" | "mutation" | "auth" | "unknown" from the automation-inventory mapping row (never decided by the HTTP method).'); continue; }
+      if (eff === 'mutation' || eff === 'unknown') counts.mutationMembers++;
+      const first = s.strings.find((t) => t.start >= open + 1 && t.start <= open + 3);
+      const method = m[2] === 'fetch' ? null : m[2].toUpperCase();
+      if (first && method) {
+        const row = mapping.find((r) => r.method === method && r.path === normPathTemplate(first.value));
+        if (row && row.effect && row.effect !== eff) add('api-effect-mismatch', line, method + ' ' + first.value + ' declares effect "' + eff + '" but the automation-inventory mapping row (line ' + row.line + ') says "' + row.effect + '" — the mapping row, decided from the verified contract, is the authority.');
+      }
+    }
+  }
+  if (under(abs, dirs.dbDir)) {
+    const recvOk = (root, chain) => LEDGER_RECEIVERS.has(root) || (root === 'this' && /^\s*\??\.\s*(db|ledger|dbRecord|recorded)\b/.test(chain));
+    for (const m of s.code.matchAll(ORM_WRITE)) {
+      if (COLLECTION_RECEIVERS.has(m[1]) || NON_RECEIVERS.has(m[1]) && m[1] !== 'this') continue;
+      if (recvOk(m[1], m[2])) { if (/^(insert|update|delete)$/.test(m[3])) counts.mutationMembers++; continue; }
+      add('db-write-unledgered', s.lineOf(m.index), m[1] + m[2].replace(/\s+/g, '') + '.' + m[3] + '() writes through an unrecorded client — every write goes through the recorded client\'s insert / update / delete, which bounds it to run-owned keys and ledgers it.');
+    }
+    for (const m of s.code.matchAll(DB_READ)) {
+      if (COLLECTION_RECEIVERS.has(m[1]) || NON_RECEIVERS.has(m[1]) && m[1] !== 'this') continue;
+      if (recvOk(m[1], m[2])) continue;
+      add('db-record-missing', s.lineOf(m.index), m[1] + m[2].replace(/\s+/g, '') + '.' + m[3] + '() reads through an unrecorded client — use the recorded client\'s read(name, sql, params) so the query and its result are evidence.');
+    }
+  }
+  if (under(abs, dirs.dbDir) || DB_ADAPTER_FILE.test(inRoot)) {
+    for (const m of s.code.matchAll(/\bprocess\s*\.\s*env\s*(?:\.\s*([A-Za-z_$][\w$]*)|\[\s*(['"]))/g)) {
+      let name = m[1];
+      if (!name) { const lit = s.strings.find((t) => t.start === m.index + m[0].length - 1); name = lit ? lit.value : '(computed)'; }
+      if (QC_DB_ENV.test(name) || dbEnvAllowed.has(name) || /^(PW_|QA_DATA_|QA_DB_EXPECTED)/.test(name)) continue;
+      add('db-env-not-qc', s.lineOf(m.index), 'process.env.' + name + ' — the connection comes only from the QC-named variable (default QA_DB[_NAME]_URL; another name only via db_access: env:{VAR} → --db-env ' + name + ').');
+    }
+  }
+  if (/^(?:prerequest|fixtures)[\\/]/.test(inRoot)) {
+    for (const m of s.code.matchAll(/\b([A-Za-z_$][\w$]*)\s*\??\.\s*(post|put|patch|delete)\s*\(/g)) {
+      if (!/request|api|http|client/i.test(m[1]) || COLLECTION_RECEIVERS.has(m[1])) continue;
+      const open = m.index + m[0].length - 1;
+      const close = matchDelim(s.code, open);
+      if (close < 0 || /\bpurpose\s*:/.test(s.code.slice(open, close))) continue;
+      add('api-mutation-in-setup-unlabelled', s.lineOf(m.index), m[1] + '.' + m[2] + '() changes data in setup code without purpose: "setup" — label it so the record and the ledger keep setup apart from the behaviour under test (and the test-data consent applies, not the data-changes gate).');
+    }
+  }
 }
 
 /* ---------------- B8 rules — staged at severity `review` (Revision 3 B8; Revision 3.1 §3.5) ----------------

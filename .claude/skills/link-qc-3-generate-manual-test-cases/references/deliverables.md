@@ -54,11 +54,14 @@ Write to `{tc_output_folder}` (one folder per User Story — create it if missin
 **Requirement coverage (weighted):** {x}% — Full {n} / Partial {n} / None {n} of {ACs} acceptance criteria
 **Manual-only scenarios:** {N} (High {h} · Medium {m} · Low {l})
 **Tag convention:** {tags every TC of this project carries, from a learning-file [type: env] "tag convention" line | —}
+**Test layers:** {ui | ui, api | ui, db | ui, api, db, hybrid … — the layer-gate answer of this run; written only when the source had layer candidates (tc-design.md "API and DB test cases")}
 ```
 
 Every header count must equal what the tables below say — the renderer recomputes them and
 reports a `MISMATCH` otherwise (fix the header, re-render). `Tag convention` is informational
-(skill 4 reads it; the renderer does not count it).
+(skill 4 reads it; the renderer does not count it). `Test layers` is a record of the layer gate
+(optional; the renderer shows it and checks every TC's derived layer against it — a TC whose
+layer the line does not list is a warning).
 
 Then the **frozen level-2 anchors, in this order** (`html-page.md` §3): `## Summary` (table: ID,
 Type, Locale, Requirement, Stage, Smoke, Automation Candidate, Data effect, Shared data, Tags,
@@ -151,7 +154,8 @@ Filling rules:
 | Rule | Detail |
 |---|---|
 | **Items** | One per distinct data need across all TCs' `Preconditions`, `Data Oracle`, `Shared data` and roles, de-duplicated, each mapped to its TC-IDs. Every item has ≥1 TC; every data-asserting TC has ≥1 item. |
-| **Environment rows** | `E1` is always the application base URL; one further row per service the TCs reach out of the browser (mail sandbox, SMS test provider, admin portal…) — only rows some TC references (`[E{n}]`). `Value` from a learning-file `[type: env]` line → `READY`; otherwise `unknown — asked by 3b/3c` → `UNKNOWN`. Never a credential in a value. |
+| **Environment rows** | `E1` is always the application base URL; one further row per service the TCs reach out of the browser (mail sandbox, SMS test provider, admin portal…) — only rows some TC references (`[E{n}]`). `Value` from a learning-file `[type: env]` line → `READY`; otherwise `unknown — asked by 3b/3c` → `UNKNOWN`. Never a credential in a value. Backend TCs add: `API base` (a URL), `Database` (`{db name} @ {server alias} ({engine})` — a logical identity, never a connection string) and, for every environment a data-changing TC uses, `Environment class` (`test` / `staging` / `production`; `unknown` is treated as production by skill 5). Never word a row `token: …` / `api key = …` (skill 4 refuses it). |
+| **Backend fixtures** | A `[D{n}]` item an `[API]` / `[DB]` line updates or deletes says `created by preparation` in its "Must look like" — skill 5 prepares it in the run and changes only that record, never a pre-existing one. |
 | **Accounts** | One row per account (`A{n}`), never per role — a role with two accounts has two rows. Username from the learning file or `unknown`; `Used by TCs` lists every TC that references `[A{n}]`. Every row is referenced by ≥1 TC (self-review check 14). |
 | **References** | Every `[E{n}]` / `[A{n}]` / `[D{n}]` token in the TC document resolves to a row here (check 12); no TC carries an environment value, a username or a shared item's identifier as a literal (the renderer warns `data-literal` / `data-ref-unresolved`). |
 | **Status** | `READY` = confirmed to exist by a learning-file `[type: data]` / `[type: env]` line. `IMPOSSIBLE` = cannot be created with any available or allowed way. `UNKNOWN` = everything else (not checked — this skill never checks live; story not implemented; spec silent on the value). **`MISSING` is never written by this skill** — it means "checked and absent", which only 3b / 3c or skill 5 can establish. **`NOT CREATABLE` is never written by this skill either** — 3b / 3c write it when evidence proves the state cannot exist on the environment (the Problems row carries the evidence); a kept item they prepared comes back `READY`, a removed one `MISSING` with a recreate note. |
@@ -358,6 +362,7 @@ over the open entries.
 - [ ] Review page language is English unless this run's task input asked for Arabic (`--lang ar` / explicit sentence) — never from the source language, a saved answer, the existing header line or a sidecar on disk; markdown and test-data file are English (quoted application labels excepted); IDs, paths and `Status` keywords are Latin; an Arabic page has `lang="ar"` + `dir="rtl"`; the header line `Review page language:` records what this run rendered
 - [ ] No environment URL / host, username or shared-dataset identifier as a literal in any TC — references only (`[E{n}]` / `[A{n}]` / `[D{n}]`, name + token), every token resolving to its own `TEST-DATA` row; intentional inputs and expected outputs inline, a deliberate collision marked `(intentional input)`; renderer warnings `data-literal` / `data-ref-unresolved` / `narrative-not-english` cleared
 - [ ] Every requirement-defined out-of-browser outcome has a complete TC; interfaces resolved task input → learning file / other TEST-DATA files → one question (answer written as `[type: env]`); `[HUMAN]` only where no authorized interface exists, never as a reason to drop a TC or to mark `Automation Candidate: NO`
+- [ ] Layer gate: API / persistence candidates asked ONCE (or answered by `--layers`); `[API]` / `[DB]` lines only for confirmed layers, the `Test layers:` header recording the answer, every skipped candidate a `Q-{n} (layer candidate)`; no derived layer `unknown`; paths / tables only inside marker lines and only when the approved source names them; data-changing backend TCs on run-created / "created by preparation" records with a read-back line; `Environment class` row present for their environments (self-review check 20)
 - [ ] `Tags:` present on every TC (`—` when none); `**Tag convention:**` header line present
 - [ ] Pre-write guard run: no approved document overwritten without an explicit instruction; skill 4 `--republish` note given when it was and an `ADO-MAP.md` exists; a legacy-shape document not rewritten wholesale on its own
 - [ ] Writes confined to `{tc_output_folder}`, `{requirements_folder}` and `{learning_file}` — no spec, steering, source, ADO-MAP or automation file touched

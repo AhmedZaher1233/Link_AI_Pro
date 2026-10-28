@@ -52,7 +52,11 @@ export const EXECUTED_OUTCOMES = ['GREEN', 'FAILURES', 'INCOMPLETE', 'SMOKE GATE
 // `PARTIAL — human step pending`. It is never counted as passed and never lets a phase be GREEN.
 export const RESULT_STATES = ['PASS', 'FAIL', 'INCOMPLETE', 'SKIP', 'NOT_RUN', 'PARTIAL'];
 export const PARTIAL_REASON = 'human step pending';
-export const CLASSIFICATIONS = ['app_bug', 'selector_failure', 'assertion_failure', 'environment_failure', 'rate_limited', 'data_missing', 'timeout_failure', 'evidence_failure', 'unverified_assumption', 'ai_rubric_failure'];
+// 3.0 — a manual run that met an [API] / [DB] line it cannot execute: `PARTIAL — api/db step pending` (skill 5b)
+export const PARTIAL_REASONS = [PARTIAL_REASON, 'api/db step pending'];
+export const CLASSIFICATIONS = ['app_bug', 'selector_failure', 'assertion_failure', 'environment_failure', 'rate_limited', 'data_missing', 'timeout_failure', 'evidence_failure', 'unverified_assumption', 'ai_rubric_failure', 'api_contract_failure', 'db_assertion_failure'];
+// 3.0 — the API / DB helpers' documented no-verdict reasons (skill 5 run-stage.mjs): never a product verdict, never a warning
+const BACKEND_REASON = /^(?:data_write_refused \((?:ownership|cascade|trigger|row-count|identity)\)|data_write_failed|data_in_doubt|read_back_mismatch|redirect_refused|auth_failure|evidence_invalid \([^)]*\)?.*)$/;
 export const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 export const BUG_STATUSES = ['open', 'resolved', 'not-checked'];
 // `partial` is an OPTIONAL column of the Stages / Run history tables and an optional ` · {n} partial`
@@ -63,7 +67,8 @@ const STATUS_BUCKET = { PASS: 'passed', FAIL: 'failed', INCOMPLETE: 'incomplete'
 // `NO VERDICT` — no smoke TC produced a PASS or FAIL (skill 5's smoke gate): positive / negative did not start; the
 // phase is never GREEN for it (it derives INCOMPLETE unless a FAIL makes it FAILURES).
 const SMOKE_RE = /^(passed|healed-then-passed|FAILED-STOPPED|NO VERDICT)\b/;
-const SECRET_RE = /\b(password|passcode|secret|token|pat|api[- ]?key)\b\s*(?:[:=]|is)\s*["'`]?[^\s"'`]{3,}/i;
+const SECRET_RE = /\b(password|passcode|secret|token|pat|api[- ]?key)\b\s*(?:[:=]|is)\s*["'`]?(?!\[redacted\]|<)[^\s"'`]{3,}|\bBearer\s+[A-Za-z0-9._~+/=-]{16,}|\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}|\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/'"]+:[^\s@/'"]+@/i;
+const isRecordHref = (h) => /\.record\.json$/i.test(String(h || '').split(/[?#]/)[0]);
 const LINK_RE = /!?\[([^\]]*)\]\(([^)\s]+)\)/g;
 
 export const LIMITS = [
@@ -266,14 +271,14 @@ export function parseReport(text) {
         const sm = statusRaw.match(/^([A-Za-z_]+)\s*(?:[—–-]\s*(.*))?$/);
         const status = (sm ? sm[1] : statusRaw).toUpperCase();
         const statusReason = sm && sm[2] ? sm[2].trim() : '';
-        if (!RESULT_STATES.includes(status) || (statusReason && status !== 'PARTIAL')) errors.push({ kind: 'unknown-enum', line: rt.line, detail: 'phase ' + n + ' ' + tc + ' Status "' + statusRaw + '" is not one of ' + RESULT_STATES.join(' / ') + ' (only PARTIAL carries a reason: `PARTIAL — ' + PARTIAL_REASON + '`)' });
-        if (status === 'PARTIAL' && !new RegExp('^' + PARTIAL_REASON + '$', 'i').test(statusReason)) warnings.push({ kind: 'partial-without-reason', phase: n, id: tc, detail: 'PARTIAL row should read `PARTIAL — ' + PARTIAL_REASON + '`' + (statusReason ? ' (found "' + statusReason + '")' : '') });
+        if (!RESULT_STATES.includes(status) || (statusReason && status !== 'PARTIAL')) errors.push({ kind: 'unknown-enum', line: rt.line, detail: 'phase ' + n + ' ' + tc + ' Status "' + statusRaw + '" is not one of ' + RESULT_STATES.join(' / ') + ' (only PARTIAL carries a reason: `PARTIAL — ' + PARTIAL_REASONS.join('` / `PARTIAL — ') + '`)' });
+        if (status === 'PARTIAL' && !PARTIAL_REASONS.some((x) => new RegExp('^' + x.replace(/[/]/g, '\\/') + '$', 'i').test(statusReason))) warnings.push({ kind: 'partial-without-reason', phase: n, id: tc, detail: 'PARTIAL row should read `PARTIAL — ' + PARTIAL_REASON + '` (or `PARTIAL — api/db step pending`)' + (statusReason ? ' (found "' + statusReason + '")' : '') });
         const cls = stripMd(cell(r, ci.cls));
         // the documented reason forms (references/run-report.md §4) are not catalogue words and never warn as unknown
-        if (cls && cls !== DASH && !/^(?:incomplete|interrupted|not started):/i.test(cls) && !/^human step/i.test(cls) && cls !== 'cleanup_incomplete' && !CLASSIFICATIONS.includes(cls)) warnings.push({ kind: 'unknown-classification', phase: n, id: tc, detail: 'classification "' + cls + '" is not in the catalogue' });
+        if (cls && cls !== DASH && !/^(?:incomplete|interrupted|not started|out of tool):/i.test(cls) && !/^human step/i.test(cls) && cls !== 'cleanup_incomplete' && !BACKEND_REASON.test(cls) && !CLASSIFICATIONS.includes(cls)) warnings.push({ kind: 'unknown-classification', phase: n, id: tc, detail: 'classification "' + cls + '" is not in the catalogue' });
         // an INCOMPLETE row names its missing variants (`incomplete: {slugs}`) or one of the documented non-variant reasons
-        if (status === 'INCOMPLETE' && !/^(?:incomplete|interrupted):\s*\S/i.test(cls) && cls !== 'rate_limited' && cls !== 'cleanup_incomplete') warnings.push({ kind: 'incomplete-without-variants', phase: n, id: tc, detail: 'INCOMPLETE row should name the missing variants as `incomplete: {slugs}`' });
-        if (status === 'PARTIAL' && !/^human step:\s*\S/i.test(cls)) warnings.push({ kind: 'partial-without-step', phase: n, id: tc, detail: 'PARTIAL row should name the pending step in Classification as `human step: {n}`' });
+        if (status === 'INCOMPLETE' && !/^(?:incomplete|interrupted):\s*\S/i.test(cls) && cls !== 'rate_limited' && cls !== 'cleanup_incomplete' && !BACKEND_REASON.test(cls)) warnings.push({ kind: 'incomplete-without-variants', phase: n, id: tc, detail: 'INCOMPLETE row should name the missing variants as `incomplete: {slugs}`' });
+        if (status === 'PARTIAL' && !/^(?:human step|out of tool):\s*\S/i.test(cls)) warnings.push({ kind: 'partial-without-step', phase: n, id: tc, detail: 'PARTIAL row should name the pending step in Classification as `human step: {n}` (or `out of tool: api/db step {n}`)' });
         results.push({ tc, req: stripMd(cell(r, ci.req)) || DASH, name: stripMd(cell(r, ci.name)), status, statusReason, group: stripMd(cell(r, ci.group)) || DASH, duration: stripMd(cell(r, ci.duration)) || DASH, classification: cls || DASH, evidenceRaw: cell(r, ci.ev), line: rt.line });
       }
     }
@@ -288,10 +293,13 @@ export function parseReport(text) {
     const healSec = sub(/^heal log$/i); const healT = tablesOf(healSec)[0];
     const readySec = sub(/^test-data readiness$/i);
     const devSec = sub(/^deviations$/i);
+    // 3.0 — the records a data-changing run kept (cleanup "keep") and the writes a crash left unresolved (never cleaned up)
+    const retainedSec = sub(/^retained test records$/i);
+    const inDoubtSec = sub(/^in-doubt test records$/i);
     const assumeSec = sub(/^unverified assumptions$/i);
     const skipsSec = sub(/^skips/i);
     const qSec = sub(/^open questions$/i);
-    for (const z of subs) if (!/^(run|stages|run plan|coverage|results|unverified assumptions|bugs|heal log|skips.*|open questions|test-data readiness|deviations)$/i.test(z.title)) warnings.push({ kind: 'unknown-subsection', phase: n, detail: 'ignored `### ' + z.title + '`' });
+    for (const z of subs) if (!/^(run|stages|run plan|coverage|results|unverified assumptions|bugs|heal log|skips.*|open questions|test-data readiness|deviations|retained test records|in-doubt test records)$/i.test(z.title)) warnings.push({ kind: 'unknown-subsection', phase: n, detail: 'ignored `### ' + z.title + '`' });
     if (pre.some((l) => l.trim() && !/^<!--/.test(l.trim()))) warnings.push({ kind: 'text-outside-subsection', phase: n, detail: 'text before the first `###` of phase ' + n + ' is not rendered' });
     phases.push({
       n, date: m[2].trim(), line: S.start + 1, declared, reason, runFields, stages, smokeGate, results, hasResultsTable: !!rt,
@@ -304,6 +312,8 @@ export function parseReport(text) {
       readinessVerdict: readySec ? (boldLine(readySec.lines, 'Verdict') || (readySec.lines.some((l) => /^all ready\.?$/i.test(stripMd(l).trim())) ? 'all ready' : null)) : null, readiness: readySec ? genericTable(tablesOf(readySec)[0]) : null,
       readinessCounts: readySec ? readinessCounts(tablesOf(readySec)[0], n, warnings) : null,
       deviations: devSec ? bulletItems(devSec.lines).filter((x) => !/^(none|—|-)\.?$/i.test(x)) : [],
+      retained: retainedSec && !isNone(retainedSec.lines) ? genericTable(tablesOf(retainedSec)[0]) : null,
+      inDoubt: inDoubtSec && !isNone(inDoubtSec.lines) ? genericTable(tablesOf(inDoubtSec)[0]) : null,
       subsectionTitles: subs.map((z) => z.title),
     });
   });
@@ -372,10 +382,19 @@ function parseLinks(raw, ctx, model, opts) {
     if (/^data:/i.test(href)) { model.errors.push({ kind: 'evidence-inline-data', ...ctx, detail: 'an image is embedded as a data: URI — link the file by relative path instead' }); continue; }
     if (/^(javascript|vbscript):/i.test(href) || /[\u0000-\u001f]/.test(href)) { model.errors.push({ kind: 'evidence-inline-data', ...ctx, detail: 'unsafe link scheme in an evidence cell' }); continue; }
     const title = (ctx.id ? ctx.id + ' · ' : '') + label + (ctx.phase ? ' · phase ' + ctx.phase : '');
-    if (isAbsolute(href)) { model.warnings.push({ kind: 'evidence-path-not-relative', ...ctx, path: href, detail: 'evidence link is not relative to the report folder — rendered as a plain link' }); out.push({ label, href, title, ok: false, missing: false, plain: true, group: opts.group }); continue; }
+    if (isAbsolute(href)) { model.warnings.push({ kind: 'evidence-path-not-relative', ...ctx, path: href, detail: 'evidence link is not relative to the report folder — rendered as a plain link' }); out.push({ label, href, title, ok: false, missing: false, plain: true, record: false, group: opts.group }); continue; }
     let decoded = href; try { decoded = decodeURIComponent(href.split(/[?#]/)[0]); } catch { /* keep */ }
-    if (!isFile(path.resolve(opts.mdDir, decoded))) { model.warnings.push({ kind: 'evidence-file-missing', ...ctx, path: href, detail: 'evidence file not found relative to the report folder' }); out.push({ label, href, title, ok: false, missing: true, plain: false, group: opts.group }); continue; }
-    out.push({ label, href, title, ok: true, missing: false, plain: false, group: opts.group });
+    if (!isFile(path.resolve(opts.mdDir, decoded))) { model.warnings.push({ kind: 'evidence-file-missing', ...ctx, path: href, detail: 'evidence file not found relative to the report folder' }); out.push({ label, href, title, ok: false, missing: true, plain: false, record: false, group: opts.group }); continue; }
+    // 3.0 — an API / DB record is linked, never shown as an image; a record that still carries a secret BLOCKs the page
+    if (isRecordHref(decoded)) {
+      let kind = 'API / DB'; let text = '';
+      try { text = readText(path.resolve(opts.mdDir, decoded)); const j = JSON.parse(text); const ch = [...new Set((j.entries || []).map((e) => e && e.channel).filter(Boolean))]; kind = ch.length ? ch.map((c) => c.toUpperCase()).join(' + ') : kind; }
+      catch { model.warnings.push({ kind: 'record-unreadable', ...ctx, path: href, detail: 'the record is not valid JSON — Checkpoint B (item 54) fails it' }); }
+      if (text && SECRET_RE.test(text)) { model.errors.push({ kind: 'secret-literal', ...ctx, detail: 'the record ' + href + ' carries a credential-shaped value — it must never be linked from a report' }); continue; }
+      out.push({ label, href, title, ok: false, missing: false, plain: false, record: true, record_kind: kind, group: opts.group });
+      continue;
+    }
+    out.push({ label, href, title, ok: true, missing: false, plain: false, record: false, group: opts.group });
   }
   if (!any && bare(text) && !/^none captured$/i.test(bare(text))) model.warnings.push({ kind: 'evidence-not-a-link', ...ctx, detail: 'evidence cell "' + bare(text) + '" is not a markdown link' });
   return out;
@@ -408,7 +427,7 @@ export function buildModel(doc, bugDoc, opts) {
     }
     // secret screen over every cell and bullet of the phase
     const scan = [];
-    for (const t of [p.stages, p.plan, p.covStages, p.covReqs, p.assumptions, p.heals, p.skips, p.questions, p.readiness]) if (t) for (const r of t.rows) scan.push(...r);
+    for (const t of [p.stages, p.plan, p.covStages, p.covReqs, p.assumptions, p.heals, p.skips, p.questions, p.readiness, p.retained, p.inDoubt]) if (t) for (const r of t.rows) scan.push(...r);
     for (const r of p.results) scan.push(r.name, r.classification);
     for (const f of Object.values(p.runFields.fields)) scan.push(f.value, ...f.items);
     scan.push(...p.deviations, p.healText || '');
@@ -457,6 +476,9 @@ export function buildModel(doc, bugDoc, opts) {
         const ev = []; const ctx = { phase: p.n, id: r.tc + ' · ' + (v.variant_slug || '') + ' · attempt ' + a.attempt };
         if (a.evidence_screenshot) ev.push(...parseLinks('[attempt-' + a.attempt + '.png](' + rel(a.evidence_screenshot) + ')', ctx, model, { mdDir, group: 'phase-' + p.n }));
         if (a.failure_screenshot) ev.push(...parseLinks('[failed](' + rel(a.failure_screenshot) + ')', ctx, model, { mdDir, group: 'phase-' + p.n }));
+        // 3.0 — the API / DB records of the attempt (written only when the run file carries them)
+        if (a.evidence_record) ev.push(...parseLinks('[attempt-' + a.attempt + '.record.json](' + rel(a.evidence_record) + ')', ctx, model, { mdDir, group: 'phase-' + p.n }));
+        if (a.failure_record) ev.push(...parseLinks('[failed record](' + rel(a.failure_record) + ')', ctx, model, { mdDir, group: 'phase-' + p.n }));
         r.attempts.push({ variant: v.variant_slug || DASH, attempt: num(a.attempt), stage: a.stage || DASH, status: String(a.status || DASH).toUpperCase(), evidence: ev, error: a.error_message || a.error || '' });
       }
     }
@@ -987,6 +1009,8 @@ function viewModel(model, files, cm, tm = emptyTracker()) {
       has_readiness: !!(p.readinessVerdict || p.readiness), readiness_verdict: p.readinessVerdict ? 'Verdict: ' + stripMd(p.readinessVerdict) : DASH, has_readiness_rows: !!(p.readiness && p.readiness.rows.length), readiness: table(p.readiness),
       has_readiness_counts: !!readinessLine(p.readinessCounts), readiness_counts: readinessLine(p.readinessCounts),
       has_deviations: p.deviations.length > 0, deviations: p.deviations.map((d) => ({ text: d })),
+      has_retained: !!(p.retained && p.retained.rows.length), retained: table(p.retained),
+      has_in_doubt: !!(p.inDoubt && p.inDoubt.rows.length), in_doubt: table(p.inDoubt),
       comment_box: commentBoxHtml('phase-' + p.n, 'phase', cm, 'en', bare(fieldValue(p.runFields.fields, 'Reviewer comment'))),
     };
   });

@@ -28,7 +28,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { buildFilter, tcIdsOf, aggregate, applyAdjustments, rateLimitsOf, cooldownFor, smokeGateOf, markFollowers, OUTPUT_KEEP, descendantsOf, TELEMETRY_SCHEMA,
-  classifyRecord, refusalScopes, parseTimeouts, silenceOf, ceilingFor, budgetsFrom, matchCovers, REASON } from './run-stage.mjs';
+  classifyRecord, refusalScopes, parseTimeouts, silenceOf, ceilingFor, budgetsFrom, matchCovers, REASON, classifyTest, helperOutcome, backendEnv, BACKEND_ENV_KEYS, validateRecords, screenshotPolicyOf } from './run-stage.mjs';
+import { sealRecord } from './redact.mjs';
 
 // the old cases describe the runner without the capacity ledger; the ledger cases switch it on explicitly
 process.env.QA_LEDGER = process.env.QA_LEDGER_SELFTEST === 'on' ? 'on' : 'off';
@@ -109,6 +110,7 @@ const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { retu
   if (!/artifacts[\\/]progress[\\/]smoke-parallel\.jsonl$/.test(e.PW_PROGRESS_FILE || '')) p.push('PW_PROGRESS_FILE ' + e.PW_PROGRESS_FILE);
   if (e.PW_GLOBAL_TIMEOUT !== '20000' || e.PW_PHASE !== '3' || e.PW_STAGE_ATTEMPT !== '1' || e.PW_WORKERS !== '2') p.push('PW_GLOBAL_TIMEOUT / PW_PHASE / PW_STAGE_ATTEMPT / PW_WORKERS wrong: ' + JSON.stringify(e));
   if ('PW_HEADLESS' in e) p.push('PW_HEADLESS set on a headed run');
+  if (e.PW_SCREENSHOTS !== 'all') p.push('PW_SCREENSHOTS without a delivery choice must be `all`: ' + e.PW_SCREENSHOTS);
   if (pl && JSON.stringify(pl.skippedGroups) !== JSON.stringify([{ name: 'serial:orders-archive', reason: 'no TCs of this stage in this group' }])) p.push('the group without smoke TCs was not skipped and named: ' + JSON.stringify(pl && pl.skippedGroups));
   if (pl && (pl.groups.filter((g) => g.command === 'normal').map((g) => g.name).join(',') !== 'parallel,serial:orders')) p.push('group order ' + pl.groups.map((g) => g.name));
   if (pl && !pl.groups.some((g) => g.command === 'isolation' && g.name === 'parallel' && g.workers === 1)) p.push('TC-003 failed beside another test but was not re-run alone');
@@ -117,7 +119,11 @@ const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { retu
   if (pl && pl.groups.some((g) => g.freshness !== 'PASS' || g.source !== 'json')) p.push('freshness / source not PASS / json');
   const log = logOf(sb);
   if (!/Running Smoke Tests \(first run\) · parallel \(parallel ×2, headed\) · start/.test(log)) p.push('the log has no start line with the activity name');
-  if (!/\|\s+✓\s+1 \[chromium\]/.test(log)) p.push('line-reporter output not appended to the log');
+  // 3.1: the full line-reporter output lives in the command's diagnostics file; the live log carries concise lines
+  const diagOf = (d) => { const out = []; const walk = (x) => { let es = []; try { es = fs.readdirSync(x, { withFileTypes: true }); } catch { return; } for (const e2 of es) { const f = path.join(x, e2.name); if (e2.isDirectory()) walk(f); else if (e2.name === 'playwright-output.log') out.push(fs.readFileSync(f, 'utf8')); } }; walk(d); return out.join('\n'); };
+  if (!/✓\s+1 \[chromium\]/.test(diagOf(path.join(sb.results, 'artifacts', 'diagnostics')))) p.push('line-reporter output not in the diagnostics file');
+  if (/\|\s+✓\s+1 \[chromium\]/.test(log)) p.push('raw line-reporter output still copied into the live log');
+  if (!/· ✓ w\d+ TC-\d+ passed \d+ s/.test(log)) p.push('no concise per-test line in the live log');
   if (!/· parallel \(parallel ×2\) · \d+\/3 TCs done · stage \d+% · passed \d+ · failed \d+ · skipped \d+ · not run \d+ · current .+ · elapsed \d\d:\d\d · remaining .+ · watchdog \w+/.test(log)
     && !/· parallel · end ·/.test(log)) p.push('neither a status line nor an end line for the parallel group in the log');
   if (!/stage end · COMPLETED/.test(log)) p.push('no stage end line');
@@ -318,15 +324,18 @@ let frozenSandbox = null;
   check('10 one phase-wide message per stage; the re-run reports its subset + the phase; attempts numbered', p, { smoke: smoke && smoke.update, rerun: re && re.update });
 }
 
-/* 11 — secrets: credential-looking output never reaches the log, the payload or the summary; env values are never written. */
+/* 11 — secrets: credential-looking output never reaches the live log, the per-command diagnostics file (3.1: the full
+   Playwright output lives there), the payload or the summary; env values are never written. */
 {
   const p = [];
   const sb = sandbox();
   const r = stage(sb, ['--stage', 'smoke', '--run', 'first', '--stage-tcs', SMOKE], { parallel: 'secret' }, { A1_PASSWORD: 's3cr3t-value-xyz' });
-  const blob = logOf(sb) + r.stdout + (r.payload ? fs.readFileSync(path.join(sb.results, r.payload.summaryFile), 'utf8') : '');
+  const diag = (() => { const out = []; const walk = (d) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (e.name === 'playwright-output.log') out.push(fs.readFileSync(f, 'utf8')); } }; walk(path.join(sb.results, 'artifacts', 'diagnostics')); return out.join('\n'); })();
+  const blob = logOf(sb) + diag + r.stdout + (r.payload ? fs.readFileSync(path.join(sb.results, r.payload.summaryFile), 'utf8') : '');
   for (const s of ['hunter2', 'abc123', 's3cr3t-value-xyz']) if (blob.includes(s)) p.push('"' + s + '" leaked');
-  if (!/line withheld: it looks like a credential/.test(logOf(sb))) p.push('the withheld-line marker is missing');
-  check('11 credential-looking lines are withheld; environment values never written', p, {});
+  if (!/line withheld: it looks like a credential/.test(diag)) p.push('the withheld-line marker is missing from the diagnostics file');
+  if (!/full output → /.test(logOf(sb))) p.push('the live log does not point at the diagnostics file');
+  check('11 credential-looking lines are withheld in every output; environment values never written', p, {});
 }
 
 /* 12 — 0xC0000142 worker crash flagged as environmental; --cmd passes the regex (| ( [ ) through a shell intact. */
@@ -1217,6 +1226,73 @@ function buildFilterFor(stage, tcs) {
   const end = '(?![\\w:-])';
   const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return '(?=.*' + esc('@' + stage) + end + ')(?=.*[\\[,]\\s*(?:' + tcs.map(esc).join('|') + ')\\s*[\\],])';
+}
+
+/* 41 — API / DB (3.0): the helpers' documented outcomes are no product verdict (NOT_RUN data changes not permitted / db
+   unavailable; INCOMPLETE data_write_refused (ownership | cascade | trigger | row-count | identity), data_write_failed,
+   read_back_mismatch, redirect_refused, auth_failure); a PASS whose record was blocked, is missing, or failed its
+   clean-up is INCOMPLETE; the helpers' environment comes from the run file only — the consent reaches a child only for
+   a test / staging target; a PASS of a backend TC without a valid record is INCOMPLETE evidence_invalid. */
+{
+  const p = [];
+  const t = (status, extra = {}) => ({ status, admissionTimeout: null, deferredUntil: null, waitBudget: null, helper: null, recordBlocked: null, recordMissing: null, cleanupIncomplete: null, ...extra });
+  const cases41 = [
+    ['Error: data changes not permitted: TC-04 is not in the data-changes consent of this run', 'NOT_RUN', /^not started: data changes not permitted \(TC-04/],
+    ['Error: db unavailable: the driver package "pg" is not installed', 'NOT_RUN', /^not started: db unavailable \(the driver package/],
+    ['Error: data write refused (cascade): delete on orders would cascade order_lines', 'INCOMPLETE', /^data_write_refused \(cascade\)$/],
+    ['Error: data write refused (ownership): PUT /api/orders/7', 'INCOMPLETE', /^data_write_refused \(ownership\)$/],
+    ['Error: data write refused (row-count): insert orders changed 2 row(s)', 'INCOMPLETE', /^data_write_refused \(row-count\)$/],
+    ['Error: data write refused (trigger): trigger tr on orders', 'INCOMPLETE', /^data_write_refused \(trigger\)$/],
+    ['Error: data write refused (identity): nokey', 'INCOMPLETE', /^data_write_refused \(identity\)$/],
+    ['Error: data write failed: deadlock detected', 'INCOMPLETE', /^data_write_failed$/],
+    ['Error: read-back mismatch: insert orders', 'INCOMPLETE', /^read_back_mismatch$/],
+    ['Error: redirect refused: 307 to http://other — not a permitted API host', 'INCOMPLETE', /^redirect_refused$/],
+    ['Error: auth failure: /api/orders answered 401 (expected 201)', 'INCOMPLETE', /^auth_failure$/],
+  ];
+  for (const [msg, status, re] of cases41) {
+    const c = classifyTest(t('FAIL', { helper: helperOutcome(msg) }));
+    if (c.status !== status || !re.test(c.reason || '')) p.push(JSON.stringify(msg.slice(0, 40)) + ' → ' + JSON.stringify(c));
+  }
+  if (helperOutcome('Error: expect(received).toBe(expected)')) p.push('an ordinary assertion failure was taken for a helper outcome');
+  if (classifyTest(t('FAIL')).status !== 'FAIL') p.push('a plain FAIL changed');
+  for (const [k, re] of [['recordBlocked', /^evidence_invalid \(redaction/], ['recordMissing', /^evidence_invalid \(no record/], ['cleanupIncomplete', /^cleanup_incomplete$/]]) {
+    const c = classifyTest(t('PASS', { [k]: 'x' }));
+    if (c.status !== 'INCOMPLETE' || !re.test(c.reason || '')) p.push('PASS with ' + k + ' → ' + JSON.stringify(c));
+  }
+  // the helpers' environment: from the run file only; the consent only for a test / staging target
+  const run = { phase: 2, run_id: 'run-7', screenshots_root: 'screenshots/US-1', data_changes: { consent: 'yes', tcs: ['TC-01', 'TC-02'], setup: true, cleanup: 'yes' }, environment: { class: 'test', api_hosts: ['https://api.test'], db_identity: 'orders_test @ db-test (PostgreSQL)', db_env_var: 'ORDERS_DB' } };
+  const e1 = backendEnv(run, 'C:/auto', 'C:/auto/reports/US-1/artifacts/progress');
+  if (e1.PW_DATA_CHANGES_TCS !== 'TC-01,TC-02' || e1.PW_DATA_CHANGES_SETUP !== 'allowed' || e1.PW_DATA_CLEANUP !== 'allowed' || e1.PW_RUN_ID !== 'run-7' || e1.PW_API_HOSTS !== 'https://api.test' || e1.PW_DB_ENV_VAR !== 'ORDERS_DB' || !/US-1$/.test(e1.PW_SCREENSHOTS_ROOT)) p.push('backend env (test target): ' + JSON.stringify(e1));
+  for (const cls of ['production', 'unknown', '']) {
+    const e = backendEnv({ ...run, environment: { ...run.environment, class: cls } }, 'C:/auto', 'C:/p');
+    if (e.PW_DATA_CHANGES_TCS || e.PW_DATA_CHANGES_SETUP || e.PW_DATA_CLEANUP) p.push('a ' + (cls || 'unrecorded') + ' target got a data-changes consent: ' + JSON.stringify(e));
+  }
+  if (backendEnv({ ...run, data_changes: { consent: 'no', tcs: ['TC-01'] } }, 'C:/a', 'C:/p').PW_DATA_CHANGES_TCS) p.push('a "no" reached the child');
+  if (!BACKEND_ENV_KEYS.includes('PW_DATA_CHANGES_TCS') || !BACKEND_ENV_KEYS.includes('PW_DATA_LEDGER_FILE')) p.push('BACKEND_ENV_KEYS incomplete (an inherited value could leak into a child)');
+  // 3.1 — the screenshot choice: the flag over the run file over `all`; an unknown flag value warns and is ignored
+  const sw = [];
+  const sp = [screenshotPolicyOf({}, {}), screenshotPolicyOf({}, { delivery: { screenshots: 'failed' } }), screenshotPolicyOf({ 'screenshot-policy': 'all' }, { delivery: { screenshots: 'none' } }), screenshotPolicyOf({ 'screenshot-policy': 'some' }, { delivery: { screenshots: 'none' } }, sw)];
+  if (JSON.stringify(sp) !== JSON.stringify(['all', 'failed', 'all', 'none']) || sw.length !== 1) p.push('screenshotPolicyOf: ' + JSON.stringify(sp) + ' warnings ' + sw.length);
+  // validateRecords: a PASS of a backend TC needs its valid record; a ui TC never does
+  const sb = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-rs-rec-')); sandboxes.push(sb);
+  const recFile = path.join(sb, 'screenshots', 'phase-1', 'TC-01', 'backend--none--r0', 'attempt-1.record.json');
+  fs.mkdirSync(path.dirname(recFile), { recursive: true });
+  const rec = { schema: 'skill5-record/1', tc: 'TC-01', tcs: ['TC-01'], test_id: 't', title: '[TC-01]', project: 'backend', attempt: 1, retry: 0, layer: 'api', identity: null, entries: [{ id: 'e1', seq: 1, purpose: 'test', channel: 'api' }], assertions: [{ id: 'a1', tc_line: 'ER1', entry_ref: 'e1', target: 'status', outcome: 'pass' }], redaction: {} };
+  fs.writeFileSync(recFile, sealRecord(rec, []).text);
+  const prog = path.join(sb, 'progress.jsonl');
+  fs.writeFileSync(prog, JSON.stringify({ at: new Date().toISOString(), worker: 0, tc: 'TC-01', event: 'evidence', kind: 'record', path: recFile }) + '\n');
+  const { checkRecordFile } = await import('./redact.mjs');
+  const ctx41 = { cwd: sb, layers: { 'TC-01': 'api', 'TC-02': 'db', 'TC-03': 'ui', 'TC-04': 'api' }, backendLines: { 'TC-01': ['ER1'], 'TC-04': ['ER1', 'ER2'] }, checkRecordFile };
+  const v = validateRecords(ctx41, { progressFile: prog }, ['TC-01', 'TC-02', 'TC-03']);
+  if (v['TC-01']) p.push('a valid record was refused: ' + v['TC-01']);
+  if (!/no record/.test(v['TC-02'] || '')) p.push('a db PASS without a record was not refused: ' + JSON.stringify(v));
+  if ('TC-03' in v) p.push('a ui TC was held to a record');
+  fs.appendFileSync(prog, JSON.stringify({ at: new Date().toISOString(), worker: 0, tc: 'TC-04', event: 'evidence', kind: 'record', path: recFile.replace(/TC-01/g, 'TC-04') }) + '\n');
+  fs.mkdirSync(path.dirname(recFile.replace(/TC-01/g, 'TC-04')), { recursive: true });
+  fs.writeFileSync(recFile.replace(/TC-01/g, 'TC-04'), sealRecord({ ...rec, tc: 'TC-04', tcs: ['TC-04'] }, []).text);
+  const v2 = validateRecords(ctx41, { progressFile: prog }, ['TC-04']);
+  if (!/ER2/.test(v2['TC-04'] || '')) p.push('a PASS without a passing assertion for ER2 was not refused: ' + JSON.stringify(v2));
+  check('41 API / DB outcomes: refusals and no-verdicts mapped, blocked / missing records and failed clean-ups never PASS, the helpers env from the run file (consent only for test / staging), records validated', p, {});
 }
 
 for (const s of sandboxes) { try { fs.rmSync(s, { recursive: true, force: true }); } catch { /* a killed process may still hold a file on Windows */ } }

@@ -67,10 +67,12 @@ WHAT THE DOCUMENT DECIDES (per TC, read by the script — never assumed):
     skill 5's automated_tc_sha256 in ADO-MAP.md equals the TC's current canonical hash;
     otherwise the row is a CONFLICT (status untouched; re-run skill 5).
   - Tags the skill owns: {feature} · smoke (Smoke: YES) · automation / manual (candidacy) ·
-    human-step (a [HUMAN] step) · the TC's "Tags:" values · the tag convention. Added when
+    human-step (a [HUMAN] step) · api-step / db-step (an [API] / [DB] line) · the TC's "Tags:" values · the tag convention. Added when
     missing, removed only when this skill introduced them earlier and the document no longer
     intends them; every other tag on the work item is preserved and never becomes owned.
   - Steps keep "Login with Administrator [A1]", "[E1]", "[D2]" and "[HUMAN] …" lines verbatim.
+  - [API] / [DB] lines (API calls, database checks / writes) are copied verbatim too; a TC made
+    only of them has no login journey prepended.
 
 ============================================================
 OUTPUT — WHAT YOU GET

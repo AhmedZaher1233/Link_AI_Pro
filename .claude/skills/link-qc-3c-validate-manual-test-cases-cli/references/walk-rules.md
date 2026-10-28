@@ -91,6 +91,14 @@ wait for (`patch-rules.md` §1b).
   app-validated (human step pending)` with `outcome-check: human step pending` in its stamp
   (§6a); it is never `validated`, `enhanced` or `inferred`, the marker is never reworded away,
   and the TC is listed under "Needs a human run" in the final message.
+- **`[API]` / `[DB]` lines are out of tool.** A Steps or Expected Result line starting `[API]` or
+  `[DB]` (an API call / assertion or a database check / write — skill 3's layer gate) is never
+  executed or judged here: no request, no query, no seed for it. Walk and judge the TC's UI lines
+  in order and skip the backend ones; stop at a UI line that needs a `$name` a skipped backend line
+  captures. A UI line that contradicts the requirement is still a `discrepancy` + PB; otherwise the
+  TC ends `draft — not app-validated (api/db step — automation only)` with `outcome-check: api/db
+  step — automation only` (§6a) — never `validated`, never `inferred` — and is listed under
+  "Needs the automation (skill 5)" in the final message. A TC with no UI line at all is not walked.
 - **Observing, and executing only what the TC says.** Do not write code, selectors, or JSON into
   any deliverable. You may read element identifiers incidentally and record them in the learning
   file's `## Automation Tricks` section, explained in words — but NEVER in the TC deliverables.
@@ -217,7 +225,10 @@ returned without error only says the action was issued. Before a TC becomes `val
    confirmed, the state is `draft — not app-validated (human step pending)` and the stamp's
    `outcome-check` line reads exactly `human step pending` — the outcome behind a human step is
    never observed by this tool, so the TC is never `validated` or `enhanced`; it is listed under
-   "Needs a human run".
+   "Needs a human run". **An `[API]` / `[DB]` line is likewise never observed here** (§3): the
+   UI lines are judged, the backend ones skipped, and the outcome is `draft — not app-validated
+   (api/db step — automation only)` with `outcome-check` reading exactly `api/db step — automation
+   only` (a UI-line contradiction stays a `discrepancy`).
 5. **A TC with an `AI Oracle` is one observation**: its reply is judged by the field's hard
    checks and rubric (`link-qc-5b-test-run-manual-cli/references/ai-response-rules.md` holds the
    rules); it is `validated` only when that observation passes; a rubric you cannot decide is a

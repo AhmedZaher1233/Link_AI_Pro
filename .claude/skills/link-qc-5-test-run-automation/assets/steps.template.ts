@@ -1,3 +1,4 @@
+// @link-qc-5-template steps 3.1.0
 // helpers/steps.ts — named steps with a deadline the helper OWNS, the stall detector, and the runtime registry the
 // other helpers share (skill 5, references/code-craft.md §5, §9).
 //

@@ -68,7 +68,7 @@ rule below points to it (`../link-qc-5-test-run-automation/references/…`), onc
     --spec {files from §1.4} --ceilings {group}={ms},… --grace {TIMEOUTS.watchdog_grace}
     --log {automation_root}/automation-logs/[SPEC-*/]{US-leaf}/run-progress-{stamp}.log
     --project {the browser project of phase N} --cwd {automation_root} --label "retest — skill 9"
-    --env-id {envId of this run's lease — coordination.md §2}
+    --env-id {envId of this run's lease — coordination.md §2} --screenshot-policy all
     [--cooldown {TIMEOUTS.rate_limit.cooldown}] [--cooldown-max {TIMEOUTS.rate_limit.cooldown_max}]
     [--headless] [--cmd "{run command}"] [--stage-json-source {path}]
   ```
@@ -77,7 +77,8 @@ rule below points to it (`../link-qc-5-test-run-automation/references/…`), onc
   over the retest TCs of each group only — compute them for ONE worker: without a readiness payload skill 5's
   default scheduler (`auto`) runs the retest SERIALLY (`scheduler.used: serial`), which suits a handful of retests;
   the active silence rule and the Auto ceiling apply as in skill 5. Never `--burn-in`, `--extra`, `--reporter`,
-  `--config`, `--retries` or `--scheduler`.
+  `--config`, `--retries` or `--scheduler`. `--screenshot-policy all` always — the retest's images are the evidence the
+  close / reopen uploads, whatever screenshot choice phase N's own run made (its `delivery.screenshots`).
 - **One background call per stage**; wait for its completion notice — never poll it, never read the
   log while it runs (pipeline mode: one foreground call per `--groups`, with a tool timeout above
   the ceiling + `--cooldown-max`). After each call, one chat message: the payload's `update`

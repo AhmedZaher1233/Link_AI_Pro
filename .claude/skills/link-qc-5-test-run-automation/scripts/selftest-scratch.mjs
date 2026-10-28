@@ -106,12 +106,16 @@ const treeHash = (dir) => {
     'env-read': "const u = process.env.A1_USER;",
     'credential-print': "const a = account('A1'); console.log(a.password);",
     'tc-id': "test('TC-07 save', async () => {});",
+    'data-change': "await db.insert({ table: 'orders', values: { name: 'x' } });",
   };
   const p = [];
   for (const [id, line] of Object.entries(bad)) {
     const r = scanSpec(PROBE('pass', line)).map((x) => x.reason);
     if (!r.includes(id)) p.push(`${id} not refused`);
   }
+  // 3.0 — the API / DB record is official evidence too; write SQL and a data-changing request change data
+  for (const [id, line] of [['official-evidence', 'await captureRecord(testInfo);'], ['data-change', "const q = 'DELETE FROM orders WHERE id = 1';"], ['data-change', "await request.post('/api/orders', {});"]]) if (!scanSpec(PROBE('pass', line)).map((x) => x.reason).includes(id)) p.push(id + ' not refused for: ' + line);
+  if (scanSpec(PROBE('pass', "const r = await db.read('status', 'SELECT status FROM orders WHERE id = $1', [1]); await request.get('/api/orders/1');")).length) p.push('a read-only probe (SELECT / GET) was refused');
   const clean = scanSpec(PROBE('pass', "// heal of TC-07: captureEvidence is not called here; process.env is not read\n  /* storageState */ await login.password.fill('typed input');"));
   if (clean.length) p.push('false positive: ' + clean.map((x) => x.reason).join(', '));
   if (FORBIDDEN.length !== Object.keys(bad).length) p.push('a FORBIDDEN rule has no case here');

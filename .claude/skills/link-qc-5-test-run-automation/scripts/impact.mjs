@@ -53,7 +53,7 @@ import {
 export const SCHEMA_VERSION = 'skill5-impact/1';
 
 const CODE_EXT = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs', '.jsx'];
-const DATA_EXT = /\.(json|csv|tsv|xlsx?|txt|xml|png|jpe?g|gif|pdf|docx?)$/i;
+const DATA_EXT = /\.(json|csv|tsv|xlsx?|txt|xml|png|jpe?g|gif|pdf|docx?|sql|graphql|gql|ya?ml)$/i;   // 3.0: query files and API contracts too
 const CONFIG_RE = /^playwright.*\.config\.(ts|mts|cts|js|mjs|cjs)$/i;
 const HOOKS = new Set(['beforeEach', 'afterEach', 'beforeAll', 'afterAll']);
 const TEST_MODS = new Set(['only', 'skip', 'fixme', 'fail', 'slow']);

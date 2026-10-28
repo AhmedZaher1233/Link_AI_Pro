@@ -72,8 +72,10 @@
 //        [--telemetry [--telemetry-interval 2000] [--tree-interval 30000]]
 //        [--ceilings auto --timeouts <timeouts.ts>] [--silence <ms>] [--timeouts-mode active|shadow]
 //        [--no-ledger] [--capacity-dir <dir>] [--env-id <id>] [--max-wait <ms>]
-//        [--scheduler auto|groups|dispatch] [--units <parallel-plan.json>] [--strict] [--pretty]
+//        [--scheduler auto|groups|dispatch] [--units <parallel-plan.json>] [--screenshot-policy all|failed|none] [--strict] [--pretty]
 //   node run-stage.mjs reclaim [--capacity-dir <dir>] [--dry-run]     (user-run: orphaned trees of crashed runs)
+//   node run-stage.mjs preflight --run-file <f> --cwd <automation root> [--env-id <id>] [--probe-url <url>] [--workers N]
+//        (one compact readiness answer from this script's own decisions — launches nothing; see preflight())
 // Telemetry is OPT-IN (--telemetry) and OBSERVE ONLY: it reuses the ledger sampler's host readings and adds the
 // running command's process tree to the summary's `telemetry`; nothing reads it back to decide anything.
 // Exit code 0 by default (the outcome is in the payload); --strict maps COMPLETED 0 · STOPPED_* 1 ·
@@ -85,6 +87,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs, print, posix, read, isFile, sha256 } from './scan-lib.mjs';
 import { run as watchdogRun } from './watchdog.mjs';
+import * as recordLib from './redact.mjs';
 
 export const SCHEMA_VERSION = 'skill5-run-stage/1';
 export const SMOKE_GATE_LIMIT = 30;
@@ -135,7 +138,83 @@ export const REASON = {
   deferred: (iso) => 'not started: deferred until ' + iso,
   lease: (why) => 'not started: environment lease (' + why + ')',
   waitBudget: (deadline) => 'interrupted: wait budget exhausted (server deadline ' + deadline + ')',
+  // 3.0 — the API / DB helpers' documented outcomes (assets/api-record, db-record, db, record templates): no product verdict
+  dataChangesRefused: (why) => 'not started: data changes not permitted (' + why + ')',
+  dbUnavailable: (why) => 'not started: db unavailable (' + why + ')',
+  writeRefused: (kind) => 'data_write_refused (' + kind + ')',
+  writeFailed: 'data_write_failed',
+  readBackMismatch: 'read_back_mismatch',
+  redirectRefused: 'redirect_refused',
+  authFailure: 'auth_failure',
+  evidenceInvalid: (why) => 'evidence_invalid (' + why + ')',
+  cleanupIncomplete: 'cleanup_incomplete',
 };
+// the message prefixes the helpers throw with (their Error names do not reach the JSON report, their messages do)
+const HELPER_OUTCOMES = [
+  [/^(?:[A-Za-z]*Error:\s*)?data changes not permitted:\s*(.*)$/i, (m) => ({ status: 'NOT_RUN', reason: REASON.dataChangesRefused(m[1].slice(0, 120)) })],
+  [/^(?:[A-Za-z]*Error:\s*)?db unavailable:\s*(.*)$/i, (m) => ({ status: 'NOT_RUN', reason: REASON.dbUnavailable(m[1].slice(0, 120)) })],
+  [/^(?:[A-Za-z]*Error:\s*)?data write refused \((ownership|cascade|trigger|row-count|identity)\):/i, (m) => ({ status: 'INCOMPLETE', reason: REASON.writeRefused(m[1].toLowerCase()) })],
+  [/^(?:[A-Za-z]*Error:\s*)?data write failed:/i, () => ({ status: 'INCOMPLETE', reason: REASON.writeFailed })],
+  [/^(?:[A-Za-z]*Error:\s*)?read-back mismatch:/i, () => ({ status: 'INCOMPLETE', reason: REASON.readBackMismatch })],
+  [/^(?:[A-Za-z]*Error:\s*)?redirect refused:/i, () => ({ status: 'INCOMPLETE', reason: REASON.redirectRefused })],
+  [/^(?:[A-Za-z]*Error:\s*)?auth failure:/i, () => ({ status: 'INCOMPLETE', reason: REASON.authFailure })],
+];
+// 3.0 — the environment of the API / DB helpers, from the run file: the evidence root, the run id of the ownership
+// ledger, the permitted API hosts, the database identity TEST-DATA names, and the data-changes consent — the consented
+// TCs reach a child ONLY for a target of class test / staging (production or an unrecorded class: nothing is allowed)
+// a run-file path in its canonical form (POSIX, relative to the automation root) whether it was stored canonical,
+// project-relative ("Testing/Automation/screenshots/…") or absolute — keep in step with run-data.mjs canonicalPath
+// (references/schemas/paths-and-evidence.md)
+export function canonicalRel(value, automationRoot) {
+  if (value === null || value === undefined || value === '') return null;
+  const s = posix(String(value)).replace(/^\.\/+/, '').replace(/\/+$/, '');
+  if (/^(?:[a-zA-Z]:\/|\/)/.test(s)) return posix(path.relative(automationRoot, s)) || '.';
+  if (fs.existsSync(path.join(automationRoot, s))) return s;
+  const segs = s.split('/');
+  const ar = posix(path.resolve(automationRoot)).toLowerCase();
+  for (let k = segs.length - 1; k >= 1; k--) if (ar.endsWith('/' + segs.slice(0, k).join('/').toLowerCase())) return segs.slice(k).join('/');
+  return s;
+}
+export const BACKEND_ENV_KEYS = ['PW_SCREENSHOTS_ROOT', 'PW_RUN_ID', 'PW_DATA_LEDGER_FILE', 'PW_DATA_LEDGER_DIR', 'PW_DATA_CHANGES_TCS', 'PW_DATA_CHANGES_SETUP', 'PW_DATA_CLEANUP', 'PW_DATA_TEARDOWN', 'PW_API_HOSTS', 'PW_DB_EXPECTED_IDENTITY', 'PW_DB_PRODUCTION_MARKERS', 'PW_DB_ENV_VAR'];
+export function backendEnv(runJson, automationRoot, progressDir) {
+  const env = {};
+  const run = runJson || {};
+  const dc = run.data_changes || {};
+  const e = run.environment || {};
+  const cls = String(e.class || '').toLowerCase();
+  const safe = cls === 'test' || cls === 'staging';
+  const yes = (v) => v === true || v === 'yes';
+  if (run.screenshots_root) env.PW_SCREENSHOTS_ROOT = path.resolve(automationRoot, canonicalRel(run.screenshots_root, automationRoot));
+  env.PW_RUN_ID = String(run.run_id || ('phase-' + (run.phase ?? '0')));
+  env.PW_DATA_LEDGER_DIR = progressDir;
+  if (safe && yes(dc.consent) && Array.isArray(dc.tcs) && dc.tcs.length) env.PW_DATA_CHANGES_TCS = dc.tcs.join(',');
+  if (safe && yes(dc.setup)) env.PW_DATA_CHANGES_SETUP = 'allowed';
+  if (safe && yes(dc.cleanup)) env.PW_DATA_CLEANUP = 'allowed';
+  if (dc.teardown === 'now') env.PW_DATA_TEARDOWN = 'now';
+  if (Array.isArray(e.api_hosts) && e.api_hosts.length) env.PW_API_HOSTS = e.api_hosts.join(',');
+  if (e.db_identity) env.PW_DB_EXPECTED_IDENTITY = String(e.db_identity);
+  if (Array.isArray(e.production_markers) && e.production_markers.length) env.PW_DB_PRODUCTION_MARKERS = e.production_markers.join(',');
+  if (e.db_env_var) env.PW_DB_ENV_VAR = String(e.db_env_var);
+  return env;
+}
+// 3.1 — the run's screenshot choice (run file `delivery.screenshots`, intake.md item 4); `--screenshot-policy` overrides it
+// for one call (skill 9's retest passes `all`). Keep the values in step with run-data.mjs SCREENSHOT_POLICIES.
+export const SCREENSHOT_POLICIES = ['all', 'failed', 'none'];
+export function screenshotPolicyOf(a, runJson, warnings = []) {
+  const flag = typeof (a || {})['screenshot-policy'] === 'string' ? a['screenshot-policy'].trim().toLowerCase() : null;
+  if (flag && SCREENSHOT_POLICIES.includes(flag)) return flag;
+  if (flag) warnings.push('--screenshot-policy ' + flag + ' is not one of ' + SCREENSHOT_POLICIES.join(' / ') + ' — the run file\'s choice is used');
+  const d = runJson && runJson.delivery && runJson.delivery.screenshots;
+  return SCREENSHOT_POLICIES.includes(d) ? d : 'all';
+}
+const BACKEND_LAYERS = new Set(['api', 'db', 'api+db']);
+const RECORD_LAYERS = new Set(['api', 'db', 'api+db', 'hybrid']);
+
+export function helperOutcome(errText) {
+  const first = String(errText || '').replace(/\u001b\[[0-9;]*m/g, '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '';
+  for (const [re, f] of HELPER_OUTCOMES) { const m = re.exec(first); if (m) return f(m); }
+  return null;
+}
 // deterministic jitter for the harness only (QA_JITTER=max | zero); full jitter otherwise
 const rand = process.env.QA_JITTER === 'max' ? () => 1 : process.env.QA_JITTER === 'zero' ? () => 0 : Math.random;
 
@@ -250,6 +329,8 @@ export function collectTests(report, resultsRoot) {
         out.push({
           title: spec.title, file: spec.file || suite.file || null, line: spec.line || null, tags, suite: t.join(' > '),
           project, repeat, status, duration_ms: results.reduce((a, r) => a + (r.duration || 0), 0),
+          // the execution identity (keep in step with run-data.mjs collectRows): start, worker slot, retry
+          startTime: (last && last.startTime) || null, parallelIndex: last && typeof last.parallelIndex === 'number' ? last.parallelIndex : null, retry: last && typeof last.retry === 'number' ? last.retry : null,
           tcs: tcIdsOf(spec.title), annotations,
           unverifiedAssumption: tags.includes('@unverified-assumption') || /@unverified-assumption/.test(spec.title),
           rateLimitError: !!(rawErr && RATE_LIMIT_ERROR.test(errText)),
@@ -259,6 +340,9 @@ export function collectTests(report, resultsRoot) {
           admissionTimeout: status === 'SKIP' ? noteOf('admission-timeout') : refusedWorker ? refusedWorker[1] : null,
           expectsRefusal: annotations.includes('expects-refusal'),
           consoleErrors: annotations.includes('console-errors'),
+          // 3.0 — the API / DB helpers: a refusal / no-verdict outcome from the error, the record's own annotations
+          helper: status === 'FAIL' ? helperOutcome(errText) : null,
+          recordBlocked: noteOf('record-blocked'), recordMissing: noteOf('record-missing'), cleanupIncomplete: noteOf('cleanup-incomplete'),
           error: rawErr ? filterLine(String(rawErr).replace(/\u001b\[[0-9;]*m/g, '').split(/\r?\n/).find((l) => l.trim()) || '').slice(0, 200) : null,
           screenshot: shot ? posix(path.relative(resultsRoot, shot.path)) : null,
         });
@@ -279,6 +363,11 @@ export function classifyTest(t) {
   if ((st === 'SKIP' || st === 'FAIL' || st === 'NOT_RUN') && t.admissionTimeout !== null && t.admissionTimeout !== undefined) return { status: 'NOT_RUN', reason: REASON.admissionTimeout(t.admissionTimeout || 'admission wait exceeded') };
   if (st === 'SKIP' && t.deferredUntil !== null && t.deferredUntil !== undefined) return { status: 'NOT_RUN', reason: REASON.deferred(t.deferredUntil || 'the server deadline') };
   if (st === 'FAIL' && t.waitBudget) return { status: 'INCOMPLETE', reason: REASON.waitBudget(t.waitBudget) };
+  // 3.0 — an API / DB helper refused or could not prove the change: never a product verdict, never a PASS
+  if (st === 'FAIL' && t.helper) return t.helper;
+  if (st === 'PASS' && t.recordBlocked !== null && t.recordBlocked !== undefined) return { status: 'INCOMPLETE', reason: REASON.evidenceInvalid('redaction — the record still carried a secret and was not written') };
+  if (st === 'PASS' && t.recordMissing !== null && t.recordMissing !== undefined) return { status: 'INCOMPLETE', reason: REASON.evidenceInvalid('no record at the assertion point') };
+  if (st === 'PASS' && t.cleanupIncomplete !== null && t.cleanupIncomplete !== undefined) return { status: 'INCOMPLETE', reason: REASON.cleanupIncomplete };
   return { status: st, reason: null };
 }
 
@@ -796,6 +885,24 @@ function incremental(resultsFile) {
   return { done, avg: durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : null, samples: durations.length };
 }
 
+/** The complete JSONL lines appended to `file` since the last call (byte offset kept in state[key]); never re-reads a file. */
+function readNewLines(file, state, key) {
+  if (!file) return [];
+  let fd;
+  try { fd = fs.openSync(file, 'r'); } catch { return []; }
+  try {
+    const size = fs.fstatSync(fd).size;
+    const from = state[key] || 0;
+    if (size <= from) return [];
+    const buf = Buffer.alloc(size - from);
+    fs.readSync(fd, buf, 0, buf.length, from);
+    const lastNl = buf.lastIndexOf(0x0a);
+    if (lastNl < 0) return [];
+    state[key] = from + lastNl + 1;
+    return buf.subarray(0, lastNl).toString('utf8').split('\n').map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((x) => x && typeof x === 'object');
+  } catch { return []; } finally { try { fs.closeSync(fd); } catch { /* closed */ } }
+}
+
 /* ---------------- heartbeat reading for the isolation check ---------------- */
 
 // [start, end] of each TC's test in one command (test-start → test-end)
@@ -807,9 +914,9 @@ function testIntervals(progressFile) {
     const key = r.worker + '|' + r.tc;
     const at = Date.parse(r.at);
     if (r.event === 'test-start') open.set(key, at);
-    else if (open.has(key)) { out.push({ tcs: tcsOfField(r.tc), start: open.get(key), end: at }); open.delete(key); }
+    else if (open.has(key)) { out.push({ tcs: tcsOfField(r.tc), start: open.get(key), end: at, worker: r.worker }); open.delete(key); }
   }
-  for (const [key, start] of open) out.push({ tcs: tcsOfField(key.split('|').slice(1).join('|')), start, end: Infinity });
+  for (const [key, start] of open) out.push({ tcs: tcsOfField(key.split('|').slice(1).join('|')), start, end: Infinity, worker: Number(key.split('|')[0]) });
   return out;
 }
 
@@ -857,7 +964,8 @@ async function runCommand(ctx, g, laterGroups) {
   fs.writeFileSync(g.planFile, JSON.stringify({ name: g.name, mode: g.mode, workers: g.workers, stage: ctx.stage, command: g.kind, tcs: g.tcs }, null, 2) + '\n');
   // the rate-limit state and its lock are SHARED (other workers, commands and runs on this environment): never deleted here
   const { grep, invert } = g.filter || buildFilter({ stage: ctx.stage, group: g.name, tcs: g.onlyTcs });
-  const pwArgs = ['test', ...g.specs, '--project=' + ctx.project, '--grep', grep];
+  // one --project per Playwright project of the stage (3.0: the browser project and the backend project in ONE call)
+  const pwArgs = ['test', ...g.specs, ...csv(ctx.project).map((p) => '--project=' + p), '--grep', grep];
   if (invert) pwArgs.push('--grep-invert', invert);
   pwArgs.push('--workers=' + g.workers, ...g.extraArgs);
   if (g.extraArgs.includes('--last-failed')) g.lastRunFrom = seedLastRun(ctx.outputPhaseDir, g.outputDir);
@@ -872,6 +980,13 @@ async function runCommand(ctx, g, laterGroups) {
     PW_LANE: String(g.lane || 1), PW_CANCEL_FILE: ctx.cancelFile, PW_DIAGNOSTICS_DIR: g.diagnosticsDir };
   if (ctx.envId) env.PW_ENV_ID = ctx.envId; else delete env.PW_ENV_ID;
   if (ctx.headless) env.PW_HEADLESS = '1'; else delete env.PW_HEADLESS;
+  // 3.1 — which attempts the evidence helper writes an image for (all · failed · none); never inherited
+  env.PW_SCREENSHOTS = ctx.screenshotPolicy || 'all';
+  // 3.0 — the API / DB helpers: never inherited, always from THIS run's file; one ownership ledger per command
+  for (const k of BACKEND_ENV_KEYS) delete env[k];
+  Object.assign(env, ctx.backendEnv || {});
+  g.dataLedgerFile = g.progressFile.replace(/(\.jsonl|\.json|\.log)?$/i, '') + '.data-ledger.jsonl';
+  env.PW_DATA_LEDGER_FILE = g.dataLedgerFile;
   let child;
   let spawnError = null;
   const shown = (ctx.cmd ? ctx.cmd : 'playwright') + ' ' + pwArgs.map((x) => (/\s|[|()]/.test(x) ? JSON.stringify(x) : x)).join(' ');
@@ -881,6 +996,29 @@ async function runCommand(ctx, g, laterGroups) {
   const what = g.kind === 'normal' ? '' : g.kind + ' · ';
   log(ctx.activity + ' · ' + g.name + ' (' + what + g.mode + ' ×' + g.workers + ', ' + (ctx.headless ? 'headless' : 'headed') + ') · start · '
     + plural(g.tcs.length, 'TC') + ' · attempt ' + g.attempt + ' · ceiling ' + mmss(g.ceilingMs) + (g.ledgerToken ? ' · ledger ' + g.workers + ' slot(s)' : g.exclusiveToken ? ' · exclusive ' + g.workers + ' slot(s)' : '') + ' · ' + shown);
+  // TWO outputs (references/schemas/paths-and-evidence.md): the live progress log stays concise — one line per test start,
+  // end (with its first error line) and wait, generated here from the heartbeats; the FULL Playwright output (stack
+  // traces, console) goes to this command's diagnostics file. Every line of both is credential-filtered.
+  g.outputLog = path.join(g.diagnosticsDir || path.join(ctx.resultsRoot, 'artifacts', 'diagnostics', 'phase-' + (ctx.phase || 0), g.name.replace(/[^\w.-]+/g, '-')), 'playwright-output.log');
+  try { fs.mkdirSync(path.dirname(g.outputLog), { recursive: true }); } catch { /* the stage JSON still carries the results */ }
+  const detail = (line) => { try { fs.appendFileSync(g.outputLog, filterLine(line) + '\n'); } catch { /* best effort */ } };
+  log(ctx.activity + ' · ' + g.name + ' · full output → ' + posix(path.relative(ctx.resultsRoot, g.outputLog)));
+  const liveState = { hb: 0, res: 0 };
+  const liveLines = () => {
+    for (const r of readNewLines(g.progressFile, liveState, 'hb')) {
+      const who = 'w' + r.worker + ' ' + (Array.isArray(r.tc) ? r.tc.join(',') : (r.tc || ''));
+      if (r.event === 'test-start') log(ctx.activity + ' · ▶ ' + who + (r.retry ? ' (retry ' + r.retry + ')' : '') + (typeof r.repeat === 'number' && r.repeat ? ' (repeat ' + r.repeat + ')' : ''));
+      else if ((r.event === 'admission-wait' || r.event === 'rate-wait') && r.phase === 'start') log(ctx.activity + ' · ⏸ ' + who + ' waiting: ' + (r.event === 'admission-wait' ? 'admission' : 'rate limit') + (r.reason || r.scope ? ' — ' + filterLine(String(r.reason || r.scope)).slice(0, 120) : ''));
+      else if (r.event === 'deferred') log(ctx.activity + ' · ⏸ ' + who + ' deferred until ' + filterLine(String(r.until || '?')).slice(0, 40));
+      else if (r.event === 'stall') log(ctx.activity + ' · ⚠ ' + who + ' no progress in step "' + filterLine(String(r.step || '')).slice(0, 80) + '"');
+    }
+    for (const r of readNewLines(g.resultsFile, liveState, 'res')) {
+      const ok = r.status === 'passed';
+      const sym = ok ? '✓' : r.status === 'skipped' ? '–' : '✗';
+      log(ctx.activity + ' · ' + sym + ' w' + r.worker + ' ' + (Array.isArray(r.tc) ? r.tc.join(',') : r.tc) + ' ' + r.status + ' ' + Math.round((Number(r.duration_ms) || 0) / 1000) + ' s'
+        + (!ok && r.error ? ' — ' + filterLine(String(r.error).replace(/\u001b\[[0-9;]*m/g, '').split(/\r?\n/).find((l) => l.trim()) || '').slice(0, 160) : ''));
+    }
+  };
   // under the ledger AND in exclusive execution the command runs under ledger-exec.mjs, which registers its own pid
   // against the reservation token at once (a parent that dies right after the spawn never leaves the child unaccounted
   // for) and hands the token to the whole tree (QA_LEDGER_TOKEN — a re-parented browser keeps it)
@@ -931,10 +1069,12 @@ async function runCommand(ctx, g, laterGroups) {
           if (!line.trim()) continue;
           if (NO_TESTS.test(line)) noTests = true;
           if (DLL_CRASH.test(line)) { ctx.flags.windowsDllInitCrash = true; g.dllCrash = true; }
-          log('  | ' + filterLine(line), true);
+          detail(line);
+          // the two lines the live view must still show as they are: no tests matched, a worker DLL-init crash
+          if (NO_TESTS.test(line) || DLL_CRASH.test(line)) log('  | ' + filterLine(line), true);
         }
       });
-      stream.on('end', () => { if (buf.trim()) { if (NO_TESTS.test(buf)) noTests = true; if (DLL_CRASH.test(buf)) { ctx.flags.windowsDllInitCrash = true; g.dllCrash = true; } log('  | ' + filterLine(buf), true); } });
+      stream.on('end', () => { if (buf.trim()) { if (NO_TESTS.test(buf)) noTests = true; if (DLL_CRASH.test(buf)) { ctx.flags.windowsDllInitCrash = true; g.dllCrash = true; } detail(buf); if (NO_TESTS.test(buf) || DLL_CRASH.test(buf)) log('  | ' + filterLine(buf), true); } });
     }
   }
   let lastStatus = Date.now();
@@ -1004,6 +1144,7 @@ async function runCommand(ctx, g, laterGroups) {
         }
       }
     }
+    liveLines();
     if (Date.now() - lastStatus >= ctx.statusEveryMs) { statusLine(); lastStatus = Date.now(); }
     if (ctx.publishStatus) ctx.publishStatus('tick');
   }
@@ -1013,6 +1154,7 @@ async function runCommand(ctx, g, laterGroups) {
     if (!exited) ctx.warnings.push(g.name + ': the process did not exit after the kill (pid ' + child.pid + ')');
   }
   if (child && !closed) await Promise.race([onClose, sleep(2000)]);
+  liveLines();
   ctx.running.delete(g);
   if (ctx.publishStatus) ctx.publishStatus('end');
   if (ctx.current === child) { ctx.current = null; ctx.currentCommand = null; }
@@ -1092,9 +1234,33 @@ function commandStatuses(ctx, g) {
       if (st === 'FAIL') failures.push({ tcs: t.tcs, title: t.title, group: g.name, status: 'FAIL', error: t.error, screenshot: t.screenshot, unverifiedAssumption: t.unverifiedAssumption, repeat: t.repeat });
     }
     for (const [tc, list] of Object.entries(per)) tcs[tc] = aggregate(list);
+    // 3.0 — a PASS of an api / db / api+db / hybrid TC needs its valid, sealed record (fail closed: evidence_invalid)
+    const recs = validateRecords(ctx, g, Object.keys(tcs).filter((tc) => tcs[tc] === 'PASS'));
+    for (const [tc, why] of Object.entries(recs)) { tcs[tc] = 'INCOMPLETE'; reasons[tc] = REASON.evidenceInvalid(why); }
   }
   for (const tc of g.tcs) if (!(tc in tcs)) { tcs[tc] = 'NOT_RUN'; reasons[tc] = g.source === 'none' ? 'no test matched the stage filter — check its tags' : 'no result for this TC in the stage JSON'; }
   return { tcs, reasons, failures, journeys, unplanned, rateLimitErrors, deferred, admissionTimeouts, tests };
+}
+
+/**
+ * 3.0 — post-command record validation: every PASS of a TC whose layer owes a record (run_plan.layers) must have the
+ * record this command's heartbeats name, readable, sealed, of that TC, with a passing assertion for every backend
+ * Expected line (run_plan.backend_lines) and no secret left. → { TC: why } for every PASS that fails it.
+ */
+export function validateRecords(ctx, g, passedTcs) {
+  const out = {};
+  const layers = ctx.layers || {};
+  const want = passedTcs.filter((tc) => RECORD_LAYERS.has(layers[tc]));
+  if (!want.length || !ctx.checkRecordFile) return out;
+  const beats = jsonl(g.progressFile).filter((r) => r.event === 'evidence' && (r.kind === 'record' || /\.record\.json$/i.test(String(r.path || ''))));
+  for (const tc of want) {
+    const mine = beats.filter((b) => tcsOfField(b.tc).includes(tc)).map((b) => b.path).filter((p) => p && String(p).includes(tc));
+    const file = mine.length ? path.resolve(ctx.cwd, String(mine[mine.length - 1])) : null;
+    if (!file) { out[tc] = 'no record for this attempt (a ' + layers[tc] + ' TC)'; continue; }
+    const c = ctx.checkRecordFile(file, { tc, status: 'PASS', backendLines: (ctx.backendLines || {})[tc] || [] });
+    if (!c.ok) out[tc] = 'record: ' + c.problems.slice(0, 3).join('; ');
+  }
+  return out;
 }
 
 /* ---------------- the code fingerprint (impact.mjs, imported lazily — never fatal) ---------------- */
@@ -1248,7 +1414,7 @@ export async function runStage(rawArgs) {
   if (!runFile || !isFile(runFile)) errors.push('--run-file must name the phase\'s run file (.runs/phase-N.json)');
   if (!cwd || !statSafe(cwd)) errors.push('--cwd must name the automation root');
   if (!logPath) errors.push('--log must name this run\'s progress log');
-  if (!project) errors.push('--project must name the browser project');
+  if (!project) errors.push('--project must name the Playwright project(s) of the stage (the browser project, the backend project, or both comma-separated)');
   const stageTcs = csv(a['stage-tcs']);
   if (stage && stage !== 'setup' && !stageTcs.length) errors.push('--stage-tcs is required: the approved document\'s TCs of this stage');
   const ceilingsAuto = a.ceilings === 'auto';
@@ -1354,10 +1520,14 @@ export async function runStage(rawArgs) {
     const smoke = cumulativeOf(progressDir).stages.smoke;
     if (smoke && smokeGateOf(smoke).decision === 'no_verdict') return { ...base, outcome: 'BLOCKED', reason: 'smoke gate NO VERDICT — no smoke TC of this phase produced a PASS or FAIL; fix and run a smoke retry (or stop) before the ' + stage + ' stage', errors: ['smoke gate NO VERDICT'], warnings };
   }
+  // the project's OWN Playwright CLI, resolved the way Node resolves it from the automation root (hoisted / workspace /
+  // symlinked installs), then every node_modules upward — never assumed at {cwd}/node_modules (project-env.mjs)
   let cliPath = null;
+  let cliError = null;
   if (!cmd) {
-    const candidates = typeof a.cli === 'string' ? [path.resolve(cwd, a.cli)] : [path.join(cwd, 'node_modules', '@playwright', 'test', 'cli.js'), path.join(cwd, 'node_modules', 'playwright', 'cli.js')];
-    cliPath = candidates.find((p) => isFile(p)) || null;
+    const penv = await loadModule('project-env.mjs');
+    if (penv.loadError) cliError = 'project-env.mjs could not be loaded (' + penv.loadError + ') — restore the skill folder with /sync-skills';
+    else { const pw = penv.resolvePlaywrightCli(cwd, typeof a.cli === 'string' ? a.cli : null); cliPath = pw.cli; cliError = pw.error || null; }
   }
   if (!specs.length && stage !== 'setup') warnings.push('no --spec: the whole automation project is filtered by tags only');
   for (const g of groups) if (!g.specs) g.specs = specs;
@@ -1393,6 +1563,16 @@ export async function runStage(rawArgs) {
     host: hostFixture() ? { totalMemMb: hostTotalMemMb(), cpus: hostCpus() } : null, kind: display.headed ? 'headed' : 'headless' });
   for (const r of ceil.refusedRaises || []) warnings.push('the machine ceiling can only be lowered here: ' + r.by + '=' + r.value + ' ignored (ceiling ' + ceil.ceiling + ' from ' + ceil.source + ')');
   if (ceil.auto && ceil.auto.reason) warnings.push('Auto ceiling: ' + ceil.auto.reason);
+  // a host that can NEVER hold one worker of this stage's kind beside its reserve: a clear, bounded BLOCKED before any side
+  // effect — never a forced launch, never coordination switched off, never a wait for an admission that cannot come
+  {
+    const lay = (runJson && runJson.run_plan && runJson.run_plan.layers) || {};
+    const allBackend = groups.length && groups.every((g) => g.tcs.length && g.tcs.every((tc) => ['api', 'db', 'api+db'].includes(lay[tc])));
+    const insufficient = allBackend
+      ? cap.autoCeiling({ totalMemMb: hostTotalMemMb(), cpus: hostCpus(), ci: !!process.env.CI, kind: 'backend' })
+      : (ceil.auto && ceil.auto.insufficient ? { insufficient: true, insufficientReason: ceil.auto.insufficientReason } : null);
+    if (insufficient && insufficient.insufficient) return { ...base, outcome: 'BLOCKED', reason: 'insufficient capacity — ' + insufficient.insufficientReason + '; nothing was started (no worker can be admitted on this host; free memory or run on a larger machine — coordination is never switched off to force it)', errors: ['insufficient capacity'], warnings, notRun: stageTcs.map((tc) => ({ tc, reason: 'not started: insufficient capacity' })) };
+  }
   // the hard cap holds in every mode: no command runs above the machine ceiling (never raised)
   const loweredByCeiling = [];
   for (const g of groups) if (g.workers > ceil.ceiling) { loweredByCeiling.push({ group: g.name, from: g.workers, to: ceil.ceiling, by: 'machine ceiling (' + ceil.source + ')' }); g.workers = ceil.ceiling; }
@@ -1411,7 +1591,10 @@ export async function runStage(rawArgs) {
     const measured = readDemand(dir)[kind];
     const boot = cap.BOOTSTRAP_DEMAND[kind];
     const per = measured && measured.memMb > 0 ? { memMb: Math.round(measured.memMb * 1.2), cpu: boot.cpu, measured: true } : { ...boot, measured: false };
-    ledger = { cap, dir, ceiling: ceil.ceiling, ceil, reserves, per, kind, cpus, pm: cap.createPressureMonitor({ reserveMb: reserves.memMb, workerMemMb: per.memMb }), rows: null, rowsAt: 0, observed: {}, availMb: availableMemMb(), lastCpu: 0, lastLag: 0, hostStats: { samples: 0, minAvailableMb: null, peakCpuPct: null, maxLagMs: 0 }, timer: null };
+    // 3.0 — a command whose TCs are ALL api / db / api+db starts no browser: it reserves the `backend` demand (one slot per
+    // worker under the same machine ceiling); a mixed command reserves the browser kind (conservative)
+    const perBackend = cap.BOOTSTRAP_DEMAND.backend ? { ...cap.BOOTSTRAP_DEMAND.backend, measured: false } : per;
+    ledger = { cap, dir, ceiling: ceil.ceiling, ceil, reserves, per, perBackend, kind, cpus, pm: cap.createPressureMonitor({ reserveMb: reserves.memMb, workerMemMb: per.memMb }), rows: null, rowsAt: 0, observed: {}, availMb: availableMemMb(), lastCpu: 0, lastLag: 0, hostStats: { samples: 0, minAvailableMb: null, peakCpuPct: null, maxLagMs: 0 }, timer: null };
     // the latest process table — a cached one when a listing fails, NULL when none was ever read (capacity.mjs then
     // treats liveness as unknown: nothing is released or broken — never an empty table that would read as "all dead")
     ledger.snapshot = async (maxAgeMs = 5000) => {
@@ -1620,6 +1803,12 @@ export async function runStage(rawArgs) {
     admissionFile, cancelFile, envId, runId, maxWaitMs, silenceMs, timeoutsMode, ledger, excl,
     unitScopesJson: JSON.stringify(unitScopesOf([...stageTcSet], rateLimits, dispatchUnits)),
     admission: { state: 'open', reason: null, cooldowns: [], seq: 0 }, admissionUpdates: 0, laneSeq: 0,
+    // 3.0 — test layers, the record validation and the helpers' environment (from this run's file only)
+    layers: (runJson.run_plan && runJson.run_plan.layers) || {}, backendLines: (runJson.run_plan && runJson.run_plan.backend_lines) || {},
+    backendEnv: backendEnv(runJson, cwd, progressDir), checkRecordFile: recordLib ? recordLib.checkRecordFile : null,
+    // 3.1 — the run's screenshot choice for the evidence helper (PW_SCREENSHOTS): --screenshot-policy, else the run file's
+    // delivery.screenshots, else `all` (a run file written before 3.1)
+    screenshotPolicy: screenshotPolicyOf(a, runJson, warnings),
     shadow: { seen: new Set(), would_stop: [], long_deadlines: [], stalls: [] },
   };
   // the admission state children read (assets/admission.template.ts) — written ONLY here, temp + rename, ≤ 1 s after a change
@@ -1639,14 +1828,20 @@ export async function runStage(rawArgs) {
   const statusFile = path.join(progressDir, 'status.json');
   let lastStatusKey = null;
   ctx.publishStatus = (event) => {
-    const active = [...ctx.running.keys()].map((g) => ({ command: g.name, workers: g.workers, tcs: g.progressFile ? uniq(testIntervals(g.progressFile).filter((s) => s.end === Infinity).flatMap((s) => s.tcs)) : [] }));
-    const key = JSON.stringify(active);
+    const open = new Map([...ctx.running.keys()].map((g) => [g, g.progressFile ? testIntervals(g.progressFile).filter((s) => s.end === Infinity) : []]));
+    const active = [...ctx.running.keys()].map((g) => ({ command: g.name, workers: g.workers, tcs: uniq(open.get(g).flatMap((s) => s.tcs)) }));
+    // per worker: the unit (command), the TC it runs and since when — viewers compute the elapsed time from startedAt
+    const perWorker = [...ctx.running.keys()].flatMap((g) => open.get(g).map((s) => ({ command: g.name, unit: g.unitId || g.name, worker: s.worker, tc: s.tcs.join(','), startedAt: iso(s.start) })));
+    const done = { passed: 0, failed: 0, other: 0 };
+    for (const g of ctx.running.keys()) for (const v of incremental(g.resultsFile).done.values()) { if (v === 'PASS') done.passed++; else if (v === 'FAIL') done.failed++; else done.other++; }
+    const waiting = ctx.waiting ? { reason: filterLine(String(ctx.waiting.reason)).slice(0, 200), since: ctx.waiting.since } : null;
+    const key = JSON.stringify([active, perWorker.map((w) => w.command + w.worker + w.tc), done, waiting && waiting.reason]);
     if (key === lastStatusKey) return;
     lastStatusKey = key;
     const activeWorkers = active.reduce((s, x) => s + x.workers, 0);
     const line = 'Auto ceiling ' + ceil.ceiling + ' (' + ceil.source + ') · active ' + activeWorkers + ' worker(s)'
-      + (active.length ? ' · ' + active.map((x) => x.command + ' ×' + x.workers + ': ' + (x.tcs.join(', ') || '—')).join(' · ') : '') + ' · ' + (display.headed ? 'headed' : 'headless — ' + (display.reason || 'requested'));
-    try { const tmp = statusFile + '.' + process.pid + '.tmp'; fs.writeFileSync(tmp, JSON.stringify({ schema: 'skill5-status/1', at: iso(Date.now()), event, stage, run, ceiling: ceil.ceiling, ceilingSource: ceil.source, headed: display.headed, activeWorkers, active, line }, null, 2) + '\n'); fs.renameSync(tmp, statusFile); } catch { /* the log line still carries it */ }
+      + (active.length ? ' · ' + active.map((x) => x.command + ' ×' + x.workers + ': ' + (x.tcs.join(', ') || '—')).join(' · ') : '') + (waiting ? ' · waiting: ' + waiting.reason : '') + ' · ' + (display.headed ? 'headed' : 'headless — ' + (display.reason || 'requested'));
+    try { const tmp = statusFile + '.' + process.pid + '.tmp'; fs.writeFileSync(tmp, JSON.stringify({ schema: 'skill5-status/1', at: iso(Date.now()), event, activity, stage, run, ceiling: ceil.ceiling, ceilingSource: ceil.source, headed: display.headed, activeWorkers, active, workers: perWorker, done, waiting, line }, null, 2) + '\n'); fs.renameSync(tmp, statusFile); } catch { /* the log line still carries it */ }
     log(activity + ' · status · ' + line);
   };
   let pressureEpisodes = [];
@@ -1711,11 +1906,15 @@ export async function runStage(rawArgs) {
   }
   const underPressure = () => { if (!ledger) return false; const st = ledger.pm.state(); return (typeof st === 'string' ? st : st && st.state) === 'pressure'; };
   // the host admits a command of k workers now? (memory / CPU after everything committed, pressure, the lease)
-  const admissionFor = (k, capacityOnly = false) => (led) => {
+  const layersOfRun = (runJson.run_plan && runJson.run_plan.layers) || {};
+  const capacityKindOf = (g) => (g && g.tcs && g.tcs.length && g.tcs.every((tc) => BACKEND_LAYERS.has(layersOfRun[tc])) ? 'backend' : null);
+  const perOf = (g) => (capacityKindOf(g) === 'backend' && ledger.perBackend ? ledger.perBackend : ledger.per);
+  const admissionFor = (k, capacityOnly = false, g = null) => (led) => {
     const now = Date.now();
     const committed = cap.committedOutstanding((led && led.entries) || [], ledger.observed, now);
     const idleCores = ledger.cpus * (1 - (ledger.lastCpu || 0) / 100);
-    return cap.admissionCheck({ availableMb: ledger.availMb, idleCores, committed, demand: { memMb: ledger.per.memMb * k, cpu: ledger.per.cpu * k }, reserves: ledger.reserves,
+    const per = perOf(g);
+    return cap.admissionCheck({ availableMb: ledger.availMb, idleCores, committed, demand: { memMb: per.memMb * k, cpu: per.cpu * k }, reserves: ledger.reserves,
       pressure: capacityOnly ? false : underPressure(), leaseValid: capacityOnly ? true : !leaseBlock });
   };
   // reserve a command's full --workers before it is spawned; the host may LOWER a group's workers (never raise),
@@ -1728,18 +1927,20 @@ export async function runStage(rawArgs) {
       // the largest worker count the host's CAPACITY admits now (a passing pressure episode never lowers it — the
       // reservation below waits for it instead); none admissible → wait for one worker, never for more
       let k = g.workers;
-      while (k > 1 && !(admissionFor(k, true)(led) || {}).ok) k--;
+      while (k > 1 && !(admissionFor(k, true, g)(led) || {}).ok) k--;
       if (k < g.workers) {
         ledgerRecord.lowered.push({ group: g.name, command: g.kind, from: g.workers, to: k, by: 'host capacity (memory / CPU after the reserve)' });
         g.ceilingMs = Math.round(g.ceilingMs * (g.workers / k));
         g.workers = k;
       }
     }
-    if (led && !(admissionFor(g.workers)(led) || {}).ok && typeof ledger.pm.noteBlocked === 'function') ledger.pm.noteBlocked();
+    if (led && !(admissionFor(g.workers, false, g)(led) || {}).ok && typeof ledger.pm.noteBlocked === 'function') ledger.pm.noteBlocked();
     let r;
+    const per = perOf(g);
+    g.capacityKind = capacityKindOf(g) || ledger.kind;
     try {
-      r = await cap.reserve({ dir: ledger.dir, cls: 'playwright', units: g.workers, limit: ledger.ceiling, machineCeiling: ceil.base, demand: { memMb: ledger.per.memMb * g.workers, cpu: ledger.per.cpu * g.workers },
-        owner: { runId, runFile: posix(runFile) }, environment: envId, admission: admissionFor(g.workers), waitMs, pollMs: 2000, snapshot: ledger.fresh });
+      r = await cap.reserve({ dir: ledger.dir, cls: 'playwright', units: g.workers, limit: ledger.ceiling, machineCeiling: ceil.base, demand: { memMb: per.memMb * g.workers, cpu: per.cpu * g.workers },
+        owner: { runId, runFile: posix(runFile) }, environment: envId, admission: admissionFor(g.workers, false, g), waitMs, pollMs: 2000, snapshot: ledger.fresh });
     } catch (e) { r = e instanceof cap.LockBusyError ? { ok: false, reason: 'capacity ledger busy (' + e.message + ')' } : { ok: false, code: 'coordination', reason: 'the capacity ledger could not be used (' + e.message + ')' }; }
     const rec = { token: r.ok ? r.token : null, group: g.name, command: g.kind, units: g.workers, waitedMs: Date.now() - t0, released: null, alive: [] };
     ledgerRecord.reservations.push(rec);
@@ -1770,11 +1971,19 @@ export async function runStage(rawArgs) {
   });
   // exclusive execution: the command waits until no other Playwright command runs on the machine, then holds the class
   // alone; its owner is judged by PID, its release needs a fresh table (confirm: 'table')
+  // exclusive mode still admits on the host's memory (os readings — no process table needed): a short host waits, bounded
+  // by --max-wait, and is never launched anyway (low memory never forces execution)
+  const exclAdmission = (g) => {
+    const kind = display.headed ? 'headed' : 'headless';
+    const per = (cap.BOOTSTRAP_DEMAND && cap.BOOTSTRAP_DEMAND[kind]) || { memMb: 1536, cpu: 1.5 };
+    const reserves = cap.reservesFor({ ci: !!process.env.CI, totalMemMb: hostTotalMemMb(), cpus: hostCpus() });
+    return () => cap.admissionCheck({ availableMb: availableMemMb(), idleCores: undefined, committed: { memMb: 0, cpu: 0 }, demand: { memMb: per.memMb * g.workers, cpu: 0 }, reserves, pressure: false, leaseValid: true });
+  };
   excl && (excl.reserveFor = async (g, waitMs) => {
     const t0 = Date.now();
     let r;
     try {
-      r = await cap.reserve({ dir: excl.dir, cls: 'playwright', units: g.workers, limit: excl.ceiling, machineCeiling: ceil.base, exclusive: true, liveness: 'pid', confirm: 'table', owner: { runId, runFile: posix(runFile) }, environment: envId, waitMs, pollMs: 2000, snapshot: excl.fresh });
+      r = await cap.reserve({ dir: excl.dir, cls: 'playwright', units: g.workers, limit: excl.ceiling, machineCeiling: ceil.base, exclusive: true, liveness: 'pid', confirm: 'table', owner: { runId, runFile: posix(runFile) }, environment: envId, waitMs, pollMs: 2000, snapshot: excl.fresh, admission: exclAdmission(g) });
     } catch (e) { r = e instanceof cap.LockBusyError ? { ok: false, reason: 'capacity ledger busy (' + e.message + ')' } : { ok: false, code: 'coordination', reason: 'the capacity ledger could not be used (' + e.message + ')' }; }
     const rec = { token: r.ok ? r.token : null, group: g.name, command: g.kind, units: g.workers, exclusive: true, waitedMs: Date.now() - t0, released: null, alive: [] };
     ledgerRecord.reservations.push(rec);
@@ -1834,12 +2043,16 @@ export async function runStage(rawArgs) {
     if (leaseBlock) { g.notAdmitted = REASON.lease(leaseBlock); ran.push(g); return true; }
     if (admissionGaveUp && !reserved) { g.notAdmitted = admissionGaveUp; ran.push(g); return true; }
     if (!cliPath && !cmd) {
-      g.spawnError = 'Playwright CLI entry not found under ' + posix(cwd) + '/node_modules (@playwright/test/cli.js) — pass --cli or --cmd';
+      g.spawnError = cliError || ('the project\'s Playwright CLI was not found from ' + posix(cwd) + ' — pass --cli <its cli.js> or --cmd');
     } else {
       const coord = ledger || excl;
       if (coord && !reserved) {
-        const r = await coord.reserveFor(g, maxWaitMs);
-        if (!r.ok) { g.notAdmitted = r.reason; admissionGaveUp = r.reason; ran.push(g); log(activity + ' · ' + g.name + ' · NOT STARTED — ' + r.reason); return true; }
+        // the live view names what the stage waits for while the reservation waits (status.json `waiting`, one log line)
+        ctx.waiting = { reason: 'capacity for ' + g.name + ' (' + g.workers + ' slot(s), bounded by --max-wait ' + Math.round(maxWaitMs / 1000) + ' s)', since: iso(Date.now()) };
+        if (ctx.publishStatus) ctx.publishStatus('waiting');
+        let r;
+        try { r = await coord.reserveFor(g, maxWaitMs); } finally { ctx.waiting = null; }
+        if (!r.ok) { g.notAdmitted = r.reason; admissionGaveUp = r.reason; ran.push(g); log(activity + ' · ' + g.name + ' · NOT STARTED — ' + filterLine(r.reason)); return true; }
       }
       allocate(g);
       g.lane = ++ctx.laneSeq;
@@ -2352,6 +2565,22 @@ export async function runStage(rawArgs) {
   const finishedAt = Date.now();
   pressureEpisodes = ledger ? (ledger.pm.episodes() || []) : [];
   const interferenceCauses = interference.filter((e) => e.cause).map((e) => ({ tc: e.tc, cause: e.cause }));
+  // 3.0 — the ownership ledger of the run so far: writes in doubt (never assumed done), created records not yet torn
+  // down (retained / orphaned) — read-only; resolved in doubt only by a lookup inside the next DB attach
+  const dataLedger = (() => {
+    const files = readdirSafe(progressDir).filter((f) => f.endsWith('.data-ledger.jsonl'));
+    if (!files.length) return null;
+    const rid = (ctx.backendEnv || {}).PW_RUN_ID;
+    const lines = files.flatMap((f) => jsonl(path.join(progressDir, f))).filter((l) => l && (!rid || l.run_id === rid));
+    const byWrite = new Map();
+    for (const l of lines) if (l.write_id) byWrite.set(l.write_id, [...(byWrite.get(l.write_id) || []), l.state]);
+    const inDoubt = [...byWrite.values()].filter((s) => s.includes('intent') && s.every((x) => x === 'intent')).length;
+    const last = new Map();
+    for (const l of lines) if (l.op === 'insert' || l.op === 'create' || l.state === 'teardown-done') last.set((l.table || l.resource || '?') + ' ' + JSON.stringify(l.key), l.state);
+    const vals = [...last.values()];
+    return { files: files.length, writes: byWrite.size, in_doubt: inDoubt, retained: vals.filter((s) => s === 'retained').length, orphaned: vals.filter((s) => s === 'committed' || s === 'verified' || s === 'recovered').length, removed: vals.filter((s) => s === 'teardown-done').length };
+  })();
+  if (dataLedger && dataLedger.in_doubt) warnings.push(dataLedger.in_doubt + ' data change(s) of this run are IN DOUBT (an intent without an outcome) — never owned, never cleaned; the next DB attach resolves them by a read-only lookup, otherwise the run is NOT ACCEPTED');
   const summary = {
     tool: 'run-stage', schema: SCHEMA_VERSION, run, stage, seq, label, phase, activity, outcome, reason,
     startedAt: iso(startedAt), finishedAt: iso(finishedAt), durationMs: finishedAt - startedAt,
@@ -2372,12 +2601,15 @@ export async function runStage(rawArgs) {
     dispatch: dispatchRecord, scheduler: schedRec,
     timeouts_shadow: { mode: timeoutsMode, silence_ms: silenceMs, would_stop: ctx.shadow.would_stop, long_deadlines: ctx.shadow.long_deadlines, stalls: ctx.shadow.stalls },
     proposals,
+    ...(dataLedger ? { data_ledger: dataLedger } : {}),
   };
   fs.writeFileSync(summaryFile, JSON.stringify(summary, null, 2) + '\n');
   const cumulative = cumulativeOf(progressDir);
   if (stage === 'smoke' && cumulative.stages.smoke) summary.smokeGate = smokeGateOf(cumulative.stages.smoke);
+  // the evidence folder of the stage message: the run file's screenshots_root (canonical form), never a guess from reports/
+  const shotsRel = runJson && runJson.screenshots_root ? canonicalRel(runJson.screenshots_root, cwd) : null;
   const relCwd = posix(path.relative(cwd, resultsRoot));
-  const evidenceDir = /^reports\//.test(relCwd) ? 'screenshots/' + relCwd.slice('reports/'.length) + '/phase-' + phase + '/' : null;
+  const evidenceDir = shotsRel ? shotsRel + '/phase-' + phase + '/' : /^reports\//.test(relCwd) ? 'screenshots/' + relCwd.slice('reports/'.length) + '/phase-' + phase + '/' : null;
   summary.cumulative = cumulative;
   summary.update = buildUpdate({ run, stage, label, outcome, reason, call: { counts, journeys }, cumulative, failures, notRun, blockers, evidenceDir, durationMs: finishedAt - startedAt, isolation, rateLimit,
     deferred: summary.deferred, interferenceCauses, pressure: summary.pressure, workers: workersLine() });
@@ -2435,11 +2667,108 @@ export function cumulativeOf(progressDir) {
   return { stages, total: countOf(all), setup };
 }
 
+/* ---------------- preflight — ONE compact readiness answer from the stage's own code paths ----------------
+   The same decisions a stage makes — the Auto ceiling, the display, the project's Playwright CLI and shared config, the
+   coordination directory and ledger, one host sample, the free slots, the environment lease — plus one bounded GET of the
+   environment URL. It launches nothing and writes only artifacts/progress/preflight.json. It replaces model-driven process
+   listings, memory probes and ad hoc URL checks (references/execution.md <environment_gate>). */
+export async function preflight(a) {
+  const head = { tool: 'run-stage', command: 'preflight', schema: 'skill5-preflight/1' };
+  const runFile = typeof a['run-file'] === 'string' ? path.resolve(a['run-file']) : null;
+  const cwd = typeof a.cwd === 'string' ? path.resolve(a.cwd) : null;
+  if (!runFile || !isFile(runFile) || !cwd || !statSafe(cwd)) return { ...head, verdict: 'blocked', reason: 'preflight needs --run-file <.runs/phase-N.json> and --cwd <automation root>' };
+  let runJson; try { runJson = JSON.parse(read(runFile)); } catch { runJson = null; }
+  if (!runJson) return { ...head, verdict: 'blocked', reason: 'the run file is not readable JSON' };
+  const resultsRoot = path.dirname(path.dirname(runFile));
+  const blocked = [];
+  const restricted = [];
+  const detail = {};
+  // the project's Playwright and shared config
+  const penv = await loadModule('project-env.mjs');
+  let playwright = { cli: null, version: null };
+  let config = { shared: null, source: null };
+  if (penv.loadError) blocked.push('project-env.mjs could not be loaded (' + penv.loadError + ')');
+  else {
+    const pw = typeof a.cmd === 'string' ? { cli: null, version: null, source: '--cmd' } : penv.resolvePlaywrightCli(cwd, typeof a.cli === 'string' ? a.cli : null);
+    playwright = { cli: pw.cli ? posix(path.relative(cwd, pw.cli)) : null, version: pw.version || null, source: pw.source || null };
+    if (!pw.cli && typeof a.cmd !== 'string') blocked.push(pw.error || 'the project\'s Playwright CLI was not found');
+    const root = typeof a.root === 'string' ? path.resolve(a.root) : (() => { for (let d = cwd, i = 0; i < 6; i++) { if (isFile(path.join(d, 'Testing', 'qa-manifest.json'))) return d; const up = path.dirname(d); if (up === d) break; d = up; } return path.dirname(cwd); })();
+    const sc = penv.resolveSharedConfig({ root, automationRoot: posix(path.relative(root, cwd)) || '.' });
+    config = { shared: sc.shared, source: sc.source, ...(sc.ambiguous.length ? { ambiguous: sc.ambiguous } : {}) };
+    if (sc.ambiguous.length) restricted.push('the shared Playwright config is ambiguous (' + sc.ambiguous.join(', ') + ') — name it before Checkpoint A');
+    else if (!sc.shared) restricted.push('no shared Playwright config resolved from the project');
+    detail.configRejected = sc.rejected;
+  }
+  // coordination, the ceiling and the host
+  const cap = await loadModule('capacity.mjs');
+  const display = displayOf(a);
+  if (!display.headed) restricted.push('headless — ' + (display.reason || 'requested'));
+  let capacity = null;
+  let workers = null;
+  let coordination = null;
+  let lease = null;
+  if (cap.loadError) blocked.push('no safe coordination — capacity.mjs could not be loaded (' + cap.loadError + ')');
+  else {
+    const dir = typeof a['capacity-dir'] === 'string' ? path.resolve(a['capacity-dir']) : cap.resolveCapacityDir();
+    const ledgerOff = a['no-ledger'] === true || process.env.QA_LEDGER === 'off';
+    let why = null;
+    try { fs.mkdirSync(dir, { recursive: true }); fs.accessSync(dir, fs.constants.W_OK); } catch (e) { why = 'the coordination directory ' + posix(dir) + ' is not writable (' + (e.code || e.message) + ')'; }
+    const led = why ? null : cap.readLedger(dir);
+    if (led && led.error) why = led.error;
+    coordination = { mode: ledgerOff ? 'exclusive' : 'ledger', dir: posix(dir), ...(ledgerOff ? { why: process.env.QA_LEDGER === 'off' ? 'QA_LEDGER=off' : '--no-ledger' } : {}) };
+    if (why) blocked.push('no safe coordination — ' + why);
+    if (ledgerOff) restricted.push('exclusive execution (' + coordination.why + '): one Playwright command at a time, serial');
+    const kind = display.headed ? 'headed' : 'headless';
+    const ceil = cap.resolveCeiling({ dir, env: process.env, manifest: readManifest(cwd), workersFlag: Number(a.workers) > 0 ? Number(a.workers) : null,
+      host: hostFixture() ? { totalMemMb: hostTotalMemMb(), cpus: hostCpus() } : null, kind });
+    if (ceil.auto && ceil.auto.insufficient) blocked.push('insufficient capacity — ' + ceil.auto.insufficientReason);
+    const status = led && !led.error ? cap.capacityStatus({ dir, rows: null }) : null;
+    const used = status ? status.used.playwright || 0 : null;
+    const free = used === null ? null : Math.max(0, ceil.ceiling - used);
+    const reserves = cap.reservesFor({ ci: !!process.env.CI, totalMemMb: hostTotalMemMb(), cpus: hostCpus() });
+    const per = cap.BOOTSTRAP_DEMAND[kind];
+    const availableMb = availableMemMb();
+    const committed = led && !led.error ? cap.committedOutstanding(led.entries, {}, Date.now()) : { memMb: 0, cpu: 0 };
+    const admissible = cap.admissibleWorkers({ availableMb, idleCores: undefined, committed, perWorker: per, reserves, ceilingFree: free === null ? ceil.ceiling : free });
+    capacity = { ceiling: ceil.ceiling, source: ceil.source, free, used, availableMb, cpus: hostCpus(), reserveMb: reserves.memMb, perWorkerMb: per.memMb, admissibleNow: admissible };
+    if (free !== null && free < 1) restricted.push('no free slot now: ' + used + ' of ' + ceil.ceiling + ' in use by other runs — commands wait (bounded by --max-wait)');
+    else if (admissible < 1) restricted.push('free memory admits no ' + kind + ' worker right now (' + availableMb + ' MB available, reserve ' + reserves.memMb + ' MB + ' + per.memMb + ' MB per worker) — commands wait (bounded by --max-wait), never forced');
+    // the scheduler's start: W0 = min(2, ceiling) under dispatch, ONE worker without proof of independence — the ramp adapts
+    workers = { start: Math.max(0, Math.min(2, ceil.ceiling, admissible)), max: ceil.ceiling, why: ceil.source + (ceil.lowered && ceil.lowered.length ? ', lowered by ' + ceil.lowered.map((l) => l.by + '=' + l.value).join(', ') : '') + '; the ramp and the admission decide per command' };
+    const envId = typeof a['env-id'] === 'string' ? a['env-id'] : null;
+    if (envId) {
+      const runId = (typeof runJson.run_id === 'string' && runJson.run_id.trim()) || sha256(posix(runFile)).slice(0, 16);
+      const v = await cap.validateLease({ dir, envId, runId, runFile: posix(runFile), rows: null });
+      lease = { envId, held: !!v.valid, reason: v.reason || null };
+      if (!v.valid) blocked.push('environment lease: ' + v.reason);
+    } else { lease = { envId: null, held: false, reason: 'no --env-id' }; restricted.push('no environment lease named (--env-id) — the environment is not coordinated'); }
+  }
+  // the environment: ONE bounded request, no credentials, the body never read
+  let environment = null;
+  if (typeof a['probe-url'] === 'string') {
+    const t0 = Date.now();
+    try {
+      const res = await fetch(a['probe-url'], { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(10000) });
+      environment = { url: filterLine(a['probe-url']), status: res.status, ms: Date.now() - t0 };
+      try { await res.body?.cancel(); } catch { /* the body is never read */ }
+      if (res.status >= 500) blocked.push('environment unhealthy: ' + res.status + ' from ' + environment.url + ' (ENVIRONMENT_BLOCKED, not a code defect)');
+    } catch (e) {
+      environment = { url: filterLine(a['probe-url']), status: null, ms: Date.now() - t0, error: filterLine(String((e && e.cause && e.cause.code) || (e && e.name) || e)).slice(0, 120) };
+      blocked.push('environment unreachable: ' + environment.url + ' (' + environment.error + ') — ENVIRONMENT_BLOCKED, not a code defect');
+    }
+  }
+  const verdict = blocked.length ? 'blocked' : restricted.length ? 'restricted' : 'ready';
+  const out = { ...head, verdict, reason: (blocked.length ? blocked : restricted).join('; ') || null, environment, lease, capacity, workers, coordination,
+    display: { headed: display.headed, reason: display.reason || null }, playwright, config };
+  try { fs.mkdirSync(path.join(resultsRoot, 'artifacts', 'progress'), { recursive: true }); fs.writeFileSync(path.join(resultsRoot, 'artifacts', 'progress', 'preflight.json'), JSON.stringify({ ...out, at: iso(Date.now()), blocked, restricted, detail }, null, 2) + '\n'); } catch { /* the payload carries it */ }
+  return out;
+}
+
 /* ---------------- CLI ---------------- */
 
 const HELP = {
   tool: 'run-stage',
-  usage: 'node run-stage.mjs --run-file <.runs/phase-N.json> --stage setup|smoke|positive|negative --run first|rerun --stage-tcs <TC,…> --ceilings <group=ms,…|auto> [--timeouts <timeouts.ts>] [--grace <ms>] --log <progress log> --project <name> --cwd <automation root> [--spec <file,…>] [--groups <name,…>] [--tcs <TC,…>] [--burn-in <TC,…>] [--extra repeat-each=N,last-failed,workers=N] [--cooldown <ms>] [--cooldown-max <ms>] [--label <text>] [--headless] [--cli <cli.js>] [--cmd "<run command>"] [--stage-json-source <path>] [--interval <ms>] [--status-every <ms>] [--ceiling-margin <ms>] [--telemetry [--telemetry-interval <ms>] [--tree-interval <ms>]] [--silence <ms>] [--timeouts-mode active|shadow] [--no-ledger] [--capacity-dir <dir>] [--env-id <id>] [--max-wait <ms>] [--scheduler auto|groups|dispatch] [--units <parallel-plan.json>] [--strict] [--pretty]  ·  node run-stage.mjs reclaim [--capacity-dir <dir>] [--dry-run]',
+  usage: 'node run-stage.mjs --run-file <.runs/phase-N.json> --stage setup|smoke|positive|negative --run first|rerun --stage-tcs <TC,…> --ceilings <group=ms,…|auto> [--timeouts <timeouts.ts>] [--grace <ms>] --log <progress log> --project <name> --cwd <automation root> [--spec <file,…>] [--groups <name,…>] [--tcs <TC,…>] [--burn-in <TC,…>] [--extra repeat-each=N,last-failed,workers=N] [--cooldown <ms>] [--cooldown-max <ms>] [--label <text>] [--headless] [--cli <cli.js>] [--cmd "<run command>"] [--stage-json-source <path>] [--interval <ms>] [--status-every <ms>] [--ceiling-margin <ms>] [--telemetry [--telemetry-interval <ms>] [--tree-interval <ms>]] [--silence <ms>] [--timeouts-mode active|shadow] [--no-ledger] [--capacity-dir <dir>] [--env-id <id>] [--max-wait <ms>] [--scheduler auto|groups|dispatch] [--units <parallel-plan.json>] [--screenshot-policy all|failed|none] [--strict] [--pretty]  ·  node run-stage.mjs reclaim [--capacity-dir <dir>] [--dry-run]',
   notes: [
     'Start it as ONE background command per stage and wait for its completion notice; never poll it. The stage message is `update`; artifacts/progress/status.json shows the active workers and their TCs.',
     '--run first for the first run (and its smoke retries); --run rerun for the targeted re-run of the TCs impact.mjs select returns. --run final was removed.',
@@ -2457,12 +2786,19 @@ const HELP = {
     '--ceilings auto --timeouts <timeouts.ts>: the documented ceiling arithmetic is done here (proposals[] carries it). --grace defaults to TIMEOUTS.watchdog_grace; the silence limit to TIMEOUTS.stall.silence (else min(3 × max(action, navigation, expect), 55 s)).',
     'Local runs are headed; --headless, CI or no graphical desktop → headless, reported in the stage message.',
     'reclaim (user-run): terminates only orphaned process trees a crashed run left in the ledger, matched by pid + start time or a recorded browser-profile marker.',
+    'preflight --run-file <f> --cwd <automation root> [--root <project>] [--env-id <id>] [--probe-url <E1 URL>] [--workers N] [--cli <cli.js>] [--headless]: ONE compact answer — verdict ready | restricted | blocked with its reason, environment {url, status, ms} (one bounded GET, no credentials, body never read), lease, capacity {ceiling, source, free, used, availableMb, admissibleNow}, workers {start, max, why}, coordination, display, playwright {cli, version}, config {shared, source}; detail in artifacts/progress/preflight.json. Launches nothing. Low memory never disables coordination: insufficient → blocked, short now → restricted (commands wait, bounded).',
+    'Two outputs per command: the live progress log (concise: start, ▶ test start, ✓ / ✗ / – test end with its first error line, ⏸ waits, status) and artifacts/diagnostics/phase-N/{command}/playwright-output.log (the full Playwright output). Both credential-filtered; status.json carries per-worker TC + startedAt, done counts and what the stage waits for.',
   ],
 };
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { print(HELP, args); return 0; }
+  if (args._[0] === 'preflight') {
+    const r = await preflight(args);
+    print(r, args);
+    return args.strict ? ({ ready: 0, restricted: 0, blocked: 2 }[r.verdict] ?? 2) : 0;
+  }
   if (args._[0] === 'reclaim') {
     const cap = await loadModule('capacity.mjs');
     if (cap.loadError) { print({ tool: 'run-stage', command: 'reclaim', outcome: 'BLOCKED', reason: 'capacity.mjs could not be loaded: ' + cap.loadError }, args); return args.strict ? 2 : 0; }

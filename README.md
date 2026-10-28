@@ -23,7 +23,7 @@ This repository is the **canonical source**. Any project pulls the skills from h
     link-qc-4-publish-test-cases-azure/            beautify the approved TCs and publish them to Azure DevOps with verified tags / automation status (ADO-MAP.md); --suite-only places them in a Test Plan suite later
       SKILL.md INPUT.txt scripts/ (ado-sync-plan, tc-hash, selftest-ado-sync + fixtures)
     link-qc-5-test-run-automation/                 generate + run Playwright (POM, automation inventory) inside the machine's capacity ledger and an environment lease, two script-decided compliance gates, coverage, drafted → checked → published reports, run acceptance
-      SKILL.md (≈200 lines, orchestrator) INPUT.txt references/ (19, loaded per activity, + rule-registry.md + expected-differences.md + schemas/) scripts/ (33 + fixtures) assets/ (11)
+      SKILL.md (≈200 lines, orchestrator) INPUT.txt references/ (20, loaded per activity — api-db.md only for [API] / [DB] TCs —, + rule-registry.md + expected-differences.md + schemas/) scripts/ (36 + fixtures) assets/ (18)
     link-qc-5b-test-run-manual-cli/                OPTIONAL, manual twin of 5 through playwright-cli (no MCP): runs EVERY TC of an approved document in full, smoke gate without heal, AI chatbot TCs judged against their `AI Oracle` rubric, writes skill 5's report set into skill 5's story folder — report only, gates nothing
       SKILL.md INPUT.txt references/ (9) scripts/ (render-run-report, selftest-run-report, scan-lib + fixtures/run-report — mirrors of skill 5's; selftest-manual-run + fixtures/manual-run — 5b-only) assets/ (2: run-report body + report shell, mirrored)
     link-qc-6-ui-testing/                          visual UI audit of an implemented screen against its design (Figma MCP / screenshots / reference site) or, with no design, against tokens, consistency, WCAG, RTL — beside the chain
@@ -220,6 +220,16 @@ its evaluation twin 3c. The optional `Data effect` (one value: `read-only` / `cr
 `Shared data` (state several TCs share, the same words in each, `(depends on TC-x)` for an order) are what skill 5's
 parallel planner reads: a `creates` TC adds only its own records, a `modifies` / `deletes` TC names the record by its
 token in the step — precise fields let more TCs run side by side (`tc-design.md` "Data effect and Shared data").
+**API and DB test cases (layer gate):** when the source describes API behaviour (an endpoint, a status code, an
+OpenAPI contract) or persistence rules ("is stored", "audit row"), the skill asks ONCE which layers to design — UI
+only · + API · + DB · + hybrid (`--layers ui,api,db,hybrid` answers in advance; a pipeline run designs UI only and
+lists the skipped candidates as open questions). A Steps or Expected line then starts with `[API]` or `[DB]`
+(`[API] POST [E2] /orders as [A1] with [D3]`, `→ capture body.id as $order`, `status 201; body.status = "Pending"`,
+`[DB] Check that the order record where id = $order has status = "Pending"`); a path or table appears only when the
+approved source names it, otherwise business words and an open question; hosts stay `[E{n}]`, credentials and
+connection strings never appear. The layer of each TC (ui · api · db · api+db · hybrid) is derived from its Steps
+lines and recorded in a `Test layers:` header line; an unclassifiable TC blocks the page. Browser-only runners (3b, 3c,
+5b) never pass a backend line: it is reported out of tool.
 
 ### 3b — validate-manual-test-cases (optional)
 Takes an existing TC document (pending or approved) and walks it through the **running
@@ -376,15 +386,24 @@ with measured headroom and ≥ 10 % more throughput, back off on interference or
 conflicting units apart, unknown effects alone — and runs SERIALLY whenever that proof is missing or stale (the check
 is re-planned automatically from a dependency fingerprint). Before every run the skill **reconciles an existing
 project's run protections** (`config-inventory.mjs reconcile`: finite timeouts, stall keys, helpers, `retries: 0`,
-visible local browsers — fixed with a backup, unfamiliar shapes reported, never overwritten). After the first run the skill heals automation defects and **re-runs only the TCs those
+visible local browsers — fixed with a backup, unfamiliar shapes reported, never overwritten; an outdated helper is
+replaced only when its template hash proves it untouched, an unresolvable setting is never filled in). The project's own
+Playwright, TypeScript and shared config are found the way Node resolves them — never a skill's fixture, never a guessed
+`node_modules` (`scripts/project-env.mjs`); one `run-stage.mjs preflight` call answers environment, capacity, workers and
+tools before the first stage, and a test that resets shared server state or moves the server clock always runs alone.
+At the start of every run ONE question asks **what to deliver**: the report as an HTML page + markdown or markdown only,
+and screenshots for every TC, failed TCs only or none (`--report html|md`, `--screenshots all|failed|none` answer it;
+a pipeline run gets HTML + every screenshot). The choice changes what is produced, never a gate — API / DB records are
+always written and the markdown is still checked by the renderer. After the first run the skill heals automation defects and **re-runs only the TCs those
 fixes touched** (decided per TC by `scripts/impact.mjs` from a code fingerprint of each test's page
 objects, helpers and timeout keys) plus the TCs without a verdict; their results are merged into the
 same phase, everything else keeps its first-run result, and Checkpoint B proves every reported result
-is fresh. **Both compliance checkpoints are decided by a script** (`scripts/check.mjs`: a frozen snapshot,
-the type check + validator + config inventory in one call, one result per check — all semantic results recorded in
-ONE batch, rejected as a whole if any entry is invalid —, missing / stale / contradictory / duplicate results
-rejected, a gate-record file per checkpoint); the merge, the report numbers,
-the readiness and coverage tables and the runtime checks come from `scripts/run-data.mjs` and
+is fresh. **Both compliance checkpoints are decided by a script** — ONE command each (`check.mjs checkpoint`; B
+inside `run-data.mjs finalize`): a frozen snapshot, the type check + validator + config inventory in one call inside
+one bounded coordination budget, then a stop at `AWAITING_REVIEW` with an empty review template that the skill fills
+from its semantic review and hands back — rejected as a whole if any entry is invalid —, missing / stale / contradictory /
+duplicate results rejected, a gate-record file per checkpoint; the merge, the report markdown, the numbers, the readiness
+and coverage tables and the runtime checks come from `scripts/run-data.mjs` (`finalize`, `judge`, `report --write`) and
 `scripts/coverage.mjs`, and the report set is written as **drafts, frozen, checked by Checkpoint B and only
 then published byte for byte** — after which the run's **acceptance** (separate from every TC's status) decides
 whether it may return `AUTOMATION COMPLETE` — a short final message that links the report and lists only what did not
@@ -448,6 +467,24 @@ review page (one shared shell: header, tiles, cards, viewer, theme toggle and co
 every bug and phase takes a reviewer comment the same way; a comment never changes a bug's status
 on its own. The story folder's top level holds nothing else (plus the reviewer's optional
 `REVIEW-COMMENTS-{feature}.md`); folders from the older layout are read-only history.
+
+**API and DB test cases (link-qc-5 3.0).** TCs with `[API]` / `[DB]` lines are automated in the same suite and gates: pure
+API / DB / API+DB TCs in a browserless `backend` Playwright project, hybrid TCs in the browser project, through
+`api/` endpoint clients and `db/` query objects. Business words are mapped to an endpoint or a table **only from a
+verified contract** (OpenAPI file, route source, migration) and the mapping records the operation's **effect**
+(read · mutation · auth · unknown) from that contract — never from the HTTP method. A data change needs the tester's
+**per-TC yes** (asked in the test-data message; `--allow-data-changes` answers it; pipeline → none), a TEST-DATA
+`Environment class` of `test` / `staging` and a verified database identity, and touches only records **this run
+created**: structured inserts / updates / deletes by primary key, every cascade level and every trigger checked (an
+unverifiable side effect is refused whatever the consent), a row-count and before / after check inside one
+transaction, a read-back, a crash-safe ownership ledger (an interrupted write is *in doubt* until a read-only lookup
+resolves it). API calls never follow a redirect blindly (`maxRedirects: 0`, each target validated before sending). The
+evidence is a **redacted record** per attempt (`attempt-{a}.record.json`, deny-by-default: unasserted values, headers,
+parameters and personal data masked; a record still holding a secret is not written and the attempt is never PASS),
+shown as "View record" on the page. Data-changing TCs run in one serial lane unless their isolation is proven; browser
+and API traffic share one rate-limit book. Kept or in-doubt records are listed in the report; the clean-up runs only
+after the one keep / clean-up answer. Implemented and covered by the harnesses (incl. a real-Playwright integration
+harness, `selftest-api-db.mjs`); not yet runtime-tested in a consumer project.
 
 ### 5b — test-run-manual-cli (manual CLI run, optional)
 The manual twin of skill 5, beside it the way 3b / 3c sit beside 3. It takes skill 3's TC document
@@ -824,6 +861,8 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-coverage.mjs 
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-capacity.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-parallel-plan.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-dispatch.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-redact.mjs --pretty
+node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-api-db.mjs --pretty      # real Playwright (QA_PLAYWRIGHT_DIR); NOT_RUN (exit 3) without one is not a pass
 node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest.mjs --pretty
 node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty
 node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty

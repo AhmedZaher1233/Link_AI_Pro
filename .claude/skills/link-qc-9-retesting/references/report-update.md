@@ -90,7 +90,8 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/render-run-report.mjs 
 absent cannot happen here — the run is BLOCKED without its coordination, coordination.md). Dry run first: `gate` must be `PASS` with `mismatches: []` and no warning this edit
 caused (`unknown-classification`, `evidence-file-missing`, `evidence-path-not-relative`) — a
 mismatch names the markdown line to fix; fix it and dry-run again. Then the same command with
-`--write`. `refused.reason: hand-edited` → tell the user what will be lost and re-render with
+`--write` — only when phase N's run file chose the page (`delivery.report` absent or `html`); under `delivery.report:
+md` the dry run is the whole step (the markdown is the deliverable, no page is written). `refused.reason: hand-edited` → tell the user what will be lost and re-render with
 `--force` only after they agree. Never write or patch the HTML. The tracker
 (`TC-STATUS-TRACKER-{feature}.md`) is read-only here.
 

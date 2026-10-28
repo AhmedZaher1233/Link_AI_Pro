@@ -159,6 +159,9 @@
 <!-- {{#if orphan}} -->
         <span class="badge orphan">{{b_orphan}}</span>
 <!-- {{/if}} -->
+<!-- {{#if has_layer}} -->
+        <span class="badge type">{{layer_word}}</span>
+<!-- {{/if}} -->
 <!-- {{#if human}} -->
         <span class="badge human">{{b_human}} <span class="ltr">{{n_human}}</span></span>
 <!-- {{/if}} -->
@@ -191,6 +194,9 @@
 <!-- {{#if human}} -->
         <p class="caption human">{{cap_human}}</p>
 <!-- {{/if}} -->
+<!-- {{#if has_layer}} -->
+        <p class="caption">{{cap_backend}}</p>
+<!-- {{/if}} -->
         <h4>{{tc_requirement}}</h4><p><span class="ltr">{{requirement}}</span></p>
 <!-- {{#if has_tags}} -->
         <h4>{{tc_tags}}</h4><p class="tags">
@@ -210,6 +216,13 @@
 <!-- {{/each}} -->
         </ol>
         <h4>{{tc_expected}}</h4><p>{{{expected}}}</p>
+<!-- {{#if has_expected_items}} -->
+        <ul>
+<!-- {{#each expected_items}} -->
+          <li{{{cls}}}>{{{text}}}</li>
+<!-- {{/each}} -->
+        </ul>
+<!-- {{/if}} -->
 <!-- {{#if has_oracle}} -->
         <h4>{{tc_oracle}}</h4><p class="oracle">{{{oracle}}}</p>
 <!-- {{/if}} -->

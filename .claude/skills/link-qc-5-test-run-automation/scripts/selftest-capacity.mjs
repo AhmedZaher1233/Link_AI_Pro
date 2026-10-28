@@ -1092,6 +1092,30 @@ function spawnDetached(marker) {
   return Number(String(r.stdout).trim());
 }
 
+/* 27 — the backend kind (3.0): an api / db command starts no browser — its demand is BOOTSTRAP_DEMAND.backend; on a fixed
+   host the Auto value for backend workers is higher than for headed ones, yet a backend reserve still takes ONE slot per
+   worker under the SAME shared machine ceiling (never raised beside browsers); the headed literal is unchanged (skill 1). */
+await test('27 backend capacity kind: its own demand, the same slots and ceiling', async (p) => {
+  eq(p, 'backend demand', cap.BOOTSTRAP_DEMAND.backend, { memMb: 256, cpu: 0.25 });
+  eq(p, 'headed demand unchanged', cap.BOOTSTRAP_DEMAND.headed, { memMb: 1536, cpu: 1.5 });
+  const host = { totalMemMb: 16384, cpus: 8 };
+  const headed = cap.autoCeiling({ ...host, kind: 'headed', upper: 32 });
+  const backend = cap.autoCeiling({ ...host, kind: 'backend', upper: 32 });
+  if (!(backend.value > headed.value)) p.push('backend Auto ' + backend.value + ' is not above headed ' + headed.value + ' on the same host');
+  const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'capacity.mjs'), 'utf8');
+  if (!/headed: \{ memMb: 1536, cpu: 1\.5 \}/.test(src)) p.push('the headed literal skill 1 reads changed');
+  // one shared ceiling: 2 slots; a headed 1-worker reserve and a backend 1-worker reserve fill it; a third waits
+  const dir = fs.mkdtempSync(path.join(TMP, 'kind-'));
+  fs.mkdirSync(dir, { recursive: true });
+  const base = { dir, cls: 'playwright', units: 1, limit: 2, machineCeiling: 2, owner: { runId: 'r1', runFile: 'f' }, waitMs: 0, pollMs: 50 };
+  const a = await cap.reserve({ ...base, demand: { ...cap.BOOTSTRAP_DEMAND.headed } });
+  const b = await cap.reserve({ ...base, demand: { ...cap.BOOTSTRAP_DEMAND.backend } });
+  const c = await cap.reserve({ ...base, demand: { ...cap.BOOTSTRAP_DEMAND.backend } });
+  if (!a.ok || !b.ok) p.push('the two reserves inside the ceiling were refused: ' + JSON.stringify({ a: a.reason, b: b.reason }));
+  if (c.ok) p.push('a backend reserve beyond the shared ceiling was granted — a backend worker is still a slot');
+  return { headed: headed.value, backend: backend.value };
+});
+
 try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* a temp folder left behind is harmless */ }
 const out = {
   tool: 'selftest-capacity',

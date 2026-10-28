@@ -55,11 +55,17 @@ without a `SPEC-*` parent is flat; an old `US-{id}/` leaf is legacy, read-only h
   comment and in the final chat summary — it must be immediately clear which result belongs to
   which execution.
 
-**Screenshots — every TC, every variant, every attempt; one folder per User Story; IMMUTABLE:**
+**Screenshots — every TC, every variant, every attempt (as far as the run's screenshot choice owes them — `all` by
+default, see the evidence contract); one folder per User Story; IMMUTABLE:**
 
 Path: `{screenshots_root}/phase-{N}/{TC-ID}/{variant_slug}/attempt-{a}.png` (the ASSERTION-POINT image, full
 page, pass or fail) and `attempt-{a}-failed.png` (the failing step), plus `phase-{N}/variants.json` (slug →
 title path, project, spec file). A second-locale variant is its own TC; earlier phases are never touched.
+
+**API / DB records (3.0)** sit beside the image path: `attempt-{a}.record.json` (the assertion-point record of an
+`api` / `db` / `api+db` / `hybrid` test) and `attempt-{a}-failed.record.json` (a failed attempt without one) —
+schema `skill5-record/1`, redacted, sealed, never overwritten (`code-craft.md` §18). A backend TC has records and no
+image; a hybrid TC has both. The project of a backend TC is `backend`, so its slug reads `backend--…--r0`.
 
 `variant_slug` = `{project}--{data-variation-slug}--r{repeat}` — `project` =
 `testInfo.project.name`; `data-variation-slug` = kebab-case of the variation label in the test
@@ -68,7 +74,9 @@ normally). `{a}` counts every execution of that variant in this phase, starting 
 in the order the commands started — the first run, an isolation check, a smoke retry, a re-queue,
 the re-run, each burn-in repeat and Playwright retries (`testInfo.retry`). A burn-in repeat's image
 lands under the `r{repeat}` its `repeatEachIndex` gives; the merge still credits it to the required
-variant as an attempt, never as an extra variant (`<second_run>` step 2).
+variant as an attempt, never as an extra variant (`<second_run>` step 2). Which image belongs to which attempt is decided
+by the attempt's own test span (TC, project, repeat, retry, worker), never by the folder alone; the stored path form, the
+pairing and the ambiguous / missing cases: `references/schemas/paths-and-evidence.md` §1, §4-§5.
 
 **Evidence contract — screenshot at the ASSERTION POINT, never at test end.**
 A screenshot taken after the test finishes is taken after `afterEach`/`afterAll` teardown
@@ -92,13 +100,23 @@ exists so no module ever inherits that defect:
   failed before reaching `captureEvidence` (so no `attempt-{a}.png` exists yet for this
   attempt) it writes the current screen as `attempt-{a}.png` so every executed attempt still
   has an image. It never overwrites an existing image — the assertion-point image always wins.
+- **The run's screenshot choice** (`{run_file}.delivery.screenshots`, `intake.md` item 4) reaches every command as
+  `PW_SCREENSHOTS` (`run-stage.mjs`; absent → `all`), and the helper — never the spec — honours it:
+  `all` → everything above; `failed` → `captureEvidence` writes nothing (no image, no `evidence` heartbeat) and the
+  `afterEach` failure handling still writes `attempt-{a}.png` (the current screen) and `attempt-{a}-failed.png` for a
+  failing attempt; `none` → neither writes an image. Records (`attempt-{a}.record.json`) are written whatever the
+  choice. The spec code is the same under every choice (`captureEvidence` stays at the assertion point, item 40), so
+  a later run can choose `all` without a code change. An EXISTING project helper that does not read `PW_SCREENSHOTS`
+  gains that one guard when the run chose `failed` or `none` (like the heartbeat line below); until it does, it simply
+  writes every image — more evidence than the choice owes, never less.
 - Specs only call the helper — no `page.screenshot(...)` in a spec body, ever.
 - **The helper writes an `evidence` heartbeat** (`{ at, worker, tc, event: 'evidence', path }` to
   `PW_PROGRESS_FILE`, through `helpers/steps.ts`'s `heartbeat()`) for every image it writes, and the console
   guard's `report()` — the first statement of `afterEach` — writes `teardown`: Checkpoint B proves from
   them that every PASS test's image was taken BEFORE its teardown started (compliance item 16b). An existing
   project helper gains that one line; without it item 16b stays `unresolved`.
-- **Evidence sanity check (first run and re-run):** for every PASS, confirm the image shows
+- **Evidence sanity check (first run and re-run):** for every PASS that has an image (under `failed` / `none` a PASS
+  has none — there is nothing to check, and item 19 records exactly that), confirm the image shows
   the state named in the TC's Expected Result (record present, message visible, value shown)
   and not a cleaned-up screen. A PASS whose image shows post-cleanup state is classified
   `evidence_failure` (a test-code defect: the call sits after teardown or after navigation)
@@ -115,7 +133,15 @@ exists so no module ever inherits that defect:
   phase) and, as a relative link, in the Evidence cell of the report's Results table. A TC that was
   not re-run keeps its first-run image as its evidence; the parallel attempt of an isolation-checked
   TC stays linked in its attempt history.
-- A TC that was NOT_RUN or SKIPPED has no image; the report says so plainly.
+- Records follow the same rule: `evidence_record` / `failure_record` beside `evidence_screenshot` /
+  `failure_screenshot` in the run file, a relative `attempt-{a}.record.json` link in the Evidence cell (rendered as
+  "View record", never as an image).
+- A TC that was NOT_RUN or SKIPPED has no image; the report says so plainly. Under `screenshots: failed` a passing
+  TC has none either, under `none` no TC has one — the `### Run` bullet `Delivery` says which choice the run made.
+- **Report format.** Under `delivery.report: md` the story folder gets no new `TEST-RUN-REPORT-{feature}.html` — the
+  markdown files are the deliverable (the renderer's gate still checks them at finalize and publish); a page an
+  earlier phase rendered stays as it was and no longer shows the latest phase (the publish payload names it
+  `stalePage`).
 
 **Immutable vs replaced:** finalized run files, earlier Markdown phase sections, screenshots
 and progress logs are immutable (the one exception: skill 9's retest updates the LATEST phase's

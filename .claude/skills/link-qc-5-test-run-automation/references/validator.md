@@ -88,7 +88,7 @@ PASS until closed) · `info`.
 | gate | when |
 |---|---|
 | `NOT_RUN` | nothing was analysed — folder missing, no spec matched, scope selector matched nothing |
-| `BLOCKED` | the scan started but its evidence is incomplete — a file in scope was unreadable or unscannable; **or** a `pom-duplicate-page` candidate pair has no inventory decision (see below) |
+| `BLOCKED` | the scan started but its evidence is incomplete — a file in scope was unreadable or unscannable; **or** a test's layer is unresolved (`layer-unresolved`, 3.0); **or** a `pom-duplicate-page` candidate pair has no inventory decision (see below) |
 | `FAIL` | scan complete, ≥1 non-excepted violation |
 | `PASS` | scan complete, zero violations — **and nothing more than that** |
 
@@ -116,7 +116,11 @@ emitted as `gate: BLOCKED`; a stack trace never reaches stdout.
 - **Violations** move the gate. Non-exemptible: `focus-only`, `modifier-no-reason`,
   `placeholder-assertion`, `empty-test-body`, `no-assertions`, `evidence-missing`, `evidence-in-hook`,
   `evidence-duplicate`, `trace-title-missing-tcid`, `trace-unknown-tcid`, `exception-not-permitted`.
-  Exemptible: the six POM rules `pom-raw-locator` · `pom-navigation` · `pom-evaluate` · `pom-keyboard` ·
+  3.0, non-exemptible: `layer-mismatch`, `record-missing`, `record-in-hook`, `record-duplicate`,
+  `api-record-missing`, `api-mutation-unledgered`, `api-effect-undeclared`, `api-effect-mismatch`,
+  `api-redirect-enabled`, `api-secret-header`, `db-record-missing`, `db-write-unledgered`, `db-write-freeform`,
+  `db-connection-literal`. Exemptible: `api-raw-request`, `db-raw-sql`, `db-driver-import` (the API / DB twins of the
+  POM rules — a recorded exception names the substance). Exemptible: the six POM rules `pom-raw-locator` · `pom-navigation` · `pom-evaluate` · `pom-keyboard` ·
   `pom-chained-locator` · `pom-spec-helper` (spec files only).
 - **Warnings** never move the gate. Exemptible: `wait-for-timeout`, `bare-set-timeout`,
   `wait-network-idle` (each also suppressed by an adjacent timing justification), `positional-unscoped`
@@ -128,10 +132,12 @@ emitted as `gate: BLOCKED`; a stack trace never reaches stdout.
 - **`review`** — undetermined, never guessed: `assertions-conditional`, `assertions-unresolved`,
   `evidence-conditional`, `evidence-unresolved`, `evidence-placement-unproven`,
   `outcome-coverage-unassessed`, `exception-unverified`, `pom-architecture-unknown`, `pom-duplicate-page`;
-  and the six **B8 rules** below, staged at `review`. Exemptible: `constant-redeclared`,
+  and the six **B8 rules** below, staged at `review`; 3.0: `layer-unresolved` (non-exemptible — the second
+  review item that moves the scanner gate to BLOCKED), `record-conditional`, `record-unresolved`,
+  `record-placement-unproven`, `api-mutation-in-setup-unlabelled` (non-exemptible), `db-env-not-qc` (exemptible). Exemptible: `constant-redeclared`,
   `console-guard-missing`, `network-guard-missing`, `admission-contract`. Not exemptible: `empty-catch`,
   `timeout-literal` (a `qa-allow` naming them is itself `exception-not-permitted`).
-- **`info`** — `assertions-call-found`, `evidence-call-found`, `modifier-declared`, `trace-uncovered-id`,
+- **`info`** — `assertions-call-found`, `evidence-call-found`, `record-call-found`, `modifier-declared`, `trace-uncovered-id`,
   `exception-unused`, `pom-duplicate-page-decided`, and every excepted finding (downgraded, never removed).
 
 `RULE_CHECKS` (exported beside `RULES`, shown by `--help`) maps every rule to the
@@ -168,6 +174,16 @@ page class of the whole automation root and reports a pair when the normalized n
 (`locators`). The `<automation_inventory>` row decides: a row naming both classes turns the pair into
 `pom-duplicate-page-decided`; without one the scanner gate stays BLOCKED. An unstrippable page file
 lands in `notRun[]` under this rule.
+
+**API / DB layers (3.0).** Every test is classified `ui` · `api` · `db` · `api+db` · `hybrid` from its parameters
+and the fixtures of the module it imports `test` from (the limit is in `limits[]`); `counts.layers` / `layerUse` /
+`mutationMembers` report the result. The image rules (`evidence-*`) and the guard rules apply to ui / hybrid
+tests, the record rules to api / db / api+db / hybrid tests; `pom-chained-locator` and `positional-unscoped` are not
+applied inside a backend test body. With `--tc-ids` pointing at the TC document the code layer is compared with
+`tcLayer` (`layer-mismatch`); with `--inventory` every `api/` call's declared effect is compared with the mapping
+row of its method and path (`api-effect-mismatch`). A project with an `api/` or `db/` folder also gets a backend pass
+over those folders (unledgered writes, free-form write SQL, redirects, header literals). Writes to pre-existing records
+are enforced at runtime by the helpers, not by this scan (`limits[]`).
 
 ## Call-site resolution — and what a positive result means
 

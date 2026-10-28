@@ -506,6 +506,16 @@ check('28 CLI reverse / BLOCKED without --files, exit 0', (p) => {
   if (h.status !== 0 || !/reverse/.test(h.stdout)) p.push('--help does not list reverse');
 });
 
+/* 45 — a query file / API contract a test reads (3.0: .sql · .graphql · .yaml) is a data part: editing it marks the
+   TCs that read it stale, and nothing else. */
+impactCase('45 a .sql query file is a data part (3.0)', [['helpers/data/orders.sql', 'SELECT status FROM orders', 'SELECT status, total FROM orders']], ['TC-04'], {
+  before: (root) => {
+    mutate(root, 'tests/Orders_Tests/01-orders.spec.ts', "./../../helpers/data/orders.json", "./../../helpers/data/orders.sql");
+    fs.writeFileSync(path.join(root, 'helpers', 'data', 'orders.sql'), 'SELECT status FROM orders WHERE id = $1\n');
+    return fp(root);
+  },
+});
+
 for (const d of temps) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
 const verdict = cases.every((c) => c.verdict === 'PASS') ? 'PASS' : 'FAIL';
 print({ tool: 'selftest-impact', cases, verdict }, args);

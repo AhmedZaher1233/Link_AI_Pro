@@ -74,7 +74,7 @@ bug file, a missing run file, a missing screenshot file or a legacy artifact in 
   artifacts/reconcile/{stamp}/      config-inventory.mjs reconcile --apply: the originals of every file it changed (same relative paths) + summary.md (before → after, conflicts)
   artifacts/progress/status.json    the live worker view (run-stage.mjs): Auto ceiling, active workers, the TCs each runs — rewritten only when it changes
   artifacts/progress/admission.json the stage's admission state (written only by run-stage.mjs; PW_ADMISSION_FILE) · artifacts/progress/cancel.flag (a stop: helper waits end at once)
-  artifacts/diagnostics/phase-{N}/{command}/   stall diagnostics of the step helper (PW_DIAGNOSTICS_DIR)
+  artifacts/diagnostics/phase-{N}/{command}/   stall diagnostics of the step helper (PW_DIAGNOSTICS_DIR) + playwright-output.log (3.1: the command's FULL Playwright output, credential-filtered; the live progress log stays concise)
   artifacts/stages/{stage}-{group}[-attempt{n}].json   raw Playwright JSON per stage command (emptied at run start)
   artifacts/progress/{stage}-{group}[-attempt{n}].jsonl          heartbeat per stage command (helpers/steps.ts + helpers/progress-reporter.ts)
   artifacts/progress/{stage}-{group}[-attempt{n}].results.jsonl  incremental per-test results (survive a killed command)
@@ -82,6 +82,7 @@ bug file, a missing run file, a missing screenshot file or a legacy artifact in 
   artifacts/progress/{stage}-{group}[-attempt{n}].plan.json      the stage-filtered run-plan group run-stage.mjs hands the watchdog (this stage's TCs of that group)
   artifacts/progress/{stage}-{group}[-attempt{n}].ratelimit.jsonl  the network guard's record per command (PW_RATE_LIMIT_FILE): 429 / 503 + Retry-After responses and policy headers, origin + pathname only
   artifacts/progress/rate-limit.state.json                       the phase-wide rate-limit slot book (PW_RATE_LIMIT_STATE) helpers/rate-limit.ts shares across workers — only when the run holds no environment lease; with one, the book is the environment group's shared rate-limits/{bookId}.json in the coordination directory
+  artifacts/progress/{stage}-{group}[-attempt{n}].data-ledger.jsonl  3.0 — the ownership ledger per command (PW_DATA_LEDGER_FILE): one fsynced line per data-change state, keys only (code-craft §19)
   artifacts/progress/{run}-{stage}-{seq}.summary.json            one per run-stage.mjs call ({run} = first | rerun): statuses, phase-wide counts, executed, code fingerprints, failures (latest attempt), isolation, interference, rateLimit, merged_stages, watchdog / timeout events, scheduler, host (the sampler's minima / peaks), opt-in telemetry, the stage message
   artifacts/test-output/phase-{N}/{stage}-{group}[-attempt{n}]/  ONE command's Playwright outputDir (PW_OUTPUT_DIR) — Playwright wipes it as that command starts, so stages/ and progress/ stay outside it; no later command touches it; earlier phases pruned by run-stage.mjs
 {automation_root}/automation-logs/[SPEC-{spec-name}/]{user_story_name}/run-progress-{stamp}.log
@@ -152,7 +153,7 @@ then `## Phase N — YYYY-MM-DD` sections, ascending. Sub-sections per phase (`#
 | `Stages` | table `Stage · Total · Passed · Failed · Incomplete · Skipped · Not run[ · Partial]` (Smoke / Positive / Negative, a `{Stage} (re-run)` row per re-run stage counting only the re-run subset, then **Total** = the results of record — one per TC, the latest attempt over the phase, **never the sum of the rows**; the `Partial` column required exactly when the phase holds a `PARTIAL` row) + `**Smoke gate:** passed \| healed-then-passed ({n} cycles) \| FAILED-STOPPED \| NO VERDICT — fail% {x}% — {action}` (fail% over the PASS + FAIL smoke TCs; `NO VERDICT` = none had one — the phase is `INCOMPLETE`, never GREEN) | when Outcome is executed (GREEN / FAILURES / INCOMPLETE / SMOKE GATE FAILED) |
 | `Run plan` | table `Group · Mode · Workers · TCs · Reason` + `**Decisions:** {n} field · {n} inferred · {n} fail-safe`; an `account:{A-ID}` lane is a row of this table like any other group, and a TC the isolation check moved shows in its new group with the move in the Reason | optional |
 | `Coverage` | table `Stage · Total TCs · Fully · Partially · Not · Weighted %` (+ **Total**) + `**Target:** {t}% ({L3 \| default}, {mechanism}) — **{PASS \| user override \| report-only \| BLOCKED}** · **Δ vs phase {N-1}:** {±d pts — improved … · regressed … \| no prior measurement}` + optional table `Requirement · Outcome · Asserted by` (Full / Partial / Missing / Assumed) | optional |
-| `Results` | table `TC-ID · REQ · Name · Status · Group · Duration · Classification · Evidence`, one row per TC. Status ∈ `PASS \| FAIL \| INCOMPLETE \| SKIP \| NOT_RUN \| PARTIAL — human step pending`. **`PARTIAL — human step pending`** is the one status that carries a reason (the frozen wording; a bare `PARTIAL` or another reason warns, a reason on any other status BLOCKs): the candidate TC has `[HUMAN]` steps, the automation ran and passed up to the first one, and its Classification names the pending step as `human step: {n}`; it counts in its own `partial` bucket — **never as passed** — and a phase holding one is `INCOMPLETE` at best. Classification otherwise from the `<first_run>` catalogue or `—`; an INCOMPLETE row writes `incomplete: {missing slugs}`, `rate_limited` (the failing step's own request throttled, refused again alone after the server's deadline — no verdict), or `interrupted: watchdog at step "…" after N s` / `interrupted: collateral (…)` / `interrupted: outer ceiling stop after N s` / `interrupted: wait budget exhausted (server deadline {T})` / `cleanup_incomplete` (reason strings on the existing statuses — no new status); a NOT_RUN row may write `not started: watchdog stop`, `not started: outer ceiling stop after N s`, `not started: depends on {TC} (failed)` (a chain follower), `not started: smoke gate failed (re-run)`, `not started: code changed after its run`, `not started: deferred until {T}`, `not started: admission timeout ({reason})`, `not started: host pressure` or `not started: environment lease ({reason})` (the last four make the run NOT ACCEPTED). Each row is the TC's result of record; its attempt sub-rows (the run file) name the pass in their stage text (`positive · re-run`, `smoke · isolation`, `positive · burn-in`). Evidence = ` · `-separated markdown links **relative to this folder** (`[attempt-2.png](../../screenshots/…/attempt-2.png) · [failed](…/attempt-1-failed.png)`) or `—`; a PARTIAL row links the image of its last automated step | same rule as Stages |
+| `Results` | table `TC-ID · REQ · Name · Status · Group · Duration · Classification · Evidence`, one row per TC. Status ∈ `PASS \| FAIL \| INCOMPLETE \| SKIP \| NOT_RUN \| PARTIAL — human step pending`. **`PARTIAL — human step pending`** is the one status that carries a reason (the frozen wording; a bare `PARTIAL` or another reason warns, a reason on any other status BLOCKs): the candidate TC has `[HUMAN]` steps, the automation ran and passed up to the first one, and its Classification names the pending step as `human step: {n}`; it counts in its own `partial` bucket — **never as passed** — and a phase holding one is `INCOMPLETE` at best. Classification otherwise from the `<first_run>` catalogue or `—`; an INCOMPLETE row writes `incomplete: {missing slugs}`, `rate_limited` (the failing step's own request throttled, refused again alone after the server's deadline — no verdict), or `interrupted: watchdog at step "…" after N s` / `interrupted: collateral (…)` / `interrupted: outer ceiling stop after N s` / `interrupted: wait budget exhausted (server deadline {T})` / `cleanup_incomplete` (reason strings on the existing statuses — no new status); a NOT_RUN row may write `not started: watchdog stop`, `not started: outer ceiling stop after N s`, `not started: depends on {TC} (failed)` (a chain follower), `not started: smoke gate failed (re-run)`, `not started: code changed after its run`, `not started: deferred until {T}`, `not started: admission timeout ({reason})`, `not started: host pressure` or `not started: environment lease ({reason})` (the last four make the run NOT ACCEPTED). **3.0 (API / DB, `api-db.md` `<backend_results>` §5):** `PARTIAL — api/db step pending` (with `out of tool: api/db step {n}` — 5b only) is the second PARTIAL reason; FAIL classifications `api_contract_failure` / `db_assertion_failure`; INCOMPLETE reasons `data_write_refused ({ownership | cascade | trigger | row-count | identity})`, `data_write_failed`, `read_back_mismatch`, `redirect_refused`, `auth_failure`, `data_in_doubt`, `evidence_invalid ({reason})`; NOT_RUN `not started: data changes not permitted (…)` / `db unavailable (…)` / `mapping unresolved (…)` / `config missing (…)` / `layer unknown` — a consented TC left unstarted, an in-doubt write or an invalid record makes the run NOT ACCEPTED. Each row is the TC's result of record; its attempt sub-rows (the run file) name the pass in their stage text (`positive · re-run`, `smoke · isolation`, `positive · burn-in`). Evidence = ` · `-separated markdown links **relative to this folder** (`[attempt-2.png](../../screenshots/…/attempt-2.png) · [failed](…/attempt-1-failed.png)`) or `—`; a PARTIAL row links the image of its last automated step | same rule as Stages |
 | `Unverified assumptions` | table `TC-ID · Ambiguity · Interpretation encoded · Evidence · Result`, or `none` | optional |
 | `Bugs` | cross-reference table `Bug · TC-ID · Severity · Status` — one row per bug this phase found or retested, ids from `BUG-REPORT-{feature}.md`; or `none`. **Details never live here** | optional |
 | `Heal log` | the nine-column table of `<first_run>` step 5, or `First run fully green` | optional |
@@ -161,7 +162,11 @@ then `## Phase N — YYYY-MM-DD` sections, ascending. Sub-sections per phase (`#
 | `Test-data readiness` | `**Verdict:** …` + table `Gap · TCs · Decision · Source · Provisioning · Identifiers / names · Effective stamped values · Verified on · Cleanup`, or `all ready` (rendered as the verdict). `Decision` ∈ `READY` · `prepared (api\|ui\|db)` · `skip — data_missing` · `skip — not creatable` · `skip — QC declined` (the legacy bare `skip` / `api` / `ui` / `db` / `manual` still parse); the renderer counts them per phase (`document.phases[].readiness`, a `Decisions:` line under the verdict) and warns `unknown-readiness-decision` for any other word | optional |
 | `Deviations` | bullets, or `- none` — parallel interference (one bullet per TC: passed alone, moved to `{group}`, shared data or a possible application concurrency defect for the human to judge), rate-limit refusals and adjustments, `outside_scope[]` specs not re-run | optional |
 
-**Never introduce a new `###` sub-section** — the renderer ignores unknown ones. The re-run, the
+**3.0 sub-sections:** `### Retained test records` and `### In-doubt test records` — table `Resource · Key · TC · Reason`
+(in doubt: `Resource · Target identity · TC · Since`), written only when the run kept or could not resolve a data
+change, copied from `run-data.mjs report`'s `retainedTable` / `inDoubtTable` fragments; resource and key only, nothing sensitive (a credential-shaped cell BLOCKs).
+
+**Never introduce any other `###` sub-section** — the renderer ignores unknown ones. The re-run, the
 isolation checks and the rate limits are carried only by the structures above: the one-line `### Run`
 bullets, the `{Stage} (re-run)` rows, `### Run plan` rows and `### Deviations` bullets.
 
@@ -193,7 +198,7 @@ title in the `<bug_report_format>` voice, "The system doesn't … when …"), ea
 | `Root cause` | plain English | |
 | `Steps to reproduce` | ordered sub-list | yes |
 | `Expected`, `Actual` | plain English | yes |
-| `Screenshot` | one relative link into `{screenshots_root}` (the failure image), or `none captured` | |
+| `Screenshot` | one relative link into `{screenshots_root}` (the failure image), or `none captured` (under the run's `screenshots: none` choice: `none captured (screenshots: none this run)`) | |
 | `Evidence` | the raw assertion text | |
 | `History` | sub-list `- phase {N} — {FAIL \| PASS \| not run}: {note}` — appended every phase that touches the bug, never replaced | |
 | `Reviewer comment` | written by the reviewer only; shown in the bug's comment box, never a status source (§9b). A phase's `### Run` may carry the same bullet; it is shown in that phase's box, never as a fact | |
@@ -228,7 +233,8 @@ absent) and reports a written value that disagrees as a mismatch. The one rule y
 
 ## 7. `.runs/phase-N.json` — schema `skill6-run/1` and its lifecycle
 
-One file per phase, POSIX paths relative to `{automation_root}` (as `results_root` /
+One file per phase, POSIX paths relative to `{automation_root}` — the stored form and what is accepted on input:
+`references/schemas/paths-and-evidence.md` §1 (as `results_root` /
 `evidence_screenshot` are today; the renderer converts them to report-relative links with
 `path.posix.relative(results_root, p)`). Top level:
 
@@ -237,6 +243,10 @@ environment-blocked | blocked`) · `run_id` · `user_story_id` · `user_story` �
 `feature` · `spec_level` · `source_tc_doc` · `source_sha256` · `environment` · `build` · `framework`
 · `file_or_suite` · `ado_mode` · `headed` · `workers_parallel` · `started_at` · `finished_at` ·
 `total_duration_ms` · `results_root` · `screenshots_root` · `logs_root` · `progress_log` ·
+`delivery { report: html | md, screenshots: all | failed | none, source: asked | flag | default, decided_at }` (3.1,
+the intake question — `intake.md` item 4; absent = html + all: `md` → no page is written, the renderer's gate still
+checks the markdown; `screenshots` → which attempts owe an image in verify 16b / 18; read by `run-stage.mjs` for
+`PW_SCREENSHOTS`) ·
 `previous_phase { phase, file, location: nested | legacy | null }` ·
 `compliance { checkpoint_a { gate, scopeDigest, recorded_at, unresolved[] }, checkpoint_b {…} }` ·
 `run_plan` (the `<run_plan>` shape) · `open_questions` (the `<open_questions>` shape, without a
@@ -257,7 +267,9 @@ the phase, minus its own schema / story / phase keys; each `stages[]` entry carr
 'incremental+watchdog'` and, for the latter, `watchdog_path`, plus `run: first | rerun`, `command:
 normal | isolation | burn-in` and `started_at` — the order attempts are merged in; every execution
 and attempt carries `run`, `command`, `code_fingerprint` and a `stage` text naming the pass) ·
-`results[]` (the per-TC rows of `<second_run>` step 3 — the results of record — each with `rerun
+`results[]` (the per-TC rows of `<second_run>` step 3 — the results of record — each with an optional `req_id_conflict`
+when the requirement sources disagree and, per attempt, an optional `evidence_issue` when its evidence could not be
+paired — `references/schemas/paths-and-evidence.md` §5-§6; and each with `rerun
 { reason: impacted | no-verdict | added, changed[] } | null`) · `unverified_assumptions[]` · `bugs[]
 { id, title, tc_id, req_id, severity, status }` · `heal_log[]` · `skips[]` · `deviations[]` ·
 `parallel_checks[] { tc, stage, group, workers, parallel_attempt, alone_attempt, outcome:
@@ -283,7 +295,14 @@ elapsed_ms, deadline_ms, expected, kind: step | test | ceiling | watchdog, evide
 adjusted[] { key, from_ms, to_ms, reason, evidence }, probe: PASS | NOT_RUN, calibration:
 done | NOT_RUN }` (optional; the renderer ignores it — the `### Run` `Timeouts` bullet and the return's
 `Timeouts:` line carry the human-readable form) · `watchdog_events[] { stage, group, worker, tc, step,
-elapsed_ms, deadline_ms, action: stopped | ceiling-stop }` (optional). `merged.stages[]`,
+elapsed_ms, deadline_ms, action: stopped | ceiling-stop }` (optional) · 3.0, optional and written only when the
+document has `[API]` / `[DB]` lines (a UI-only run file keeps the 2.x shape): `run_plan.layers {TC: ui | api | db |
+api+db | hybrid}`, `run_plan.backend_project`, `run_plan.backend_lines {TC: [ER{n}]}` · `data_changes { consent, tcs[],
+setup, cleanup, teardown, asked_at }` · `environment` as an object `{ name, class, api_hosts[], db_identity,
+production_markers[], db_env_var }` (a plain string stays valid; the report shows `name`) · `evidence_record` /
+`failure_record` on every attempt and on `results[]` beside the image paths. What the run kept or left in doubt is
+never copied into the run file — the ledgers (`artifacts/progress/*.data-ledger.jsonl`) are its only source.
+`merged.stages[]`,
 `watchdog_events[]` and `timeouts.events[]` entries come ready-made from the stage summaries of
 `run-stage.mjs` (`artifacts/progress/{run}-{stage}-{seq}.summary.json`).
 
@@ -309,7 +328,10 @@ prior measurement" — and says which.
 
 Evidence and Screenshot cells hold markdown links RELATIVE to the report folder; the page shows each as a
 thumbnail with its own viewer. A missing file warns (`evidence-file-missing`), an absolute path warns, a
-`data:` URI **blocks** — and nothing under `screenshots/` is ever moved, or the links break.
+`data:` URI **blocks** — and nothing under `screenshots/` is ever moved, or the links break. A `.record.json` link (3.0)
+is shown as "View record" with its channel (`API`, `DB`, `DB + API`), never as an image; an unreadable record warns
+(`record-unreadable` — item 54 has already failed it) and a record that still carries a credential-shaped value
+**blocks** the page (`secret-literal`).
 
 ## 9. Provenance and hand edits
 

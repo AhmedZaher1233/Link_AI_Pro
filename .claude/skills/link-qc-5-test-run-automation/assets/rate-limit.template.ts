@@ -1,3 +1,4 @@
+// @link-qc-5-template rate-limit 3.1.0
 // helpers/rate-limit.ts — pace the calls the application rate-limits, never the tests; scoped, shared across runs,
 // server deadlines never shortened (skill 5, references/run-plan-and-config.md <run_plan> "Rate limits",
 // references/code-craft.md §9, §11).

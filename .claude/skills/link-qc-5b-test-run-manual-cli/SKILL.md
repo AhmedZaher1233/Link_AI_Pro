@@ -20,7 +20,7 @@ description: >
   scope question — smoke first behind the 30% smoke gate (no self-heal: an application-error
   majority stops the run), then positive, then negative, with a live progress line per TC. Each TC
   ends PASS / FAIL / INCOMPLETE / SKIP / NOT_RUN or "PARTIAL — human step pending" (a [HUMAN]
-  step is never executed), PASS only after the Expected Result was positively observed, with an
+  step is never executed) or "PARTIAL — api/db step pending" ([API] / [DB] lines are out of tool), PASS only after the Expected Result was positively observed, with an
   assertion-point screenshot per TC and a failure image on failure. Tests an AI chatbot / assistant
   whose reply differs every run: a TC carrying skill 3's optional "AI Oracle" field is sent its
   prompt, the reply TEXT is read (never a screenshot), the deterministic hard checks run first
@@ -99,6 +99,13 @@ that tests an **AI assistant** whose reply differs every run (`references/ai-res
    `PARTIAL — human step pending`, classification `human step: {n}`, image of the last executed
    step, listed under "Needs a human run"; never `PASS`, never counted as passed; the phase is
    `INCOMPLETE` at best.
+6b. **An `[API]` / `[DB]` line is out of tool.** playwright-cli sends no API request and runs no
+   query: such a line (skill 3's layer gate) is skipped, never improvised. The UI lines still run
+   in order — a UI step that fails is `FAIL` with its classification and a bug, as always; a UI
+   step that needs a `$name` a skipped line captures stops the TC. Otherwise the TC ends
+   `PARTIAL — api/db step pending`, classification `out of tool: api/db step {n}`, image of the
+   last executed UI step, listed under "Needs the automation (skill 5)"; never `PASS`. A TC
+   without any UI line is `NOT_RUN` (`not started: api/db only — run skill 5`).
 7. **Evidence per TC, immutable.** One assertion-point screenshot per executed TC (taken when the
    expected result is verified, BEFORE any cleanup) plus a failure image on failure, under
    `{screenshots_root}/phase-{N}/{TC-ID}/manual-cli--none--r{k}/attempt-{a}[-failed].png`; an AI

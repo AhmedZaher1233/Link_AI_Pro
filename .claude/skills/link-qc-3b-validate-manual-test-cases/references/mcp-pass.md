@@ -85,6 +85,14 @@ Apply the plan within the chosen scope (FULL / SHARED / CUSTOM — `scope-gate.m
   app-validated (human step pending)` with `outcome-check: human step pending` in its stamp
   (§6); it is never `validated`, `enhanced` or `inferred`, the marker is never reworded away,
   and the TC is listed under "Needs a human run" in the final message.
+- **`[API]` / `[DB]` lines are out of tool.** A Steps or Expected Result line starting `[API]` or
+  `[DB]` (an API call / assertion or a database check / write — skill 3's layer gate) is never
+  executed or judged here: no request, no query, no seed for it. Walk and judge the TC's UI lines
+  in order and skip the backend ones; stop at a UI line that needs a `$name` a skipped backend line
+  captures. A UI line that contradicts the requirement is still a `discrepancy` + PB; otherwise the
+  TC ends `draft — not app-validated (api/db step — automation only)` with `outcome-check: api/db
+  step — automation only` (§6) — never `validated`, never `inferred` — and is listed under
+  "Needs the automation (skill 5)" in the final message. A TC with no UI line at all is not walked.
 - **Observing only.** Do not write code, selectors, or JSON. You may read element identifiers
   incidentally and record them in the learning file's `## Automation Tricks` section — but
   NEVER in the TC deliverables.
@@ -183,8 +191,9 @@ matched) · `enhanced` (corrected / extended from observation — log what chang
 (§1) · `draft — not app-validated` (not walked: scope excluded, app unreachable, stale, data
 changes not authorized, data missing — D{n}, data not creatable — D{n}, or **human step
 pending** — reason in parentheses). A TC stopped at a `[HUMAN]` step is
-`draft — not app-validated (human step pending)`, stamped `outcome-check: human step pending`
-(the only case this skill writes that key); the six states are unchanged — this is a draft
+`draft — not app-validated (human step pending)`, stamped `outcome-check: human step pending`;
+a TC with an `[API]` / `[DB]` line is `draft — not app-validated (api/db step — automation only)`,
+stamped `outcome-check: api/db step — automation only` (§3; the only two cases this skill writes that key); the six states are unchanged — this is a draft
 reason. Never mark a TC `validated` on the strength of its prefix alone — that is `inferred`.
 A TC with an `AI Oracle` is one observation: its reply is judged by the field's hard checks and
 rubric (`link-qc-5b-test-run-manual-cli/references/ai-response-rules.md` holds the rules); it is

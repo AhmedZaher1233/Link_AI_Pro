@@ -371,6 +371,82 @@ check('11 BLOCKED inputs; CLI --out writes the payload; exit 0, --strict 2 on BL
   if (h.status !== 0 || !/parallel-plan/.test(h.stdout)) p.push('--help');
 });
 
+/* 14 — [API] / [DB] lines (3.0): the effect of an API call comes from the inventory mapping, never the HTTP method — a
+   POST search mapped `read` is a read and runs beside anything; a POST without a mapping row, a call in business words
+   and a write on a record the line does not name run ALONE; a create of its own record conflicts with every aggregate
+   reader of that collection (POST / INSERT are never presumed independent of them); an update of a token-named record
+   is a write on it; DDL is a barrier; a TC without markers keeps its claims. */
+check('14 API / DB claims from the mapping, not the method; unproven data changes run alone', (p) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-markers-')); temps.push(dir);
+  const inv = path.join(dir, 'automation-inventory.md');
+  fs.writeFileSync(inv, '| Operation | Method | Path | Effect | Evidence |\n|---|---|---|---|---|\n| search | POST | /api/orders/search | read | handler reads only |\n| create | POST | /api/orders | mutation | repository.save |\n| touch | GET | /api/orders/{id}/touch | mutation | writes last_seen |\n| rename | PUT | /api/orders/{id} | mutation | repository.save |\n');
+  const doc = (steps, expected = ['The result is shown.']) => parseTcDocument('### TC-90 — x\n- **Steps:**\n' + steps.map((s, i) => '  ' + (i + 1) + '. ' + s).join('\n') + '\n- **Expected Result:**\n' + expected.map((s) => '  - ' + s).join('\n') + '\n')[0];
+  const tcd = parseTestData('');
+  const rows = [
+    { method: 'POST', path: '/api/orders/search', effect: 'read' }, { method: 'POST', path: '/api/orders', effect: 'mutation' },
+    { method: 'GET', path: '/api/orders/{}/touch', effect: 'mutation' }, { method: 'PUT', path: '/api/orders/{}', effect: 'mutation' },
+  ];
+  const claimsOf = (steps, expected) => tcClaims(doc(steps, expected), tcd, rows);
+  const search = claimsOf(['[API] POST [E2] /api/orders/search as [A1] with {"q": "x"}'], ['[API] status 200']);
+  // (the word "search" may add a fail-safe aggregate read — conservative; never a write or a run-alone claim)
+  if (search.runAlone || search.claims.some((c) => c.mode === 'write' || c.mode === 'exclusive')) p.push('a POST search mapped read was treated as a change: ' + JSON.stringify(search.claims));
+  const unknown = claimsOf(['[API] POST [E2] /api/unmapped as [A1]'], ['[API] status 201']);
+  if (!unknown.runAlone || !hasClaim(unknown.claims, { key: '*', mode: 'exclusive' })) p.push('a POST without a mapping row did not run alone: ' + JSON.stringify(unknown.claims));
+  const words = claimsOf(['[API] Create an order as [A1]'], ['[API] status 201']);
+  if (!words.runAlone) p.push('an API call in business words did not run alone');
+  const touch = claimsOf(['[API] GET [E2] /api/orders/[D3]/touch as [A1]'], ['[API] status 200']);
+  if (!hasClaim(touch.claims, { key: 'rec:D3', mode: 'write' })) p.push('a GET mapped mutation on [D3] is no write on [D3]: ' + JSON.stringify(touch.claims));
+  const create = claimsOf(['[API] POST [E2] /api/orders as [A1] with {"n": 1} → capture body.id as $o', '[API] PUT [E2] /api/orders/$o as [A1] with {"n": 2}'], ['[API] status 200']);
+  if (create.runAlone || !hasClaim(create.claims, { key: 'col:order', mode: 'write', own: true })) p.push('a create + update of its own order: ' + JSON.stringify(create.claims));
+  const counter = claimsOf(['[DB] Check that the order record where status = "Pending" has 3 rows'], ['[DB] Check that the order record where status = "Pending" has 3 rows']);
+  if (!claimsConflict(create.claims, counter.claims).conflict) p.push('an own create does not conflict with a TC that counts the same collection — POST presumed independent');
+  const other = claimsOf(['[API] POST [E2] /api/orders as [A1] with {"n": 3}'], ['[API] status 201']);
+  if (claimsConflict(create.claims, other.claims).conflict) p.push('two TCs each creating their own order conflict (they are isolated by construction)');
+  const dbIns = claimsOf(['[DB] Create the order record "A-1"'], ['[DB] Check that the order record where name = "A-1" has status = "Pending"']);
+  if (dbIns.runAlone || !hasClaim(dbIns.claims, { key: 'col:order', mode: 'write', own: true })) p.push('a DB insert of its own record: ' + JSON.stringify(dbIns.claims));
+  const dbUpd = claimsOf(['[DB] Update the order record [D4] to status "Paid"'], ['[DB] Check that the order record where id = [D4] has status = "Paid"']);
+  if (!hasClaim(dbUpd.claims, { key: 'rec:D4', mode: 'write' })) p.push('a DB update of [D4] is no write on [D4]');
+  const dbBlind = claimsOf(['[DB] Delete the order record where status = "Old"'], ['[DB] Check that the order record where status = "Old" does not exist']);
+  if (!dbBlind.runAlone) p.push('a DB delete on records it does not name did not run alone');
+  const ddl = claimsOf(['[DB] Check the orders table after truncate orders'], ['[DB] Check that the order record does not exist']);
+  if (!hasClaim(ddl.claims, { key: '*', mode: 'exclusive' })) p.push('DDL / TRUNCATE is no barrier');
+  const ui = claimsOf(['Open Orders — the list is visible.'], ['The list is visible.']);
+  if (ui.layer !== 'ui' || ui.claims.some((c) => c.source === 'marker')) p.push('a TC without markers gained marker claims');
+  // planParallel reads the mapping from --inventory
+  const f = copyFixture();
+  const r1 = plan(f, { inventory: inv });
+  if (r1.outcome !== 'OK') p.push('a plan with --inventory: ' + r1.outcome + ' ' + r1.reason);
+});
+
+check('15 shared server state is a barrier: a reset endpoint reached through a page-object method the test calls, a reset / server clock in the TC text; the browser clock and other methods are not', (p) => {
+  const f = copyFixture();
+  const info = path.join(f.root, 'pages', 'InfoPage.ts');
+  // TC-31 calls runCleanUp(), which now posts to a reset endpoint; TC-35 calls openDashboard(), which moves the BROWSER clock
+  mutate(info, "async runCleanUp(): Promise<void> { await this.page.getByRole('button', { name: 'Run clean-up' }).click(); }",
+    "async runCleanUp(): Promise<void> { await this.page.request.post('/dev/reset'); await this.page.getByRole('button', { name: 'Run clean-up' }).click(); }");
+  mutate(info, "async openDashboard(): Promise<void> { await this.page.goto('/dashboard'); }",
+    "async openDashboard(): Promise<void> { await this.page.clock.setSystemTime(new Date(0)); await this.page.goto('/dashboard'); }");
+  const r = plan(f);
+  if (r.outcome !== 'OK') { p.push('plan ' + r.outcome + ' ' + r.reason); return; }
+  const t31 = r.tcs['TC-31'];
+  if (!t31 || !['barrier', 'run-alone'].includes(t31.class)) p.push('TC-31 (reaches POST /dev/reset) is ' + (t31 && t31.class) + ', not a barrier');
+  const u31 = unitOf(r, 'TC-31');
+  if (!u31 || !u31.claims.some((c) => c.key === '*' && c.mode === 'exclusive' && /\/dev\/reset/.test(c.evidence))) p.push('the unit of TC-31 has no exclusive claim naming the reset: ' + JSON.stringify(u31 && u31.claims));
+  if (!t31 || !t31.reasons.some((x) => /\/dev\/reset/.test(x))) p.push('TC-31''s reasons do not name the reset: ' + JSON.stringify(t31 && t31.reasons));
+  const u35 = unitOf(r, 'TC-35');
+  if (u35 && u35.claims.some((c) => /setSystemTime/.test(c.evidence))) p.push('the browser clock (page.clock) was treated as shared state');
+  const u33 = unitOf(r, 'TC-33');
+  if (u33 && u33.claims.some((c) => /\/dev\/reset/.test(c.evidence))) p.push('TC-33 (another InfoPage method) inherited the reset');
+  if (!(r.readiness.conflicts_brief || []).some((l) => /TC-31/.test(l) && /reset/.test(l))) p.push('conflicts_brief does not name the reset: ' + JSON.stringify(r.readiness.conflicts_brief));
+  // the TC text itself
+  const text = tcClaims(parseTcDocument('### TC-91 — x\n- **Steps:**\n  1. Reset the database to the seed data.\n- **Expected Result:**\n  - The seed order is listed.\n')[0], parseTestData(''), []);
+  if (!text.claims.some((c) => c.key === '*' && c.mode === 'exclusive')) p.push('"Reset the database" in the TC text is no barrier');
+  const clock = tcClaims(parseTcDocument('### TC-92 — x\n- **Steps:**\n  1. Advance the server clock by one day.\n- **Expected Result:**\n  - The order is overdue.\n')[0], parseTestData(''), []);
+  if (!clock.claims.some((c) => c.key === '*' && c.mode === 'exclusive')) p.push('"Advance the server clock" in the TC text is no barrier');
+  const pw = tcClaims(parseTcDocument('### TC-93 — x\n- **Steps:**\n  1. Reset the password filter.\n- **Expected Result:**\n  - The list is shown.\n')[0], parseTestData(''), []);
+  if (pw.claims.some((c) => c.key === '*' && /resets shared/.test(c.evidence))) p.push('"Reset the password filter" was read as a shared reset');
+});
+
 for (const d of temps) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
 const verdict = cases.every((c) => c.verdict === 'PASS') ? 'PASS' : 'FAIL';
 print({ tool: 'selftest-parallel-plan', cases, verdict }, args);

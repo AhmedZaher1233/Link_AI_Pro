@@ -39,7 +39,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, print, read, isFile, isDir, posix, rel, stripSource, matchDelim, splitArgs, findBlocks, testIdentifiers, importMap, walk, isCodeFile, sha256 } from './scan-lib.mjs';
-import { parseTcDocument, parseTestData, tcHash } from './tc-hash.mjs';
+import { parseTcDocument, parseTestData, tcHash, tcLayer } from './tc-hash.mjs';
 import { closureOf, fingerprintTests } from './impact.mjs';
 import { unitsConflict, isGlobal, createScheduler, parseKey, GLOBAL_KEY } from './dispatch.mjs';
 
@@ -92,6 +92,9 @@ const BG_EFFECTS = [
   ['job', /\b(scheduled job|nightly job|batch job|background job)\b/],
 ];
 const GLOBAL_SETTINGS = /\b(system settings?|global settings?|application settings?|site settings?|admin(?:istration)? settings?|configuration screen|system configuration)\b/;
+// a destructive reset of shared data, or the SERVER / global clock moved — never the browser's own clock
+const GLOBAL_RESET_TEXT = /\b(?:reset|restore|wipe|purge|truncate|re-?seed|clear)\s+(?:the\s+|all\s+)?(?:test\s+)?(?:database|db|environment|tenant|backend|server data|all data|snapshot|seed data)\b|\bfactory[- ]reset\b/i;
+const GLOBAL_CLOCK_TEXT = /\b(?:set|advance|freeze|change|move|shift)\s+(?:the\s+)?(?:system|server|application|backend|global)\s+(?:date|time|clock)\b|\btime[- ]travel\b/i;
 const LANG_SWITCH = /\b(switch(?:es|ed)? (?:the )?(?:portal|application|app|ui|language) to|change (?:the )?language|language switch|switch to (?:arabic|english))\b/;
 const WRONG_CRED = /\b(wrong|invalid|incorrect|expired) (password|credentials?|code|otp)\b|\block(?:ed)? out\b|\blockout\b/;
 const NOTE_SINGLE = /\b(single[- ]session|one session|only one session|one active session)\b/i;
@@ -158,8 +161,86 @@ function docStage(tc) {
   return /negative/i.test(fieldText(tc, 'Type')) ? 'negative' : 'positive';
 }
 
+/* ---------------- [API] / [DB] lines (3.0) ---------------- */
+const API_LINE = /^\s*\[API\]\s+([A-Z]+)\s+(?:\[E\d+\]\s*)?(\/\S*)/;
+const DB_WRITE = /^\s*\[DB\]\s+(create|insert|update|delete|remove)\b(?:\s+(?:the|a|an|own|new))*\s+([a-z][a-z_-]{2,})/i;
+const DB_CHECK = /^\s*\[DB\]\s+check\b[^\n]*?\b(?:the\s+)?([a-z][a-z_-]{2,})\s+record/i;
+const DB_DDL = /^\s*\[DB\][^\n]*\b(truncate|alter table|drop table|create table)\b/i;
+const normApiPath = (p) => String(p || '').split('?')[0].replace(/\$[A-Za-z_]\w*|\[D\d+\]|\{[^}]*\}|:[A-Za-z_]\w*|\b\d+\b/g, '{}').replace(/\/+$/, '').toLowerCase();
+/** The API / DB mapping table of the automation inventory: method + path → effect (read · mutation · auth · unknown). */
+export function readMapping(file) {
+  const text = file ? read(file) : null;
+  if (!text) return [];
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.replace(/\*\*|`/g, '').trim());
+  const rows = [];
+  for (let i = 0; i + 1 < lines.length; i++) {
+    if (!/^\s*\|/.test(lines[i]) || !/^\s*\|?\s*:?-+/.test(lines[i + 1])) continue;
+    const h = cells(lines[i]).map((x) => x.toLowerCase());
+    const ci = { m: h.findIndex((x) => /^method/.test(x)), p: h.findIndex((x) => /^(path|endpoint)/.test(x)), e: h.findIndex((x) => /^effect/.test(x)) };
+    if (ci.m < 0 || ci.p < 0 || ci.e < 0) continue;
+    for (let j = i + 2; j < lines.length && /^\s*\|/.test(lines[j]); j++) { const c = cells(lines[j]); rows.push({ method: (c[ci.m] || '').toUpperCase(), path: normApiPath(c[ci.p]), effect: (c[ci.e] || '').toLowerCase().split(/\s/)[0] }); }
+    i += 1;
+  }
+  return rows;
+}
+const entityOfPath = (p) => { const segs = String(p).split('?')[0].split('/').filter((s) => s && !/^\$|^\[D\d+\]$|^\{|^:|^\d+$|^api$|^v\d+$/i.test(s)); return segs.length ? singular(segs[segs.length - 1].toLowerCase().replace(/[^a-z-]/g, '')) : null; };
+
+/**
+ * Claims of the [API] / [DB] lines of one TC. The effect of an [API] call comes from the inventory mapping (the verified
+ * contract) — NEVER from the HTTP method; a call with no mapping row, or a line in business words, is `unknown` and runs
+ * ALONE (a POST or an INSERT is never presumed independent). A create of the TC's own record is an own write on its
+ * collection (it still conflicts with every aggregate reader of that collection); an update / delete of a token-named
+ * record is a write on that record; DDL / TRUNCATE is a barrier.
+ */
+export function markerClaims(lines, mapping = [], expectedLines = []) {
+  const claims = [];
+  const add = (key, mode, evidence, extra = {}) => { if (!claims.some((c) => c.key === key && c.mode === mode && !!c.own === !!extra.own)) claims.push({ key, mode, ...extra, source: 'marker', evidence }); };
+  const captured = new Set();
+  // Expected lines are ASSERTIONS: an [API] one asserts the call's response (no claim of its own); a [DB] one reads
+  for (const raw of expectedLines) {
+    const c = DB_CHECK.exec(String(raw || ''));
+    if (c) { const tokens = dTokens(raw); add('col:' + singular(c[1].toLowerCase()) + (tokens[0] ? '@' + tokens[0] : ''), /\bhas \d+ rows?\b|\bcount\b|does not exist/i.test(raw) ? 'aggregate-read' : 'read', '"' + snippet(raw) + '"'); }
+  }
+  for (const raw of lines) {
+    const line = String(raw || '');
+    for (const m of line.matchAll(/capture\b[^$]*?\bas\s+\$([A-Za-z_]\w*)/g)) captured.add(m[1]);
+    if (!/^\s*\[(API|DB)\]/.test(line)) continue;
+    const tokens = dTokens(line);
+    if (DB_DDL.test(line)) { add(GLOBAL_KEY, 'exclusive', '"' + snippet(line) + '" — DDL / TRUNCATE: a barrier'); continue; }
+    const api = API_LINE.exec(line);
+    if (/^\s*\[API\]/.test(line)) {
+      if (!api) { add(GLOBAL_KEY, 'exclusive', '"' + snippet(line) + '" — an API call in business words: its effect is unknown until the mapping names it'); continue; }
+      const row = mapping.find((r) => r.method === api[1] && r.path === normApiPath(api[2]));
+      const effect = row ? row.effect : 'unknown';
+      const entity = entityOfPath(api[2]);
+      if (effect === 'read' || effect === 'auth') { if (entity) add('col:' + entity + (tokens[0] ? '@' + tokens[0] : ''), 'read', '"' + snippet(line) + '" — mapped ' + effect); continue; }
+      if (effect !== 'mutation' || !entity) { add(GLOBAL_KEY, 'exclusive', '"' + snippet(line) + '" — ' + (row ? 'mapped ' + effect : 'no mapping row') + ': the effect is not proven — runs alone'); continue; }
+      const ownTarget = /\$([A-Za-z_]\w*)/.exec(api[2]);
+      if (api[1] === 'POST' && !tokens.length) add('col:' + entity, 'write', '"' + snippet(line) + '" — creates its own ' + entity, { own: true });
+      else if (ownTarget && captured.has(ownTarget[1])) add('col:' + entity, 'write', '"' + snippet(line) + '" — changes the ' + entity + ' it created ($' + ownTarget[1] + ')', { own: true });
+      else if (tokens.length) { add('rec:' + tokens[0], 'write', '"' + snippet(line) + '" — changes [' + tokens[0] + ']'); add('col:' + entity + '@' + tokens[0], 'write', '"' + snippet(line) + '"'); }
+      else add(GLOBAL_KEY, 'exclusive', '"' + snippet(line) + '" — changes an existing ' + entity + ' it does not name: runs alone');
+      continue;
+    }
+    const w = DB_WRITE.exec(line);
+    if (w) {
+      const entity = singular(w[2].toLowerCase());
+      const kind = w[1].toLowerCase();
+      if (kind === 'create' || kind === 'insert') add('col:' + entity, 'write', '"' + snippet(line) + '" — inserts its own ' + entity, { own: true });
+      else if (tokens.length) { add('rec:' + tokens[0], 'write', '"' + snippet(line) + '" — changes [' + tokens[0] + ']'); add('col:' + entity + '@' + tokens[0], 'write', '"' + snippet(line) + '"'); }
+      else if (/\$([A-Za-z_]\w*)/.test(line) && [...line.matchAll(/\$([A-Za-z_]\w*)/g)].every((m) => captured.has(m[1]))) add('col:' + entity, 'write', '"' + snippet(line) + '" — changes the ' + entity + ' it created', { own: true });
+      else add(GLOBAL_KEY, 'exclusive', '"' + snippet(line) + '" — a DB write on a record it does not name: runs alone');
+      continue;
+    }
+    const c = DB_CHECK.exec(line);
+    if (c) { const entity = singular(c[1].toLowerCase()); add('col:' + entity + (tokens[0] ? '@' + tokens[0] : ''), /\bhas \d+ rows?\b|\bcount\b|does not exist/i.test(line) ? 'aggregate-read' : 'read', '"' + snippet(line) + '"'); }
+  }
+  return claims;
+}
+
 /** Claims of one TC from its document fields and TEST-DATA (code and learned claims are added per unit). */
-export function tcClaims(tc, data) {
+export function tcClaims(tc, data, mapping = []) {
   const claims = [];
   const add = (key, mode, source, evidence, extra = {}) => { if (!claims.some((c) => c.key === key && c.mode === mode && !!c.own === !!extra.own)) claims.push({ key, mode, ...extra, source, evidence }); };
   const steps = fieldItems(tc, 'Steps');
@@ -208,6 +289,11 @@ export function tcClaims(tc, data) {
     else if (targets[0].kind === 'create') mode = 'creates';
     else mode = 'modifies';
   }
+  // shared server state named in the TC text itself: a destructive reset or a server / global clock change → a barrier
+  const resetText = GLOBAL_RESET_TEXT.exec(all);
+  const clockText = GLOBAL_CLOCK_TEXT.exec(all);
+  if (resetText) { barrier = true; add(GLOBAL_KEY, 'exclusive', 'inferred', '"' + snippet(resetText[0]) + '" — resets shared server state'); }
+  if (clockText) { barrier = true; add(GLOBAL_KEY, 'exclusive', 'inferred', '"' + snippet(clockText[0]) + '" — changes the server clock'); }
   const firstCreate = targets.findIndex((t) => t.kind === 'create');
   const firstOther = targets.findIndex((t) => t.kind !== 'create');
   const own = mode === 'creates' || (firstCreate >= 0 && (firstOther < 0 || firstCreate < firstOther));
@@ -253,8 +339,15 @@ export function tcClaims(tc, data) {
     if (!re.test(observed)) continue;
     for (const scope of tcEntities.length ? tcEntities : ['*']) { add('bg:' + effect + '@' + scope, 'aggregate-read', 'inferred', 'observes the ' + effect + ' effect'); bgReads.push('bg:' + effect + '@' + scope); }
   }
-  const runAlone = claims.some((c) => c.mode === 'exclusive' && c.source === 'fail-safe');
-  return { claims, effect: { mode, source }, entities: tcEntities, after, lockout: wrongCred && accounts.length > 0, accounts, barrier, runAlone, bgReads };
+  // 3.0 — [API] / [DB] lines: their own claims, from the mapping; an unproven data change runs alone
+  const backendLines = [...steps, ...fieldItems(tc, 'Expected Result')].filter((s) => /^\s*\[(API|DB)\]/.test(String(s || '')));
+  const layer = backendLines.length ? tcLayer(tc).layer : 'ui';
+  if (backendLines.length) for (const c of markerClaims(steps, mapping, fieldItems(tc, 'Expected Result'))) {
+    if (!claims.some((x) => x.key === c.key && x.mode === c.mode && !!x.own === !!c.own)) claims.push(c);
+    if (c.key === GLOBAL_KEY) barrier = barrier || /DDL/.test(c.evidence);
+  }
+  const runAlone = claims.some((c) => c.mode === 'exclusive' && (c.source === 'fail-safe' || c.source === 'marker'));
+  return { claims, effect: { mode, source }, entities: tcEntities, after, lockout: wrongCred && accounts.length > 0, accounts, barrier, runAlone, bgReads, layer };
 }
 
 /* ---------------- learned conflicts ---------------- */
@@ -362,7 +455,117 @@ function sideEffects(s, start, end, imports) {
   }
   const login = LOGIN_RE.test(code);
   const own = /\b(uniqueName|runPrefix|uniqueCode)\s*\(/.test(code);
-  return { has: writes.length > 0 || login, writes, login, own };
+  // setup code (hooks, fixtures, global setup): a destructive reset or a server-clock change is shared server state; a reset
+  // of a receiver that cannot be placed counts too (unresolved shared setup is never parallel-ready)
+  const shared = sharedStateSites(s, start, end, { setup: true });
+  return { has: writes.length > 0 || login || shared.length > 0, writes, login, own, shared, calls: [...callNames(code)] };
+}
+
+/* ---------------- shared server state: destructive resets and the server / global clock ----------------
+   A test that resets the database / environment or moves the SERVER clock changes what every other test sees: it is a
+   barrier (runs alone). Found by URL path in HTTP calls (request / api / fetch / axios — `/dev/reset`, `/dev/clock`, …),
+   by reset / truncate / restore calls on a data receiver (db, api, client, …Api, …Db, …Repository) and by name
+   (resetDatabase(), truncateAll()), in the test, its hooks and fixtures, global setup, and — through the import closure —
+   inside helper / page-object functions the test calls. NOT shared: the browser's own clock (page.clock, context.clock,
+   fake timers) and data the run owns (an argument built from runPrefix() / uniqueName()). */
+const RESET_URL_RE = /\/(?:reset|reseed|re-seed|seed-reset|wipe|purge|truncate|restore|clear-all|clearall|factory-reset|reset-all|reset-db|reset-data|cleanup-all)(?:[/?#'"`]|$)/i;
+const CLOCK_URL_RE = /\/(?:clock|time-travel|timetravel|system-time|systemtime|set-time|settime|freeze-time|fake-time|server-time|now)(?:[/?#'"`]|$)/i;
+const HTTP_CALL_RE = /\b(request|api|apiContext|apiRequest|context|client|http|axios|server|admin|adminApi|testApi|devApi)\s*\.\s*(post|put|patch|delete|get|fetch)\s*\(|(^|[^\w$.])(fetch)\s*\(/g;
+const RESET_CALL_RE = /([A-Za-z_$][\w$]*)\s*\.\s*(reset|truncate|wipe|purge|restore|clearAll|reseed|resetAll|resetDatabase|resetDb|resetData|restoreSnapshot|truncateAll|truncateTables)\s*\(/g;
+const RESET_FN_RE = /(^|[^\w$.])(reset(?:Database|Db|Data|All|Environment|Env|Tenant|Server|Backend|State)|truncate(?:All|Tables|Database|Db)?|wipe(?:All|Data|Database|Db)?|purge(?:All|Data)?|restore(?:Database|Db|Snapshot)|reseed(?:All|Database|Db)?)\s*\(/g;
+const CLOCK_CALL_RE = /([A-Za-z_$][\w$]*)\s*\.\s*(setSystemTime|setTime|advanceTime|travel|timeTravel|freezeTime|setClock|setDate|setNow|setServerTime)\s*\(/g;
+const SQL_CALL_RE = /([A-Za-z_$][\w$]*)\s*\.\s*(query|execute|exec|raw|run|none|any|many)\s*\(/g;
+const BROWSER_CLOCK_RECV = /^(page|context|clock|browserContext|sinon|jest|vi|fakeTimers|timers|fake)$/i;
+const DATA_RECV = /^(db|database|api|apiClient|client|request|apiContext|apiRequest|http|backend|server|admin|adminApi|testApi|devApi|data|seeder|seed|tenant|sql|knex|prisma|pool|conn|connection|dataLedger)$|(Api|Client|Db|Database|Repository|Repo|Seeder|Store|Server|Backend)$/;
+const OWN_ARG_RE = /\b(runPrefix|uniqueName|uniqueCode|ownedKeys|owns)\s*\(/;
+const CALL_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'function', 'return', 'await', 'typeof', 'new', 'super', 'import', 'require', 'expect', 'test', 'describe', 'step']);
+function callNames(code) {
+  const out = new Set();
+  for (const m of String(code).matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)) if (!CALL_KEYWORDS.has(m[1])) out.add(m[1]);
+  return out;
+}
+/** Shared-state sites in a code range: [{ kind: reset | clock, scope: shared | unknown, evidence, line }]. */
+export function sharedStateSites(s, start, end, { setup = false } = {}) {
+  const code = s.code.slice(start, end);
+  const out = [];
+  const lineAt = (i) => s.lineOf(start + i);
+  const argsOf = (relIndex, len) => { const open = start + relIndex + len - 1; const close = matchDelim(s.code, open); return close < 0 ? '' : s.src.slice(open, close + 1); };
+  for (const m of code.matchAll(HTTP_CALL_RE)) {
+    const arg = argsOf(m.index, m[0].length);
+    if (OWN_ARG_RE.test(arg)) continue;
+    const verb = m[2] || 'fetch';
+    const what = (m[1] ? m[1] + '.' + m[2] : 'fetch') + '(' + ((arg.match(/['"`]([^'"`]*\/[^'"`]*)['"`]/) || [])[1] || '…').slice(0, 60) + ')';
+    const writing = verb !== 'get' && (verb !== 'fetch' || /method\s*:\s*['"`](post|put|patch|delete)/i.test(arg) || m[4] !== 'fetch');
+    if (RESET_URL_RE.test(arg)) out.push({ kind: 'reset', scope: 'shared', evidence: what + ' resets shared server state', line: lineAt(m.index) });
+    else if (CLOCK_URL_RE.test(arg) && writing && (verb !== 'fetch' || /method\s*:\s*['"`](post|put|patch)/i.test(arg))) out.push({ kind: 'clock', scope: 'shared', evidence: what + ' changes the server clock', line: lineAt(m.index) });
+  }
+  for (const m of code.matchAll(RESET_CALL_RE)) {
+    const arg = argsOf(m.index, m[0].length);
+    if (OWN_ARG_RE.test(arg)) continue;
+    if (DATA_RECV.test(m[1])) out.push({ kind: 'reset', scope: 'shared', evidence: m[1] + '.' + m[2] + '() resets shared data', line: lineAt(m.index) });
+    else if (setup && !/^(form|filter|filters|search|page|this|locator|el|element|input|field|state|store|mock|stub|spy|timer|clock)$/i.test(m[1])) out.push({ kind: 'reset', scope: 'unknown', evidence: m[1] + '.' + m[2] + '() in setup code — a reset whose scope cannot be placed', line: lineAt(m.index) });
+  }
+  for (const m of code.matchAll(RESET_FN_RE)) {
+    const arg = argsOf(m.index + m[1].length, m[0].length - m[1].length);
+    if (OWN_ARG_RE.test(arg)) continue;
+    out.push({ kind: 'reset', scope: 'shared', evidence: m[2] + '() resets shared data', line: lineAt(m.index + m[1].length) });
+  }
+  for (const m of code.matchAll(CLOCK_CALL_RE)) {
+    if (BROWSER_CLOCK_RECV.test(m[1])) continue;   // the browser's / test runner's own clock: per test
+    if (DATA_RECV.test(m[1])) out.push({ kind: 'clock', scope: 'shared', evidence: m[1] + '.' + m[2] + '() changes the server clock', line: lineAt(m.index) });
+    else if (setup) out.push({ kind: 'clock', scope: 'unknown', evidence: m[1] + '.' + m[2] + '() in setup code — a clock whose owner cannot be placed', line: lineAt(m.index) });
+  }
+  for (const m of code.matchAll(SQL_CALL_RE)) {
+    const arg = argsOf(m.index, m[0].length);
+    if (OWN_ARG_RE.test(arg)) continue;
+    if (/\b(truncate\s+(table\s+)?\w|drop\s+(table|schema|database)\b|delete\s+from\s+[\w."]+\s*(;|['"`]|\)))/i.test(arg)) out.push({ kind: 'reset', scope: 'shared', evidence: m[1] + '.' + m[2] + '(' + (arg.match(/\b(truncate|drop|delete\s+from)\b[^'"`]{0,40}/i) || [''])[0] + '…) clears shared data', line: lineAt(m.index) });
+  }
+  const seen = new Set();
+  return out.filter((x) => { const k = x.kind + '|' + x.line + '|' + x.evidence; if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+const sharedFnCache = new Map();
+/**
+ * The functions of one module (helper, fixture, page object) whose body — directly or through another function of the same
+ * module — changes shared server state, and the sites at module level (they run on import). → { fns: Map(name → site), topLevel[] }
+ */
+export function sharedStateFns(abs) {
+  if (sharedFnCache.has(abs)) return sharedFnCache.get(abs);
+  const res = { fns: new Map(), topLevel: [] };
+  sharedFnCache.set(abs, res);
+  const s = strippedFile(abs);
+  if (!s || s.parseError) return res;
+  const bodies = [];
+  const heads = [
+    /\b(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(/g,
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\s*\*?\s*[A-Za-z_$]*\s*\(|\([^()]*\)\s*(?::\s*[^=]+)?=>|[A-Za-z_$][\w$]*\s*=>)/g,
+    /^[ \t]*(?:public\s+|private\s+|protected\s+|static\s+|readonly\s+)*(?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*(?::\s*[^{;]+)?\{/gm,
+  ];
+  for (const re of heads) for (const m of s.code.matchAll(re)) {
+    if (CALL_KEYWORDS.has(m[1]) || /^(constructor|get|set)$/.test(m[1])) continue;
+    const open = s.code.indexOf('{', m.index + m[0].length - 1);
+    if (open < 0 || open - (m.index + m[0].length) > 400) continue;
+    const close = matchDelim(s.code, open);
+    if (close < 0) continue;
+    bodies.push({ name: m[1], start: open, end: close });
+  }
+  for (const b of bodies) { const sites = sharedStateSites(s, b.start, b.end, { setup: false }); if (sites.length) res.fns.set(b.name, sites[0]); }
+  // a function calling one that changes shared state changes it too (fixpoint, same module)
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const b of bodies) {
+      if (res.fns.has(b.name)) continue;
+      const calls = callNames(s.code.slice(b.start, b.end));
+      for (const [n, site] of res.fns) if (calls.has(n)) { res.fns.set(b.name, { ...site, evidence: b.name + '() → ' + n + '(): ' + site.evidence }); changed = true; break; }
+    }
+  }
+  // module level (outside every function body): runs on import
+  const inside = (i) => bodies.some((b) => i > b.start && i < b.end);
+  for (const site of sharedStateSites(s, 0, s.code.length, { setup: false })) {
+    const idx = s.code.split('\n').slice(0, site.line - 1).join('\n').length + 1;
+    if (!inside(idx)) res.topLevel.push(site);
+  }
+  return res;
 }
 
 /** Destructured parameter names of the first parameter of the function starting at `a` (async / function / arrow). */
@@ -545,7 +748,9 @@ function scanSpec(abs, root) {
       const lit = stringArg(s, open);
       if (lit) literals.push({ entity: entityOfName(m[2] + m[3]) || 'record', literal: lit, line: s.lineOf(open) });
     }
-    tests.push({ file, title: normTitle(t.text), rawTitle: t.text, describe: chain.map((d) => d.title), chain, line: b.line, tags, dynamic, literals, start: b.headStart });
+    tests.push({ file, title: normTitle(t.text), rawTitle: t.text, describe: chain.map((d) => d.title), chain, line: b.line, tags, dynamic, literals, start: b.headStart,
+      // shared server state changed in the test body itself, and the functions it calls (matched against the closure)
+      shared: sharedStateSites(s, b.body.start, b.body.end, { setup: false }), calls: [...callNames(s.code.slice(b.body.start, b.body.end))] });
   }
   const tb = imports.get('test');
   const thirdParty = tb && tb.bare && tb.spec !== '@playwright/test' ? tb.spec : null;
@@ -584,6 +789,8 @@ function effectClaims(effects, where) {
       if (w.literal && !effects.own) out.push({ key: 'rec:lit:' + w.entity + ':' + w.literal.toLowerCase(), mode: 'write', source: 'inferred', evidence: where + ': creates the fixed record "' + w.literal + '"' });
     } else out.push({ key: GLOBAL_KEY, mode: 'exclusive', source: 'fail-safe', evidence: where + ': ' + w.evidence + ' — what it changes cannot be bounded' });
   }
+  // shared server state (a reset, the server clock): a barrier; a reset whose scope cannot be placed: run alone (fail safe)
+  for (const sh of effects.shared || []) out.push({ key: GLOBAL_KEY, mode: 'exclusive', source: sh.scope === 'unknown' ? 'fail-safe' : 'inferred', evidence: where + ': ' + sh.evidence + (sh.line ? ' (line ' + sh.line + ')' : '') });
   return out;
 }
 
@@ -645,20 +852,28 @@ export function readinessFingerprint({ root, specs = [], tc = null, data = null,
     const j = readJson(path.resolve(String(runFile)));
     runPlan = j && typeof j === 'object' ? sha256(JSON.stringify({ plan: j.run_plan || null, adjustments: j.run_plan_adjustments || [] })) : 'error:run file unreadable';
   }
-  return { specs: sortU(specs.map(String)), code, tcs, data: fileHash(data), learning: fileHash(learning), runPlan, environment: environment || null };
+  // helpers: the CONTENT of every module under {root}/helpers — the verdict depends on helpers no spec imports yet (an
+  // installed admission helper switches the contract on) and on a helper a reconcile replaced; presence alone is not enough
+  let helpers = null;
+  try {
+    const dir = path.join(path.resolve(String(root)), 'helpers');
+    const files = isDir(dir) ? fs.readdirSync(dir).filter((f) => /\.(m?ts|m?js|cjs|cts)$/.test(f)).sort(natural) : [];
+    helpers = sha256(files.map((f) => f + '=' + sha256(read(path.join(dir, f)) || '')).join('\n'));
+  } catch (e) { helpers = 'error:' + (e && e.message ? e.message : e); }
+  return { specs: sortU(specs.map(String)), code, tcs, data: fileHash(data), learning: fileHash(learning), runPlan, environment: environment || null, helpers };
 }
 
 /** The parts of two readiness fingerprints that differ (specs compared as sets; [] = fresh). */
 export function fingerprintChanges(a, b) {
   if (!a || !b) return ['fingerprint'];
-  const parts = ['specs', 'code', 'tcs', 'data', 'learning', 'runPlan', 'environment'];
+  const parts = ['specs', 'code', 'tcs', 'data', 'learning', 'runPlan', 'environment', 'helpers'];
   return parts.filter((k) => JSON.stringify(a[k] ?? null) !== JSON.stringify(b[k] ?? null) || String(a[k] ?? '').startsWith('error:'));
 }
 
 /**
  * The readiness check. Every input is optional except `root`; a missing TC document makes every TC run-alone (fail safe).
  */
-export function planParallel({ root, specs = [], tc = null, data = null, learning = null, runFile = null, progress = null, stage = null, ceiling = null, compare = false, environment = null } = {}) {
+export function planParallel({ root, specs = [], tc = null, data = null, learning = null, runFile = null, progress = null, stage = null, ceiling = null, compare = false, environment = null, inventory = null } = {}) {
   const base = { tool: 'parallel-plan', schema: SCHEMA_VERSION, mode: compare ? 'shadow' : 'readiness', stage: stage || null };
   const warnings = [];
   const review = [];
@@ -675,6 +890,8 @@ export function planParallel({ root, specs = [], tc = null, data = null, learnin
   const dataText = dataPath ? read(dataPath) : null;
   if (data && dataText === null) warnings.push('TEST-DATA not found: ' + data + ' — account notes unknown');
   const testData = parseTestData(dataText || '');
+  // 3.0 — the automation inventory's API / DB mapping decides the effect of an [API] call (never the HTTP method)
+  const mapping = readMapping(inventory ? path.resolve(root || '.', inventory) : null);
   const docTcs = tcText ? parseTcDocument(tcText) : [];
   const hashes = Object.fromEntries(docTcs.map((t) => [t.id, tcHash(t, testData)]));
   let runJson = null;
@@ -735,7 +952,7 @@ export function planParallel({ root, specs = [], tc = null, data = null, learnin
   // ---- TCs
   const tcInfo = new Map();
   for (const t of docTcs) {
-    const c = tcClaims(t, testData);
+    const c = tcClaims(t, testData, mapping);
     tcInfo.set(t.id, { id: t.id, title: t.title, docStage: docStage(t), candidate: !/^no\b/i.test(fieldText(t, 'Automation Candidate')), hash: hashes[t.id], ...c });
   }
   // ---- tests (closure ids joined with the structural scan by file · describe path · title · occurrence)
@@ -753,7 +970,7 @@ export function planParallel({ root, specs = [], tc = null, data = null, learnin
       if (!ct) warnings.push('test not found in the closure (scanned only): ' + id);
       if (!ct || !ct.tcs.length) continue;
       const fixtures = sortU((ct.parts || []).filter((p) => p.startsWith('fixture:')).map((p) => p.slice('fixture:'.length)));
-      tests.push({ id, file: f, title: st.title, tcs: ct.tcs, line: st.line, scan: st, spec: sc, fixtures, unknown: ct.unknown || [] });
+      tests.push({ id, file: f, title: st.title, tcs: ct.tcs, line: st.line, scan: st, spec: sc, fixtures, unknown: ct.unknown || [], files: ct.files || [] });
     }
     if (sc.parseError) for (const [id, ct] of Object.entries(closure.tests)) if (ct.file === f && ct.tcs.length) tests.push({ id, file: f, title: ct.title, tcs: ct.tcs, line: 0, scan: { tags: [], dynamic: 'the spec could not be scanned', chain: [], describe: ct.describe, literals: [] }, spec: sc, fixtures: [], unknown: ct.unknown || [] });
   }
@@ -875,6 +1092,21 @@ export function planParallel({ root, specs = [], tc = null, data = null, learnin
     for (const h of hooks) if (h.effects.has) claims.push(...effectClaims(h.effects, h.kind + ' ' + h.file + ':' + h.line));
     for (const k of sortU(u._tests.flatMap((t) => t.fixtures))) { const d = defByFileName.get(k); if (d && !d.admission && d.effects.has) claims.push(...effectClaims(d.effects, d.scope + ' fixture ' + d.name + ' (' + d.file + ')')); }
     for (const t of u._tests) for (const l of t.scan.literals) claims.push({ key: 'rec:lit:' + l.entity + ':' + l.literal.toLowerCase(), mode: 'write', source: 'inferred', evidence: t.file + ':' + l.line + ' creates the fixed record "' + l.literal + '"' });
+    // shared server state: in the test body, and inside the helper / fixture / page-object functions it (or its hooks and
+    // fixtures) call — found through its import closure; a module that changes it at load affects every importer
+    for (const t of u._tests) {
+      for (const sh of t.scan.shared || []) claims.push({ key: GLOBAL_KEY, mode: 'exclusive', source: 'inferred', evidence: t.file + ':' + sh.line + ': ' + sh.evidence });
+      const called = new Set(t.scan.calls || []);
+      for (const d of t.scan.chain) for (const h of d.hooks) for (const c of (h.effects.calls || [])) called.add(c);
+      for (const h of t.spec.fileHooks) for (const c of (h.effects.calls || [])) called.add(c);
+      for (const k of t.fixtures) { const d = defByFileName.get(k); if (d && d.effects) for (const c of d.effects.calls || []) called.add(c); }
+      for (const f of t.files || []) {
+        if (f === t.file || !isCodeFile(f)) continue;
+        const sf = sharedStateFns(path.join(absRoot, f));
+        for (const site of sf.topLevel) claims.push({ key: GLOBAL_KEY, mode: 'exclusive', source: 'inferred', evidence: f + ':' + site.line + ': ' + site.evidence + ' — at module load, for every importer' });
+        for (const [name, site] of sf.fns) if (called.has(name)) claims.push({ key: GLOBAL_KEY, mode: 'exclusive', source: site.scope === 'unknown' ? 'fail-safe' : 'inferred', evidence: t.file + ' calls ' + name + '() → ' + f + ':' + site.line + ': ' + site.evidence });
+      }
+    }
     // code impact.mjs cannot follow (dynamic access, unresolved import) may hide side effects: fail safe
     for (const t of u._tests) if (t.unknown && t.unknown.length) claims.push({ key: GLOBAL_KEY, mode: 'exclusive', source: 'fail-safe', evidence: 'its code cannot be followed statically (' + t.unknown[0] + ') — unknown effects run alone' });
     for (const g of globals) claims.push({ key: 'global:setup', mode: 'write', source: 'inferred', evidence: g.kind + ' in ' + g.config + ' runs in every child' });
@@ -1062,6 +1294,16 @@ export function planParallel({ root, specs = [], tc = null, data = null, learnin
     expectedDuration: { serialOnlyMs, knownUnits: knownMs.length, unknownUnits: units.length - knownMs.length, plannedMs },
     serialisations,
   };
+  // the concrete conflicts in one line each (at most 5) — what the run-start message and the stage update quote
+  const brief = [];
+  const RANK = { inferred: 0, field: 1, marker: 2, learned: 3, 'fail-safe': 4 };
+  for (const u of units.filter(isGlobal)) {
+    const cs = u.claims.filter((x) => x.mode === 'exclusive' && x.key === GLOBAL_KEY).sort((a, b) => (RANK[a.source] ?? 5) - (RANK[b.source] ?? 5));
+    if (cs.length) brief.push(u.tcs.join(', ') + ' run' + (u.tcs.length === 1 ? 's' : '') + ' alone — ' + cs.slice(0, 2).map((c) => c.evidence).join('; '));
+  }
+  for (const c of conflicts.filter((x) => x.b !== GLOBAL_KEY)) { const ua = units.find((x) => x.id === c.a); const ub = units.find((x) => x.id === c.b); if (ua && ub) brief.push(ua.tcs.join(', ') + ' ↔ ' + ub.tcs.join(', ') + ' kept apart — ' + (c.keys || []).join(', ')); }
+  readiness.conflicts_brief = brief.slice(0, 5);
+  if (brief.length > 5) readiness.conflicts_brief_more = brief.length - 5;
   const outUnits = units.map(({ _tests, _fixtureName, ...u }) => u);
   return {
     ...base, outcome: 'OK', root: posix(absRoot),
@@ -1114,7 +1356,7 @@ function main() {
   if (args.help) { print(HELP, args); return 0; }
   const str = (k) => (typeof args[k] === 'string' ? args[k] : null);
   const specs = str('spec') ? str('spec').split(',').map((x) => x.trim()).filter(Boolean) : [];
-  const payload = planParallel({ root: str('root'), specs, tc: str('tc'), data: str('data'), learning: str('learning'), runFile: str('run-file'), progress: str('progress'), stage: str('stage'), ceiling: str('ceiling'), compare: !!args.compare, environment: str('env-id') });
+  const payload = planParallel({ root: str('root'), specs, tc: str('tc'), data: str('data'), learning: str('learning'), runFile: str('run-file'), progress: str('progress'), stage: str('stage'), ceiling: str('ceiling'), compare: !!args.compare, environment: str('env-id'), inventory: str('inventory') });
   // a BLOCKED payload is written too: an earlier OK payload must never survive as if it were still valid
   if (str('out')) {
     const out = path.resolve(str('out'));

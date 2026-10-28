@@ -1,0 +1,35 @@
+// Editor / `npm run typecheck` config for THIS repository only — never synced, never part of a skill.
+// The TypeScript under skill 5 is not a project of its own: assets/*.template.ts are copied into a consumer project as
+// helpers/{name}.ts (+ timeouts.ts at its root), and the harness fixtures import them by those consumer paths. Two
+// options map that assembled layout back onto the sources, so every import resolves where it is written:
+//   moduleSuffixes  "./record" also finds "./record.template.ts" (assets import each other by their consumer names)
+//   rootDirs        a fixture's "./helpers/{name}" and an asset's "../timeouts" land in assets/ (the virtual merge of the
+//                   consumer root, its helpers/ folder and the assets folder)
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "moduleSuffixes": [".template", ""],
+    "rootDirs": [
+      ".claude/skills/link-qc-5-test-run-automation",
+      ".claude/skills/link-qc-5-test-run-automation/assets",
+      ".claude/skills/link-qc-5-test-run-automation/scripts/fixtures/api-db",
+      ".claude/skills/link-qc-5-test-run-automation/scripts/fixtures/api-db/helpers",
+      ".claude/skills/link-qc-5-test-run-automation/scripts/fixtures/admission",
+      ".claude/skills/link-qc-5-test-run-automation/scripts/fixtures/admission/helpers"
+    ]
+  },
+  "include": [
+    ".claude/skills/link-qc-5-test-run-automation/assets/**/*.ts",
+    ".claude/skills/link-qc-5-test-run-automation/scripts/fixtures/api-db/**/*.ts",
+    ".claude/skills/link-qc-5-test-run-automation/scripts/fixtures/admission/**/*.ts"
+  ],
+  // installed two folders deep beside a registry the run generates (tests/…/data-ledger.cleanup.spec.ts + ./registry) —
+  // it only resolves inside a consumer project
+  "exclude": [".claude/skills/link-qc-5-test-run-automation/assets/data-ledger.cleanup.spec.template.ts"]
+}

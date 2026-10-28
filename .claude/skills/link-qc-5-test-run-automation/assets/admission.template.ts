@@ -1,3 +1,4 @@
+// @link-qc-5-template admission 3.1.0
 // helpers/admission.ts — admission fixtures: no new unit of work starts its side effects while the runner says "wait"
 // (skill 5, references/run-plan-and-config.md <shared_config>, references/code-craft.md §6, §9).
 //

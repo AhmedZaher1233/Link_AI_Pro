@@ -127,7 +127,9 @@ Values come from the TC step and the `TEST-DATA` file, never invented: a typed i
 step; a `[E{n}]` / `[A{n}]` / `[D{n}]` token is resolved through **its own** `TEST-DATA` row
 (`execution-rules.md` §2) and the resolved value goes into the command, never into a report line.
 A step starting with `[HUMAN]` maps to no command — the TC stops there (`execution-rules.md`
-§3). A step you cannot map to one of these is not improvised: the TC fails `assertion_failure`
+§3). A line starting with `[API]` / `[DB]` maps to no command either and is never improvised
+(no `run-code` request, no shell query): it is skipped and the TC ends `PARTIAL — api/db step
+pending` (`execution-rules.md` §3). A step you cannot map to one of these is not improvised: the TC fails `assertion_failure`
 with the step named, and a `Q-{n}` (`open-questions.md`) asks what the step means.
 
 ## 5. Reading the page — small, targeted, never the whole tree

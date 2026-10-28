@@ -51,7 +51,8 @@ gate is the human.
    state from another TC.
 7. **Redundancy** — merge or remove TCs that cover identical scenarios under different names.
 8. **Observability** — every expected result maps to an observable outcome (visible / text /
-   count / url). "Works correctly" is not assertable: rewrite.
+   count / url — or, on an `[API]` / `[DB]` line, a status / body field / stored value / row count).
+   "Works correctly" is not assertable: rewrite.
 9. **Step quality** — every step carries the 4 handoff fields; loading-indicator assertions are
    two steps; no generic steps; every TC reads as a complete user journey (no "apply the required
    filter"-style vagueness).
@@ -126,6 +127,17 @@ gate is the human.
     typed input in `Steps`, never in the oracle; `Expected Result` readable without the oracle;
     the negative AI set (injection, out-of-scope, another user's data / PII, secret echo, empty /
     very long input, language switch) covered, or each missing item a `Q-{n}`.
+20. **API and DB lines** (`tc-design.md` "API and DB test cases") — `[API]` / `[DB]` lines exist
+    only for layers the tester confirmed (layer gate answered, or `--layers`), and the
+    `Test layers:` header records the answer; every unconfirmed candidate is a `Q-{n} (layer
+    candidate)`. No TC's derived layer is `unknown` (a TC without a UI step marks every Expected
+    line; a backend TC has a backend action step). Every line follows the grammar; every `$name`
+    is captured before it is used; an endpoint path / table / column appears only inside its
+    marker line and only when the approved source names it — otherwise business words plus a
+    `Q-{n}`; expected statuses, bodies and stored values come from the requirement. Every
+    data-changing backend TC carries its `Data effect`, a read-back line, and changes only a record
+    created in the same TC or a `[D{n}]` "created by preparation" — never a pre-existing one; every
+    environment it uses has an `Environment class` row; no token, key or connection string anywhere.
 
 Anything you cannot fix yourself (spec ambiguity, missing fixture, unclear requirement) is listed
 under **Open Findings for the Human Reviewer** — never silently resolved. Header counts you

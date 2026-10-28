@@ -39,7 +39,8 @@
 //                     unknown (nothing written) · an existing "Automated" is kept only when the
 //                     previous map's automated_tc_sha256 equals the current canonical hash, else
 //                     CONFLICT (status untouched, row flagged). Skill 5 alone writes Automated.
-//   Tags              intended = {feature} + smoke + automation|manual + human-step + the TC's Tags:
+//   Tags              intended = {feature} + smoke + automation|manual + human-step + api-step / db-step
+//                     (a [API] / [DB] line — tc-hash tcLayer) + the TC's Tags:
 //                     values + convention tags. add = intended − current; remove = previously
 //                     introduced − intended; every other tag is preserved. A tag already on the work
 //                     item never becomes owned.
@@ -60,7 +61,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, print, parseTcDocument, parseTestData, tcHash, hashDocument, HASH_VERSION } from './tc-hash.mjs';
+import { parseArgs, print, parseTcDocument, parseTestData, tcHash, hashDocument, tcLayer, HASH_VERSION } from './tc-hash.mjs';
 
 export const SCHEMA_VERSION = 'ado-sync/1';
 export const MAP_COLUMNS = ['TC-ID', 'ADO Work Item ID', 'published_tc_sha256', 'automated_tc_sha256', 'Automation candidate', 'AutomationStatus', 'Tags (introduced)', 'Suite'];
@@ -152,7 +153,9 @@ export function tcFacts(tc) {
     if (name.toLowerCase() === 'validation') continue;
     for (const s of [f.value, ...f.items]) for (const m of String(s || '').matchAll(REF_RE)) refs.add(m[1] + m[2]);
   }
-  return { candidacy, smoke, humanSteps: humanLines.length, docTags: splitTags(fieldValue(tc, 'Tags')), refs: [...refs].sort() };
+  const layer = tcLayer(tc); // [API] / [DB] markers — owned tags api-step / db-step beside human-step
+  const apiLines = layer.apiSteps + layer.apiExpected; const dbLines = layer.dbSteps + layer.dbExpected;
+  return { candidacy, smoke, humanSteps: humanLines.length, apiSteps: apiLines, dbSteps: dbLines, layer: layer.layer, docTags: splitTags(fieldValue(tc, 'Tags')), refs: [...refs].sort() };
 }
 
 /** The "Test data" block text for one TC — referenced rows only, never a password. */
@@ -215,6 +218,8 @@ export function planFromInputs({ tcText, dataText, dataFile, dataSha, mapText, r
       ...(facts.smoke ? ['smoke'] : []),
       ...(facts.candidacy === 'YES' ? ['automation'] : facts.candidacy === 'NO' ? ['manual'] : []),
       ...(facts.humanSteps ? ['human-step'] : []),
+      ...(facts.apiSteps ? ['api-step'] : []),
+      ...(facts.dbSteps ? ['db-step'] : []),
       ...facts.docTags,
       ...convention,
     ]);
@@ -241,7 +246,7 @@ export function planFromInputs({ tcText, dataText, dataFile, dataSha, mapText, r
     }
     rows.push({
       tcId: tc.id, title: tc.title, workItemId: r && r.id != null ? r.id : 'create', hash,
-      candidacy: facts.candidacy, smoke: facts.smoke, humanSteps: facts.humanSteps, docTags: facts.docTags, refs: facts.refs,
+      candidacy: facts.candidacy, smoke: facts.smoke, humanSteps: facts.humanSteps, ...(facts.layer !== 'ui' ? { apiSteps: facts.apiSteps, dbSteps: facts.dbSteps, layer: facts.layer } : {}), docTags: facts.docTags, refs: facts.refs,
       intendedTags: sortTags(intended), currentTags: sortTags(remoteTags), tagsAdd: sortTags(tagsAdd), tagsRemove: sortTags(tagsRemove), tagsPreserve: sortTags(tagsPreserve),
       previouslyIntroduced: previouslyIntroduced ? sortTags(previouslyIntroduced) : null,
       ownership: previouslyIntroduced ? 'known' : 'unknown',
@@ -258,7 +263,7 @@ export function planFromInputs({ tcText, dataText, dataFile, dataSha, mapText, r
     statusWrite: rows.filter((r) => r.status.action === 'write').length, statusKeep: rows.filter((r) => r.status.action === 'keep').length,
     statusUnknown: rows.filter((r) => r.status.action === 'unknown').length, statusConflict: rows.filter((r) => r.status.action === 'conflict').length,
     current: rows.filter((r) => r.unchanged).length,
-    humanStep: rows.filter((r) => r.humanSteps > 0).length, unresolvedRefs: rows.reduce((n, r) => n + r.descriptionBlock.unresolved.length, 0),
+    humanStep: rows.filter((r) => r.humanSteps > 0).length, ...(rows.some((r) => r.layer) ? { apiStep: rows.filter((r) => r.apiSteps > 0).length, dbStep: rows.filter((r) => r.dbSteps > 0).length } : {}), unresolvedRefs: rows.reduce((n, r) => n + r.descriptionBlock.unresolved.length, 0),
   };
   const gate = errors.length ? 'BLOCKED' : 'PASS';
   return {

@@ -1,0 +1,13 @@
+{
+  "name": "link-ai-pro-authoring",
+  "private": true,
+  "description": "Authoring tooling for THIS repository only: type definitions so the editor checks the skills' TypeScript templates and fixtures. Never synced to a consumer project; every skill script stays zero-dependency.",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}
