@@ -26,6 +26,8 @@ This repository is the **canonical source**. Any project pulls the skills from h
       SKILL.md (≈200 lines, orchestrator) INPUT.txt references/ (20, loaded per activity — api-db.md only for [API] / [DB] TCs —, + rule-registry.md + expected-differences.md + schemas/) scripts/ (36 + fixtures) assets/ (18)
     link-qc-5b-test-run-manual-cli/                OPTIONAL, manual twin of 5 through playwright-cli (no MCP): runs EVERY TC of an approved document in full, smoke gate without heal, AI chatbot TCs judged against their `AI Oracle` rubric, writes skill 5's report set into skill 5's story folder — report only, gates nothing
       SKILL.md INPUT.txt references/ (9) scripts/ (render-run-report, selftest-run-report, scan-lib + fixtures/run-report — mirrors of skill 5's; selftest-manual-run + fixtures/manual-run — 5b-only) assets/ (2: run-report body + report shell, mirrored)
+    link-qc-5c-test-run-automation-lite/           OPTIONAL, lightweight twin of 5: same job and report set in four stages, one script (lite.mjs), script-recorded checkpoints, no subagents — standalone (vendored engine/)
+      SKILL.md INPUT.txt references/ (6 + maintainers/) scripts/ (lite.mjs, selftest-lite.mjs) assets/templates/ engine/
     link-qc-6-ui-testing/                          visual UI audit of an implemented screen against its design (Figma MCP / screenshots / reference site) or, with no design, against tokens, consistency, WCAG, RTL — beside the chain
       SKILL.md (≈420 lines) INPUT.txt references/ (10, loaded per step)
     link-qc-7-sync-tc-status-to-azure/             Azure loop: latest TC outcomes → one Test Plan run (cloud test-plan tools; else NOT_RUN)
@@ -57,7 +59,7 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
    curl -fsSL -o .claude/commands/sync-skills.md https://raw.githubusercontent.com/AhmedZaher1233/Link_AI_Pro/main/.claude/commands/sync-skills.md
    ```
 
-2. In Claude Code run `/sync-skills` — it bootstraps the sync script, copies skills 1-12, 3b, 3c and 5b
+2. In Claude Code run `/sync-skills` — it bootstraps the sync script, copies skills 1-12, 3b, 3c, 5b and 5c
    into `.claude/skills/` and updates itself. Reload the session when it tells you to. Add
    `--tools` only if you want to run skill 3c or 5b (installs `playwright-cli` and its browser) or
    annotate static design images with link-qc-6-ui-testing (installs Pillow + numpy when Python exists) — 3b and
@@ -159,7 +161,7 @@ it NEW or EXISTING before anything is touched; the mode is resolved from that sn
 `scripts/validate-setup.mjs` produces the PASS / WARN / FAIL / NOT_RUN table at the end and
 never reports PASS for a check that did not run. Run modes on an existing project:
 **audit** writes nothing at all and lists what repair would change; **repair** syncs skills
-1-12, 3b, 3c and 5b, adds missing folders, steering layers, MCP entries and learning-file sections (and,
+1-12, 3b, 3c, 5b and 5c, adds missing folders, steering layers, MCP entries and learning-file sections (and,
 only after you say yes, `playwright-cli` for skills 3c, 5b and 9 and Pillow + numpy for link-qc-6-ui-testing), normalizes
 names (steering files, `.claude/Skills` → `.claude/skills`, legacy learning heading) and writes
 the manifest; **restructure** adds a confirmed `git mv` migration to the canonical layout.
@@ -526,6 +528,19 @@ What it never does: heal, re-run smoke on its own, switch tool mid-run, touch Az
 a password, modify a record it did not create, leave a seed script in the repository, or change a
 TC's design, state or status.
 
+### 5c — test-run-automation-lite (lightweight automation, optional)
+The lightweight twin of skill 5: the same job — an approved TC document → Playwright POM automation → smoke / positive /
+negative behind the 30 % smoke gate → run + bug report in skill 5's story folder — in four stages (Prepare & Generate ·
+Checkpoint A & Test Data · Execute, Analyze & Heal · Checkpoint B & Report) driven by one script, `scripts/lite.mjs`, that
+returns one compact JSON verdict per call. Checkpoint A has four script-decided checks (tsc · POM · TC traceability ·
+assertions), Checkpoint B three (results integrity · TC status & coverage · failure evidence); there is no 58-item semantic
+review, no subagent and no `AWAITING_REVIEW` cycle. Workers stay at 1 unless the readiness check proves TCs independent
+(then 2-5), re-runs cover only what a heal made stale, the report is markdown and screenshots are failure-only unless
+`--report html` / `--screenshots` say otherwise. The approval rule, the per-TC data-changes consent, the data ledger and the
+"never mask a failure" rules are skill 5's. It is **standalone**: `engine/` carries a vendored copy of skill 5 3.2.0's
+scripts, templates and references (`references/maintainers/ENGINE.md`, hash-checked by the self-test), so a project can
+install it without skill 5. Choose skill 5 for the full semantic review, subagents or the open-question parking flow.
+
 ### 6 — ui-testing (visual UI audit, beside the chain)
 Compares an implemented screen with its approved design and writes a **UI Visual QA Bug
 Report** (`Testing/UI-Testing/Reports/UI-Visual-QA-<page>.md`) where every finding is a full,
@@ -866,6 +881,7 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-api-db.mjs --
 node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest.mjs --pretty
 node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty
 node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty
+node .claude/skills/link-qc-5c-test-run-automation-lite/scripts/selftest-lite.mjs --pretty
 node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/selftest-ado-sync.mjs --pretty
 node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/selftest.mjs --pretty
 node .claude/skills/link-qc-3b-validate-manual-test-cases/scripts/selftest.mjs --pretty

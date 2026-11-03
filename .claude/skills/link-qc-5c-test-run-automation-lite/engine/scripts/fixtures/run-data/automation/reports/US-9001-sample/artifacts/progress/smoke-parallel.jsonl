@@ -1,0 +1,7 @@
+{"at":"2026-10-01T09:00:06.000Z","worker":0,"tc":"TC-001","event":"test-start","retry":0,"project":"chromium"}
+{"at":"2026-10-01T09:00:07.000Z","worker":0,"tc":"TC-001","step":"Open the order form","event":"start","deadline_ms":30000,"note":null}
+{"at":"2026-10-01T09:00:18.000Z","worker":0,"tc":"TC-001","step":"Open the order form","event":"end","outcome":"ok","elapsed_ms":11000}
+{"at":"2026-10-01T09:00:19.000Z","worker":0,"tc":"TC-001","event":"evidence","path":"screenshots/US-9001-sample/phase-1/TC-001/chromium--none--r0/attempt-1.png"}
+{"at":"2026-10-01T09:00:20.000Z","worker":0,"tc":"TC-001","event":"teardown"}
+{"at":"2026-10-01T09:00:20.500Z","worker":0,"tc":"TC-001","event":"console-report","entries":0,"unexpected":0}
+{"at":"2026-10-01T09:00:21.000Z","worker":0,"tc":"TC-001","event":"test-end","status":"passed"}

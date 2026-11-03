@@ -1,0 +1,44 @@
+SKILL: visualplanner (folder link-qc-13-visualplanner) — plan / spec visual breakdown
+WHAT IT DOES: Turns a planning document (spec, PRD, design doc, implementation plan) into one self-contained HTML
+breakdown page beside the document: visual sections, flow diagrams, expandable cards, a question card for every
+question the plan raises, and a review toolbar on every section. Optional Egyptian Arabic second language with an
+in-page switch. Readers answer and comment in the page; its Save button writes the answers where you chose before the
+build and keeps every comment inside the page itself. Beside the QA chain, gates nothing.
+
+============================================================
+INPUT — WHAT YOU MUST PROVIDE
+============================================================
+  The planning document — a path ("break down ./docs/my-plan.md") or the document open in the editor.
+
+ASKED ONCE, BEFORE THE BUILD (in one question message):
+  Language            — English only · English + Egyptian Arabic (opens in English) · (opens in Arabic)
+                        Skipped when the request already says (e.g. written in Arabic, "English only").
+  Answer destination  — where the page's Save button writes the answers to the plan's questions:
+                          register  the feature's clarification_register.md (offered only when the folder holds
+                                    one with the columns # · Answer · Status · User · Updated in Spec ·
+                                    Last Updated Date); then the spec owner runs /speckit-clarify
+                          plan      the plan document itself, in one managed "Answers to Questions" block at its
+                                    end; nothing else in the document changes
+                          none      nowhere — answers stay in the page (Copy for Clarify / Copy Review carry them)
+                        Skipped when the plan raises no questions (none), or the request names the destination.
+                        Never chosen for you: a run that cannot ask uses none and says so.
+
+NEEDS: Node 18+ (scripts/page-tool.mjs assembles, checks and writes the page). Save in the page needs Chrome or Edge.
+
+============================================================
+OUTPUT — WHAT YOU GET
+============================================================
+  {project}-breakdown.html beside the source document (in a Spec Kit feature: the feature folder), opened in the
+  browser at the end. Written only after the page tool's checks pass. On a re-run the page is rebuilt and the
+  readers' saved comments and answers are carried over (anything the new page no longer has is named).
+
+  Later, when a reader presses Save in the page:
+    register  answered rows of clarification_register.md filled (Answer, Status Answered, User, Updated in Spec No,
+              date); only Open rows, or rows this page filled itself; a register without the expected table is
+              never written
+    plan      the "Answers to Questions" block at the end of the plan, one entry per question
+    always    every reaction, comment and answer written into the page file itself
+
+  The final message names the language, the answer destination and how to answer / Save / Copy for Clarify.
+
+WHEN TO RUN: whenever a plan or spec should be easier to read, review and answer. Never required by another skill.

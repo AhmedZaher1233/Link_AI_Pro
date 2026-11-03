@@ -1,0 +1,2 @@
+{"at":"2026-10-01T09:04:11.000Z","worker":0,"tc":"TC-004","event":"test-start","retry":0,"project":"chromium"}
+{"at":"2026-10-01T09:04:11.500Z","worker":0,"tc":"TC-004","event":"test-end","status":"skipped"}

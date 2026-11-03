@@ -1,0 +1,24 @@
+{
+  "schema": "skill6-run/1",
+  "phase": 3,
+  "status": "running",
+  "framework": "playwright",
+  "run_plan": {
+    "user_story": "US-1234",
+    "generated": "2026-09-20T10:00:00Z",
+    "headed": true,
+    "workers_parallel": 2,
+    "projects": ["chromium"],
+    "required_variants": {},
+    "setup_groups": [
+      { "name": "setup:order-items", "mode": "serial", "workers": 1, "spec": "tests/Orders_Tests/00-setup-order-items.spec.ts", "provides": "an order with twelve line items", "decision": "ui", "cleanup": "keep", "source": "discovery" }
+    ],
+    "groups": [
+      { "name": "parallel", "mode": "parallel", "workers": 2, "tcs": ["TC-001", "TC-002", "TC-003", "TC-004", "TC-005", "TC-006", "TC-007", "TC-008"] },
+      { "name": "serial:orders", "mode": "serial", "workers": 1, "tcs": ["TC-010", "TC-011"], "reason": "both edit the same order's line items" },
+      { "name": "serial:orders-archive", "mode": "serial", "workers": 1, "tcs": ["TC-012"], "reason": "archives the shared order" }
+    ],
+    "decisions": [],
+    "estimate": { "serial_only_s": 0, "planned_s": 0 }
+  }
+}

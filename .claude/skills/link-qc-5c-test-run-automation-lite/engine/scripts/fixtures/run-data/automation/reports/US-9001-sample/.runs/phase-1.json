@@ -1,0 +1,114 @@
+{
+  "schema": "skill6-run/1",
+  "phase": 1,
+  "status": "running",
+  "run_id": "US-9001-phase-1-2026-10-01",
+  "user_story_id": "US-9001",
+  "user_story": "US-9001 — Sample orders",
+  "user_story_name": "US-9001-sample",
+  "feature": "sample",
+  "spec_level": "",
+  "source_tc_doc": "Testing/Manual_Test/TestCases/US-9001-sample/TEST-CASES-sample.md",
+  "source_sha256": "0a1b2c3d4e5f00000000000000000000000000000000000000000000000000aa",
+  "environment": "QA",
+  "build": "1.0.0",
+  "framework": "playwright",
+  "file_or_suite": "tests/Orders_Tests/",
+  "ado_mode": "local",
+  "headed": true,
+  "workers_parallel": 2,
+  "started_at": "2026-10-01T09:00:00Z",
+  "finished_at": "2026-10-01T09:22:00Z",
+  "total_duration_ms": 1320000,
+  "results_root": "reports/US-9001-sample/",
+  "screenshots_root": "screenshots/US-9001-sample/",
+  "logs_root": "automation-logs/US-9001-sample/",
+  "progress_log": "automation-logs/US-9001-sample/run-progress-2026-10-01-0900.log",
+  "previous_phase": { "phase": null, "file": null, "location": null },
+  "compliance": { "checkpoint_a": { "gate": "PASS", "scopeDigest": "a1a1a1a1", "recorded_at": "2026-10-01T08:58:00Z", "unresolved": [] } },
+  "run_plan": {
+    "user_story": "US-9001",
+    "generated": "2026-10-01T08:55:00Z",
+    "headed": true,
+    "workers_parallel": 2,
+    "projects": ["chromium"],
+    "required_variants": {
+      "TC-001": ["chromium--none--r0"],
+      "TC-002": ["chromium--none--r0"],
+      "TC-003": ["chromium--none--r0"],
+      "TC-004": ["chromium--none--r0"],
+      "TC-005": ["chromium--variation-a--r0", "chromium--variation-b--r0"]
+    },
+    "setup_groups": [],
+    "groups": [
+      { "name": "parallel", "mode": "parallel", "workers": 2, "tcs": ["TC-001", "TC-002", "TC-004", "TC-005"] },
+      { "name": "serial:orders", "mode": "serial", "workers": 1, "tcs": ["TC-003"], "reason": "edits the shared draft order" }
+    ],
+    "rate_limits": [],
+    "decisions": [],
+    "estimate": { "serial_only_s": 300, "planned_s": 200 }
+  },
+  "run_plan_adjustments": [
+    { "at": "2026-10-01T09:05:00Z", "stage": "positive", "kind": "move", "tc": "TC-002", "from": "parallel", "to": "serial:interference", "reason": "failed beside other tests, passed alone", "evidence": "reports/US-9001-sample/artifacts/progress/first-positive-1.summary.json" }
+  ],
+  "data_readiness": {
+    "verdict": "READY-WITH-SKIPS",
+    "gaps": [
+      { "gap": "customer without orders", "tcs": ["TC-004"], "decision": "skip — QC declined", "source": "qc", "provisioning": null, "identifiers": null, "stamped_values": null, "verified_on": null, "cleanup": null }
+    ],
+    "predicted_skips": ["TC-004"]
+  },
+  "coverage_snapshot": {
+    "measuredAt": "2026-10-01T08:57:00Z",
+    "weightedPct": 80,
+    "target": 80,
+    "targetSource": "default",
+    "mechanism": "soft block",
+    "verdict": "PASS",
+    "byStage": {
+      "smoke": { "total": 1, "full": 1, "partial": 0, "none": 0, "weightedPct": 100 },
+      "positive": { "total": 3, "full": 2, "partial": 1, "none": 0, "weightedPct": 83.3 },
+      "negative": { "total": 1, "full": 0, "partial": 1, "none": 0, "weightedPct": 50 }
+    },
+    "tcs": { "TC-001": "Fully Covered", "TC-002": "Fully Covered", "TC-003": "Fully Covered", "TC-004": "Partially Covered", "TC-005": "Partially Covered" },
+    "requirements": [
+      { "id": "REQ-01", "short": "create an order", "outcome": "Full", "assertedBy": ["TC-001"] },
+      { "id": "REQ-02", "short": "filter and totals", "outcome": "Partial", "assertedBy": ["TC-002", "TC-005"] },
+      { "id": "REQ-03", "short": "edit a draft", "outcome": "Full", "assertedBy": ["TC-003"] },
+      { "id": "REQ-04", "short": "customer required", "outcome": "Missing", "assertedBy": [] }
+    ],
+    "manual": { "total": 2, "high": 1, "medium": 1, "low": 0 },
+    "delta": { "against": null, "pctChange": null, "improved": [], "regressed": [], "added": [], "removed": [] }
+  },
+  "timeouts": {
+    "playwright_version": "1.52.0",
+    "feature_gates": { "tags_object": true, "last_failed": true, "native_step_timeout": true },
+    "initial": { "test_default_ms": 90000, "test_long_ms": 180000, "expect_ms": 10000, "action_ms": 15000, "navigation_ms": 30000, "hook_ms": 60000, "step_default_ms": 30000, "step_long_ms": 120000, "operations": {}, "watchdog_grace_ms": 60000, "rate_limit": { "max_start_wait_ms": 120000, "in_step_wait_ms": 5000, "cooldown_ms": 60000, "cooldown_max_ms": 120000 } },
+    "events": [
+      { "tc": "TC-003", "step": "Save the order", "elapsed_ms": 30000, "deadline_ms": 30000, "expected": "the success toast is visible", "kind": "step", "evidence": "reports/US-9001-sample/artifacts/progress/positive-serial-orders.jsonl", "classification": "selector_failure" }
+    ],
+    "adjusted": [],
+    "probe": "NOT_RUN",
+    "calibration": "done"
+  },
+  "impact": {
+    "selections": [
+      { "at": "2026-10-01T09:15:00Z", "iteration": 1, "rerun_set": [ { "tc": "TC-003", "reason": "impacted", "changed": ["pages/OrderPage.ts"] } ], "added": [], "outside_scope": [] }
+    ],
+    "final_check": { "at": "2026-10-01T09:25:00Z", "stale": [], "fresh_by_member_only": [], "unknown": [] }
+  },
+  "results": [
+    { "tc_id": "TC-002", "req_id": "REQ-02", "test_name": "Filter orders by status" },
+    { "tc_id": "TC-003", "req_id": "REQ-03", "test_name": "Edit the draft order", "healed_in_first_run": true, "root_cause": "the save button moved into the toolbar" },
+    { "tc_id": "TC-004", "req_id": "REQ-04", "test_name": "Reject an order without a customer", "classification": "data_missing", "root_cause": "customer fixture missing — QC chose skip" }
+  ],
+  "parallel_checks": [
+    { "tc": "TC-002", "parallel_attempt": 1, "learning_line": "the orders list keeps the status filter of the session", "resolution": null }
+  ],
+  "bugs": [],
+  "heal_log": [
+    { "tc_id": "TC-003", "files": "pages/OrderPage.ts", "category": "selector_failure", "previous": "getByRole('button', { name: 'Save' })", "updated": "toolbar.getByRole('button', { name: 'Save' })", "reason": "the save button moved into the toolbar; same element, same behaviour", "reference": "n/a (locator repair)", "verification": "validator rules · semantic re-review", "rerun": "burn-in 3/3 PASS" }
+  ],
+  "skips": [ { "tc_id": "TC-004", "status": "SKIP", "reason": "customer fixture missing — QC chose skip" } ],
+  "deviations": [ "TC-002 failed beside other tests and passed alone — moved to serial:interference" ]
+}

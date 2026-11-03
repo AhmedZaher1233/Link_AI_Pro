@@ -16,6 +16,7 @@ export const SKILLS = [
   'link-qc-4-publish-test-cases-azure',
   'link-qc-5-test-run-automation',
   'link-qc-5b-test-run-manual-cli',
+  'link-qc-5c-test-run-automation-lite',
   'link-qc-6-ui-testing',
   'link-qc-7-sync-tc-status-to-azure',
   'link-qc-8-sync-bugs-azure',

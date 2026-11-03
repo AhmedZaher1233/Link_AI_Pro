@@ -1,0 +1,21 @@
+{
+  "config": { "version": "1.52.0" },
+  "suites": [
+    {
+      "title": "tests/Orders_Tests/orders.spec.ts",
+      "file": "tests/Orders_Tests/orders.spec.ts",
+      "specs": [],
+      "suites": [
+        {
+          "title": "REQ-02 Orders list",
+          "file": "tests/Orders_Tests/orders.spec.ts",
+          "specs": [
+            { "title": "[TC-002] Filter orders by status", "file": "tests/Orders_Tests/orders.spec.ts", "line": 40, "tags": ["@positive", "@run:parallel"],
+              "tests": [ { "projectName": "chromium", "expectedStatus": "passed", "annotations": [], "results": [ { "status": "passed", "duration": 20000, "attachments": [], "annotations": [] } ] } ] }
+          ],
+          "suites": []
+        }
+      ]
+    }
+  ]
+}

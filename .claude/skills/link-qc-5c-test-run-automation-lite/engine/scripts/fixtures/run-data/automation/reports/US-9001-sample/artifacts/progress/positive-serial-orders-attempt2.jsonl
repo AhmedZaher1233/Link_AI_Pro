@@ -1,0 +1,21 @@
+{"at":"2026-10-01T09:20:06.000Z","worker":0,"tc":"TC-003","event":"test-start","retry":0,"project":"chromium"}
+{"at":"2026-10-01T09:20:07.000Z","worker":0,"tc":"TC-003","step":"Save the order","event":"start","deadline_ms":30000,"note":"the success toast is visible"}
+{"at":"2026-10-01T09:20:15.000Z","worker":0,"tc":"TC-003","step":"Save the order","event":"end","outcome":"ok","elapsed_ms":8000}
+{"at":"2026-10-01T09:20:16.000Z","worker":0,"tc":"TC-003","event":"evidence","path":"screenshots/US-9001-sample/phase-1/TC-003/chromium--none--r0/attempt-2.png"}
+{"at":"2026-10-01T09:20:17.000Z","worker":0,"tc":"TC-003","event":"teardown"}
+{"at":"2026-10-01T09:20:17.100Z","worker":0,"tc":"TC-003","event":"console-report","entries":0,"unexpected":0}
+{"at":"2026-10-01T09:20:18.000Z","worker":0,"tc":"TC-003","event":"test-end","status":"passed"}
+{"at":"2026-10-01T09:20:40.000Z","worker":0,"tc":"TC-003","event":"test-start","retry":0,"project":"chromium"}
+{"at":"2026-10-01T09:20:41.000Z","worker":0,"tc":"TC-003","step":"Save the order","event":"start","deadline_ms":30000,"note":"the success toast is visible"}
+{"at":"2026-10-01T09:20:49.000Z","worker":0,"tc":"TC-003","step":"Save the order","event":"end","outcome":"ok","elapsed_ms":8000}
+{"at":"2026-10-01T09:20:50.000Z","worker":0,"tc":"TC-003","event":"evidence","path":"screenshots/US-9001-sample/phase-1/TC-003/chromium--none--r1/attempt-1.png"}
+{"at":"2026-10-01T09:20:51.000Z","worker":0,"tc":"TC-003","event":"teardown"}
+{"at":"2026-10-01T09:20:51.100Z","worker":0,"tc":"TC-003","event":"console-report","entries":0,"unexpected":0}
+{"at":"2026-10-01T09:20:52.000Z","worker":0,"tc":"TC-003","event":"test-end","status":"passed"}
+{"at":"2026-10-01T09:21:20.000Z","worker":0,"tc":"TC-003","event":"test-start","retry":0,"project":"chromium"}
+{"at":"2026-10-01T09:21:21.000Z","worker":0,"tc":"TC-003","step":"Save the order","event":"start","deadline_ms":30000,"note":"the success toast is visible"}
+{"at":"2026-10-01T09:21:29.000Z","worker":0,"tc":"TC-003","step":"Save the order","event":"end","outcome":"ok","elapsed_ms":8000}
+{"at":"2026-10-01T09:21:30.000Z","worker":0,"tc":"TC-003","event":"evidence","path":"screenshots/US-9001-sample/phase-1/TC-003/chromium--none--r2/attempt-1.png"}
+{"at":"2026-10-01T09:21:31.000Z","worker":0,"tc":"TC-003","event":"teardown"}
+{"at":"2026-10-01T09:21:31.100Z","worker":0,"tc":"TC-003","event":"console-report","entries":0,"unexpected":0}
+{"at":"2026-10-01T09:21:32.000Z","worker":0,"tc":"TC-003","event":"test-end","status":"passed"}

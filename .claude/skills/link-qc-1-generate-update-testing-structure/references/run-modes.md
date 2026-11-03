@@ -45,7 +45,7 @@ This project already has a testing structure. What should I do?
      manifest update. Lists exactly what B would change.
 
   B) REPAIR — update skills and add what is missing (keep the structure as it is)
-     Sync skills 1-12, 3b, 3c and 5b + the sync-skills command from the source repo, install any missing
+     Sync skills 1-12, 3b, 3c, 5b and 5c + the sync-skills command from the source repo, install any missing
      steering layer, folder, MCP entry or learning-file section, normalize non-canonical
      steering file names, migrate an uppercase .claude/Skills folder, write the manifest,
      then health-check. Existing folders, tests, pages, configs, steering content and

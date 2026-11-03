@@ -1,0 +1,21 @@
+{
+  "config": { "version": "1.52.0" },
+  "suites": [
+    {
+      "title": "tests/Orders_Tests/orders.spec.ts",
+      "file": "tests/Orders_Tests/orders.spec.ts",
+      "specs": [],
+      "suites": [
+        {
+          "title": "REQ-01 Orders",
+          "file": "tests/Orders_Tests/orders.spec.ts",
+          "specs": [
+            { "title": "[TC-001] Create an order with valid data", "file": "tests/Orders_Tests/orders.spec.ts", "line": 12, "tags": ["@smoke", "@positive", "@run:parallel"],
+              "tests": [ { "projectName": "chromium", "expectedStatus": "passed", "annotations": [], "results": [ { "status": "passed", "duration": 15000, "attachments": [], "annotations": [] } ] } ] }
+          ],
+          "suites": []
+        }
+      ]
+    }
+  ]
+}

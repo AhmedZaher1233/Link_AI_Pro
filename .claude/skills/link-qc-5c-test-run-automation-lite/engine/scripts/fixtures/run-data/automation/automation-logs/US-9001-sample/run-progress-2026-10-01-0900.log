@@ -1,0 +1,8 @@
+2026-10-01T09:00:00.000Z · Reviewing Requirements & Test Cases · results_root reports/US-9001-sample · logs_root automation-logs/US-9001-sample · screenshots_root screenshots/US-9001-sample
+2026-10-01T09:00:00.500Z · Running Smoke Tests (first run) · stage start · parallel ×2 (1 TC)
+  | Running 1 test using 1 worker
+  | [line withheld: it looks like a credential]
+2026-10-01T09:01:00.000Z · Running Smoke Tests (first run) · stage end · COMPLETED · Smoke tests completed (first run): 1 passed, 0 failed, 0 skipped, 0 not run — 1 TC, 01:00.
+2026-10-01T09:04:05.000Z · Running Positive Tests (first run) · stage end · COMPLETED
+2026-10-01T09:04:45.000Z · Running Negative Tests (first run) · stage end · COMPLETED
+2026-10-01T09:22:00.000Z · Running Positive Tests (re-run) · stage end · COMPLETED

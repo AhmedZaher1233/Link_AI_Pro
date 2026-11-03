@@ -1,0 +1,1 @@
+{ "tool": "impact", "schema": "skill5-impact/1", "stale": [{ "tc": "TC-02", "changed": ["page:OrdersPage.create"], "last": "positive-attempt1" }], "fresh": ["TC-01"], "fresh_by_member_only": [], "never_run": [], "no_verdict": [], "unknown": [] }

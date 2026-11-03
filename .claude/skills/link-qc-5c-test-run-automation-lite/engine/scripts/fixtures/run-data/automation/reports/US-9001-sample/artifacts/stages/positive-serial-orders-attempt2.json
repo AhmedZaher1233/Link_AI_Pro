@@ -1,0 +1,25 @@
+{
+  "config": { "version": "1.52.0" },
+  "suites": [
+    {
+      "title": "tests/Orders_Tests/orders.spec.ts",
+      "file": "tests/Orders_Tests/orders.spec.ts",
+      "specs": [],
+      "suites": [
+        {
+          "title": "REQ-03 Draft orders",
+          "file": "tests/Orders_Tests/orders.spec.ts",
+          "specs": [
+            { "title": "[TC-003] Edit the draft order", "file": "tests/Orders_Tests/orders.spec.ts", "line": 98, "tags": ["@positive", "@run:serial-orders"],
+              "tests": [
+                { "projectName": "chromium", "expectedStatus": "passed", "annotations": [], "results": [ { "status": "passed", "duration": 12000, "attachments": [], "annotations": [] } ] },
+                { "projectName": "chromium", "expectedStatus": "passed", "annotations": [], "results": [ { "status": "passed", "duration": 12000, "attachments": [], "annotations": [] } ] },
+                { "projectName": "chromium", "expectedStatus": "passed", "annotations": [], "results": [ { "status": "passed", "duration": 12000, "attachments": [], "annotations": [] } ] }
+              ] }
+          ],
+          "suites": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 # Project Learning — {project name}
-<!-- Shared knowledge base for all QA skills (skills 1-11, 3b, 3c and 5b). Read before asking; update after learning.
+<!-- Shared knowledge base for all QA skills (skills 1-11, 3b, 3c, 5b and 5c). Read before asking; update after learning.
      One tagged line per fact, plain English. Never store credentials, tokens or secrets here.
      Specs and steering documents always win over this file. -->
 

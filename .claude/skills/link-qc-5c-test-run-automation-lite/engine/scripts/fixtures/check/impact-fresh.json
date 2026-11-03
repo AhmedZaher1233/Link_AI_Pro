@@ -1,0 +1,1 @@
+{ "tool": "impact", "schema": "skill5-impact/1", "stale": [], "fresh": ["TC-01", "TC-02"], "fresh_by_member_only": [], "never_run": [], "no_verdict": [], "unknown": [] }

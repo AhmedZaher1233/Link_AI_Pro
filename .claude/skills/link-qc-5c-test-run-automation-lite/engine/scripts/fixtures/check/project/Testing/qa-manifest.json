@@ -1,0 +1,7 @@
+{
+  "paths": {
+    "automationRoot": "Testing/Automation",
+    "tests": "Testing/Automation/tests",
+    "pages": "Testing/Automation/pages"
+  }
+}

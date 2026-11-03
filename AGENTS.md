@@ -13,9 +13,9 @@ shell scripts under skill 1, five under skill 5, and the review-page renderer + 
 mirrored under skills 3, 3b and 3c).
 
 Consumer projects pull the skills from here with `/sync-skills`. Nothing project-specific ever
-belongs in this repo. The sync set is `SKILLS` in `lib.mjs`: fifteen folders named `link-qc-{N}-{purpose}` in
+belongs in this repo. The sync set is `SKILLS` in `lib.mjs`: sixteen folders named `link-qc-{N}-{purpose}` in
 test-cycle order — 1 setup, 2 review, 3 / 3b / 3c manual TCs and their live validation, 4 publish, 5 automation,
-5b manual CLI run (report only), 6 UI audit (beside the chain, gates nothing), 7-9 the optional Azure loop (TC outcomes, two-way bug sync,
+5b manual CLI run (report only), 5c the lightweight automation twin of 5 (standalone, vendored engine), 6 UI audit (beside the chain, gates nothing), 7-9 the optional Azure loop (TC outcomes, two-way bug sync,
 retest), 10 white-box, 11 business rules, 12 the ADHD chat output style (beside the chain, chat only,
 writes nothing). Every folder name equals its frontmatter `name`. Prose says
 "skill N" with these numbers; the pre-`link-qc` folder names live only in `SKILL_RENAMES` (consumer migration).

@@ -1,0 +1,46 @@
+SKILL:        link-qc-5c-test-run-automation-lite
+VERSION:      1.5.1
+
+WHAT IT DOES:
+  The lightweight twin of link-qc-5-test-run-automation. It turns the APPROVED test-case document of skill 3 into Playwright
+  Page Object Model automation, runs it (smoke, then positive and negative behind a 30% smoke gate), heals test-code defects,
+  re-runs only what a fix made stale, and publishes a markdown run report + bug report — in four stages, with one compact script
+  (lite.mjs), no subagents and two script-recorded checkpoints:
+    Checkpoint A (4 checks): TypeScript compilation · POM compliance · TC coverage & traceability · assertion validation
+    Checkpoint B (3 checks): test-results integrity · final TC status & coverage · failure evidence & defect classification
+  Same quality rules as the Full skill (POM, traceability, meaningful assertions, no guessed selectors, smoke gate, NOT_RUN
+  accuracy, test-data safety, impacted re-runs, preserved defect evidence); less process around them.
+
+DEPENDS ON:
+  No other QA skill. The engine (a vendored copy of link-qc-5-test-run-automation 3.2.0) ships in engine/; an installed
+  link-qc-5 is never called or modified. Needs Node >= 18 and the project's own @playwright/test + TypeScript. Without
+  engine/ lite.mjs stops with BLOCKED and names the missing folder.
+
+INPUT — WHAT YOU MUST PROVIDE
+  REQUIRED
+  1. The test-case document, Status: APPROVED   (e.g. Testing/Manual_Test/TestCases/[SPEC-x/]US-.../TEST-CASES-{feature}.md)
+     An unapproved document gets ONE question: approve now / run without approval / stop  (--approve / --unapproved answer it).
+  2. The application URL and its environment class (test or staging) — asked once if the learning file does not hold them.
+  3. Credentials by SECRET NAME (the project's {automation root}/.env) — never typed in chat. Tests sign in ONCE per role:
+     the auth strategy (stored session per role, or an API sign-in after each reset) is probed once or taken from the
+     learning file; stored sessions live in a git-ignored .auth/ and are removed at close-out.
+
+  OPTIONAL
+  - --report html|md            default md (HTML is made only by the existing renderer)
+  - --screenshots failed|all|none   default failed
+  - --max-workers N             default and maximum 5 (2-5 workers when the readiness check proves 2+ TCs independent — no shared
+                                test data or state; otherwise 1)
+  - --allow-data-changes all|TC-01,TC-03|none   default none (per-TC consent for tests that create / modify / delete data;
+                                lite init-run / lite consent write the record — every change then goes through the data ledger)
+  - --headless, --ado (Azure DevOps close-out through the existing integration; not required)
+
+OUTPUT   ({automation root} = flag → QA manifest → constitution → the project's Playwright config → Testing/Automation)
+  {automation root}/{tests,pages,helpers,...}                        the automation (existing POMs reused)
+  {automation root}/reports/[SPEC-x/]US-.../TEST-RUN-REPORT-{feature}.md   (+ .html when asked)  and  BUG-REPORT-{feature}.md
+  {automation root}/reports/.../.runs/phase-N.json, phase-N.checkpoint-A.json, phase-N.checkpoint-B.json
+  {automation root}/screenshots/..., automation-logs/.../run-summary-{stamp}.log
+  Return: AUTOMATION COMPLETE | BLOCKED | ENVIRONMENT_BLOCKED, with counts, bugs, links and the learning-file line.
+
+WHEN TO USE THE FULL SKILL INSTEAD
+  You want its 58-item semantic review at both checkpoints, subagent delegation of the plumbing steps, the open-question parking flow,
+  the 12-principle data-readiness walk, or the rendered HTML report as the default.

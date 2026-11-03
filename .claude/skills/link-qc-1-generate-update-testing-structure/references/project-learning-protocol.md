@@ -4,7 +4,7 @@ Load in write modes (B, C, new project) before touching the learning file, and i
 before asking the user a question.
 
 ## What it is
-One plain-English file every QA skill (1-11, 3b, 3c and 5b) reads **before asking the QC/user anything** and
+One plain-English file every QA skill (1-11, 3b, 3c, 5b and 5c) reads **before asking the QC/user anything** and
 updates **after learning anything**: modules, rules, roles, screens, flows, test data, EN/AR
 differences, automation tricks — one section per skill (`Knowledge` + `Questions and Answers`)
 plus shared sections. Behaviour knowledge lives here; structural paths live in
@@ -48,7 +48,7 @@ file names, variables, selectors, code, stack traces, secrets, or requirement te
 verbatim. `data-testid` values and URLs only under `Automation Tricks` / `Automation Model`,
 each explained in words on the same line.
 
-## Protocol — shared by skills 1-11, 3b, 3c and 5b (read first, ask second, write back)
+## Protocol — shared by skills 1-11, 3b, 3c, 5b and 5c (read first, ask second, write back)
 
 *Read first — targeted, never the whole file:* read only the `## Index`; pick the module/page/
 element names relevant to the task plus their `Similar to` modules; grep the tags

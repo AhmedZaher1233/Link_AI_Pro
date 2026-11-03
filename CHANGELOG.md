@@ -6,6 +6,20 @@ their next `/sync-skills`, so every entry under *Unreleased* is a release once i
 
 ## [Unreleased]
 
+### link-qc-5c 1.5.1 — the lightweight automation twin joins the sync set
+
+- **link-qc-5c-test-run-automation-lite** (new in the sync set): folder renamed from `link-qc-5b-test-run-automation-lite` so it
+  equals its `name` and every documented call path resolves; `allowed-tools` no longer pre-approves a bare `Bash` or
+  `mcp__azure-devops`; the stage-1 approval check reads the anchored `Status:` line; INPUT.txt no longer claims a hard
+  dependency on skill 5; rule 13 states it overrides the engine's code-craft §15 (no `storageState`); a hash manifest of the
+  vendored engine (`references/maintainers/engine-manifest.json`) with selftest case 30. `selftest-lite.mjs` 39/39.
+- **Skill 1:** `SKILLS` in `lib.mjs` gains `link-qc-5c-test-run-automation-lite` (16 folders); SKILL.md, INPUT.txt,
+  `run-modes.md`, `skills-sync.md`, `validation-contract.md` (QA Skills 16/16), `project-learning-protocol.md`, the learning
+  template header and the `testing-layout.md` chain name 5c. No new learning section — 5c writes tagged lines into skill 5's
+  `### Automation Model (skill 5)`. `selftest.mjs` 17/17.
+- **`/sync-skills`**, **skill 12** (`SKILL.md` chain + a `qa-pipeline.md` row), **README** (layout, a 5c section, the
+  self-test list) and **CLAUDE.md** (sixteen folders, layout, a 5c scripts section, twenty-seven harnesses).
+
 ### Skill 5 3.1.0 — fewer model round trips, bounded coordination, a report pipeline that no longer needs repair scripts
 
 **Implemented; not runtime-tested.** No harness, syntax check or consumer run was executed for this change (by request);
