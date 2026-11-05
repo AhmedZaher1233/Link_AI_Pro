@@ -1,5 +1,5 @@
 ---
-name: visualplanner
+name: link-qc-14-visualplanner
 description: "Turn any planning document into a beautiful, visual HTML breakdown. Use this skill when someone wants to visualize a plan, spec, PRD, or design document as an interactive HTML walkthrough. Trigger on: 'break down this plan', 'visualize this spec', 'make this plan visual', 'visual breakdown', 'plan breakdown', 'turn this spec into HTML', 'make this plan easier to follow', 'plan breakdown in Arabic', 'اعمل الخطة دي بالعربي', or any request to convert a planning/design document into a visual format. Can add Egyptian Arabic as a second language with an in-page English/Arabic switch. Readers answer the plan's questions and comment in the page. Before building, the skill asks where the Save button writes the answers: the feature's clarification_register.md (for /speckit-clarify), the plan document itself, or nowhere. Save always keeps the comments in the page; Copy for Clarify copies the questions and answers for the chat; the page opens in the browser when done."
 ---
 
