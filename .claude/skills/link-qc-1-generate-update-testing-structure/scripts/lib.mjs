@@ -15,7 +15,6 @@ export const SKILLS = [
   'link-qc-3c-validate-manual-test-cases-cli',
   'link-qc-4-publish-test-cases-azure',
   'link-qc-5-test-run-automation',
-  'link-qc-5b-test-run-manual-cli',
   'link-qc-5c-test-run-automation-lite',
   'link-qc-6-ui-testing',
   'link-qc-7-sync-tc-status-to-azure',
@@ -24,6 +23,8 @@ export const SKILLS = [
   'link-qc-10-white-box-testing',
   'link-qc-11-discover-business-rules',
   'link-qc-12-adhd-output-style',
+  'link-qc-13-test-run-manual-cli',
+  'link-qc-14-visualplanner',
 ];
 // Folder names the suite used before the link-qc-N naming (and the folders merged into another skill).
 // sync-qa-skills.mjs --apply removes a legacy folder once its replacement is in place; validate-setup.mjs reports it.
@@ -45,6 +46,7 @@ export const SKILL_RENAMES = {
   '4-white-box-testing': 'link-qc-10-white-box-testing',
   '7-discover-business-rules': 'link-qc-11-discover-business-rules',
   'i-have-adhd': 'link-qc-12-adhd-output-style',
+  'link-qc-5b-test-run-manual-cli': 'link-qc-13-test-run-manual-cli',
 };
 export const SYNC_COMMAND = '.claude/commands/sync-skills.md';
 
@@ -157,7 +159,7 @@ export const LEGACY_WORD_PACKAGE = 'office-word-mcp-server';
 export const LEGACY_WORD_ENTRYPOINT = 'word_mcp_server';
 export const MANIFEST = 'Testing/qa-manifest.json';
 // Playwright CLI (@playwright/cli) — the browser tool of link-qc-3c-validate-manual-test-cases-cli and
-// link-qc-5b-test-run-manual-cli only. Installed globally by `sync-qa-skills.mjs --apply --tools` (opt-in); never a
+// link-qc-13-test-run-manual-cli only. Installed globally by `sync-qa-skills.mjs --apply --tools` (opt-in); never a
 // prerequisite for 3b or any other skill.
 export const PLAYWRIGHT_CLI_PACKAGE = '@playwright/cli';
 export const PLAYWRIGHT_CLI_BIN = 'playwright-cli';

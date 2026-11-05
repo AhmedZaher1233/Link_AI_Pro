@@ -6,7 +6,7 @@ between calls, snapshots written to `.playwright-cli/*.yml`, targeted reads (`fi
 `snapshot`, `eval`). Commands are pre-approved only as `playwright-cli …` or `npx --no-install
 playwright-cli …`; `--help [command]` is the reference when a flag below does not exist in the
 installed version — never guess a flag. These are the same mechanics as skills 3c and 5b
-(`link-qc-5b-test-run-manual-cli/references/browser-cli.md` is the fuller text).
+(`link-qc-13-test-run-manual-cli/references/browser-cli.md` is the fuller text).
 
 ## 1. What is executed
 
@@ -21,7 +21,7 @@ pending` (never PASS); a bug behind that step is unobserved. An `[API]` / `[DB]`
 command either and is never improvised: a bug whose reproduction needs one is not taken on this
 route (SKILL.md route table — `NOT_RUN`, automation only); in a full-TC re-run a backend line after
 the failing UI step leaves the row `PARTIAL — api/db step pending` (never PASS). A TC with an `AI Oracle` field is
-judged from the reply TEXT per `../link-qc-5b-test-run-manual-cli/references/ai-response-rules.md`
+judged from the reply TEXT per `../link-qc-13-test-run-manual-cli/references/ai-response-rules.md`
 (read when present; absent → the bug's own steps only, no row change). A step that cannot be mapped
 to a command below is not improvised: the TC is `FAIL · assertion_failure` with the step named, and
 the bug is unobserved.

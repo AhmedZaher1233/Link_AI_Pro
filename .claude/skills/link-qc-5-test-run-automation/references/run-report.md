@@ -102,7 +102,7 @@ bug file, a missing run file, a missing screenshot file or a legacy artifact in 
   `artifacts/stages/` and `artifacts/progress/` are emptied at the start of a phase; inside it, every
   command — normal, isolation, burn-in, smoke retry, re-queue, re-run — takes the next free
   `-attempt{n}` of its stage / group and `PW_STAGE_ATTEMPT={n}` — no file is ever reused.
-- **Shared with the manual CLI run.** `link-qc-5b-test-run-manual-cli` (the manual twin of this skill) writes
+- **Shared with the manual CLI run.** `link-qc-13-test-run-manual-cli` (the manual twin of this skill) writes
   the SAME three files, `.runs/phase-{N}.json` and the screenshot tree with the same phase counter: a
   phase it wrote is an ordinary earlier phase here (it counts for `N`, is named by `Previous phase`, is
   never rewritten) and is recognisable by its `Run command` bullet (`manual run — playwright-cli …
@@ -306,7 +306,7 @@ never copied into the run file — the ledgers (`artifacts/progress/*.data-ledge
 `watchdog_events[]` and `timeouts.events[]` entries come ready-made from the stage summaries of
 `run-stage.mjs` (`artifacts/progress/{run}-{stage}-{seq}.summary.json`).
 
-A run file written by `link-qc-5b-test-run-manual-cli` carries the generic keys only (`framework:
+A run file written by `link-qc-13-test-run-manual-cli` carries the generic keys only (`framework:
 "manual-cli"`, `file_or_suite: "—"`, no `compliance` / `run_plan` / `coverage_snapshot` / `merged` /
 `heal_log` / `timeouts` / `watchdog_events` / `parallel_checks` / `rate_limit` / `impact` /
 `run_plan_adjustments`); the coverage delta therefore skips it.

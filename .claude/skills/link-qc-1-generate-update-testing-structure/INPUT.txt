@@ -3,7 +3,7 @@ WHAT IT DOES: Audits, repairs or restructures the project's QA foundation — th
 layout, docs/steering/ (L1/L2/L3), Node/NPM + Playwright, .mcp.json (Playwright, Azure DevOps,
 Docx MCP; optional Figma MCP; on cloud Azure DevOps projects the optional azure-devops-attachments
 server + its launcher for skills 8 / 9 evidence uploads), the optional playwright-cli for skills 3c, 5b and 9 and Python + Pillow for
-link-qc-6-ui-testing, the QA skills 1-12, 3b, 3c, 5b and 5c (.claude/skills/), Testing/project-learning.md and
+link-qc-6-ui-testing, the QA skills 1-14, 3b, 3c and 5c (.claude/skills/), Testing/project-learning.md and
 Testing/qa-manifest.json — with a read-only preflight first and a deterministic PASS/FAIL
 validation at the end. Invoke it explicitly; other skills never run it for you.
 
@@ -17,7 +17,7 @@ REQUIRED:
 OPTIONAL ARGUMENT (existing projects; skips the mode question):
   audit        — Mode A: health-check only. Writes NOTHING (no downloads, installs, renames,
                  learning-file or manifest updates). Lists what B would fix.
-  repair       — Mode B: sync skills 1-12, 3b, 3c, 5b and 5c + sync-skills command, add missing folders / steering
+  repair       — Mode B: sync skills 1-14, 3b, 3c and 5c + sync-skills command, add missing folders / steering
                  layers / MCP entries / learning-file sections, normalize names (steering files,
                  .claude/Skills → .claude/skills, legacy learning heading), write the manifest.
                  Never moves or rewrites existing valid content.
@@ -74,7 +74,7 @@ OUTPUT — WHAT YOU GET
     README.md                (index + the single set of resolution rules — authored by this skill)
     L1-testing-foundation.md / L2-testing-qa-standards.md   (copied from the source repo, never authored)
     L3-project-testing.md    (template — you fill the placeholders)
-  .claude/skills/1-12, 3b, 3c, 5b and 5c + .claude/commands/sync-skills.md  (synced from the source repo)
+  .claude/skills/1-14, 3b, 3c and 5c + .claude/commands/sync-skills.md  (synced from the source repo)
   .mcp.json                  (Playwright / Azure DevOps / Docx entries, env-var placeholder for the PAT;
                               the Azure DevOps entry is the cloud or the self-hosted server per the
                               detected hosting; a legacy `word` entry is replaced by `docx` during

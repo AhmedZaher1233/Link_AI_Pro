@@ -313,7 +313,7 @@ OUTPUT — WHAT YOU GET
                                          scripts/check.mjs, never by hand)
       coverage/                        ← coverage-summary.csv · coverage-detail.csv ·
                                          manual-scenarios.csv (replaced each run)
-  NOTE: the same report set may hold phases written by link-qc-5b-test-run-manual-cli (the
+  NOTE: the same report set may hold phases written by link-qc-13-test-run-manual-cli (the
   manual CLI run) — one phase counter, one BUG-n sequence; its phases are read-only history here.
       artifacts/stages/*.json          ← raw Playwright JSON per stage command (replaced each run)
       artifacts/progress/*.jsonl       ← heartbeat + incremental results per stage command (the

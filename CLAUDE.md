@@ -17,11 +17,12 @@ layout `helpers/{name}` → `assets/{name}.template.ts`); never synced, never a 
 ignored. After a clone: `npm install` once.
 
 Consumer projects pull the skills from here with `/sync-skills`. Nothing project-specific ever
-belongs in this repo. The sync set is `SKILLS` in `lib.mjs`: sixteen folders named `link-qc-{N}-{purpose}` in
+belongs in this repo. The sync set is `SKILLS` in `lib.mjs`: seventeen folders named `link-qc-{N}-{purpose}` in
 test-cycle order — 1 setup, 2 review, 3 / 3b / 3c manual TCs and their live validation, 4 publish, 5 automation,
-5b manual CLI run (report only), 5c the lightweight automation twin of 5 (standalone, vendored engine), 6 UI audit (beside the chain, gates nothing), 7-9 the optional Azure loop (TC outcomes, two-way bug sync,
+5c the lightweight automation twin of 5 (standalone, vendored engine), 6 UI audit (beside the chain, gates nothing), 7-9 the optional Azure loop (TC outcomes, two-way bug sync,
 retest), 10 white-box, 11 business rules, 12 the ADHD chat output style (beside the chain, chat only,
-writes nothing). Every folder name equals its frontmatter `name`. Prose says
+writes nothing), 13 the manual CLI run (report only; was `link-qc-5b-test-run-manual-cli`, prose still calls it "5b"),
+14 the visual planner (a plan / spec → interactive HTML breakdown, beside the chain). Every folder name equals its frontmatter `name`. Prose says
 "skill N" with these numbers; the pre-`link-qc` folder names live only in `SKILL_RENAMES` (consumer migration).
 
 **Two worlds — don't confuse them:**
@@ -53,7 +54,7 @@ project**, not to this repo. Do not create them here.
       SKILL.md INPUT.txt scripts/ (ado-sync-plan, tc-hash — canonical copy, selftest-ado-sync + fixtures/ado-sync/)
     link-qc-5-test-run-automation/                 Playwright POM generation (automation inventory first) + staged run (one run-stage.mjs call and one message per stage, isolation check inside, inside the machine's capacity ledger and an environment lease) + targeted re-run of the TCs a fix touched (impact.mjs) + 2 script-decided compliance gates (check.mjs) + drafts → freeze → Checkpoint B → publish (run-data.mjs) + run acceptance
       SKILL.md (≈200 lines: orchestrator — workflow with activity names, every-activity rules, block index; `metadata.version` = the skill's semver) INPUT.txt references/ (20, one per activity: intake, results-and-evidence, azure-devops, code-generation, run-plan-and-config, open-questions, coverage, test-data-readiness, test-data-preparation, execution, final-run, structured-returns, compliance-checkpoints, automation-rules, code-craft, validator, run-report, scratch-investigation, azure-mcp-troubleshooting, api-db (3.0 — loaded only for a document with `[API]` / `[DB]` lines) — plus rule-registry.md, the maintainers' one-home-per-rule map, expected-differences.md, the 1.2.0 → 2.0 gate parity register, and schemas/script-payloads.md, loaded by no activity) scripts/ (36 + fixtures/: the 34 below plus tc-hash — mirror of skill 4's — and selftest-tc-hash) assets/ (18: run-report body partial + report-shell mirror, 16 *.template.ts copied into consumer projects)
-    link-qc-5b-test-run-manual-cli/                manual twin of 5: every TC of an APPROVED document run in full through playwright-cli (no MCP), smoke gate without heal, `AI Oracle` TCs judged by rubric; writes skill 5's report set into skill 5's story folder — report only, gates nothing
+    link-qc-13-test-run-manual-cli/                (was link-qc-5b-…) manual twin of 5: every TC of an APPROVED document run in full through playwright-cli (no MCP), smoke gate without heal, `AI Oracle` TCs judged by rubric; writes skill 5's report set into skill 5's story folder — report only, gates nothing
       SKILL.md INPUT.txt references/ (10: intake, browser-cli, run-plan, execution-rules, test-data-preparation, ai-response-rules, run-report-manual, open-questions, learning-file, self-review) scripts/ (render-run-report, selftest-run-report, scan-lib + fixtures/run-report/ — mirrors of skill 5's; selftest-manual-run + fixtures/manual-run/ — 5b-only) assets/ (2: run-report body partial + report-shell — mirrors)
     link-qc-5c-test-run-automation-lite/           lightweight, standalone twin of 5: approved TCs → POM automation → smoke / positive / negative behind the 30 % gate → report in four stages through one script (`lite.mjs`), 4-check Checkpoint A + 3-check Checkpoint B recorded by script, no subagents
       SKILL.md (≈70 lines) INPUT.txt references/ (lite-rules, schemas, stage-1…4 + maintainers/: CHANGELOG, ENGINE, engine-manifest.json) scripts/ (lite.mjs, selftest-lite.mjs) assets/templates/ (5) engine/ (vendored link-qc-5 3.2.0: scripts, assets, references, the fixtures selftest-lite reads; `engine/SKILL.md` is a non-invocable stub)
@@ -67,6 +68,8 @@ project**, not to this repo. Do not create them here.
     link-qc-11-discover-business-rules/            code-enforced rules (EARS) not in the spec
     link-qc-12-adhd-output-style/                  ADHD chat output style + QA-pipeline overlay (was `i-have-adhd`); chat only, writes no file
       SKILL.md INPUT.txt references/qa-pipeline.md — no scripts, no learning section, no MCP
+    link-qc-14-visualplanner/                      plan / spec / PRD → one interactive HTML breakdown beside the document (optional Egyptian Arabic, in-page answers + comments; Save writes answers to clarification_register.md, the plan, or nowhere) — beside the chain, gates nothing
+      SKILL.md INPUT.txt README.md references/ (3: arabic-egyptian, design-system, interactive-elements) scripts/ (launch.ps1 / .sh, page-tool.mjs, selftest.mjs) assets/ (review-system.css / .js)
     find-skills/                           helper skill (not part of the sync set)
   commands/sync-skills.md                  thin wrapper over scripts/sync-qa-skills.mjs
   agents/                                  empty
@@ -688,12 +691,12 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-profile-run.m
   stubs) and compare against `scripts/fixtures/run-report/golden/`. Regenerate the golden only for
   a deliberate change (command in the fixture README).
 
-### `skills/link-qc-5b-test-run-manual-cli/scripts/`
+### `skills/link-qc-13-test-run-manual-cli/scripts/`
 
 ```bash
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/render-run-report.mjs --report <TEST-RUN-REPORT-{feature}.md> [--bugs <BUG-REPORT-{feature}.md>] [--runs <dir>] [--out <html>] [--write] [--force] [--strict] [--pretty]
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/render-run-report.mjs --report <TEST-RUN-REPORT-{feature}.md> [--bugs <BUG-REPORT-{feature}.md>] [--runs <dir>] [--out <html>] [--write] [--force] [--strict] [--pretty]
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty
 ```
 
 - `render-run-report.mjs`, `selftest-run-report.mjs`, `scan-lib.mjs`, `assets/run-report.template.html`,
@@ -826,7 +829,7 @@ the intended effect.
 
 `scripts/render-run-report.mjs`, `scripts/selftest-run-report.mjs`, `scripts/scan-lib.mjs`,
 `assets/run-report.template.html`, `assets/report-shell.template.html` and `scripts/fixtures/run-report/**`
-are byte-identical in `link-qc-5-test-run-automation` (canonical copies) and `link-qc-5b-test-run-manual-cli`;
+are byte-identical in `link-qc-5-test-run-automation` (canonical copies) and `link-qc-13-test-run-manual-cli`;
 each carries a `MIRROR` banner (goldens listed in the fixture README instead). The report shell is therefore
 mirrored FIVE ways — skills 3, 3b, 3c, 5 and 5b. Skill 5's `selftest-run-report.mjs` case 28 and the 5b copy
 of the harness check the mirror; skill 3's case 27 checks the shell against both. `selftest-manual-run.mjs` and
@@ -1230,7 +1233,7 @@ Branch `main`; commit and push only when asked. Projects pick changes up on thei
 `/sync-skills`, so a push here is effectively a release — add an entry under `## [Unreleased]` in
 `CHANGELOG.md` (one sub-list per skill touched; it doubles as the PR description), make sure
 `SKILL.md`, `INPUT.txt`, `lib.mjs` and `README.md` are consistent, a changed versioned skill bumped its
-`metadata.version`, and that all twenty-seven self-test harnesses pass (skill 1's
+`metadata.version`, and that all twenty-eight self-test harnesses pass (skill 1's
 `selftest.mjs`; skill 4's `selftest-ado-sync.mjs`; skill 5's validator, run-report, watchdog,
 config-inventory, tc-hash, run-stage, impact, scratch, references, profile-run, check, run-data, coverage,
 capacity, parallel-plan, dispatch, admission, redact and api-db harnesses — the api-db one, like admission, on a local
@@ -1238,7 +1241,7 @@ Playwright test runner (its NOT_RUN is not a pass) — run-stage in both variant
 the admission one on a local Playwright test runner (its NOT_RUN is not a pass), one harness after another, each with
 its own temp folder and `QA_CAPACITY_DIR`; the mirrored one in skills 3, 3b and 3c including its
 mirror case; and skill 5b's `selftest-run-report.mjs` — the run-report mirror — and
-`selftest-manual-run.mjs`; skill 5c's `selftest-lite.mjs`), before committing.
+`selftest-manual-run.mjs`; skill 5c's `selftest-lite.mjs`; skill 14's `selftest.mjs`), before committing.
 
 ## Azure loop conventions (skills 7 to 9)
 

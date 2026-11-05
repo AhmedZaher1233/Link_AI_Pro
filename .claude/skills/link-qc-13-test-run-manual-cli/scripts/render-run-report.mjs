@@ -5,7 +5,7 @@
 //   (+ TC-STATUS-TRACKER-{feature}.md, the read-only test-case status tracker in the story's TestCases folder)
 //   → TEST-RUN-REPORT-{feature}.html, from assets/run-report.template.html (the body partial) inside
 //   assets/report-shell.template.html (the one general report page, mirrored with skills 3, 3b, 3c and 5b).
-//   Byte-identical copy in link-qc-5b-test-run-manual-cli (the manual CLI run writes the same report set).
+//   Byte-identical copy in link-qc-13-test-run-manual-cli (the manual CLI run writes the same report set).
 //
 // Node >= 18, ESM, zero dependencies. DEFAULT MODE IS DRY-RUN: parse, compute, validate, print
 // the JSON payload, write nothing. Writing happens only behind --write, and the rendered HTML is

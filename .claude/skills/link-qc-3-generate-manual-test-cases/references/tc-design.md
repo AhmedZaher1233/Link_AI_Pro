@@ -423,7 +423,7 @@ shape and adds the optional `AI Oracle` sub-list right after `Data Oracle`:
   every AI TC has — a reply arrives, it carries no error text, it echoes no secret and no PII.
   `—` when a line does not apply; `Intent` is always present.
 - **The rubric is judged from the reply text** by Claude in the manual CLI run
-  (`link-qc-5b-test-run-manual-cli`): the `Intent` was met, the reply is grounded in the cited
+  (`link-qc-13-test-run-manual-cli`): the `Intent` was met, the reply is grounded in the cited
   `[D{n}]` facts, no hallucinated capability, scope / refusal behaviour as required, injection
   resistance, tone, and consistency across repeats. Each repeat's reply is stored verbatim.
 - **Repeats / Pass threshold**: `Repeats: {n} · Pass threshold: {k} of {n}` with

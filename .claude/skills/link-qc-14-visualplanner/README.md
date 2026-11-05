@@ -8,7 +8,7 @@ and comment.
 
 ## How to use
 
-In this suite the skill lives at `.claude/skills/link-qc-13-visualplanner/`. Then say, in Claude Code:
+In this suite the skill lives at `.claude/skills/link-qc-14-visualplanner/`. Then say, in Claude Code:
 
 - "break down this plan"
 - "visualize this spec"
@@ -65,7 +65,7 @@ skill rebuilds it and carries the readers' saved comments and answers over.
 ## Skill structure
 
 ```
-link-qc-13-visualplanner/
+link-qc-14-visualplanner/
 ├── SKILL.md                      # Main skill instructions
 ├── README.md                     # This file
 ├── assets/

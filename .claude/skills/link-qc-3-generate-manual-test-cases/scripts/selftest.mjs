@@ -617,7 +617,7 @@ function listFiles(dir) { const out = []; const walk = (d) => { for (const e of 
 }
 
 /* 27 — the report shell and the renderer kit are byte-identical with skills 5 and 5b when installed (the run report uses the same page). */
-for (const s5name of ['link-qc-5-test-run-automation', 'link-qc-5b-test-run-manual-cli']) {
+for (const s5name of ['link-qc-5-test-run-automation', 'link-qc-13-test-run-manual-cli']) {
   const s5 = path.join(skillDir, '..', s5name);
   if (!fs.existsSync(s5)) cases.push({ case: '27 shell mirror with ' + s5name, ok: true, skipped: true, problems: [], detail: s5name + ' not installed — nothing to compare' });
   else {

@@ -1,4 +1,4 @@
-SKILL: link-qc-14-visualplanner (folder link-qc-13-visualplanner) — plan / spec visual breakdown
+SKILL: link-qc-14-visualplanner — plan / spec visual breakdown
 WHAT IT DOES: Turns a planning document (spec, PRD, design doc, implementation plan) into one self-contained HTML
 breakdown page beside the document: visual sections, flow diagrams, expandable cards, a question card for every
 question the plan raises, and a review toolbar on every section. Optional Egyptian Arabic second language with an

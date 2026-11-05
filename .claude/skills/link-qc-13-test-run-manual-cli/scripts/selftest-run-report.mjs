@@ -30,7 +30,7 @@ const TRACKER_MISMATCH = fx('tracker', 'TC-STATUS-TRACKER-create-order.mismatch.
 const GOLDEN_TRACKER = fx('golden', 'TEST-RUN-REPORT-create-order.tracker.html');
 
 /** The two skill folders that own a byte-identical copy of the run-report renderer, this harness, scan-lib, both templates and fixtures/run-report/. */
-const RUN_REPORT_SKILLS = ['link-qc-5-test-run-automation', 'link-qc-5b-test-run-manual-cli'];
+const RUN_REPORT_SKILLS = ['link-qc-5-test-run-automation', 'link-qc-13-test-run-manual-cli'];
 const cases = []; const fail = [];
 function check(name, problems, detail) { cases.push({ case: name, ok: problems.length === 0, problems, detail }); if (problems.length) fail.push({ case: name, problems }); }
 /** A temporary copy of the whole automation tree, so `../../screenshots/…` links resolve exactly as in a project. */

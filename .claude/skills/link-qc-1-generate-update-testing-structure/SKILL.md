@@ -3,7 +3,7 @@ name: link-qc-1-generate-update-testing-structure
 description: >
   Audit, repair or restructure the QA foundation of a project — Testing/ layout, docs/steering/
   (L1/L2/L3), Node/NPM/Playwright, .mcp.json (Playwright, Azure DevOps, Docx MCP; optional Figma MCP; on cloud Azure DevOps projects the optional azure-devops-attachments server + its launcher for skills 8 / 9 evidence uploads), the optional
-  playwright-cli for skills 3c, 5b and 9 and Python + Pillow for link-qc-6-ui-testing, the QA skills 1-12, 3b, 3c, 5b and 5c and the shared learning file — with a read-only preflight first and a deterministic
+  playwright-cli for skills 3c, 5b and 9 and Python + Pillow for link-qc-6-ui-testing, the QA skills 1-14, 3b, 3c and 5c and the shared learning file — with a read-only preflight first and a deterministic
   PASS/FAIL validation at the end. Use once per project before skills 2-11, and again whenever the
   setup drifts. New project: full setup, no questions except the skills-replace confirmation. Existing project: asks A audit (zero
   writes) / B repair / C restructure (confirmed move plan). Invoke it explicitly:
@@ -60,7 +60,7 @@ only what the resolved mode permits.
    truth, steering governs quality policy, the learning file never overrides either.
 8. **Never report PASS without executing the check.** Statuses come from
    `scripts/validate-setup.mjs`; unprobed items are `NOT_RUN`.
-9. **One canonical skills source.** Skills 1-12, 3b, 3c, 5b and 5c come only from
+9. **One canonical skills source.** Skills 1-14, 3b, 3c and 5c come only from
    `https://github.com/AhmedZaher1233/Link_AI_Pro` through `scripts/sync-qa-skills.mjs`; they
    are never authored, copied from Downloads, or taken from another project. The skills folder
    is `.claude/skills/` (lowercase).

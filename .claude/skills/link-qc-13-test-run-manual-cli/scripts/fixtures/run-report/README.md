@@ -40,7 +40,7 @@ To look at the page in a browser, render it **beside the fixture markdown** (omi
 thumbnails and the viewer find the PNG stubs, then delete the generated HTML from the fixture folder.
 
 This whole `fixtures/run-report/` folder, the renderer, the harness, `scan-lib.mjs` and both templates are
-byte-identical in `link-qc-5-test-run-automation` and `link-qc-5b-test-run-manual-cli` (harness case 28);
+byte-identical in `link-qc-5-test-run-automation` and `link-qc-13-test-run-manual-cli` (harness case 28);
 regenerate the golden in skill 5 and copy the folder to 5b. The golden is rendered through two templates:
 `assets/run-report.template.html` (the body partial) and `assets/report-shell.template.html` (the shared
 report shell, byte-identical in skills 3, 3b, 3c, 5 and 5b). A shell change changes this golden and

@@ -230,7 +230,7 @@ returned without error only says the action was issued. Before a TC becomes `val
    (api/db step — automation only)` with `outcome-check` reading exactly `api/db step — automation
    only` (a UI-line contradiction stays a `discrepancy`).
 5. **A TC with an `AI Oracle` is one observation**: its reply is judged by the field's hard
-   checks and rubric (`link-qc-5b-test-run-manual-cli/references/ai-response-rules.md` holds the
+   checks and rubric (`link-qc-13-test-run-manual-cli/references/ai-response-rules.md` holds the
    rules); it is `validated` only when that observation passes; a rubric you cannot decide is a
    `Q-{n}` and the TC stays `draft`.
 

@@ -24,7 +24,7 @@ This repository is the **canonical source**. Any project pulls the skills from h
       SKILL.md INPUT.txt scripts/ (ado-sync-plan, tc-hash, selftest-ado-sync + fixtures)
     link-qc-5-test-run-automation/                 generate + run Playwright (POM, automation inventory) inside the machine's capacity ledger and an environment lease, two script-decided compliance gates, coverage, drafted → checked → published reports, run acceptance
       SKILL.md (≈200 lines, orchestrator) INPUT.txt references/ (20, loaded per activity — api-db.md only for [API] / [DB] TCs —, + rule-registry.md + expected-differences.md + schemas/) scripts/ (36 + fixtures) assets/ (18)
-    link-qc-5b-test-run-manual-cli/                OPTIONAL, manual twin of 5 through playwright-cli (no MCP): runs EVERY TC of an approved document in full, smoke gate without heal, AI chatbot TCs judged against their `AI Oracle` rubric, writes skill 5's report set into skill 5's story folder — report only, gates nothing
+    link-qc-13-test-run-manual-cli/                OPTIONAL, manual twin of 5 through playwright-cli (no MCP): runs EVERY TC of an approved document in full, smoke gate without heal, AI chatbot TCs judged against their `AI Oracle` rubric, writes skill 5's report set into skill 5's story folder — report only, gates nothing
       SKILL.md INPUT.txt references/ (9) scripts/ (render-run-report, selftest-run-report, scan-lib + fixtures/run-report — mirrors of skill 5's; selftest-manual-run + fixtures/manual-run — 5b-only) assets/ (2: run-report body + report shell, mirrored)
     link-qc-5c-test-run-automation-lite/           OPTIONAL, lightweight twin of 5: same job and report set in four stages, one script (lite.mjs), script-recorded checkpoints, no subagents — standalone (vendored engine/)
       SKILL.md INPUT.txt references/ (6 + maintainers/) scripts/ (lite.mjs, selftest-lite.mjs) assets/templates/ engine/
@@ -38,6 +38,8 @@ This repository is the **canonical source**. Any project pulls the skills from h
     link-qc-11-discover-business-rules/            find rules the code enforces that the spec never states (PO approval gate)
     link-qc-12-adhd-output-style/                  ADHD-friendly CHAT output style with a QA-pipeline overlay — beside the chain, chat only, writes nothing
       SKILL.md INPUT.txt references/ (qa-pipeline)
+    link-qc-14-visualplanner/                      OPTIONAL, plan / spec / PRD → one interactive HTML breakdown (optional Egyptian Arabic, in-page answers + comments) — beside the chain, gates nothing
+      SKILL.md INPUT.txt README.md references/ (3) scripts/ (launch, page-tool, selftest) assets/ (review-system)
     find-skills/                           helper: discover and install skills from skills.sh
   commands/
     sync-skills.md                         /sync-skills — thin wrapper around scripts/sync-qa-skills.mjs
@@ -59,7 +61,7 @@ Every skill folder has a `SKILL.md` (the instructions Claude follows) and an `IN
    curl -fsSL -o .claude/commands/sync-skills.md https://raw.githubusercontent.com/AhmedZaher1233/Link_AI_Pro/main/.claude/commands/sync-skills.md
    ```
 
-2. In Claude Code run `/sync-skills` — it bootstraps the sync script, copies skills 1-12, 3b, 3c, 5b and 5c
+2. In Claude Code run `/sync-skills` — it bootstraps the sync script, copies skills 1-14, 3b, 3c and 5c
    into `.claude/skills/` and updates itself. Reload the session when it tells you to. Add
    `--tools` only if you want to run skill 3c or 5b (installs `playwright-cli` and its browser) or
    annotate static design images with link-qc-6-ui-testing (installs Pillow + numpy when Python exists) — 3b and
@@ -161,7 +163,7 @@ it NEW or EXISTING before anything is touched; the mode is resolved from that sn
 `scripts/validate-setup.mjs` produces the PASS / WARN / FAIL / NOT_RUN table at the end and
 never reports PASS for a check that did not run. Run modes on an existing project:
 **audit** writes nothing at all and lists what repair would change; **repair** syncs skills
-1-12, 3b, 3c, 5b and 5c, adds missing folders, steering layers, MCP entries and learning-file sections (and,
+1-14, 3b, 3c and 5c, adds missing folders, steering layers, MCP entries and learning-file sections (and,
 only after you say yes, `playwright-cli` for skills 3c, 5b and 9 and Pillow + numpy for link-qc-6-ui-testing), normalizes
 names (steering files, `.claude/Skills` → `.claude/skills`, legacy learning heading) and writes
 the manifest; **restructure** adds a confirmed `git mv` migration to the canonical layout.
@@ -879,8 +881,8 @@ node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-dispatch.mjs 
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-redact.mjs --pretty
 node .claude/skills/link-qc-5-test-run-automation/scripts/selftest-api-db.mjs --pretty      # real Playwright (QA_PLAYWRIGHT_DIR); NOT_RUN (exit 3) without one is not a pass
 node .claude/skills/link-qc-1-generate-update-testing-structure/scripts/selftest.mjs --pretty
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty
 node .claude/skills/link-qc-5c-test-run-automation-lite/scripts/selftest-lite.mjs --pretty
 node .claude/skills/link-qc-4-publish-test-cases-azure/scripts/selftest-ado-sync.mjs --pretty
 node .claude/skills/link-qc-3-generate-manual-test-cases/scripts/selftest.mjs --pretty

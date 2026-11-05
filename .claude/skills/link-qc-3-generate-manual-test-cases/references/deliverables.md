@@ -33,7 +33,7 @@ that WOULD change, and writes nothing at all — not even the learning file.
 
 Write to `{tc_output_folder}` (one folder per User Story — create it if missing). The markdown
 (and `TEST-DATA-{feature}.md`) is **always English** — skills 4, 5, 3b, the manual CLI run
-(`link-qc-5b-test-run-manual-cli`) and the renderer parse it. Header block (every line present; an empty optional value is `—`, never blank):
+(`link-qc-13-test-run-manual-cli`) and the renderer parse it. Header block (every line present; an empty optional value is `—`, never blank):
 
 ```markdown
 # Test Cases — {feature}
@@ -238,7 +238,7 @@ Tell the reviewer, explicitly:
    with `--revision`. Corrections typed straight into the chat by TC-ID work too. A TC 3b had
    validated is then reset to draft and needs `3b --scope <ids>`.
 7. Approval unlocks `link-qc-4-publish-test-cases-azure` (beautify + publish to Azure DevOps, writes
-   `ADO-MAP.md`), `link-qc-5-test-run-automation` **and** `link-qc-5b-test-run-manual-cli` (the manual
+   `ADO-MAP.md`), `link-qc-5-test-run-automation` **and** `link-qc-13-test-run-manual-cli` (the manual
    run of every approved TC through playwright-cli — it writes only skill 5's run report set, never
    this document) — 4, 5 and 5b independently; publishing is optional and is
    not skill 5's gate. Skill 4 refuses a document that is not `Status: APPROVED`; 5 and 5b ask

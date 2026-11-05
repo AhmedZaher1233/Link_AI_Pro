@@ -1,5 +1,5 @@
 ---
-name: link-qc-5b-test-run-manual-cli
+name: link-qc-13-test-run-manual-cli
 model: claude-opus-5
 description: >
   Manual Test Run through the Playwright command line (playwright-cli) — the manual twin of

@@ -1,6 +1,6 @@
 # Skills sync — the one procedure
 
-The canonical source of skills 1-12, 3b, 3c, 5b and 5c (12 = the ADHD chat overlay) and the `/sync-skills` command is
+The canonical source of skills 1-14, 3b, 3c and 5c (12 = the ADHD chat overlay) and the `/sync-skills` command is
 `https://github.com/AhmedZaher1233/Link_AI_Pro` (branch `main`). The only implementation is
 `scripts/sync-qa-skills.mjs`; `/sync-skills` (`.claude/commands/sync-skills.md`) is a thin
 wrapper around it. Never re-describe the procedure elsewhere — link here.

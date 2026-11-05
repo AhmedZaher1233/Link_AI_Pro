@@ -6,6 +6,23 @@ their next `/sync-skills`, so every entry under *Unreleased* is a release once i
 
 ## [Unreleased]
 
+### Skills 13 and 14 join the sync set — the manual CLI run renamed from 5b to 13
+
+- **link-qc-13-test-run-manual-cli** (was `link-qc-5b-test-run-manual-cli`): front-matter `name`, INPUT.txt and every
+  folder-path reference now say `link-qc-13-test-run-manual-cli` — the run-report mirror lists (`selftest-run-report.mjs`
+  `RUN_REPORT_SKILLS` in skills 5 and 13, skill 3 / 3c `selftest.mjs` case 27), the `MIRROR` banners of
+  `render-run-report.mjs` and `report-shell.template.html` (skills 3, 3c, 5, 13), the fixture READMEs, the manual-run
+  fixture's run file, skill 1's preflight / validate-setup / secrets scripts and references, skills 3, 3c, 5, 9 and 12.
+  The short prose label "5b" and the learning heading `### Manual Run Model (skill 5b)` are unchanged. Goldens regenerated
+  (banner line + provenance hash only): skill 3 / 3c review pages, skill 5 / 13 run-report pages, the 13 manual-run page.
+  5c's vendored engine is a fork and keeps its old comments.
+- **link-qc-14-visualplanner** (new in the sync set): INPUT.txt and README name the folder `link-qc-14-visualplanner`.
+- **Skill 1:** `SKILLS` gains `link-qc-13-test-run-manual-cli` and `link-qc-14-visualplanner` (17 folders); `SKILL_RENAMES`
+  maps `link-qc-5b-test-run-manual-cli` → `link-qc-13-test-run-manual-cli`, so a consumer's old folder is removed on the
+  next `/sync-skills`. Sync-set lists read "1-14, 3b, 3c and 5c"; `validation-contract.md` QA Skills 17/17.
+- **`/sync-skills`**, **skill 12** (chain + `qa-pipeline.md` rows 13 and 14), **README** and **CLAUDE.md** / **AGENTS.md**
+  (seventeen folders, layout, twenty-eight harnesses incl. skill 14's `selftest.mjs`).
+
 ### link-qc-5c 1.5.1 — the lightweight automation twin joins the sync set
 
 - **link-qc-5c-test-run-automation-lite** (new in the sync set): folder renamed from `link-qc-5b-test-run-automation-lite` so it

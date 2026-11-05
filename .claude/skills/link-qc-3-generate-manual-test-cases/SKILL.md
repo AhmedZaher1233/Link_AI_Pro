@@ -242,7 +242,7 @@ ask for the token; never use REST as a fallback.
 
 ## Downstream contract
 
-`link-qc-4-publish-test-cases-azure`, `link-qc-5-test-run-automation`, `link-qc-5b-test-run-manual-cli`
+`link-qc-4-publish-test-cases-azure`, `link-qc-5-test-run-automation`, `link-qc-13-test-run-manual-cli`
 and `link-qc-3b-validate-manual-test-cases` parse the
 markdown document. These field names are frozen — renaming or dropping one breaks the pipeline:
 `Status:` (`PENDING HUMAN REVIEW` / `APPROVED`), `ID`, `Type`, `Locale`, `Requirement`, `Stage`,
@@ -255,7 +255,7 @@ progress` and the level-2 anchors (`references/html-page.md` §3) are frozen for
 Skill 4 builds `[TC-ID] {description}` titles and `ADO-MAP.md` from them and publishes the
 `Tags:` values; skill 5 derives `@smoke` from `Smoke:` only, its stages from `Stage` (or Type
 when an older document lacks it) and its run plan from `Data effect` / `Shared data`; the manual
-CLI run (`link-qc-5b-test-run-manual-cli`) executes every approved TC in full through
+CLI run (`link-qc-13-test-run-manual-cli`) executes every approved TC in full through
 playwright-cli, judges an `AI Oracle` from the reply text, and writes only skill 5's run report
 set — nothing into this document; 3b
 rewrites `Validation`, step label wording and the header counts in place and never a design

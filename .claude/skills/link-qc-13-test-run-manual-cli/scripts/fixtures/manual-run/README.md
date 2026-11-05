@@ -26,6 +26,6 @@ Regenerate the golden only for a deliberate renderer / template change (after re
 5's golden and re-mirroring):
 
 ```bash
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/render-run-report.mjs --report .claude/skills/link-qc-5b-test-run-manual-cli/scripts/fixtures/manual-run/automation/reports/US-2000-ask-assistant/TEST-RUN-REPORT-ask-assistant.md --write --force --out .claude/skills/link-qc-5b-test-run-manual-cli/scripts/fixtures/manual-run/golden/TEST-RUN-REPORT-ask-assistant.html --strict
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/render-run-report.mjs --report .claude/skills/link-qc-13-test-run-manual-cli/scripts/fixtures/manual-run/automation/reports/US-2000-ask-assistant/TEST-RUN-REPORT-ask-assistant.md --write --force --out .claude/skills/link-qc-13-test-run-manual-cli/scripts/fixtures/manual-run/golden/TEST-RUN-REPORT-ask-assistant.html --strict
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty
 ```

@@ -1,4 +1,4 @@
-SKILL: link-qc-5b-test-run-manual-cli
+SKILL: link-qc-13-test-run-manual-cli
 WHAT IT DOES: The manual twin of link-qc-5-test-run-automation. Takes skill 3's test case
 document (Status: APPROVED proceeds at once; anything else is ONE question — approve now, run
 without approval, or stop) and EXECUTES EVERY test case in it, in full and

@@ -123,8 +123,8 @@ Start with the answer. End when the answer is done.
 This project runs a QA pipeline: `link-qc-1-generate-update-testing-structure` -> `link-qc-2-review-requirements`
 -> `link-qc-3-generate-manual-test-cases` -> (`link-qc-3b-validate-manual-test-cases`
 or its CLI twin `link-qc-3c-validate-manual-test-cases-cli`, optional) -> human sets APPROVED -> (`link-qc-4-publish-test-cases-azure`,
-optional) / `link-qc-5-test-run-automation` / `link-qc-5b-test-run-manual-cli` (the manual CLI run — same report set, same story folder, optional) / `link-qc-5c-test-run-automation-lite` (the lightweight automation twin of 5 — same report set, optional) -> the Azure loop (`link-qc-7-sync-tc-status-to-azure`, `link-qc-8-sync-bugs-azure`,
-`link-qc-9-retesting`, all optional); `link-qc-6-ui-testing` (visual UI audit per screen) runs beside the chain at any time and
+optional) / `link-qc-5-test-run-automation` / `link-qc-13-test-run-manual-cli` (the manual CLI run — same report set, same story folder, optional) / `link-qc-5c-test-run-automation-lite` (the lightweight automation twin of 5 — same report set, optional) -> the Azure loop (`link-qc-7-sync-tc-status-to-azure`, `link-qc-8-sync-bugs-azure`,
+`link-qc-9-retesting`, all optional); `link-qc-6-ui-testing` (visual UI audit per screen) and `link-qc-14-visualplanner` (a plan / spec turned into an HTML breakdown) run beside the chain at any time and
 gates nothing; `link-qc-10-white-box-testing` and `link-qc-11-discover-business-rules` are the closing code audits (any time after the requirement exists). When any of them is running, the sixteen
 rules above still apply to the CHAT, with these additions. Detail and worked examples:
 `references/qa-pipeline.md`.

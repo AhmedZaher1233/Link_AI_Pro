@@ -51,7 +51,7 @@ project). In Mode A the rows are reported as-is with "would be fixed by B".
 ## playwright-cli — the browser tool of skills 3c, 5b and 9 only (optional)
 
 * What it is: Microsoft's `@playwright/cli` (`playwright-cli`), a command-line browser driver
-  that `link-qc-3c-validate-manual-test-cases-cli`, `link-qc-5b-test-run-manual-cli` and `link-qc-9-retesting`
+  that `link-qc-3c-validate-manual-test-cases-cli`, `link-qc-13-test-run-manual-cli` and `link-qc-9-retesting`
   (for bugs without an automated TC) use instead of the Playwright MCP server. Skill 3b and every other skill never need it — its absence is a WARN, never a FAIL, and never a reason
   to hold up anything else.
 * Detected by `playwright-cli --version` (global, what sync installs) or

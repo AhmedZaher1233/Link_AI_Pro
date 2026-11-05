@@ -10,10 +10,10 @@ produced by them and never by hand.
 ## 1. Commands (from the project root)
 
 ```bash
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/render-run-report.mjs --report {results_root}/TEST-RUN-REPORT-{feature}.md --pretty            # dry run: payload, gate, mismatches
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/render-run-report.mjs --report {results_root}/TEST-RUN-REPORT-{feature}.md --write --pretty    # writes TEST-RUN-REPORT-{feature}.html beside it
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty      # the mirrored harness (29 cases) — must pass before delivery
-node .claude/skills/link-qc-5b-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty      # the 5b-only harness (a manual phase after an automation phase) — must pass before delivery
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/render-run-report.mjs --report {results_root}/TEST-RUN-REPORT-{feature}.md --pretty            # dry run: payload, gate, mismatches
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/render-run-report.mjs --report {results_root}/TEST-RUN-REPORT-{feature}.md --write --pretty    # writes TEST-RUN-REPORT-{feature}.html beside it
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/selftest-run-report.mjs --pretty      # the mirrored harness (29 cases) — must pass before delivery
+node .claude/skills/link-qc-13-test-run-manual-cli/scripts/selftest-manual-run.mjs --pretty      # the 5b-only harness (a manual phase after an automation phase) — must pass before delivery
 ```
 
 `--force` only for a hand-edited page the user asked you to replace. The renderer never prints
@@ -152,7 +152,7 @@ after a passing retest in this phase; a bug whose TC did not run → `not-checke
                       "gaps": [ { "gap", "tcs": [], "decision": "READY | prepared (api|ui|db) | skip — data_missing | skip — not creatable | skip — QC declined",
                                   "source", "provisioning", "identifiers", "stamped_values", "verified_on", "cleanup": "kept | cleaned up | left | null" } ],
                       "predicted_skips": [] },
-  "manual_run": { "skill": "link-qc-5b-test-run-manual-cli", "tool": "playwright-cli", "tool_version", "login_methods": { "A1": "attended" } } }
+  "manual_run": { "skill": "link-qc-13-test-run-manual-cli", "tool": "playwright-cli", "tool_version", "login_methods": { "A1": "attended" } } }
 ```
 
 Paths are POSIX, relative to `{automation_root}`, exactly as skill 5 writes them. `data_readiness`
